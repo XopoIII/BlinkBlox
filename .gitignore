@@ -7,6 +7,9 @@
 
 /release
 /Network
+# Output of the diagnostic fixtures under test/Sources/Invalid, whose paths resolve relative to
+# the schema file rather than the repository root.
+/test/Network
 /Blink
 test/Sources/Game.txt
 sourcemap.json

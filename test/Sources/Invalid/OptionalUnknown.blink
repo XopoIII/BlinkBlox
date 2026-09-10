@@ -1,0 +1,3 @@
+-- expect E3002
+-- `unknown` rides the instance side table and has no presence flag, so it cannot be optional.
+type Anything = unknown?

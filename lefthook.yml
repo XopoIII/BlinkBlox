@@ -11,6 +11,7 @@ pre-commit:
       # compiler rewrites from scratch on every run, and stylua would fight the generator over it.
       exclude:
         - "test/Network/*"
+        - "test/Golden/*"
       run: stylua --check {staged_files}
 
     lint:
@@ -22,6 +23,7 @@ pre-commit:
       exclude:
         - "src/Templates/*"
         - "test/Network/*"
+        - "test/Golden/*"
         - "benchmark/*"
       run: selene {staged_files}
 

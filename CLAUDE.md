@@ -25,10 +25,30 @@ Upstream `main` has been frozen since April 2026 — the author moved to a `rewr
 in issue #12 that the current version gets nothing but major bug fixes. Issue #45 (an unbounded
 parse of a hostile client buffer) was explicitly declared out of scope.
 
-Moving to `rewrite` is not an option: its Studio plugin is unported, it has no documentation, and it
-still lacks TypeScript output, sync validation, bit packing and rate limiting.
+Moving to `rewrite` is not an option, and this was settled rather than left open. That branch is
+Blink v1.0.0-pre.7 — a from-scratch compiler on Lute with an HIR and an SSA-ish LIR, 583 commits
+ahead of `main` and nothing merged back. What it costs is the whole surface people actually use: its
+Studio plugin file is empty, it has no docs, no TypeScript emitter, no sync validation, no `Predict`,
+no benchmarks. What it does not buy is the two things an IR is usually wanted for — its LIR
+optimizer is an empty stub, `@bitpack` is parsed with zero consumers, and issue #45 is still open
+there. **Adopting HIR/LIR is rejected; do not reopen it.** Individual algorithms from that branch are
+worth porting (see `src/Templates/Base.luau`'s invocation slots) and are ported on their own.
 
 So the fixes happen here.
+
+## What this fork is for
+
+Two other projects occupy the neighbouring ground, and neither covers this one:
+
+- **red-blox/zap** is a bandwidth project — a shared bitfield, static size analysis, offset-encoded
+  lengths. It has no rate limiting at all (its issue #219; the maintainer holds that throttling is
+  the game's job) and no `pcall` around per-event decoding, so one malformed event discards the rest
+  of that player's batch.
+- **upstream `rewrite`** is a compiler-architecture project, described above.
+
+Neither protects a live server from its own clients. That is the gap this fork fills: **the
+generated server module should be safe to point at the open internet** — without giving up the
+TypeScript output, the Studio plugin or the docs. Bandwidth parity is a second-order goal.
 
 ## Commands
 
@@ -36,6 +56,7 @@ So the fixes happen here.
 |---|---|
 | Install the toolchain | `rokit install` |
 | Run the test suite | `sh scripts/run-tests.sh` |
+| Re-record the output snapshots | `cd test && lune run Test --yes --update-goldens` |
 | Type-check everything | `sh scripts/type-check.sh` |
 | Lint | `selene src test plugin/src .lune` |
 | Check formatting | `stylua --check src test plugin .lune` |
@@ -108,15 +129,11 @@ Keep this in mind before adding any new prompt.
 
 ## Downstream
 
-`dibby-roblox` consumes this compiler (schema at `colony/net/Colony.blink`) and, while it still pins
-`1axen/blink@0.18.8`, post-processes the generated server module with `scripts/patch-net-guard.sh` to
-close the unbounded-parse hole by hand.
+`dibby-roblox` was the only consumer, and it is archived. Nothing outside this repository
+post-processes the generated text any more, so **the emitted output shape is no longer frozen** —
+the old warning about an anchor-matching patch script no longer applies.
 
-**As of 0.19.0 that patch is redundant** — the same guard is generated, plus a stop on unrecognised
-event ids that the patch never had. Moving that repository to `XopoIII/blink@0.19.0` means it can
-delete `patch-net-guard.sh` and drop the guard step from `scripts/net-build.sh`; rate limiting stays
-in its own `Inbound.accept`, which needs per-player state over time.
-
-The patch matches anchors in the emitted text, so **while it is still in use, changing the
-generator's output shape breaks that build**. Check any generator change by regenerating that schema
-and diffing against its committed output.
+What replaced it as the safety net is `test/Golden/`: a committed copy of every test schema's
+generated modules. Any change to the emitter shows up there as a reviewable diff instead of as
+silence. Regenerate with `lune run Test --yes --update-goldens` from `test/`, and read the diff
+before committing it — that diff IS the review.

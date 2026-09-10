@@ -312,13 +312,6 @@ local PRIMITIVES = Settings.Primtives
 local ARRAY_BOUNDS = NumberRange.new(0, (PRIMITIVES.u16.Bounds :: NumberRange).Max)
 local DOUBLE_BOUNDS = PRIMITIVES.f64.Bounds :: NumberRange
 
----- Variables -----
-
-local TotalOptions = 0
-for _ in OPTIONS do
-	TotalOptions += 1
-end
-
 ---- Main ----
 
 local Parser = {}
@@ -718,14 +711,25 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 
 	local Components = {}
 	local Primitives = {}
+	local Closed = false
 
 	for _ = 1, Primitive.AllowedComponents do
 		table.insert(Primitives, self:Consume("Primitive"))
 		if self:TryConsume("CloseChevrons") then
+			Closed = true
 			break
 		end
 
 		self:Consume("Comma")
+	end
+
+	if not Closed then
+		local Extra = self:Peek()
+		error(
+			Error.new(Error.AnalyzeInvalidRange, self.Source, `Too many components`, self.File)
+				:Primary(Extra, `Expected at most {Primitive.AllowedComponents} component(s)`)
+				:Emit()
+		)
 	end
 
 	for _, Token in Primitives do
@@ -945,12 +949,14 @@ end
 
 function Parser.Options(self: Parser): Options
 	local Options: Options = {}
-	for _ = 1, TotalOptions do
-		local Keyword = self:Peek()
-		if Keyword.Value ~= "option" then
-			break
-		end
 
+	--> Read options until something that is not one. Bounding this loop by the number of KNOWN
+	--> options -- as it used to be -- silently stopped parsing once that many `option` statements
+	--> had been seen, duplicates included, and every option past the cut was reported as
+	--> "Option set after start of file" instead of being applied.
+	local Declared: { [string]: Token } = {}
+
+	while self:Peek().Value == "option" do
 		self:Consume("Keyword")
 		local Key = self:ConsumeAll("Identifier", "Assign")
 		local Name = Key.Value
@@ -965,6 +971,31 @@ function Parser.Options(self: Parser): Options
 			Error.new(Error.ParserUnknownOption, self.Source, `Unknown option "{Name}"`, self.File)
 				:Primary(Key, `Expected one of {Examples}`)
 				:Emit()
+		end
+
+		local Previous = Declared[Name]
+		if Previous then
+			Error.new(Error.AnalyzeDuplicateDeclaration, self.Source, `Duplicate option "{Name}"`, self.File)
+				:Primary(Key, "Option set twice")
+				:Secondary(Previous, "Already set here")
+				:Emit()
+		end
+
+		Declared[Name] = Key
+
+		--> Parsed since 0.14 and read by nothing since: no generator has ever looked at it. Warning
+		--> rather than erroring keeps existing schemas compiling while they migrate.
+		if Name == "UseColon" then
+			Error.new(
+				Error.AnalyzeDeprecatedOption,
+				self.Source,
+				`Option "UseColon" is deprecated`,
+				self.File,
+				"Warning"
+			)
+				:Primary(Key, "This option has no effect")
+				:Note("No generator reads it. It will be removed in 1.0 -- delete the line.")
+				:Warn()
 		end
 
 		local Value = self:Consume(Type)
@@ -1356,6 +1387,14 @@ function Parser.Type(self: Parser, Name: Token, Keyword: Token?, IsDataField: bo
 
 		local Range = self:Range(Primitive)
 		if Range then
+			if not Primitive.AllowsRange then
+				local PrimitiveToken = (Declaration :: Primitive).Tokens.Primitive
+				Error.new(Error.AnalyzeInvalidRangeType, self.Source, `Type doesn't accept a range`, self.File)
+					:Primary(Range.Token, "Remove this range")
+					:Secondary(PrimitiveToken, `"{PrimitiveToken.Value}" has no bounds to constrain`)
+					:Emit()
+			end
+
 			Value.Range = Range.Range
 			Tokens.Range = Range.Token
 		end
@@ -1365,6 +1404,19 @@ function Parser.Type(self: Parser, Name: Token, Keyword: Token?, IsDataField: bo
 		-- ex: u8?
 		local Optional = self:Optional()
 		if Optional then
+			if Declaration.Type == "Primitive" then
+				local Node = Declaration :: Primitive
+				if not Node.Value.Primitive.AllowsOptional then
+					Error.new(Error.AnalyzeInvalidOptionalType, self.Source, `Type cannot be optional`, self.File)
+						:Primary(Optional, "Remove this optional")
+						:Secondary(
+							Node.Tokens.Primitive,
+							`"{Node.Tokens.Primitive.Value}" has no way to encode absence`
+						)
+						:Emit()
+				end
+			end
+
 			Declaration = {
 				Type = "Optional",
 				Name = Name.Value,

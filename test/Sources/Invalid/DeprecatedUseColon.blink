@@ -1,0 +1,11 @@
+-- expect W3017
+-- UseColon is parsed and read by nothing. It warns, and the schema still compiles.
+option UseColon = true
+option ClientOutput = "../../Network/DeprecatedClient.luau"
+option ServerOutput = "../../Network/DeprecatedServer.luau"
+
+event Ping {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+}

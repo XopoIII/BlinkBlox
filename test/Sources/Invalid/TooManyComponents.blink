@@ -1,0 +1,3 @@
+-- expect E3009
+-- A vector takes a single component type; a third one used to fail somewhere unrelated.
+type Position = vector<f32, f32, f32>

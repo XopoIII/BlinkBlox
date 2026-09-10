@@ -32,6 +32,12 @@ export type Span = {
 	End: number,
 }
 
+--- Errors abort the compile; warnings are rendered and then execution continues. Anything that is
+--- merely suspicious -- a type whose maximum serialised size cannot be bounded, a deprecated option
+--- -- has to be a warning, because refusing to compile a schema that might be fine is worse than
+--- letting it through with a note.
+export type Severity = "Error" | "Warning"
+
 local SpecialSymbols = {
 	CLI = {
 		Line = "─",
@@ -92,6 +98,7 @@ local Error = {
 	AnalyzeUnknownImport = 3014,
 	AnalyzeErrorWhileImporting = 3015,
 	AnalyzeOptionAfterStart = 3016,
+	AnalyzeDeprecatedOption = 3017,
 }
 
 Error.__index = Error
@@ -106,6 +113,8 @@ export type Class = typeof(setmetatable(
 		File: string,
 		RawMessage: string,
 		PrimarySpan: Span?,
+		Severity: Severity,
+		Notes: { string },
 	},
 	Error
 ))
@@ -149,9 +158,13 @@ function Error.GetNameFromCode(From: number): string
 	error(`Unknown error code: {From}`)
 end
 
-function Error.new(Code: number, Source: string, Message: string, File: string?): Class
+function Error.new(Code: number, Source: string, Message: string, File: string?, Severity: Severity?): Class
+	local Level: Severity = Severity or "Error"
+	local Prefix = (Level == "Warning") and "W" or "E"
+	local TextColor: Color = if Level == "Warning" then "yellow" else "red"
+
 	local Lines = string.split(Source, "\n")
-	local Content = `{Color(`[E{string.format("%04i", Code)}] Error`, "red")}: {Message}`
+	local Content = `{Color(`[{Prefix}{string.format("%04i", Code)}] {Level}`, TextColor)}: {Message}`
 	Content ..= `\n    {Symbols.RightUp}{Symbols.Line}[{File or "input.blink"}:1:{#Lines}]`
 	Content ..= `\n    {Symbols.Down}`
 
@@ -163,6 +176,8 @@ function Error.new(Code: number, Source: string, Message: string, File: string?)
 		Code = Code,
 		File = File or "input.blink",
 		RawMessage = Message,
+		Severity = Level,
+		Notes = {},
 	}, Error)
 end
 
@@ -233,16 +248,80 @@ end
 
 function Error.Primary(self: Class, Span: Span, Text: string): Class
 	self.PrimarySpan = Span
-	return self:Label(Span, Text, "red")
+	--> A warning's primary label follows its header colour; a red underline under a yellow header
+	--> reads as an error the reader then has to un-read.
+	local LabelColor: Color = if self.Severity == "Warning" then "yellow" else "red"
+	return self:Label(Span, Text, LabelColor)
 end
 
 function Error.Secondary(self: Class, Span: Span, Text: string): Class
 	return self:Label(Span, Text, "blue")
 end
 
-function Error.Emit(self: Class): never
+--- A trailing line that says what to do about the diagnostic, rendered under the labels. A label
+--- points at what is wrong; a note points at the fix, and the two read badly when merged.
+function Error.Note(self: Class, Text: string): Class
+	table.insert(self.Notes, Text)
+	return self
+end
+
+--- Closes the gutter. Shared by Emit and Warn so the two render identically -- only what happens
+--- afterwards differs.
+local function Finalize(self: Class)
+	for _, Note in self.Notes do
+		self.Message ..= `\n    {Symbols.Down} {Style("= note:", "dim")} {Note}`
+	end
+
 	self.Message ..= `\n    {Symbols.Down}`
 	self.Message ..= `\n{string.rep(Symbols.Line, 4)}{Symbols.LeftDown}\n`
+end
+
+--- Renders the diagnostic and RETURNS. The compile continues, so this is the only reporting path a
+--- caller may use for something that does not invalidate the output.
+function Error.Warn(self: Class)
+	Finalize(self)
+
+	local OnEmit: ((Class) -> ())? = Error.OnEmit
+	if OnEmit then
+		OnEmit(self)
+	end
+
+	if IS_ROBLOX then
+		warn(self.Message)
+		return
+	end
+
+	if not stdio then
+		return
+	end
+
+	if Compact then
+		local LineStart = 0
+		local LineFinish = 0
+
+		if self.PrimarySpan then
+			local Slices = self:Slice(self.PrimarySpan)
+			LineStart = Slices[1].Line
+			LineFinish = Slices[#Slices].Line
+		end
+
+		stdio.ewrite(
+			string.format(
+				"[W%04i] [L%03i:L%03i] [%s] Warning: %s\n",
+				self.Code,
+				LineStart,
+				LineFinish,
+				self.File,
+				self.RawMessage
+			)
+		)
+	else
+		stdio.ewrite(self.Message)
+	end
+end
+
+function Error.Emit(self: Class): never
+	Finalize(self)
 
 	if IS_ROBLOX or _G.RELEASE == nil then
 		local OnEmit: ((Class) -> ())? = Error.OnEmit

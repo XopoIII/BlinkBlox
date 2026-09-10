@@ -22,7 +22,7 @@ for file in "$@"; do
 	[ -f "$file" ] || continue
 	case "$file" in
 		# Build artifacts: the compiler writes these, and the syntax theme is upstream data.
-		test/Network/* | release/* | build/sourcemap*.json) continue ;;
+		test/Network/* | test/Golden/* | release/* | build/sourcemap*.json) continue ;;
 		docs/public/syntax/*) continue ;;
 		globalTypes.d.luau) continue ;;
 		# Lock files and dependency manifests are not prose.

@@ -54,7 +54,7 @@ local THEME = {
 	Comment = Color3.fromHex("#529955"),
 
 	Error = Color3.fromHex("#FF5050"),
-	Warning = Color3.fromHex("#FF5050"),
+	Warning = Color3.fromHex("#D7BA7D"),
 
 	Complete = Color3.fromHex("#04385f"),
 
@@ -506,8 +506,12 @@ local function OnAnalysisErrorChanged()
 	end
 
 	--> Error message
+	local IsWarning = (Diagnostic.Severity == "Warning")
+	local SeverityColor = IsWarning and THEME.Warning or THEME.Error
+	local SeverityLabel = `<font color="#{SeverityColor:ToHex()}">{IsWarning and "Warning" or "Error"}</font>`
+
 	local Message =
-		`{Error.GetNameFromCode(Diagnostic.Code)}: {Diagnostic.RawMessage} <font transparency="0.5"><i>Blink({Diagnostic.Code})</i></font>`
+		`{SeverityLabel} {Error.GetNameFromCode(Diagnostic.Code)}: {Diagnostic.RawMessage} <font transparency="0.5"><i>Blink({Diagnostic.Code})</i></font>`
 	for _, Label in Labels do
 		local Line = Utility.GetCurrentLine(Input.Text, Label.Span.Start)
 		Message ..= `\n{Label.Text} [L{Line}]`
@@ -533,6 +537,9 @@ local function OnAnalysisErrorChanged()
 		local Line = ErrorTemplate:Clone()
 		Line.Size = UDim2.new(1, 0, 0, TextHeight)
 		local Fill = Line.Fill
+		if IsWarning then
+			Fill.TextColor3 = THEME.Warning
+		end
 
 		if Offset < Start then
 			Line.Fill.MaxVisibleGraphemes = 0

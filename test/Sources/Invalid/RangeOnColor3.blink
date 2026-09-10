@@ -1,0 +1,3 @@
+-- expect E3008
+-- Color3 has no numeric bounds, so a range on it could only ever be dropped on the floor.
+type Tint = Color3(1..2)

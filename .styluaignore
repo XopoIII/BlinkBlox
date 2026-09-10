@@ -1,0 +1,5 @@
+# Generated network modules: the compiler writes these, and stylua would fight the generator
+# over every line. `test/Golden` is the committed copy of that same output.
+test/Golden/
+Network/
+release/

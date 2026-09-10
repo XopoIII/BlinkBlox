@@ -15,8 +15,10 @@ exclude = [
 	# they are spliced into that file — `RecieveBuffer`, `PlayersMap`, `Read`. Linting them in
 	# isolation reports undefined variables for every one of them.
 	"src/Templates/**",
-	# Generated network code and build output.
+	# Generated network code and build output. `test/Golden` is a committed copy of the compiler's
+	# output, kept so a generator change shows up as a reviewable diff -- it is not hand-written.
 	"test/Network/**",
+	"test/Golden/**",
 	"release/**",
 	"build/**",
 	# The benchmark tree pulls in third-party transports (zap, bytenet) for comparison.
