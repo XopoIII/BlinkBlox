@@ -18,6 +18,7 @@ export type Cases = {
 	FireExcept: string,
 	On: string,
 	Invoke: string,
+	Predict: string,
 	StepReplication: string,
 	Next: string,
 	Iter: string,
@@ -43,6 +44,7 @@ local Indexes = {
 local Cases: { [string]: { string } } = {
 	On = { "On", "on", "on" },
 	Invoke = { "Invoke", "invoke", "invoke" },
+	Predict = { "Predict", "predict", "predict" },
 	Fire = { "Fire", "fire", "fire" },
 	FireAll = { "FireAll", "fireAll", "fire_all" },
 	FireList = { "FireList", "fireList", "fire_list" },

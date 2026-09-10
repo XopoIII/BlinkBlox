@@ -1423,6 +1423,52 @@ RunClosure("Edit mode stubs keep the shape of the real API", function()
 	Stub.ReliableServer.FireAll(1)
 end)
 
+RunClosure("Predict delivers to local listeners", function()
+	--> Upstream issue #59. Predict hands an event to this side's own listeners without touching a
+	--> remote, so receiving code can be driven directly from a test or a story.
+	local Received: number?
+	local Disconnect = Server.ReliableClient.On(function(_Player, Value)
+		Received = Value
+	end)
+
+	Server.ReliableClient.Predict(Shared.Player, 42)
+
+	if Received ~= 42 then
+		ErrorPrint(`Failed "Predict": listener received {tostring(Received)}, expected 42.`)
+	end
+
+	Disconnect()
+
+	--> It mirrors the receive path rather than only calling listeners: with none attached the event
+	--> waits in the queue, exactly as a networked one would, and arrives when a listener connects.
+	Server.ReliableClient.Predict(Shared.Player, 7)
+
+	local Queued: number?
+	local DisconnectQueued = Server.ReliableClient.On(function(_Player, Value)
+		Queued = Value
+	end)
+
+	if Queued ~= 7 then
+		ErrorPrint(`Failed "Predict": a queued event arrived as {tostring(Queued)}, expected 7.`)
+	end
+
+	DisconnectQueued()
+
+	--> And it stays local: nothing may reach the wire.
+	local Delivered = 0
+	local Watch = Shared.Bridge:Connect(function()
+		Delivered += 1
+	end)
+
+	Server.ReliableClient.Predict(Shared.Player, 1)
+	task.wait(0.2)
+	Watch.Disconnect()
+
+	if Delivered ~= 0 then
+		ErrorPrint(`Failed "Predict": {Delivered} packet(s) went over the wire.`)
+	end
+end)
+
 PrettyPrint("green", `All tests passed successfully!`)
 
 process.exit(0)

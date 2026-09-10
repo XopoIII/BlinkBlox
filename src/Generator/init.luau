@@ -463,8 +463,37 @@ function Declarations.Event(Declaration: Parser.Event)
 				:End()
 		end
 
-		Noop.Push(`{Casing.On} = NOOP_RETURNING`, 0, Indent + 1)
-		Body.PushLines(Listener.Content, 0, Indent + 1)
+		--> Predict (upstream issue #59, and the other half of #81).
+		-->
+		--> Delivers an event to this side's own listeners without going near a remote, so a test or a
+		--> story can drive receiving code directly. It mirrors the receive path deliberately, queue
+		--> included: a Predict that skipped the queue would behave differently from the network
+		--> whenever no listener is attached yet, which is exactly the case tests hit most.
+		if Options.Predict then
+			local PredictArguments = `{Context == "Server" and "Player: Player, " or ""}{Values}`
+			local Predict = Blocks.Function(Casing.Predict, PredictArguments, "()", true)
+
+			if IsSingle then
+				local Bound = Predict:Compare(Connection, "nil", "Not"):Lines(CallListener.Content, Predict.Indent)
+				if IsReliable then
+					Bound:Branch("Default"):Line(`table.insert({Queue}, \{{ListenerArguments}\} :: \{any\})`):End()
+				else
+					Bound:End()
+				end
+			else
+				Predict:Iterator("_", "Listener", Connection):Lines(CallListener.Content, Predict.Indent):End()
+			end
+
+			Predict:End()
+
+			Noop.Push(`{Casing.On} = NOOP_RETURNING,`, 0, Indent + 1)
+			Noop.Push(`{Casing.Predict} = NOOP`, 0, Indent + 1)
+			Body.PushLines(Listener:Wrap("", ",").Content, 0, Indent + 1)
+			Body.PushLines(Predict.Content, 0, Indent + 1)
+		else
+			Noop.Push(`{Casing.On} = NOOP_RETURNING`, 0, Indent + 1)
+			Body.PushLines(Listener.Content, 0, Indent + 1)
+		end
 	elseif Value.From ~= Context and IsPolling then
 		Events.Push(`{Queue} = CreateQueue()`)
 		Block = (Channel.Listening == false) and Block:Compare("Index", Index, "Equals")

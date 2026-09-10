@@ -95,6 +95,36 @@ option MaxInstancesPerPacket = 512
 Only inbound server traffic is checked. The client trusts the server by construction, and capping
 what the server sends would drop legitimate replication.
 
+## `Predict`
+Default: `false`
+
+Adds a `Predict` entry point to every event, on the side that listens to it. It hands the event
+straight to that side's own listeners without touching a remote.
+
+```blink copy
+option Predict = true
+```
+
+```lua filename="server.luau" copy
+-- An event declared `From: Client` is listened to on the server, so Predict lives there.
+blink.MyEvent.Predict(Player, 5)
+```
+```lua filename="client.luau" copy
+-- An event declared `From: Server` is listened to on the client.
+blink.MyEvent.Predict(5)
+```
+
+It takes exactly what a listener receives, and behaves like a real arriving event: if no listener is
+connected yet, the call waits in the queue and is delivered when one connects.
+
+Two uses. Tests can drive receiving code without standing up a network, and Roblox stories — which
+run in edit mode, where no remotes exist — can exercise UI that reacts to events.
+
+<Callout type="warning">
+    Off by default because it is an entry point into your listeners that does not exist on the wire.
+    Enable it where you want it and leave it off in builds where you do not.
+</Callout>
+
 ## `RemoteScope`
 Default: `""`
 

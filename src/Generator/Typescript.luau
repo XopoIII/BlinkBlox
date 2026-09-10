@@ -264,6 +264,11 @@ function Generators.Event(State: State, Event: Parser.Event)
 		StringBuilder.Push(`{Casing.Iter}: () => IterableFunction<{ListenerValues}>`, 0, Indent + 1)
 	else
 		StringBuilder.Push(`{Casing.On}: (Listener: ({ListenerValues}) => void) => (() => void)`, 0, Indent + 1)
+
+		--> Predict takes what a listener receives, since it stands in for an arriving event.
+		if State.Options.Predict then
+			StringBuilder.Push(`{Casing.Predict}: ({ListenerValues}) => void`, 0, Indent + 1)
+		end
 	end
 
 	StringBuilder.Push(`\}`, 0, Indent)

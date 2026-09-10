@@ -94,6 +94,10 @@ export type Options = {
 	MaxPacketSize: number?,
 	MaxEventsPerPacket: number?,
 	MaxInstancesPerPacket: number?,
+
+	--> Generates a Predict entry point on each event, which dispatches to local listeners without
+	--> touching remotes. See the generator.
+	Predict: boolean?,
 }
 
 export type Body = Node<"Body", {
@@ -210,6 +214,7 @@ local OPTIONS: { [string]: Lexer.Types } = {
 	MaxPacketSize = "Number",
 	MaxEventsPerPacket = "Number",
 	MaxInstancesPerPacket = "Number",
+	Predict = "Boolean",
 }
 
 local EVENT: { EventOption } = {
