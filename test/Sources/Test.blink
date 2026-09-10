@@ -67,6 +67,15 @@ export enum SizeEnum = {A, B, C}
 export set SizeFlags = {F1, F2, F3}
 export map SizeMap = {[u8]: u16}
 
+-- An ordered unreliable event: delivery is still not guaranteed, but a packet that arrives after a
+-- newer one is discarded instead of applied out of order.
+event OrderedPosition {
+    From: Client,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Data: u8,
+}
+
 -- Fixtures for offset-encoded lengths. A span of a hundred fits in one byte however high the bounds
 -- sit, so these cost one byte of length where they used to cost two.
 export type OffsetArray = u8[300..400]

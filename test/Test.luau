@@ -1941,6 +1941,72 @@ RunClosure("Decoding stops when the player leaves", function()
 	end
 end)
 
+RunClosure("Ordered unreliable events", function()
+	--> Unreliable packets can arrive in any order. For anything that describes a CURRENT state -- a
+	--> position, an aim direction -- applying an older packet after a newer one is worse than losing
+	--> it: the state visibly snaps backwards.
+	-->
+	--> Delivery is captured rather than mocked away, then replayed backwards, which is the exact
+	--> situation the sequence number exists for.
+	local Received = {}
+	local Disconnect = Server.OrderedPosition.On(function(_Player, Value)
+		table.insert(Received, Value)
+	end)
+
+	task.wait(0.2)
+	table.clear(Received)
+
+	local Remote = ClientEnvironment.Instances.BLINK_UNRELIABLE_REMOTE
+	local Original = Remote.FireServer
+	local Captured = {}
+
+	Remote.FireServer = function(_self, Buffer, Instances)
+		table.insert(Captured, { Buffer = Buffer, Instances = Instances })
+	end
+
+	Client.OrderedPosition.Fire(1)
+	Client.OrderedPosition.Fire(2)
+	Client.OrderedPosition.Fire(3)
+	Remote.FireServer = Original
+
+	if #Captured ~= 3 then
+		ErrorPrint(`Failed "Ordered unreliable": captured {#Captured} packets, expected 3.`)
+	end
+
+	local ServerRemote = ServerEnvironment.Instances.BLINK_UNRELIABLE_REMOTE
+
+	--> Newest first, then the two older ones. Only the first may be dispatched.
+	ServerRemote.OnServerEvent:Fire(Shared.Player, Captured[3].Buffer, Captured[3].Instances)
+	ServerRemote.OnServerEvent:Fire(Shared.Player, Captured[1].Buffer, Captured[1].Instances)
+	ServerRemote.OnServerEvent:Fire(Shared.Player, Captured[2].Buffer, Captured[2].Instances)
+
+	task.wait(0.3)
+	Disconnect()
+
+	if #Received ~= 1 or Received[1] ~= 3 then
+		ErrorPrint(
+			`Failed "Ordered unreliable": received {#Received} event(s) ({table.concat(Received, ", ")}), `
+				.. `expected only the newest.`
+		)
+	end
+
+	--> In order, everything arrives: a check that drops stale packets must not drop fresh ones.
+	local InOrder = {}
+	local DisconnectOrdered = Server.OrderedPosition.On(function(_Player, Value)
+		table.insert(InOrder, Value)
+	end)
+
+	Client.OrderedPosition.Fire(4)
+	task.wait(0.15)
+	Client.OrderedPosition.Fire(5)
+	task.wait(0.3)
+	DisconnectOrdered()
+
+	if #InOrder ~= 2 then
+		ErrorPrint(`Failed "Ordered unreliable": {#InOrder} of 2 in-order events arrived.`)
+	end
+end)
+
 RunClosure("Offset-encoded lengths", function()
 	--> A length is written relative to the declared minimum, in the smallest numeral that holds the
 	--> SPAN. `u8[300..400]` has a hundred possible lengths, so one byte carries it -- where encoding

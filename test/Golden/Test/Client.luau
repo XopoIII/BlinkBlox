@@ -172,6 +172,22 @@ local Queue: any = {
 }
 
 
+--> Sequence numbers for ordered unreliable events, one counter per event.
+local OrderOut: { number } = {}
+local OrderIn: { number } = {}
+
+--> Accepts a packet only if it is newer than the last one seen for this event. The
+--> comparison tolerates the counter wrapping at 65536.
+local function OrderAccept(Slot: number, Identifier: number): boolean
+	local Last = OrderIn[Slot]
+	if Last ~= nil and Identifier <= Last and (Last - Identifier) < 32767 then
+		return false
+	end
+
+	OrderIn[Slot] = Identifier
+	return true
+end
+
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
 --> runtime, and says which event did it.
@@ -190,11 +206,11 @@ Queue.Unreliable[0] = table.create(256)
 Queue.Reliable[2] = table.create(256)
 Queue.Reliable[3] = table.create(256)
 Queue.Reliable[6] = CreateQueue()
-Queue.Unreliable[4] = CreateQueue()
-Queue.Reliable[7] = CreateQueue()
 Queue.Unreliable[5] = CreateQueue()
+Queue.Reliable[7] = CreateQueue()
+Queue.Unreliable[6] = CreateQueue()
 Queue.Reliable[9] = table.create(256)
-Queue.Unreliable[7] = table.create(256)
+Queue.Unreliable[8] = table.create(256)
 Queue.Reliable[10] = table.create(256)
 Queue.Reliable[11] = table.create(256)
 Queue.Reliable[12] = table.create(256)
@@ -211,20 +227,20 @@ Queue.Reliable[23] = table.create(256)
 Queue.Reliable[24] = table.create(256)
 Queue.Reliable[25] = table.create(256)
 Queue.Reliable[26] = table.create(256)
-Queue.Unreliable[8] = table.create(256)
 Queue.Unreliable[9] = table.create(256)
+Queue.Unreliable[10] = table.create(256)
 Events.Reliable[27] = {}
 Queue.Reliable[27] = table.create(256)
 Events.Reliable[28] = {}
 Queue.Reliable[28] = table.create(256)
-Events.Unreliable[10] = {}
-Queue.Unreliable[10] = table.create(256)
 Events.Unreliable[11] = {}
 Queue.Unreliable[11] = table.create(256)
+Events.Unreliable[12] = {}
+Queue.Unreliable[12] = table.create(256)
 Queue.Reliable[29] = table.create(256)
 Queue.Reliable[30] = table.create(256)
-Queue.Unreliable[12] = table.create(256)
 Queue.Unreliable[13] = table.create(256)
+Queue.Unreliable[14] = table.create(256)
 Queue.Reliable[32] = table.create(256)
 Queue.Reliable[33] = table.create(256)
 Queue.Reliable[34] = table.create(256)
@@ -234,7 +250,7 @@ Queue.Reliable[37] = table.create(256)
 Queue.Reliable[38] = table.create(256)
 Queue.Reliable[39] = table.create(256)
 Queue.Reliable[40] = table.create(256)
-Queue.Unreliable[15] = table.create(256)
+Queue.Unreliable[16] = table.create(256)
 Queue.Reliable[41] = table.create(256)
 Queue.Reliable[42] = table.create(256)
 Queue.Reliable[43] = table.create(256)
@@ -371,6 +387,21 @@ function SerdesFunctions.Indexers_ReadEVENT_TestEvent(): ({ ["z z"]: number, ["1
 	return Value1, Value2, Value3, Value4
 end
 
+function SerdesFunctions.WriteEVENT_OrderedPosition(Value: number): ()
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
+	-- EVENT_OrderedPosition (1)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+	local OrderIdentifier = ((OrderOut[1] or 0) + 1) % 65536
+	OrderOut[1] = OrderIdentifier
+	buffer.writeu16(SendBuffer, BLOCK_START + 1, OrderIdentifier)
+	-- Value: OrderedPosition
+	if typeof(Value) ~= "number" then
+		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value)
+end
+
 function SerdesFunctions.WriteEVENT_RateLimited(Value: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
@@ -398,8 +429,8 @@ end
 function SerdesFunctions.WriteEVENT_UnreliableOversize(Value: string): ()
 	-- Allocate BLOCK: 3 bytes
 	local BLOCK_START = Allocate(3)
-	-- EVENT_UnreliableOversize (1)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+	-- EVENT_UnreliableOversize (2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
 	-- Value: UnreliableOversize
 	if typeof(Value) ~= "string" then
 		error(`Expected Value to be of type string, got {type(Value)} instead.`)
@@ -656,8 +687,8 @@ end
 function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 	-- Allocate BLOCK: 20 bytes
 	local BLOCK_START = Allocate(20)
-	-- EVENT_ClientUnreliablePollEvent (2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+	-- EVENT_ClientUnreliablePollEvent (3)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
 	-- Value: ClientUnreliablePollEvent
 	-- Value.Field: Field
 	local BITFIELD_0 = 0
@@ -870,8 +901,8 @@ end
 function SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent(Value: nil): ()
 	-- Allocate BLOCK: 1 bytes
 	local BLOCK_START = Allocate(1)
-	-- EVENT_ClientEmptyUnreliablePollEvent (3)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
+	-- EVENT_ClientEmptyUnreliablePollEvent (4)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 4)
 end
 
 function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
@@ -1250,8 +1281,8 @@ end
 function SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent(Value: nil): ()
 	-- Allocate BLOCK: 1 bytes
 	local BLOCK_START = Allocate(1)
-	-- EVENT_ClientEmptyUnreliableEvent (6)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 6)
+	-- EVENT_ClientEmptyUnreliableEvent (7)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 7)
 end
 
 function SerdesFunctions.ReadEVENT_EmptyEvent(): (nil)
@@ -1900,8 +1931,8 @@ end
 function SerdesFunctions.WriteEVENT_UnreliableClient(Value: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- EVENT_UnreliableClient (14)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 14)
+	-- EVENT_UnreliableClient (15)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 15)
 	-- Value: UnreliableClient
 	if typeof(Value) ~= "number" then
 		error(`Expected Value to be of type number, got {type(Value)} instead.`)
@@ -3901,6 +3932,9 @@ if not RunService:IsRunning() then
 			return Result
 		end
 	},
+	OrderedPosition = {
+		Fire = NOOP
+	},
 	OffsetArray = {
 		Read = function(Buffer: buffer): (OffsetArray)
 			-- Buffer overwrite
@@ -5671,55 +5705,55 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				SerdesEvent = "TestEvent"
 				Events.Unreliable[0](Value1, Value2, Value3, Value4)
 			end
-		elseif Index == 4 then
-			Push(Queue.Unreliable[4], table.pack(SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent()))
 		elseif Index == 5 then
-			Push(Queue.Unreliable[5], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyUnreliablePollEvent()))
-		elseif Index == 7 then
-			local Value: nil = SerdesFunctions.ReadEVENT_EmptyUnreliableEvent()
-			if Events.Unreliable[7] ~= nil then
-				SerdesEvent = "EmptyUnreliableEvent"
-				Events.Unreliable[7](Value)
-			end
+			Push(Queue.Unreliable[5], table.pack(SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent()))
+		elseif Index == 6 then
+			Push(Queue.Unreliable[6], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyUnreliablePollEvent()))
 		elseif Index == 8 then
-			local Value: { number } = SerdesFunctions.ReadEVENT_ArrayPrimitive()
+			local Value: nil = SerdesFunctions.ReadEVENT_EmptyUnreliableEvent()
 			if Events.Unreliable[8] ~= nil then
-				SerdesEvent = "ArrayPrimitive"
+				SerdesEvent = "EmptyUnreliableEvent"
 				Events.Unreliable[8](Value)
 			end
 		elseif Index == 9 then
-			local Value: number? = SerdesFunctions.ReadEVENT_OptionalPrimitive()
+			local Value: { number } = SerdesFunctions.ReadEVENT_ArrayPrimitive()
 			if Events.Unreliable[9] ~= nil then
-				SerdesEvent = "OptionalPrimitive"
+				SerdesEvent = "ArrayPrimitive"
 				Events.Unreliable[9](Value)
 			end
 		elseif Index == 10 then
+			local Value: number? = SerdesFunctions.ReadEVENT_OptionalPrimitive()
+			if Events.Unreliable[10] ~= nil then
+				SerdesEvent = "OptionalPrimitive"
+				Events.Unreliable[10](Value)
+			end
+		elseif Index == 11 then
 			local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableSync()
-			for _, Listener in Events.Unreliable[10] do
+			for _, Listener in Events.Unreliable[11] do
 				SerdesEvent = "ManyUnreliableSync"
 				Listener(Value)
 			end
-		elseif Index == 11 then
+		elseif Index == 12 then
 			local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableAsync()
-			for _, Listener in Events.Unreliable[11] do
+			for _, Listener in Events.Unreliable[12] do
 				task.spawn(Listener, Value)
 			end
-		elseif Index == 12 then
-			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServer()
-			if Events.Unreliable[12] ~= nil then
-				SerdesEvent = "UnreliableServer"
-				Events.Unreliable[12](Value)
-			end
 		elseif Index == 13 then
-			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServerAsync()
+			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServer()
 			if Events.Unreliable[13] ~= nil then
-				task.spawn(Events.Unreliable[13], Value)
+				SerdesEvent = "UnreliableServer"
+				Events.Unreliable[13](Value)
 			end
-		elseif Index == 15 then
+		elseif Index == 14 then
+			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServerAsync()
+			if Events.Unreliable[14] ~= nil then
+				task.spawn(Events.Unreliable[14], Value)
+			end
+		elseif Index == 16 then
 			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadEVENT_TupleUnreliable()
-			if Events.Unreliable[15] ~= nil then
+			if Events.Unreliable[16] ~= nil then
 				SerdesEvent = "TupleUnreliable"
-				Events.Unreliable[15](Value1, Value2, Value3, Value4, Value5)
+				Events.Unreliable[16](Value1, Value2, Value3, Value4, Value5)
 			end
 		end
 	end
@@ -7050,6 +7084,19 @@ local Returns = table.freeze({
 			return Result
 		end
 	},
+	OrderedPosition = {
+		Fire = function(Value: number): ()
+			local Previous = Save()
+			Load()
+			SerdesFunctions.WriteEVENT_OrderedPosition(Value)
+			if CheckUnreliableSize("OrderedPosition") then
+				local Buffer = buffer.create(SendCursor)
+				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+				Unreliable:FireServer(Buffer, SendInstances)
+			end
+			Load(Previous)
+		end
+	},
 	OffsetArray = {
 		Read = function(Buffer: buffer): (OffsetArray)
 			-- Buffer overwrite
@@ -8199,7 +8246,7 @@ local Returns = table.freeze({
 	ServerUnreliablePollEvent = {
 		Iter = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
-			local queue = Queue.Unreliable[4]
+			local queue = Queue.Unreliable[5]
 			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
@@ -8212,7 +8259,7 @@ local Returns = table.freeze({
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
 		Next = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
-			local queue = Queue.Unreliable[4]
+			local queue = Queue.Unreliable[5]
 			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
@@ -8253,7 +8300,7 @@ local Returns = table.freeze({
 	ServerEmptyUnreliablePollEvent = {
 		Iter = function(): () -> (number, nil)
 			local index = 0
-			local queue = Queue.Unreliable[5]
+			local queue = Queue.Unreliable[6]
 			return function (): (number, nil)
 				index += 1
 				local arguments = Pop(queue)
@@ -8266,7 +8313,7 @@ local Returns = table.freeze({
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
 		Next = function(): () -> (number, nil)
 			local index = 0
-			local queue = Queue.Unreliable[5]
+			local queue = Queue.Unreliable[6]
 			return function (): (number, nil)
 				index += 1
 				local arguments = Pop(queue)
@@ -8319,17 +8366,17 @@ local Returns = table.freeze({
 	},
 	EmptyUnreliableEvent = {
 		On = function(Listener: (Value: nil) -> ()): () -> ()
-			Events.Unreliable[7] = Listener
+			Events.Unreliable[8] = Listener
 			return function (): ()
-				if Events.Unreliable[7] == Listener then
-					Events.Unreliable[7] = nil
+				if Events.Unreliable[8] == Listener then
+					Events.Unreliable[8] = nil
 				end
 			end
 		end,
 		Predict = function(Value: nil): ()
-			if Events.Unreliable[7] ~= nil then
+			if Events.Unreliable[8] ~= nil then
 				SerdesEvent = "EmptyUnreliableEvent"
-				Events.Unreliable[7](Value)
+				Events.Unreliable[8](Value)
 			end
 		end
 	},
@@ -8672,22 +8719,6 @@ local Returns = table.freeze({
 	},
 	ArrayPrimitive = {
 		On = function(Listener: (Value: { number }) -> ()): () -> ()
-			Events.Unreliable[8] = Listener
-			return function (): ()
-				if Events.Unreliable[8] == Listener then
-					Events.Unreliable[8] = nil
-				end
-			end
-		end,
-		Predict = function(Value: { number }): ()
-			if Events.Unreliable[8] ~= nil then
-				SerdesEvent = "ArrayPrimitive"
-				Events.Unreliable[8](Value)
-			end
-		end
-	},
-	OptionalPrimitive = {
-		On = function(Listener: (Value: number?) -> ()): () -> ()
 			Events.Unreliable[9] = Listener
 			return function (): ()
 				if Events.Unreliable[9] == Listener then
@@ -8695,10 +8726,26 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: number?): ()
+		Predict = function(Value: { number }): ()
 			if Events.Unreliable[9] ~= nil then
-				SerdesEvent = "OptionalPrimitive"
+				SerdesEvent = "ArrayPrimitive"
 				Events.Unreliable[9](Value)
+			end
+		end
+	},
+	OptionalPrimitive = {
+		On = function(Listener: (Value: number?) -> ()): () -> ()
+			Events.Unreliable[10] = Listener
+			return function (): ()
+				if Events.Unreliable[10] == Listener then
+					Events.Unreliable[10] = nil
+				end
+			end
+		end,
+		Predict = function(Value: number?): ()
+			if Events.Unreliable[10] ~= nil then
+				SerdesEvent = "OptionalPrimitive"
+				Events.Unreliable[10](Value)
 			end
 		end
 	},
@@ -8745,23 +8792,6 @@ local Returns = table.freeze({
 	},
 	ManyUnreliableSync = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			table.insert(Events.Unreliable[10], Listener)
-			return function (): ()
-				local Index = table.find(Events.Unreliable[10], Listener)
-				if Index ~= nil then
-					table.remove(Events.Unreliable[10], Index)
-				end
-			end
-		end,
-		Predict = function(Value: number): ()
-			for _, Listener in Events.Unreliable[10] do
-				SerdesEvent = "ManyUnreliableSync"
-				Listener(Value)
-			end
-		end
-	},
-	ManyUnreliableAsync = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
 			table.insert(Events.Unreliable[11], Listener)
 			return function (): ()
 				local Index = table.find(Events.Unreliable[11], Listener)
@@ -8772,6 +8802,23 @@ local Returns = table.freeze({
 		end,
 		Predict = function(Value: number): ()
 			for _, Listener in Events.Unreliable[11] do
+				SerdesEvent = "ManyUnreliableSync"
+				Listener(Value)
+			end
+		end
+	},
+	ManyUnreliableAsync = {
+		On = function(Listener: (Value: number) -> ()): () -> ()
+			table.insert(Events.Unreliable[12], Listener)
+			return function (): ()
+				local Index = table.find(Events.Unreliable[12], Listener)
+				if Index ~= nil then
+					table.remove(Events.Unreliable[12], Index)
+				end
+			end
+		end,
+		Predict = function(Value: number): ()
+			for _, Listener in Events.Unreliable[12] do
 				task.spawn(Listener, Value)
 			end
 		end
@@ -8826,22 +8873,6 @@ local Returns = table.freeze({
 	},
 	UnreliableServer = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			Events.Unreliable[12] = Listener
-			return function (): ()
-				if Events.Unreliable[12] == Listener then
-					Events.Unreliable[12] = nil
-				end
-			end
-		end,
-		Predict = function(Value: number): ()
-			if Events.Unreliable[12] ~= nil then
-				SerdesEvent = "UnreliableServer"
-				Events.Unreliable[12](Value)
-			end
-		end
-	},
-	UnreliableServerAsync = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
 			Events.Unreliable[13] = Listener
 			return function (): ()
 				if Events.Unreliable[13] == Listener then
@@ -8851,7 +8882,23 @@ local Returns = table.freeze({
 		end,
 		Predict = function(Value: number): ()
 			if Events.Unreliable[13] ~= nil then
-				task.spawn(Events.Unreliable[13], Value)
+				SerdesEvent = "UnreliableServer"
+				Events.Unreliable[13](Value)
+			end
+		end
+	},
+	UnreliableServerAsync = {
+		On = function(Listener: (Value: number) -> ()): () -> ()
+			Events.Unreliable[14] = Listener
+			return function (): ()
+				if Events.Unreliable[14] == Listener then
+					Events.Unreliable[14] = nil
+				end
+			end
+		end,
+		Predict = function(Value: number): ()
+			if Events.Unreliable[14] ~= nil then
+				task.spawn(Events.Unreliable[14], Value)
 			end
 		end
 	},
@@ -9058,17 +9105,17 @@ local Returns = table.freeze({
 	},
 	TupleUnreliable = {
 		On = function(Listener: (Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?) -> ()): () -> ()
-			Events.Unreliable[15] = Listener
+			Events.Unreliable[16] = Listener
 			return function (): ()
-				if Events.Unreliable[15] == Listener then
-					Events.Unreliable[15] = nil
+				if Events.Unreliable[16] == Listener then
+					Events.Unreliable[16] = nil
 				end
 			end
 		end,
 		Predict = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-			if Events.Unreliable[15] ~= nil then
+			if Events.Unreliable[16] ~= nil then
 				SerdesEvent = "TupleUnreliable"
-				Events.Unreliable[15](Value1, Value2, Value3, Value4, Value5)
+				Events.Unreliable[16](Value1, Value2, Value3, Value4, Value5)
 			end
 		end
 	},

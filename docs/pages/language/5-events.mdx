@@ -24,6 +24,18 @@ Currently Blink supports either `Server` or `Client`.
 Determines the type (reliability) of the event.
 * `Reliable` - Events are guaranteed to arrive at their destination in the order they were sent in.
 * `Unreliable` - Events are not guaranteed to arrive at their destination or to arrive in the order they were sent in. They also have a maximum size of roughly 1000 bytes, which Blink enforces at compile time and again on send -- see [`MaxUnreliableSize`](1-options#maxunreliablesize).
+* `OrderedUnreliable` - As `Unreliable`, plus a two-byte sequence number: a packet that arrives *after* a newer one is discarded rather than delivered late. Delivery is still not guaranteed and packets can still be lost — what is guaranteed is that your listener never sees an older state after a newer one.
+
+<Callout type="info">
+    Use `OrderedUnreliable` for anything describing a **current** state — a position, an aim
+    direction, a health value — where applying a stale packet makes the state visibly snap backwards.
+    Plain `Unreliable` is right for independent one-off signals, where an older packet is still
+    useful on its own.
+
+    The sequence is tracked per event, and on the server per player: sixty clients each run their own
+    counter, and one client's says nothing about another's. It wraps at 65536, and the comparison is
+    written to tolerate that.
+</Callout>
 
 #### `Call`
 Determines the listening API exposed on the receiving side.

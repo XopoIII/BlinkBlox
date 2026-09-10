@@ -411,8 +411,13 @@ local function Sealed(Node: Node): Measurement
 	return Seal(Measure(Node))
 end
 
+--- Bytes an ordered unreliable event spends on its sequence number, on top of its payload. Exposed
+--- so the unreliable size analysis can account for it without duplicating the constant.
+local ORDERING_BYTES = 2
+
 return {
 	Measure = Measure,
 	Sealed = Sealed,
 	DefaultLength = DEFAULT_LENGTH,
+	OrderingBytes = ORDERING_BYTES,
 }

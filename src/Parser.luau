@@ -197,7 +197,9 @@ export type Event = Node<
 	"Event",
 	{
 		From: "Client" | "Server",
-		Type: "Reliable" | "Unreliable",
+		--> OrderedUnreliable is Unreliable plus a sequence number: delivery is still not guaranteed,
+		--> but a packet arriving after a newer one is discarded rather than applied out of order.
+		Type: "Reliable" | "Unreliable" | "OrderedUnreliable",
 		Call: EventCall,
 		Data: (TypeNode | Tuple)?,
 		--> Sustained events per second accepted from one player, and the bucket capacity that lets a
@@ -261,7 +263,7 @@ local OPTIONS: { [string]: Lexer.Types } = {
 
 local EVENT: { EventOption } = {
 	{ Key = "From", Type = "Identifier", Values = { "Client", "Server" } },
-	{ Key = "Type", Type = "Identifier", Values = { "Reliable", "Unreliable" } },
+	{ Key = "Type", Type = "Identifier", Values = { "Reliable", "Unreliable", "OrderedUnreliable" } },
 	{ Key = "Call", Type = "Identifier", Values = { "SingleSync", "SingleAsync", "ManySync", "ManyAsync", "Polling" } },
 	{ Key = "Poll", Type = "Boolean", Values = { true, false }, Optional = true },
 	{ Key = "Rate", Type = "Number", Values = {}, Optional = true, Numeric = true },
@@ -978,16 +980,19 @@ local function AnalyzeUnreliableSizes(self: Parser, Declarations: { Declaration 
 		end
 
 		local Event = Declaration :: Event
-		if Event.Value.Type ~= "Unreliable" then
+		local Reliability = Event.Value.Type
+		if Reliability ~= "Unreliable" and Reliability ~= "OrderedUnreliable" then
 			continue
 		end
 
 		local Data = Event.Value.Data
 		local Measured = if Data then Size.Sealed(Data :: any) else nil
 
-		--> The event index is one byte, written ahead of the payload.
-		local Minimum = 1 + (if Measured then Measured.Min else 0)
-		local Maximum = 1 + (if Measured then Measured.Max else 0)
+		--> The event index is one byte, written ahead of the payload, and an ordered event adds its
+		--> sequence number on top of that.
+		local Header = 1 + (if Reliability == "OrderedUnreliable" then Size.OrderingBytes else 0)
+		local Minimum = Header + (if Measured then Measured.Min else 0)
+		local Maximum = Header + (if Measured then Measured.Max else 0)
 		local Identifier = Event.Tokens.Identifier
 
 		if Minimum > Limit then

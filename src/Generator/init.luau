@@ -121,6 +121,10 @@ local Options: Parser.Options
 local Generators = {}
 local Declarations = {}
 
+--> Set when the schema declares at least one OrderedUnreliable event, so the sequence bookkeeping
+--> is emitted only where something uses it.
+local UsesOrdering = false
+
 --> One entry per rate-limited event or function, in the order they were generated. Each takes three
 --> consecutive numbers in the per-player bucket, so the entry at index N starts at slot (N - 1) * 3 + 1.
 local RateSlots: { { Rate: number, Burst: number } } = {}
@@ -167,6 +171,23 @@ local function RateGuardExpression(Value: { Rate: number?, Burst: number? }, Nam
 	local Slot = ((#RateSlots - 1) * 3) + 1
 
 	return `RateAccept(Player, {Slot}, {Rate}, {Burst}, "{Name}")`
+end
+
+--- The call that decides whether an ordered packet is newer than the last one seen. Nil when the
+--- event is not ordered, in which case no check is emitted at all.
+---
+--- The server keys by player: sixty clients each run their own sequence, and one client's counter
+--- says nothing about another's.
+local function OrderGuardExpression(IsOrdered: boolean, Index: number): string?
+	if not IsOrdered then
+		return nil
+	end
+
+	if Context == "Server" then
+		return `OrderAccept(Player, {Index}, OrderIdentifier)`
+	end
+
+	return `OrderAccept({Index}, OrderIdentifier)`
 end
 
 local function FormatIndex(Index: string): string
@@ -373,7 +394,13 @@ function Declarations.Event(Declaration: Parser.Event)
 	local Reliability = Value.Type
 
 	local IsReliable = (Reliability == "Reliable")
-	local IsUnreliable = (Reliability == "Unreliable")
+	--> Ordered events travel the unreliable channel; the ordering is a sequence number on top of it.
+	local IsOrdered = (Reliability == "OrderedUnreliable")
+	local IsUnreliable = (Reliability == "Unreliable" or IsOrdered)
+
+	if IsOrdered then
+		UsesOrdering = true
+	end
 	local IsPolling = (Value.Call == "Polling" or Options.UsePolling)
 	local IsSameContext = Value.From == Context
 
@@ -381,12 +408,15 @@ function Declarations.Event(Declaration: Parser.Event)
 	local Channel = IsUnreliable and Channels.Unreliable or Channels.Reliable
 
 	local Index = Channel.Count
-	local Queue = `Queue.{Reliability}[{Index}]`
-	local Connection = `Events.{Reliability}[{Index}]`
+	--> Ordered events ride the unreliable channel, so they share its queue and listener tables --
+	--> naming those after the declared reliability would index a third table that does not exist.
+	local ChannelName = if IsUnreliable then "Unreliable" else "Reliable"
+	local Queue = `Queue.{ChannelName}[{Index}]`
+	local Connection = `Events.{ChannelName}[{Index}]`
 
 	--> Data body
 	local DataTypes, Values, Arguments, _ = "nil", "Value: nil", "Value", nil
-	local Read, Write = Generators.Event(Value.Data, Index, Identifier)
+	local Read, Write = Generators.Event(Value.Data, Index, Identifier, nil, IsOrdered)
 
 	if Value.Data then
 		DataTypes, Values, _, Arguments = Generators.LuauType(Value.Data :: Type, true)
@@ -446,6 +476,13 @@ function Declarations.Event(Declaration: Parser.Event)
 			CallListener = CallListener:Line(CallExpr)
 		end
 
+		--> Read before the payload, because that is the order it was written in. The DECISION comes
+		--> after the payload is decoded, for the same reason the rate limit's does: a variable-length
+		--> payload cannot be skipped without reading it.
+		if IsOrdered then
+			Types.u16.Read("OrderIdentifier", Block)
+		end
+
 		Block:Line(`local {Values} = {Util.GetPath(Identifier, false, Scope)}()`)
 
 		--> The decode above has to happen either way: payloads are variable length, so skipping an
@@ -454,6 +491,11 @@ function Declarations.Event(Declaration: Parser.Event)
 		local RateGuard = RateGuardExpression(Value, Declaration.Name)
 		if RateGuard then
 			Block = Block:Compare(RateGuard, "true", "Equals")
+		end
+
+		local OrderGuard = OrderGuardExpression(IsOrdered, Index)
+		if OrderGuard then
+			Block = Block:Compare(OrderGuard, "true", "Equals")
 		end
 
 		local Disconnect = Blocks.Function("", "", "()")
@@ -507,6 +549,10 @@ function Declarations.Event(Declaration: Parser.Event)
 				:End()
 		end
 
+		if OrderGuard then
+			Block = Block:End()
+		end
+
 		if RateGuard then
 			Block = Block:End()
 		end
@@ -555,9 +601,21 @@ function Declarations.Event(Declaration: Parser.Event)
 
 		Channel.Listening = true
 
+		if IsOrdered then
+			Types.u16.Read("OrderIdentifier", Block)
+		end
+
 		local PollArguments =
 			`table.pack({Context == "Server" and "Player, " or ""}{Util.GetPath(Identifier, false, Scope)}())`
+		local PollOrderGuard = OrderGuardExpression(IsOrdered, Index)
 		local PollRateGuard = RateGuardExpression(Value, Declaration.Name)
+
+		--> Both gate the same enqueue, so they combine into one condition rather than nesting.
+		if PollRateGuard and PollOrderGuard then
+			PollRateGuard = `{PollRateGuard} and {PollOrderGuard}`
+		elseif PollOrderGuard then
+			PollRateGuard = PollOrderGuard
+		end
 
 		if PollRateGuard then
 			--> Split because the one-liner decodes and enqueues at once, and only the enqueue may be
@@ -1278,7 +1336,8 @@ function Generators.Event(
 	Data: Type?,
 	Index: number,
 	Identifier: string,
-	Function: ("Data" | "Return")?
+	Function: ("Data" | "Return")?,
+	Ordered: boolean?
 ): ({ string }, { string })
 	local Type, Values, _, Returns = "nil", "Value: nil", nil, "nil"
 	if Data then
@@ -1295,6 +1354,14 @@ function Generators.Event(
 
 	--> The event index is a literal in the generated code; the writers take the text form.
 	Types.u8.Write(tostring(Index), Write)
+
+	--> An ordered event carries a per-event sequence number after its index. It wraps at 65536, and
+	--> the receiver's comparison is written to tolerate that.
+	if Ordered then
+		Write:Line(`local OrderIdentifier = ((OrderOut[{Index}] or 0) + 1) % 65536`)
+		Write:Line(`OrderOut[{Index}] = OrderIdentifier`)
+		Types.u16.Write("OrderIdentifier", Write)
+	end
 	if Function then
 		Types.u8.Write("InvocationIdentifier", Write)
 		if Function == "Return" then
@@ -1369,6 +1436,7 @@ function Generator.Reset()
 	Return = Builder.new()
 
 	table.clear(RateSlots)
+	UsesOrdering = false
 
 	--> Reset channels
 	Channels.Reliable.Count = 0
@@ -1573,6 +1641,62 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		}
 	end
 
+	--> Sequence bookkeeping for OrderedUnreliable, emitted only where the schema uses it.
+	-->
+	--> Outgoing is a counter per event; incoming is the last sequence seen per event, per SOURCE --
+	--> which on the server means per player, since sixty clients each have their own sequence.
+	local OrderingBody = {}
+	if UsesOrdering then
+		local Shared = {
+			"\n",
+			"--> Sequence numbers for ordered unreliable events, one counter per event.\n",
+			"local OrderOut: { number } = {}\n",
+		}
+
+		if Context == "Server" then
+			table.move({
+				"local OrderIn: { [Player]: { number } } = {}\n",
+				"\n",
+				"--> Accepts a packet only if it is newer than the last one seen from this player for\n",
+				"--> this event. The comparison tolerates the counter wrapping at 65536: a sequence far\n",
+				"--> BELOW the last one is not stale, it is the counter having gone round.\n",
+				"local function OrderAccept(Player: Player, Slot: number, Identifier: number): boolean\n",
+				"\tlocal State = OrderIn[Player]\n",
+				"\tif not State then\n",
+				"\t\tState = {}\n",
+				"\t\tOrderIn[Player] = State\n",
+				"\tend\n",
+				"\n",
+				"\tlocal Last = State[Slot]\n",
+				"\tif Last ~= nil and Identifier <= Last and (Last - Identifier) < 32767 then\n",
+				"\t\treturn false\n",
+				"\tend\n",
+				"\n",
+				"\tState[Slot] = Identifier\n",
+				"\treturn true\n",
+				"end\n",
+			}, 1, 20, #Shared + 1, Shared)
+		else
+			table.move({
+				"local OrderIn: { number } = {}\n",
+				"\n",
+				"--> Accepts a packet only if it is newer than the last one seen for this event. The\n",
+				"--> comparison tolerates the counter wrapping at 65536.\n",
+				"local function OrderAccept(Slot: number, Identifier: number): boolean\n",
+				"\tlocal Last = OrderIn[Slot]\n",
+				"\tif Last ~= nil and Identifier <= Last and (Last - Identifier) < 32767 then\n",
+				"\t\treturn false\n",
+				"\tend\n",
+				"\n",
+				"\tOrderIn[Slot] = Identifier\n",
+				"\treturn true\n",
+				"end\n",
+			}, 1, 13, #Shared + 1, Shared)
+		end
+
+		OrderingBody = Shared
+	end
+
 	--> Emitted only when the schema actually has unreliable events -- most do not, and a helper
 	--> nothing calls is noise in a file people read when debugging their own traffic.
 	local UnreliableGuardBody = {}
@@ -1618,6 +1742,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		{ `local BASE_EVENT_NAME = "{Options.RemoteScope and Options.RemoteScope .. "_" or ""}BLINK"\n` },
 		string.split(Sources.Base, "\r"),
 		RateTemplateBody,
+		OrderingBody,
 		UnreliableGuardBody,
 		(if Options.SyncValidation then SYNC_VALIDATION_BODY else {}),
 		Events.DumpLines(),
