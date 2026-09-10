@@ -18,7 +18,13 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local Invocations = 0
+--> Free-slot bitset for outstanding invocations: a set bit is a free slot.
+-->
+--> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
+--> error path. Two calls in flight across the wrap therefore collided: the reused id was still
+--> occupied, and the collision check refused a perfectly legitimate call. With a bitset the id is
+--> the first genuinely free slot, and it goes back the moment its reply arrives.
+local InvocationSlots = 0xFFFFFFFF
 
 local SendSize = 64
 local SendOffset = 0
@@ -83,14 +89,21 @@ local function Load(Save: BufferSave?)
     SendInstances = {}
 end
 
-local function Invoke()
-    if Invocations == 255 then
-        Invocations = 0
+local function Invoke(): number
+    local Slot = bit32.countrz(InvocationSlots)
+
+    --> countrz of zero is 32: every slot taken. Thirty-two calls from one side with none answered is
+    --> already pathological, and failing here beats handing out an id that belongs to someone else.
+    if Slot == 32 then
+        error("[Blink]: 32 calls are already awaiting a response, this call has been dropped.")
     end
 
-    local Invocation = Invocations
-    Invocations += 1
-    return Invocation
+    InvocationSlots = bit32.bxor(InvocationSlots, bit32.lshift(1, Slot))
+    return Slot
+end
+
+local function ReleaseInvocation(Identifier: number)
+    InvocationSlots = bit32.bor(InvocationSlots, bit32.lshift(1, Identifier))
 end
 
 local function Allocate(Bytes: number)
@@ -4414,8 +4427,12 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 					return SerdesFunctions.ReadFUNCTION_RETURN_RateLimitedCall()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
-				task.spawn(Calls[InvocationIdentifier], Success, ReturnValue)
+				local Thread = Calls[InvocationIdentifier]
 				Calls[InvocationIdentifier] = nil
+				ReleaseInvocation(InvocationIdentifier)
+				if coroutine.status(Thread) == "suspended" then
+					task.spawn(Thread, Success, ReturnValue)
+				end
 			end
 		elseif Index == 3 then
 			local Value: Vector3 = SerdesFunctions.ReadEVENT_SendOccupiedCell()
@@ -4451,8 +4468,12 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 					return SerdesFunctions.ReadFUNCTION_RETURN_EmptyFunction()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
-				task.spawn(Calls[InvocationIdentifier], Success, ReturnValue)
+				local Thread = Calls[InvocationIdentifier]
 				Calls[InvocationIdentifier] = nil
+				ReleaseInvocation(InvocationIdentifier)
+				if coroutine.status(Thread) == "suspended" then
+					task.spawn(Thread, Success, ReturnValue)
+				end
 			end
 		elseif Index == 11 then
 			-- Read BLOCK: 1 bytes
@@ -4462,8 +4483,12 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 					return SerdesFunctions.ReadFUNCTION_RETURN_UnitFunction()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
-				task.spawn(Calls[InvocationIdentifier], Success, Value)
+				local Thread = Calls[InvocationIdentifier]
 				Calls[InvocationIdentifier] = nil
+				ReleaseInvocation(InvocationIdentifier)
+				if coroutine.status(Thread) == "suspended" then
+					task.spawn(Thread, Success, Value)
+				end
 			end
 		elseif Index == 12 then
 			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,} = SerdesFunctions.ReadEVENT_Flags8()
@@ -4750,8 +4775,12 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 					return SerdesFunctions.ReadFUNCTION_RETURN_RemoteFunction()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
-				task.spawn(Calls[InvocationIdentifier], Success, ReturnValue)
+				local Thread = Calls[InvocationIdentifier]
 				Calls[InvocationIdentifier] = nil
+				ReleaseInvocation(InvocationIdentifier)
+				if coroutine.status(Thread) == "suspended" then
+					task.spawn(Thread, Success, ReturnValue)
+				end
 			end
 		elseif Index == 40 then
 			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number } = SerdesFunctions.ReadEVENT_Tuple()
@@ -4772,8 +4801,12 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 					return SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
-				task.spawn(Calls[InvocationIdentifier], Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5)
+				local Thread = Calls[InvocationIdentifier]
 				Calls[InvocationIdentifier] = nil
+				ReleaseInvocation(InvocationIdentifier)
+				if coroutine.status(Thread) == "suspended" then
+					task.spawn(Thread, Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5)
+				end
 			end
 		elseif Index == 42 then
 			local Value: number = SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent()
@@ -6229,10 +6262,6 @@ local Returns = table.freeze({
 	RateLimitedCall = {
 		Invoke = function(Value: number): (number)
 			local InvocationIdentifier = Invoke()
-			if Calls[InvocationIdentifier] ~= nil then
-				Invocations -= 1
-				error("More than 256 calls are awaiting a response, this packet has been dropped.")
-			end
 			SerdesFunctions.WriteFUNCTION_DATA_RateLimitedCall(Value, InvocationIdentifier)
 			Calls[InvocationIdentifier] = coroutine.running()
 			local Success, ReturnValue: number = coroutine.yield()
@@ -6748,10 +6777,6 @@ local Returns = table.freeze({
 	EmptyFunction = {
 		Invoke = function(Value: nil): (nil)
 			local InvocationIdentifier = Invoke()
-			if Calls[InvocationIdentifier] ~= nil then
-				Invocations -= 1
-				error("More than 256 calls are awaiting a response, this packet has been dropped.")
-			end
 			SerdesFunctions.WriteFUNCTION_DATA_EmptyFunction(Value, InvocationIdentifier)
 			Calls[InvocationIdentifier] = coroutine.running()
 			local Success, ReturnValue: nil = coroutine.yield()
@@ -6764,10 +6789,6 @@ local Returns = table.freeze({
 	UnitFunction = {
 		Invoke = function(Value: nil): (nil)
 			local InvocationIdentifier = Invoke()
-			if Calls[InvocationIdentifier] ~= nil then
-				Invocations -= 1
-				error("More than 256 calls are awaiting a response, this packet has been dropped.")
-			end
 			SerdesFunctions.WriteFUNCTION_DATA_UnitFunction(Value, InvocationIdentifier)
 			Calls[InvocationIdentifier] = coroutine.running()
 			local Success, Value: nil = coroutine.yield()
@@ -7445,10 +7466,6 @@ local Returns = table.freeze({
 	RemoteFunction = {
 		Invoke = function(Value: number): (number)
 			local InvocationIdentifier = Invoke()
-			if Calls[InvocationIdentifier] ~= nil then
-				Invocations -= 1
-				error("More than 256 calls are awaiting a response, this packet has been dropped.")
-			end
 			SerdesFunctions.WriteFUNCTION_DATA_RemoteFunction(Value, InvocationIdentifier)
 			Calls[InvocationIdentifier] = coroutine.running()
 			local Success, ReturnValue: number = coroutine.yield()
@@ -7499,10 +7516,6 @@ local Returns = table.freeze({
 	TupleFunction = {
 		Invoke = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): (Instance?, Instance, number?, ("A" | "B" | "C" | "D"), number)
 			local InvocationIdentifier = Invoke()
-			if Calls[InvocationIdentifier] ~= nil then
-				Invocations -= 1
-				error("More than 256 calls are awaiting a response, this packet has been dropped.")
-			end
 			SerdesFunctions.WriteFUNCTION_DATA_TupleFunction(Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
 			Calls[InvocationIdentifier] = coroutine.running()
 			local Success, ReturnValue1: Instance?, ReturnValue2: Instance, ReturnValue3: number?, ReturnValue4: ("A" | "B" | "C" | "D"), ReturnValue5: number = coroutine.yield()

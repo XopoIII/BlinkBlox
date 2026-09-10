@@ -1,3 +1,4 @@
+--!strict
 --!native
 --!optimize 2
 
@@ -202,7 +203,11 @@ function Error.Slice(self: Class, Span: Span): { Slice }
 		end
 
 		local Spaces = (Span.Start - Start)
-		local Underlines = math.clamp(Span.End - Span.Start, 1, Length)
+
+		--> `math.clamp` throws when max < min, and an EMPTY line has a length of zero -- so a span
+		--> that reaches a blank line crashed the renderer instead of printing the diagnostic it was
+		--> called to print. One underline is the floor: there is always something to point at.
+		local Underlines = math.clamp(Span.End - Span.Start, 1, math.max(Length, 1))
 
 		table.insert(Slices, {
 			Line = Line,

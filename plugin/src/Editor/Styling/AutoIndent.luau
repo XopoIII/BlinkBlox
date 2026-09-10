@@ -1,3 +1,4 @@
+--!strict
 local Utility = require("../Utility")
 
 local Hook = {}

@@ -59,6 +59,7 @@ TypeScript output, the Studio plugin or the docs. Bandwidth parity is a second-o
 | Re-record the output snapshots | `cd test && lune run Test --yes --update-goldens` |
 | Type-check everything | `sh scripts/type-check.sh` |
 | Lint | `selene src test plugin/src .lune` |
+| Check type-checking modes | `sh scripts/check-strict.sh` |
 | Check formatting | `stylua --check src test plugin .lune` |
 | Format | `stylua src test plugin .lune` |
 | Install git hooks | `lefthook install` |
@@ -70,6 +71,11 @@ The same gates run in CI (`.github/workflows/checks.yaml`) and before each commi
 
 **The tree is at zero.** No lint warnings, no type errors, no formatting drift. Keep it there — a
 warning that is tolerated once stops being read.
+
+Every `.luau` file declares its type-checking mode on line 1, and `scripts/check-strict.sh` enforces
+it. This is not cosmetic: Luau defaults to `nonstrict`, so a file without a directive is *unchecked*
+rather than merely unannotated — the lexer, the generator, `Settings` and the diagnostics renderer
+all ran that way while the type gate reported the tree as clean.
 
 ## Architecture
 

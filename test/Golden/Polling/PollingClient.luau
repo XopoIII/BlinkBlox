@@ -18,7 +18,13 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local Invocations = 0
+--> Free-slot bitset for outstanding invocations: a set bit is a free slot.
+-->
+--> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
+--> error path. Two calls in flight across the wrap therefore collided: the reused id was still
+--> occupied, and the collision check refused a perfectly legitimate call. With a bitset the id is
+--> the first genuinely free slot, and it goes back the moment its reply arrives.
+local InvocationSlots = 0xFFFFFFFF
 
 local SendSize = 64
 local SendOffset = 0
@@ -83,14 +89,21 @@ local function Load(Save: BufferSave?)
     SendInstances = {}
 end
 
-local function Invoke()
-    if Invocations == 255 then
-        Invocations = 0
+local function Invoke(): number
+    local Slot = bit32.countrz(InvocationSlots)
+
+    --> countrz of zero is 32: every slot taken. Thirty-two calls from one side with none answered is
+    --> already pathological, and failing here beats handing out an id that belongs to someone else.
+    if Slot == 32 then
+        error("[Blink]: 32 calls are already awaiting a response, this call has been dropped.")
     end
 
-    local Invocation = Invocations
-    Invocations += 1
-    return Invocation
+    InvocationSlots = bit32.bxor(InvocationSlots, bit32.lshift(1, Slot))
+    return Slot
+end
+
+local function ReleaseInvocation(Identifier: number)
+    InvocationSlots = bit32.bor(InvocationSlots, bit32.lshift(1, Identifier))
 end
 
 local function Allocate(Bytes: number)

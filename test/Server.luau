@@ -1,3 +1,4 @@
+--!strict
 local Shared = require("./Shared")
 
 local Signal = Shared.Signal

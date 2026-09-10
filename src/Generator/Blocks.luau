@@ -1,3 +1,4 @@
+--!strict
 type BranchType = "Conditional" | "Default"
 type EqualityOperator = "Not" | "Equals" | "Greater" | "Less" | "GreaterOrEquals" | "LessOrEquals"
 

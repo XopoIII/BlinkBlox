@@ -1,3 +1,4 @@
+--!strict
 --> Sets the version used by the build. Run as:
 -->     lune run bump 0.19.0
 -->

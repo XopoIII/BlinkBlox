@@ -1,3 +1,4 @@
+--!strict
 local Table = {}
 
 function Table.MergeArrays(a: { any }, b: { any }): { any }

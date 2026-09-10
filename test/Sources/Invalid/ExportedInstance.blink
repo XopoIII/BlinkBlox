@@ -1,0 +1,10 @@
+-- expect E3013
+-- Instances travel beside the buffer, in the remote's second argument. An exported Read/Write pair
+-- has only the buffer, so exporting one used to compile into code that silently lost the value.
+option ClientOutput = "../../Network/ExportClient.luau"
+option ServerOutput = "../../Network/ExportServer.luau"
+
+export struct Marker {
+    Name: string(0..16),
+    Part: Instance(BasePart),
+}

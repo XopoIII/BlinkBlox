@@ -30,6 +30,9 @@ jobs:
       - name: Lint
         run: selene src test plugin/src .lune
 
+      - name: Type-checking mode
+        run: sh scripts/check-strict.sh
+
       - name: Types
         run: sh scripts/type-check.sh
 

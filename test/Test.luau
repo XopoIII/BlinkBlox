@@ -1,3 +1,4 @@
+--!strict
 local Format = require("../src/Modules/Format")
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
@@ -1817,6 +1818,54 @@ RunClosure("Rate limiting", function()
 		ErrorPrint(
 			`Failed "Rate limiting": {Succeeded} invocations succeeded and {Refused} were refused, expected 2 and 2.`
 		)
+	end
+end)
+
+RunClosure("Invocation slots are recycled", function()
+	--> The old allocator was a counter that wrapped at 255 and released a slot only on the error
+	--> path, never on success. Two calls in flight across the wrap collided: the reused id was still
+	--> occupied, so the collision check refused a legitimate call. A bitset hands out the first free
+	--> slot instead, and a reply gives it straight back.
+
+	Server.RemoteFunction.On(function(_Player, Value)
+		task.wait(0.4)
+		return Value
+	end)
+
+	local Completed, Refused = 0, 0
+	for _ = 1, 40 do
+		task.spawn(function()
+			local Ok = pcall(function()
+				return Client.RemoteFunction.Invoke(1)
+			end)
+
+			if Ok then
+				Completed += 1
+			else
+				Refused += 1
+			end
+		end)
+	end
+
+	task.wait(1.5)
+
+	--> Thirty-two slots exist, so eight of the forty must be turned away with an error rather than
+	--> silently handed an id that belongs to another call.
+	if Completed ~= 32 then
+		ErrorPrint(`Failed "Invocation slots": {Completed} of 40 concurrent calls completed, expected 32.`)
+	end
+
+	if Refused ~= 8 then
+		ErrorPrint(`Failed "Invocation slots": {Refused} calls were refused, expected 8.`)
+	end
+
+	--> And the slots came back: a call after the storm must simply work.
+	local Success = pcall(function()
+		return Client.RemoteFunction.Invoke(1)
+	end)
+
+	if not Success then
+		ErrorPrint(`Failed "Invocation slots": a call after the burst was refused, so slots leaked.`)
 	end
 end)
 

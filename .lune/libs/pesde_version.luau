@@ -1,3 +1,4 @@
+--!strict
 local fs = require("@lune/fs")
 local log = require("./log")
 local serde = require("@lune/serde")

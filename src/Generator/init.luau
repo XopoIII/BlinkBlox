@@ -1,6 +1,6 @@
+--!strict
 --!native
 --!optimize 2
---!strict
 
 local Parser = require("./Parser")
 local Settings = require("./Settings")
@@ -860,25 +860,24 @@ function Declarations.Function(Declaration: Parser.Function)
 
 		Types.u8.Read("InvocationIdentifier", Block)
 		Block:Lines(Deserialize.Content, Block.Indent + 1)
+		--> The slot is freed before the thread is resumed, so a caller that immediately invokes again
+		--> from inside its own continuation gets a slot rather than an exhaustion error.
+		-->
+		--> The status check is not paranoia: a Promise that was cancelled, or a Future that already
+		--> completed, leaves a thread that is dead or running. `task.spawn` on either of those throws
+		--> from inside the remote handler, where no user pcall can reach it.
 		Block:Compare("Calls[InvocationIdentifier]", "nil", "Not")
-			:Line(`task.spawn(Calls[InvocationIdentifier], Success, {ReturnArguments})`)
+			:Line("local Thread = Calls[InvocationIdentifier]")
 			:Line("Calls[InvocationIdentifier] = nil")
+			:Line("ReleaseInvocation(InvocationIdentifier)")
+			:Compare("coroutine.status(Thread)", `"suspended"`, "Equals")
+			:Line(`task.spawn(Thread, Success, {ReturnArguments})`)
 			:End()
-
-		--> Function listener body
-		local Exhaust = Blocks
-			.Block()
-			:Compare("Calls[InvocationIdentifier]", "nil", "Not")
-			--> Fail instead of closing/cancelling the thread
-			:Line("Invocations -= 1")
-			:Line('error("More than 256 calls are awaiting a response, this packet has been dropped.")')
 			:End()
-			.Content
 
 		local Error = `"There was an exception while processing \\"{Name}\\"."`
 		local Contents = Blocks.Block()
 			:Line("local InvocationIdentifier = Invoke()")
-			:Lines(Exhaust)
 			:Line(`{Util.GetPath(DataIdentifier, true, Scope)}({DataArguments}, InvocationIdentifier)`)
 			:Line("Calls[InvocationIdentifier] = coroutine.running()")
 			:Line(`local Success, {ReturnValues} = coroutine.yield()`)
@@ -894,12 +893,16 @@ function Declarations.Function(Declaration: Parser.Function)
 			Invoke = Blocks.Function(Casing.Invoke, DataValues, `Future.Future<boolean, {ReturnTypes}>`, true)
 			Invoke:Lines(Wrapper.Content, 1)
 		elseif IsPromise then
-			local OnCancel =
-				Blocks.Function("", ""):Line("Calls[InvocationIdentifier] = nil"):End():Wrap("OnCancel(", ")")
+			--> A cancelled promise gives its slot back too, otherwise cancelling enough calls would
+			--> exhaust the bitset with nothing outstanding.
+			local OnCancel = Blocks.Function("", "")
+				:Line("Calls[InvocationIdentifier] = nil")
+				:Line("ReleaseInvocation(InvocationIdentifier)")
+				:End()
+				:Wrap("OnCancel(", ")")
 
 			local Promise = Blocks.Function("", "Resolve, Reject, OnCancel")
 				:Line("local InvocationIdentifier = Invoke()")
-				:Lines(Exhaust)
 				:Line(`{Util.GetPath(DataIdentifier, true, Scope)}({DataArguments}, InvocationIdentifier)`)
 				:Line("Calls[InvocationIdentifier] = coroutine.running()")
 				:Lines(OnCancel.Content, 1)

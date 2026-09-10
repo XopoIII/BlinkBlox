@@ -33,6 +33,12 @@ pre-commit:
       # subset. Checks the compiler and the plugin as separate contours — see the script's header.
       run: sh scripts/type-check.sh
 
+    strict-mode:
+      glob: "*.luau"
+      # Luau defaults to `nonstrict`, so a file without a directive is unchecked rather than
+      # unannotated -- and the type gate then reports the tree as clean while skipping it entirely.
+      run: sh scripts/check-strict.sh {staged_files}
+
     english-only:
       # Every artefact in this repository is written in English — code, comments, docs, commit
       # bodies, schema files. A single non-English word in a comment is invisible to review and

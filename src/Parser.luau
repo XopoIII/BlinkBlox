@@ -1306,6 +1306,24 @@ function Parser.Declarations(self: Parser): { Declaration }
 					:Emit()
 			end
 
+			--> An exported type gets a standalone Read/Write pair. Instances and unknowns are never
+			--> encoded into the buffer -- they are appended to a table that travels as the remote's
+			--> second argument -- and an export has no remote and no such table, so the value would
+			--> be silently lost on write and read back as nil. Nothing checked this before.
+			local Measured = Size.Measure(Declaration :: any)
+			if Measured.Refs > 0 then
+				Error.new(
+					Error.AnalyzeInvalidExport,
+					self.Source,
+					`Types containing an Instance or unknown can't be exported`,
+					self.File
+				)
+					:Primary(Export, "Remove export here")
+					:Secondary(Name, `"{Name.Value}" carries a value that travels beside the buffer`)
+					:Note("An exported Read/Write pair only has the buffer, so such a value cannot survive it.")
+					:Emit()
+			end
+
 			Declaration.Value.Export = true
 		end
 

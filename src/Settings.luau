@@ -1,3 +1,4 @@
+--!strict
 --- The compiler's own range type. Deliberately NOT Roblox's `NumberRange` userdata: the CLI runs on
 --- Lune where that global does not exist, and every range in the AST is a plain table.
 export type NumberRange = { Min: number, Max: number }

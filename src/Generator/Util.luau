@@ -1,3 +1,4 @@
+--!strict
 local Parser = require("../Parser")
 
 type Scope = Parser.Scope

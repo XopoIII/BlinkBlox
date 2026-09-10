@@ -1,3 +1,4 @@
+--!strict
 local Utility = {}
 
 export type Range = {

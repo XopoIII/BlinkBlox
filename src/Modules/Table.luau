@@ -1,3 +1,4 @@
+--!strict
 return {
 	Merge = function(...: { any }): { any }
 		local Tables = { ... }
