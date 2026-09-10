@@ -31,6 +31,16 @@ if [ ! -f globalTypes.d.luau ]; then
 		"https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.d.luau"
 fi
 
+# Lune's own type definitions, which `.luaurc` aliases as `@lune`. They live in the user's home
+# directory rather than the repository, so a fresh checkout — a CI runner, a new machine — has none,
+# and every `require("@lune/fs")` in the compiler reports as an unknown require. That is exactly how
+# this gate failed the first time it ran in CI.
+#
+# `lune setup` is idempotent and takes under a second, so it runs unconditionally instead of guessing
+# at the path, which changes with the pinned Lune version.
+echo "type-check: refreshing Lune type definitions"
+lune setup >/dev/null
+
 mkdir -p build
 
 echo "type-check: compiler (src)"
