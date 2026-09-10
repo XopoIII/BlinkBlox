@@ -39,6 +39,12 @@ pre-commit:
       # unannotated -- and the type gate then reports the tree as clean while skipping it entirely.
       run: sh scripts/check-strict.sh {staged_files}
 
+    file-size:
+      glob: "*.luau"
+      # A ratchet, not a rule about tomorrow: files already over the limit are recorded at their
+      # current size and may shrink but not grow.
+      run: sh scripts/check-file-size.sh {staged_files}
+
     english-only:
       # Every artefact in this repository is written in English — code, comments, docs, commit
       # bodies, schema files. A single non-English word in a comment is invisible to review and

@@ -68,6 +68,7 @@ and belongs in one release, not three.
 | Type-check everything | `sh scripts/type-check.sh` |
 | Lint | `selene src test plugin/src .lune` |
 | Check type-checking modes | `sh scripts/check-strict.sh` |
+| Check file sizes | `sh scripts/check-file-size.sh` |
 | Check formatting | `stylua --check src test plugin .lune` |
 | Format | `stylua src test plugin .lune` |
 | Install git hooks | `lefthook install` |
@@ -79,6 +80,11 @@ The same gates run in CI (`.github/workflows/checks.yaml`) and before each commi
 
 **The tree is at zero.** No lint warnings, no type errors, no formatting drift. Keep it there — a
 warning that is tolerated once stops being read.
+
+Luau files are capped at 900 lines by `scripts/check-file-size.sh`. Four files are already past that
+and are recorded at their current size: they may shrink, never grow. A recorded number makes every
+addition to a long file a deliberate decision, where a plain exclusion list would just become
+permission.
 
 Every `.luau` file declares its type-checking mode on line 1, and `scripts/check-strict.sh` enforces
 it. This is not cosmetic: Luau defaults to `nonstrict`, so a file without a directive is *unchecked*
