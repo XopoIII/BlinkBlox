@@ -11,7 +11,10 @@ end
 --> player's buffer back into PlayersMap, so a test can drive that path by flipping this.
 local PlayerInGame = true
 
-Metatable.__index = {
+--> Stands in for the Players service as the mock player's parent. Only ever compared against nil.
+local PlayerParent = { Name = "Players" }
+
+local PlayerFields = {
 	--> The real API the generated code calls. Returning a plain boolean is enough: the code only
 	--> ever asks whether the player is still a descendant of Players.
 	IsDescendantOf = function(_self, _Ancestor)
@@ -22,6 +25,16 @@ Metatable.__index = {
 	--> exactly the detail those warnings exist to give.
 	Name = "Player",
 }
+
+--> A function rather than a table because `Parent` has to track SetPlayerInGame: the receive loop
+--> stops decoding once the player detaches, and a frozen field would make that path untestable.
+Metatable.__index = function(_self, Key: string)
+	if Key == "Parent" then
+		return if PlayerInGame then PlayerParent else nil
+	end
+
+	return PlayerFields[Key]
+end
 
 local Signal = {}
 Signal.__index = Signal

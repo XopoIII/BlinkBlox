@@ -1286,6 +1286,14 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		local MaxInstances = Options.MaxInstancesPerPacket or DEFAULT_MAX_INSTANCES_PER_PACKET
 
 		local function EmitInboundGuard(Channel: Blocks.Block)
+			--> Nothing stops a client from calling FireServer with arguments of its own choosing, and
+			--> the signature is a promise the client never made. `buffer.len` on a string throws from
+			--> inside the connection itself, where no listener's pcall can reach it, so the types have
+			--> to be established before any other guard reads them.
+			Channel:Line(`if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then`, 1)
+			Channel:Line(`\twarn(\`[Blink]: Dropped a malformed packet from \{Player.Name\}.\`)`, 1)
+			Channel:Line("\treturn", 1)
+			Channel:Line("end", 1)
 			Channel:Line(`if buffer.len(Buffer) > {MaxPacketSize} then`, 1)
 			Channel:Line(`\twarn(\`[Blink]: Dropped an oversized packet from \{Player.Name\}.\`)`, 1)
 			Channel:Line("\treturn", 1)
@@ -1317,8 +1325,15 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Unreliables:Line("local DecodedEvents = 0", 1)
 	end
 
-	Reliables = Reliables:While("RecieveCursor < Size")
-	Unreliables = Unreliables:While("RecieveCursor < Size")
+	--> A player who leaves mid-packet is not worth decoding the rest for: every listener that runs
+	--> from here on receives a Player already detached from the DataModel, and anything they do with
+	--> it -- a leaderstats write, a save -- is work aimed at nobody.
+	local Condition = if Context == "Server"
+		then "RecieveCursor < Size and Player.Parent ~= nil"
+		else "RecieveCursor < Size"
+
+	Reliables = Reliables:While(Condition)
+	Unreliables = Unreliables:While(Condition)
 
 	if Context == "Server" then
 		local function EmitEventCap(Channel: Blocks.Block)

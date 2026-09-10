@@ -1525,6 +1525,10 @@ RunClosure("Inbound packets are bounded", function()
 	do
 		local Source = fs.readFile("../Network/Server.luau")
 		local Required = {
+			["argument type check"] = `if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then`,
+			["departed player stops the loop"] = "Player.Parent ~= nil",
+			["reliable remote class check"] = `assert(Reliable:IsA("RemoteEvent")`,
+			["unreliable remote class check"] = `assert(Unreliable:IsA("UnreliableRemoteEvent")`,
 			["oversized packet check"] = "if buffer.len(Buffer) >",
 			["instance count check"] = "if #Instances >",
 			["decoded event counter"] = "DecodedEvents += 1",
@@ -1554,6 +1558,27 @@ RunClosure("Inbound packets are bounded", function()
 
 		if Received ~= 1 then
 			ErrorPrint(`Failed "Inbound packets are bounded": a single legitimate event arrived {Received} time(s).`)
+		end
+	end
+
+	--> 5. Arguments of the wrong type are dropped rather than dispatched. A client picks what it
+	--> passes to FireServer; the generated signature is a promise it never made.
+	do
+		local Received = 0
+		local Disconnect = Server.ReliableClient.On(function()
+			Received += 1
+		end)
+
+		local Remote = ServerEnvironment.Instances.BLINK_RELIABLE_REMOTE
+		Remote.OnServerEvent:Fire(Shared.Player, "not a buffer", {})
+		Remote.OnServerEvent:Fire(Shared.Player, buffer.create(8), "not a table")
+		Remote.OnServerEvent:Fire(Shared.Player)
+
+		task.wait(0.3)
+		Disconnect()
+
+		if Received ~= 0 then
+			ErrorPrint(`Failed "Inbound packets are bounded": malformed arguments dispatched {Received} event(s).`)
 		end
 	end
 end)

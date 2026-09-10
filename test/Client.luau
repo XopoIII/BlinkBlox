@@ -21,11 +21,20 @@ local function Fire(Reliable: boolean, ...)
 	Shared.Bridge:Fire("Client", Reliable and "BLINK_RELIABLE_REMOTE" or "BLINK_UNRELIABLE_REMOTE", Buffer, Instances)
 end
 
+--> The generated modules assert the class of each remote before using it, so a mock that cannot
+--> answer IsA is indistinguishable from the planted stand-in that assert exists to catch.
+local function IsA(ClassName: string)
+	return function(_self, Queried: string)
+		return Queried == ClassName
+	end
+end
+
 ClientEnviornment.Instances.BLINK_RELIABLE_REMOTE = {
 	FireServer = function(_self, ...)
 		Fire(true, ...)
 	end,
 	OnClientEvent = Signal.new(),
+	IsA = IsA("RemoteEvent"),
 }
 
 ClientEnviornment.Instances.BLINK_UNRELIABLE_REMOTE = {
@@ -33,6 +42,7 @@ ClientEnviornment.Instances.BLINK_UNRELIABLE_REMOTE = {
 		Fire(false, ...)
 	end,
 	OnClientEvent = Signal.new(),
+	IsA = IsA("UnreliableRemoteEvent"),
 }
 
 Shared.Bridge:Connect(function(From: string, Remote: string, Buffer: buffer, Instances: { Instance })

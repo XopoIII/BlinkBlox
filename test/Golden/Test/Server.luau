@@ -3957,6 +3957,12 @@ if not Unreliable then
     Unreliable = UnreliableRemoteEvent
 end
 
+--> The server creates these when they are missing, but FindFirstChild above may have matched an
+--> instance of a different class that a plugin or an earlier build left behind. Failing loudly at
+--> require time beats failing per packet, forever, at runtime.
+assert(Reliable:IsA("RemoteEvent"), "[Blink]: The reliable remote is not a RemoteEvent.")
+assert(Unreliable:IsA("UnreliableRemoteEvent"), "[Blink]: The unreliable remote is not an UnreliableRemoteEvent.")
+
 local PlayersMap: {[Player]: BufferSave} = {}
 
 Players.PlayerRemoving:Connect(function(Player)
@@ -4003,6 +4009,10 @@ local function StepReplication()
 end
 RunService.Heartbeat:Connect(StepReplication)
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
+	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
+		warn(`[Blink]: Dropped a malformed packet from {Player.Name}.`)
+		return
+	end
 	if buffer.len(Buffer) > 8192 then
 		warn(`[Blink]: Dropped an oversized packet from {Player.Name}.`)
 		return
@@ -4022,7 +4032,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	end
 	SerdesThread = coroutine.running()
 	local DecodedEvents = 0
-	while (RecieveCursor < Size) do
+	while (RecieveCursor < Size and Player.Parent ~= nil) do
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		DecodedEvents += 1
@@ -4128,6 +4138,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	end
 end)
 Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
+	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
+		warn(`[Blink]: Dropped a malformed packet from {Player.Name}.`)
+		return
+	end
 	if buffer.len(Buffer) > 8192 then
 		warn(`[Blink]: Dropped an oversized packet from {Player.Name}.`)
 		return
@@ -4147,7 +4161,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 	SerdesThread = coroutine.running()
 	local DecodedEvents = 0
-	while (RecieveCursor < Size) do
+	while (RecieveCursor < Size and Player.Parent ~= nil) do
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		DecodedEvents += 1

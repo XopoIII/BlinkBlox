@@ -201,6 +201,12 @@ end
 local Reliable: RemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
 local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
 
+--> WaitForChild returns whatever carries that name. A client can create an instance of any class in
+--> ReplicatedStorage, so without this the first thing to answer to the name wins -- and every
+--> outgoing packet is then handed to an object of the attacker's choosing.
+assert(Reliable:IsA("RemoteEvent"), "[Blink]: The reliable remote is not a RemoteEvent.")
+assert(Unreliable:IsA("UnreliableRemoteEvent"), "[Blink]: The unreliable remote is not an UnreliableRemoteEvent.")
+
 local function StepReplication()
     if SendCursor <= 0 then
         return

@@ -23,6 +23,12 @@ if not Unreliable then
     Unreliable = UnreliableRemoteEvent
 end
 
+--> The server creates these when they are missing, but FindFirstChild above may have matched an
+--> instance of a different class that a plugin or an earlier build left behind. Failing loudly at
+--> require time beats failing per packet, forever, at runtime.
+assert(Reliable:IsA("RemoteEvent"), "[Blink]: The reliable remote is not a RemoteEvent.")
+assert(Unreliable:IsA("UnreliableRemoteEvent"), "[Blink]: The unreliable remote is not an UnreliableRemoteEvent.")
+
 local PlayersMap: {[Player]: BufferSave} = {}
 
 Players.PlayerRemoving:Connect(function(Player)
