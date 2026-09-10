@@ -463,7 +463,7 @@ function Declarations.Event(Declaration: Parser.Event)
 				:End()
 		end
 
-		Noop.Push(`{Casing.On} = NOOP`, 0, Indent + 1)
+		Noop.Push(`{Casing.On} = NOOP_RETURNING`, 0, Indent + 1)
 		Body.PushLines(Listener.Content, 0, Indent + 1)
 	elseif Value.From ~= Context and IsPolling then
 		Events.Push(`{Queue} = CreateQueue()`)
@@ -506,8 +506,8 @@ function Declarations.Event(Declaration: Parser.Event)
 			:End()
 			:Wrap("", ",")
 
-		Noop.Push(`{Casing.Iter} = NOOP,`, 0, Indent + 1)
-		Noop.Push(`{Casing.Next} = NOOP`, 0, Indent + 1)
+		Noop.Push(`{Casing.Iter} = NOOP_RETURNING,`, 0, Indent + 1)
+		Noop.Push(`{Casing.Next} = NOOP_RETURNING`, 0, Indent + 1)
 
 		Body.PushLines(Iter.Content, 0, Indent + 1)
 		Body.Push("--- @deprecated v0.14.1 -- Use `Iter` instead.", 0, Indent + 1)
@@ -731,7 +731,7 @@ function Declarations.Function(Declaration: Parser.Function)
 			:Lines(FlushQueue.Content, 1)
 			:End()
 
-		Noop.Push(`{Casing.On} = NOOP`, 0, Indent + 1)
+		Noop.Push(`{Casing.On} = NOOP_RETURNING`, 0, Indent + 1)
 		Body.PushLines(Listener.Content, 0, 2)
 	else
 		--> Return recieve body
@@ -1227,8 +1227,20 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	Casing = Settings.GetCasing((Options.Casing :: Settings.Case) or "Pascal")
 
 	--> Setup noop
+	-->
+	--> Required in edit mode, where `RunService:IsRunning()` is false: no remotes exist, so every
+	--> entry point becomes a stub. That includes Roblox "stories" (Hoarcekat, UILabs, Flipbook),
+	--> which is what upstream issue #81 is about.
+	-->
+	--> The stub has to keep the SHAPE of the real API, not merely exist. A bare `function() end`
+	--> made three things break in a story rather than degrade quietly:
+	--> `On` returned nil, so `local Disconnect = Net.Foo.On(...)` followed by `Disconnect()` raised;
+	--> `Iter` returned nil, so `for _ in Net.Foo.Iter() do` raised instead of iterating zero times;
+	--> and `StepReplication` was missing altogether, so it was nil under ManualReplication -- while
+	--> the real Returns table has always carried it.
 	Noop.Push(`if not RunService:IsRunning() then`)
 	Noop.Push(`local NOOP = function() end`, 0, 1)
+	Noop.Push(`local NOOP_RETURNING = function() return NOOP end`, 0, 1)
 	Noop.Push(`local Returns = table.freeze(\{`, 0, 1)
 
 	--> Setup remote events
@@ -1315,6 +1327,9 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> Replication
 	local Replication = Builder.new()
 	Return.Push(`{Casing.StepReplication} = StepReplication,`, 1, 1)
+	--> The stub table has to expose it too. Under ManualReplication a story calls StepReplication
+	--> itself, and its absence here made that a nil call rather than a no-op.
+	Noop.Push(`{Casing.StepReplication} = NOOP,`, 0, 2)
 
 	if not Options.ManualReplication then
 		Replication.Push("RunService.Heartbeat:Connect(StepReplication)")

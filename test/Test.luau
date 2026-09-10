@@ -1387,6 +1387,42 @@ RunClosure("Inbound packets are bounded", function()
 	end
 end)
 
+RunClosure("Edit mode stubs keep the shape of the real API", function()
+	--> Upstream issue #81. With `RunService:IsRunning()` false — edit mode, and therefore every
+	--> Roblox story framework — the module returns a frozen stub table instead of touching remotes.
+	--> A stub whose entries have the wrong SHAPE does not degrade quietly, it raises: `On` returning
+	--> nil breaks `local Disconnect = ...On(...)`, and `Iter` returning nil breaks `for ... in`.
+	local StubEnvironment = Shared.GetEnvironment()
+	StubEnvironment.Services.RunService.IsRunning = function()
+		return false
+	end
+
+	local Stub = MockRequire("../Network/Server.luau", {
+		game = StubEnvironment.game,
+		Color3 = StubEnvironment.Color3,
+		DateTime = StubEnvironment.DateTime,
+		BrickColor = StubEnvironment.BrickColor,
+	})
+
+	local Disconnect = Stub.ReliableClient.On(function() end)
+	if type(Disconnect) ~= "function" then
+		ErrorPrint(`Failed "Edit mode stubs": On returned {type(Disconnect)}, expected a disconnect function.`)
+	end
+	Disconnect()
+
+	for _ in Stub.ClientPollEvent.Iter() do
+		ErrorPrint(`Failed "Edit mode stubs": Iter yielded a value in edit mode.`)
+	end
+
+	if type(Stub.StepReplication) ~= "function" then
+		ErrorPrint(`Failed "Edit mode stubs": StepReplication is {type(Stub.StepReplication)}, expected a function.`)
+	end
+	Stub.StepReplication()
+
+	--> Firing is a no-op rather than an error: a story that pushes state outward should not crash.
+	Stub.ReliableServer.FireAll(1)
+end)
+
 PrettyPrint("green", `All tests passed successfully!`)
 
 process.exit(0)
