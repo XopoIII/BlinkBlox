@@ -88,7 +88,13 @@ local TOKENS: { TokenRule } = {
 
 	--> Attribute patterns
 	{ "^?", "Optional" },
-	{ `^%(%a+%)`, "Class" },
+	--> `%a+` would not match a class name containing a digit, so `Instance(Vector3Value)`,
+	--> `Instance(UIGridLayout)` and `Instance(Part0)` failed to lex (upstream issue #75). The parser
+	--> then silently fell back to the bare "Instance" class and reported the leftover "(" as an
+	--> unrelated syntax error.
+	--> A digit is allowed only after the first character, ON PURPOSE: this rule is matched BEFORE the
+	--> Range rules below, so `^%(%w+%)` would swallow `u8(10)` and `(1..5)` and break every range.
+	{ `^%([%a_][%w_]*%)`, "Class" },
 	{ `^%[]`, "Array" },
 	{ `^%({NUMBER}%)`, "Range" },
 	{ `^%({NUMBER}{DOTS}%)`, "Range" },

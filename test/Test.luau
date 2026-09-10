@@ -1247,6 +1247,50 @@ RunClosure("Buffer (Default, Fixed, Bounded)", function()
 	end
 end)
 
+RunClosure("Firing at a player who left does not resurrect their buffer", function()
+	--> Upstream issue #84. A remote function's listener may yield, and the player can leave while it
+	--> is suspended. PlayerRemoving clears their PlayersMap entry, but the resumed listener then
+	--> wrote it straight back -- and nothing removes it a second time, so StepReplication allocated
+	--> a buffer and fired a remote at a player who was gone on every Heartbeat, for ever.
+	local Received = 0
+	local Disconnect = Client.ReliableServer.On(function()
+		Received += 1
+	end)
+
+	--> The player leaves.
+	Shared.SetPlayerInGame(false)
+	ServerEnvironment.Services.Players.PlayerRemoving:Fire(Shared.Player)
+
+	--> This is the write a resumed listener performs. It must be dropped, not stored.
+	Server.ReliableServer.Fire(Shared.Player, 1)
+
+	--> Long enough for several Heartbeats, so a resurrected entry would replicate at least once.
+	task.wait(0.5)
+
+	Disconnect()
+	Shared.SetPlayerInGame(true)
+
+	if Received ~= 0 then
+		ErrorPrint(
+			`Failed "Firing at a player who left": the client received {Received} event(s) after the player left.`
+		)
+	end
+
+	--> And the map must be usable again for a player who is present.
+	local ReceivedAfter = 0
+	local DisconnectAfter = Client.ReliableServer.On(function()
+		ReceivedAfter += 1
+	end)
+
+	Server.ReliableServer.Fire(Shared.Player, 1)
+	task.wait(0.5)
+	DisconnectAfter()
+
+	if ReceivedAfter == 0 then
+		ErrorPrint(`Failed "Firing at a player who left": a present player stopped receiving events.`)
+	end
+end)
+
 PrettyPrint("green", `All tests passed successfully!`)
 
 process.exit(0)

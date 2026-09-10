@@ -464,6 +464,17 @@ event InstanceOptional {
     Data: Instance?
 }
 
+-- Class names containing a digit used to fail to lex (issue #75). Vector3Value and Motor6D are real
+-- Roblox classes, and the digit sits in the middle and at the end respectively.
+type Vector3ValueRef = Instance(Vector3Value)
+
+event InstanceOfClassWithDigit {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: Instance(Motor6D)
+}
+
 event Reference {
     From: Server,
     Type: Reliable,

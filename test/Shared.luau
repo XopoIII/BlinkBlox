@@ -7,6 +7,18 @@ Metatable.__tostring = function()
 	return "Player"
 end
 
+--> Whether the mock player is still in the game. Generated server code asks before writing a
+--> player's buffer back into PlayersMap, so a test can drive that path by flipping this.
+local PlayerInGame = true
+
+Metatable.__index = {
+	--> The real API the generated code calls. Returning a plain boolean is enough: the code only
+	--> ever asks whether the player is still a descendant of Players.
+	IsDescendantOf = function(_self, _Ancestor)
+		return PlayerInGame
+	end,
+}
+
 local Signal = {}
 Signal.__index = Signal
 
@@ -121,4 +133,10 @@ return {
 	Bridge = Signal.new(),
 	GetEnvironment = GetEnvironment,
 	ServerOnlyInstance = roblox.Instance.new("Instance"),
+
+	--> Simulates the player leaving (and coming back), so a test can exercise what generated server
+	--> code does when a listener resumes after its player is gone.
+	SetPlayerInGame = function(InGame: boolean)
+		PlayerInGame = InGame
+	end,
 }

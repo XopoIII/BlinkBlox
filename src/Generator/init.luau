@@ -62,7 +62,7 @@ local RELIABLE_BODY = {
 		"local Position = Allocate(Size)\n",
 		"buffer.copy(SendBuffer, Position, Buffer, 0, Size)\n",
 		"table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)\n",
-		"PlayersMap[Player] = Save()\n",
+		"SavePlayerBuffer(Player)\n",
 	},
 }
 
@@ -516,7 +516,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		if IsReliable then
 			Fire:Line("Load(PlayersMap[Player])")
 			Fire:Line(WriteEvent)
-			Fire:Line("PlayersMap[Player] = Save()")
+			Fire:Line("SavePlayerBuffer(Player)")
 		else
 			Fire:Line("Load()")
 			Fire:Line(WriteEvent)
@@ -705,7 +705,7 @@ function Declarations.Function(Declaration: Parser.Function)
 				:Branch("Default")
 				:Line(`{Util.GetPath(ReturnIdentifier, true, Scope)}({ReturnArguments}, InvocationIdentifier)`)
 				:End()
-				:Line("PlayersMap[Player] = Save()")
+				:Line("SavePlayerBuffer(Player)")
 				:End()
 
 		local Listener = Blocks.Function(Casing.On, `Listener: (Player, {DataTypes}) -> ({ReturnTypes})`, "()", true)
