@@ -1121,7 +1121,8 @@ function Generators.Event(
 		Write:Comment(`{Identifier} ({Index})`)
 	end
 
-	Types.u8.Write(Index, Write)
+	--> The event index is a literal in the generated code; the writers take the text form.
+	Types.u8.Write(tostring(Index), Write)
 	if Function then
 		Types.u8.Write("InvocationIdentifier", Write)
 		if Function == "Return" then

@@ -1,0 +1,40 @@
+# Every gate that decides whether a change is allowed in: formatting, lint, types, tests.
+#
+# Until this file existed the repository ran NO checks on a pull request — `.github/workflows` held
+# only the docs deploy and the release upload, so the test suite ran solely when somebody typed the
+# command locally. It could not have run here anyway: the runner used to abort on `stdio.prompt`
+# with "IO error: not a terminal" the moment stdin was not a TTY.
+#
+# The same commands are available locally, and `lefthook.yml` runs them before a commit.
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup rokit
+        uses: CompeyDev/setup-rokit@v0.1.0
+
+      - name: Format
+        run: stylua --check src test plugin .lune
+
+      - name: Lint
+        run: selene src test plugin/src .lune
+
+      - name: Types
+        run: sh scripts/type-check.sh
+
+      # `--no-compile` is not an option here: the point is to prove the CURRENT compiler still
+      # produces network code that behaves, so the suite regenerates it first.
+      - name: Tests
+        run: lune run Test --yes
+        working-directory: test

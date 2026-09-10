@@ -20,7 +20,7 @@ return {
 	DeepClone = function(Table: { [any]: any }): { [any]: any }
 		local Cache = {}
 
-		local function Clone(Original)
+		local function Clone(Original: any): any
 			local Cached = Cache[Original]
 			if Cached ~= nil then
 				return Cached

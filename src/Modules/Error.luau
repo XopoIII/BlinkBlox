@@ -1,7 +1,10 @@
 --!native
 --!optimize 2
 
-local IS_ROBLOX = (game ~= nil)
+--> Dual-target probe: this module runs on Lune for the CLI and inside Roblox for the Studio
+--> plugin. Roblox type defs declare `game` as a non-nullable DataModel, so the comparison only
+--> type-checks through `any` — at runtime on Lune the global is genuinely absent.
+local IS_ROBLOX = ((game :: any) ~= nil)
 
 local stdio
 local process
@@ -64,7 +67,6 @@ local Colors = {
 local Compact = false
 
 local Error = {
-	OnEmit = nil,
 
 	LexerUnexpectedToken = 1001,
 
@@ -108,6 +110,13 @@ export type Class = typeof(setmetatable(
 	Error
 ))
 
+--- Hook the Studio plugin installs to receive diagnostics instead of having them printed or thrown
+--- (see the editor's `OnErrorEmitted`). Declared here rather than in the table literal above because
+--- it refers to `Class`, and a field initialised to `nil` in the literal types as exactly `nil` —
+--- which made every assignment to it a type error.
+export type EmitHandler = (Error: Class) -> ()
+Error.OnEmit = nil :: EmitHandler?
+
 local Symbols = IS_ROBLOX and SpecialSymbols.ROBLOX or SpecialSymbols.CLI
 
 local function Color(Text: string, ColorName: Color): string
@@ -133,7 +142,7 @@ end
 function Error.GetNameFromCode(From: number): string
 	for Name, Code in Error do
 		if Code == From then
-			return Name
+			return Name :: string
 		end
 	end
 

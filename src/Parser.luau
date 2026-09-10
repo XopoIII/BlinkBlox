@@ -11,7 +11,8 @@ local Settings = require("./Settings")
 
 ---- Globals ----
 
-type NumberRange = { Min: number, Max: number }
+--> Shared with Settings and the generator so all three mean the same table, not Roblox's userdata.
+export type NumberRange = Settings.NumberRange
 local NumberRange = {
 	new = function(Min: number, Max: number?): NumberRange
 		return {
@@ -161,10 +162,15 @@ export type Tuple = Node<"Tuple", {
 	Values: { TypeNode },
 } & Attributes, AttributesTokens>
 
+--- The listening API generated for an event. Named so `Parser.Event` can annotate its local without
+--- restating the union (it used to reach for it through `index<index<Event, "Value">, "Call">`, which
+--- this Luau version does not parse).
+export type EventCall = "SingleSync" | "SingleAsync" | "ManySync" | "ManyAsync" | "Polling"
+
 export type Event = Node<"Event", {
 	From: "Client" | "Server",
 	Type: "Reliable" | "Unreliable",
-	Call: "SingleSync" | "SingleAsync" | "ManySync" | "ManyAsync" | "Polling",
+	Call: EventCall,
 	Data: (TypeNode | Tuple)?,
 }, {}>
 
@@ -342,7 +348,9 @@ end
 local function GetFileSource(Path: string, Directory: string): (string?, string?)
 	local IsROBLOX = (task ~= nil)
 	if IsROBLOX then
-		local Parent = game:GetService("ServerStorage")["BLINK_CONFIGURATION_FILES"]
+		--> `FindFirstChild` rather than an index: the loop below already treats a missing level as
+		--> "give up and return nil", and indexing would raise instead of producing that nil.
+		local Parent: Instance? = game:GetService("ServerStorage"):FindFirstChild("BLINK_CONFIGURATION_FILES")
 		local Indices = string.split(Path, ".")
 		for _, Index in Indices do
 			if not Parent then
@@ -1157,7 +1165,7 @@ end
 
 function Parser.Event(self: Parser, Name: Token): Event
 	local Structure = self:Structure(Name, EVENT)
-	local Call: index<index<Event, "Value">, "Call"> = Structure.Call
+	local Call: EventCall = Structure.Call
 	if Structure.Poll then
 		Call = "Polling"
 	end
@@ -1691,9 +1699,13 @@ function Parser.Declaration(self: Parser, Name: Token): TypeNode
 
 	local To = Reference.To
 
-	--> Need to use the new node name
-	To = table.clone(To)
-	To.Name = Name.Value
+	--> Need to use the new node name.
+	--> `TypeNode` is a union of node shapes, and Luau permits neither `table.clone` nor a field write
+	--> on a union. The rename therefore happens on a loose clone, which is then narrowed back on the
+	--> way out; the clone stays shallow either way.
+	local Renamed = table.clone(To :: any)
+	Renamed.Name = Name.Value
+	To = Renamed :: TypeNode
 
 	if GENERICS_TYPES[To.Type] and To.Value.Generics then
 		To = self:ReplaceGenerics(To)

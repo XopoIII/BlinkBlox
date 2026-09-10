@@ -1,0 +1,46 @@
+# Git hooks. Install once with `lefthook install`.
+#
+# These are the same gates CI runs (.github/workflows/checks.yaml); running them here means a red
+# build is found before the push rather than after it. Keep it green locally.
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      glob: "*.luau"
+      # Generated network code is not ours to format: `test/Network/**` is a build artifact the
+      # compiler rewrites from scratch on every run, and stylua would fight the generator over it.
+      exclude:
+        - "test/Network/*"
+      run: stylua --check {staged_files}
+
+    lint:
+      glob: "*.luau"
+      # `src/Templates/**` are runtime FRAGMENTS spliced into generated output; they reference
+      # identifiers that only exist after splicing, so linting them in isolation reports undefined
+      # variables for every one of them. Excluded in selene.toml too, but explicit file arguments
+      # bypass that, so it has to be repeated here.
+      exclude:
+        - "src/Templates/*"
+        - "test/Network/*"
+        - "benchmark/*"
+      run: selene {staged_files}
+
+    types:
+      glob: "*.luau"
+      # Whole-project: luau-lsp needs the full sourcemap and every module's requires, not the staged
+      # subset. Checks the compiler and the plugin as separate contours — see the script's header.
+      run: sh scripts/type-check.sh
+
+    english-only:
+      # Every artefact in this repository is written in English — code, comments, docs, commit
+      # bodies, schema files. A single non-English word in a comment is invisible to review and
+      # permanent once it lands, so the rule is enforced rather than agreed.
+      run: sh scripts/check-english.sh {staged_files}
+
+pre-push:
+  commands:
+    tests:
+      # The suite regenerates the network modules and executes them against mocked Roblox globals,
+      # so it is the only gate that proves the compiler's OUTPUT still behaves. Too slow for every
+      # commit, mandatory before a push.
+      run: sh scripts/run-tests.sh

@@ -1,4 +1,6 @@
-type NumberRange = { Min: number, Max: number }
+--- The compiler's own range type. Deliberately NOT Roblox's `NumberRange` userdata: the CLI runs on
+--- Lune where that global does not exist, and every range in the AST is a plain table.
+export type NumberRange = { Min: number, Max: number }
 local NumberRange = {
 	new = function(Min: number, Max: number?): NumberRange
 		return {
@@ -38,7 +40,7 @@ local Indexes = {
 	Snake = 3,
 }
 
-local Cases = {
+local Cases: { [string]: { string } } = {
 	On = { "On", "on", "on" },
 	Invoke = { "Invoke", "invoke", "invoke" },
 	Fire = { "Fire", "fire", "fire" },

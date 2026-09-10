@@ -2,11 +2,18 @@ type BranchType = "Conditional" | "Default"
 type EqualityOperator = "Not" | "Equals" | "Greater" | "Less" | "GreaterOrEquals" | "LessOrEquals"
 
 type Method = "Read" | "Allocate" | "None"
+
+--- A fragment that is interpolated into the code being generated. It is `string | number` because
+--- callers legitimately pass both: an identifier from the schema ("Length", "Value1") or a literal
+--- count computed by the generator (an event index, a fixed array size). Both interpolate to the
+--- same text, and declaring only `string` is what forced numeric call sites to type-error.
+export type Emittable = string | number
+
 type Operation = {
 	Method: Method,
 	Bytes: number,
 	Counts: number,
-	Variable: string?,
+	Variable: Emittable?,
 }
 
 local DEFAULT_UNIQUE = "BLOCK_START"
@@ -41,21 +48,24 @@ export type Block = typeof(setmetatable(
 
 function Block.new<Parent>(Parent: Block?, Unique: string?): Block
 	local Indent = (Parent and Parent.Indent + 1 or 1)
-	return setmetatable({
-		Unique = Unique or DEFAULT_UNIQUE,
-		Parent = Parent,
-		Indent = Indent,
-		Cursor = 1,
-		Unsafe = false,
-		Content = table.create(64),
-		Operation = {
-			Method = "None",
-			Bytes = 0,
-			Counts = 0,
-		},
-		Variables = {},
-		OperationOffset = 0,
-	}, Block)
+	return setmetatable(
+		{
+			Unique = Unique or DEFAULT_UNIQUE,
+			Parent = Parent,
+			Indent = Indent,
+			Cursor = 1,
+			Unsafe = false,
+			Content = table.create(64),
+			Operation = {
+				Method = "None",
+				Bytes = 0,
+				Counts = 0,
+			},
+			Variables = {},
+			OperationOffset = 0,
+		} :: any,
+		Block
+	)
 end
 
 function Block.DisableOperationOptimisations(self: Block): Block
@@ -103,7 +113,7 @@ function Block.Allocate(self: Block, Bytes: number): string
 	return self:_operation("Allocate", Bytes)
 end
 
-function Block._lineFront(self: Block, Text: string, Indent: number): Block
+function Block._lineFront(self: Block, Text: string, Indent: number?): Block
 	table.insert(self.Content, self.Cursor, `{string.rep("\t", Indent or self.Indent)}{Text}\n`)
 	return self
 end
@@ -140,7 +150,7 @@ function Block.Declare(self: Block, Variable: string, Initialize: boolean?): str
 			break
 		end
 
-		Current = Current.Parent
+		Current = Current.Parent :: Block
 	end
 
 	if Declared then
@@ -208,7 +218,7 @@ function Block.Multiline(self: Block, Content: string, Indent: number?): Block
 	return self
 end
 
-function Block.Loop(self: Block, Counter: string, Length: string): Block
+function Block.Loop(self: Block, Counter: Emittable, Length: Emittable): Block
 	local Loop = Block.new(self, `{ARRAY_UNIQUE}_{self.Indent}`)
 	Loop:Line(`for {Counter}, {Length} do`, Loop.Indent - 1)
 	Loop.Operation.Variable = Length
@@ -225,7 +235,7 @@ function Block.Iterator(self: Block, Key: string, Value: string, Iterator: strin
 	return Block.new(self)
 end
 
-function Block.Compare(self: Block, Left: string, Right: string, Operator: EqualityOperator): Block
+function Block.Compare(self: Block, Left: Emittable, Right: Emittable, Operator: EqualityOperator): Block
 	self:Line(`if {Left} {Operators[Operator]} {Right} then`)
 	return Block.new(self)
 end
@@ -233,8 +243,8 @@ end
 function Block.Branch(
 	self: Block,
 	Branch: BranchType,
-	Left: string?,
-	Right: string?,
+	Left: Emittable?,
+	Right: Emittable?,
 	Operator: EqualityOperator?
 ): Block
 	local Parent = self.Parent
@@ -293,7 +303,7 @@ setmetatable(Function, Block)
 
 function Function.new(Name: string, Arguments: string, Return: string?, IsInlined: boolean?, Localised: boolean?): Block
 	local NewBlock = Block.new(nil)
-	setmetatable(NewBlock, Function)
+	setmetatable(NewBlock :: any, Function)
 
 	local Suffix = Return and `: {Return}` or ""
 	NewBlock:Advance(1)
@@ -315,7 +325,7 @@ setmetatable(Connection, Block)
 
 function Connection.new(Signal: string, Arguments: string): Block
 	local NewBlock = Block.new()
-	setmetatable(NewBlock, Connection)
+	setmetatable(NewBlock :: any, Connection)
 	NewBlock:Advance(1)
 	NewBlock:Line(`{Signal}:Connect(function({Arguments})`, 0)
 	return NewBlock

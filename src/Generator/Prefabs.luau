@@ -5,6 +5,8 @@ local Blocks = require("./Blocks")
 local Parser = require("../Parser")
 
 type Block = Blocks.Block
+--> The compiler's range table, not Roblox's NumberRange userdata (which does not exist on Lune).
+type NumberRange = Parser.NumberRange
 type Writer = (Value: string, Block: Block, Range: NumberRange?, Components: { string }?) -> ()
 type Reader = (Variable: string, Block: Block, Range: NumberRange?, Components: { string }?) -> ()
 type Generate = (
@@ -164,10 +166,15 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 				end
 			elseif Primitive == "Instance" and Class then
 				local Assert = AssertGenerator(TargetVariable, Class)
-				if Block == Write then
-					Block:Compare(TargetVariable, "nil", "Not"):Multiline(Assert.Exact, Block.Indent + 1):End()
-				else
-					Block:Multiline(Assert.Exact, Block.Indent)
+				--> `Exact` is optional on AssertPrefab because range asserts may omit it; the Instance
+				--> generator always sets it. Reading it into a local narrows the type without a cast.
+				local Exact = Assert.Exact
+				if Exact then
+					if Block == Write then
+						Block:Compare(TargetVariable, "nil", "Not"):Multiline(Exact, Block.Indent + 1):End()
+					else
+						Block:Multiline(Exact, Block.Indent)
+					end
 				end
 			end
 		end
@@ -537,7 +544,9 @@ do
 
 	Primitives.Instance = {
 		Type = function(Declaration)
-			return Declaration.Value.Class
+			--> The parser defaults an Instance without an explicit class to "Instance", so this is never
+			--> nil in practice; the fallback states that instead of asserting it.
+			return Declaration.Value.Class or "Instance"
 		end,
 		Generate = GeneratePrimitivePrefab("any", Types.Instance, Asserts.Instance),
 	}

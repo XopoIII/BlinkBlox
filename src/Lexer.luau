@@ -47,6 +47,16 @@ export type Token = {
 
 export type Mode = "Parsing" | "Highlighting"
 
+--- A rule in `TOKENS`: a Lua pattern, plus either the token type it always produces or a transformer
+--- that inspects the matched text and decides both the type and the value it carries.
+---
+--- The transformer's value is `string | boolean` and not `string`, because that is what the lexer
+--- genuinely produces: the `true`/`false` rule returns a real boolean, and `Parser.Options` stores it
+--- straight into a `boolean` option field. Everything else in the compiler reads `Token.Value` as a
+--- string, so the widening is confined to this type and to the one cast where a token is built.
+export type TokenTransformer = (Text: string) -> (Types, string | boolean)
+export type TokenRule = { [number]: string | Types | TokenTransformer }
+
 local DOTS = "%.%."
 local NUMBER = "%-?%d*%.?%d+"
 
@@ -58,7 +68,7 @@ local Booleans = {
 	["false"] = true,
 }
 
-local TOKENS = {
+local TOKENS: { TokenRule } = {
 	--> Simple patterns
 	{ "^%s+", "Whitespace" },
 	{ "^=", "Assign" },
@@ -198,9 +208,10 @@ function Lexer.GetNextToken(self: Lexer, DontAdvanceCursor: boolean?, StartAt: n
 		return Text, Position, math.min(Position + #Text, self.Size)
 	end
 
-	for _, Token in TOKENS do
-		local Pattern = Token[1]
-		local Type: (Types | (Text: string) -> Types)? = Token[2]
+	for _, Rule in TOKENS do
+		--> A rule is a fixed pair: the pattern, then either a type or a transformer (see TokenRule).
+		local Pattern = Rule[1] :: string
+		local Type = Rule[2] :: Types | TokenTransformer
 
 		local Text, Start, End = Match(Pattern)
 
@@ -220,17 +231,21 @@ function Lexer.GetNextToken(self: Lexer, DontAdvanceCursor: boolean?, StartAt: n
 			return self:GetNextToken(DontAdvanceCursor)
 		end
 
+		local Value: string | boolean = Text
 		if type(Type) == "function" then
 			--> Only overwrite the type when highlighting
-			local TrueType, TrueText = Type(Text)
+			local TrueType, TrueValue = Type(Text)
 
 			Type = TrueType
-			Text = IsHighlighting and Text or TrueText
+			Value = if IsHighlighting then Text else TrueValue
 		end
 
 		return {
-			Type = Type,
-			Value = Text,
+			Type = Type :: Types,
+			--> `true`/`false` genuinely arrive here as booleans, which `Parser.Options` relies on when
+			--> it stores an option straight into a boolean field. Every other reader treats `Value` as
+			--> a string, so the cast keeps that widening in this one place instead of in the type.
+			Value = Value :: string,
 			Start = Start,
 			End = End,
 		}

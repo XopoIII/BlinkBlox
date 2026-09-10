@@ -1,0 +1,108 @@
+# Blink — working notes
+
+An IDL compiler for ROBLOX buffer networking, written in Luau. A schema (`.blink`) compiles to
+server, client and shared Luau modules that serialise events into buffers.
+
+This is a fork of [`1Axen/blink`](https://github.com/1Axen/blink) at `v0.18.8`.
+
+## Everything here is written in English
+
+Code, comments, identifiers, documentation, commit messages, pull request bodies, schema files,
+agent and skill instructions, prompts, tool descriptions — **all of it, without exception**.
+
+No other language appears anywhere in this repository. This is enforced, not merely agreed:
+`scripts/check-english.sh` runs on every commit and rejects letters outside ASCII. Box-drawing
+characters (`─ │ ┆ ╭ ╯`, used by the diagnostics renderer) and em dashes are punctuation, not
+letters, and stay allowed.
+
+Conversation with the user may happen in another language; nothing that lands in the repository does.
+
+## Why the fork exists
+
+Upstream `main` has been frozen since April 2026 — the author moved to a `rewrite` branch and stated
+in issue #12 that the current version gets nothing but major bug fixes. Issue #45 (an unbounded
+parse of a hostile client buffer) was explicitly declared out of scope.
+
+Moving to `rewrite` is not an option: its Studio plugin is unported, it has no documentation, and it
+still lacks TypeScript output, sync validation, bit packing and rate limiting.
+
+So the fixes happen here.
+
+## Commands
+
+| Task | Command |
+|---|---|
+| Install the toolchain | `rokit install` |
+| Run the test suite | `sh scripts/run-tests.sh` |
+| Type-check everything | `sh scripts/type-check.sh` |
+| Lint | `selene src test plugin/src .lune` |
+| Check formatting | `stylua --check src test plugin .lune` |
+| Format | `stylua src test plugin .lune` |
+| Install git hooks | `lefthook install` |
+| Compile a schema | `lune run init <path-to-.blink> -- --yes` (from `src/CLI`) |
+| Build release binaries | `lune run build` |
+| Docs, locally | `cd docs && npm install && npm run dev` |
+
+The same gates run in CI (`.github/workflows/checks.yaml`) and before each commit (`lefthook.yml`).
+
+**The tree is at zero.** No lint warnings, no type errors, no formatting drift. Keep it there — a
+warning that is tolerated once stops being read.
+
+## Architecture
+
+```
+src/CLI/init.luau          argument parsing, help, watch mode
+src/CLI/Utility/Compile    the pipeline: read -> parse -> generate -> write
+src/Lexer.luau             tokeniser, pattern table + transformers
+src/Parser.luau            recursive descent, semantic analysis, AST (types live here)
+src/Generator/init.luau    the Luau emitter
+src/Generator/Blocks.luau  code-emitting DSL (Block / Function / Connection)
+src/Generator/Prefabs.luau read/write prefabs per primitive, plus range and type asserts
+src/Templates/*.luau       runtime fragments spliced into generated output
+plugin/src/                the Studio plugin: editor, syntax highlighting, autocomplete
+```
+
+There is no separate IR — the generator walks the AST directly.
+
+### `src/` is dual-target, and the layout hides it
+
+The same lexer, parser and error modules run **on Lune** for the CLI *and* **inside Roblox** for the
+Studio plugin, which requires them through the `@compiler` alias in `.luaurc`. They branch at
+runtime: `src/Parser.luau` tests `task ~= nil`, `src/Modules/Error.luau` tests `game ~= nil`.
+
+Consequences worth remembering:
+
+- `selene.toml` sets `std = "luau+roblox"` at the root; `plugin/selene.toml` sets `std = "roblox"`.
+- `scripts/type-check.sh` analyses the compiler and the plugin as two separate contours.
+- The compiler's range type is `Settings.NumberRange` (a plain `{ Min, Max }` table), deliberately
+  **not** Roblox's `NumberRange` userdata, which does not exist on Lune. All three of Settings,
+  Parser and Prefabs refer to the one definition.
+
+### Things that look wrong and are not
+
+- **`src/Templates/*.luau` do not stand alone.** They are concatenated into generated output and
+  reference identifiers that exist only after splicing (`RecieveBuffer`, `PlayersMap`, `Read`).
+  Excluded from lint; never "fix" an undefined variable there.
+- **`_G` is the build-constant channel.** `build/.darklua.json` declares `inject_global_value` for
+  `_G.VERSION` and `_G.RELEASE`, so darklua replaces them with literals when bundling a release.
+  Reading them through `_G` is what lets an unbundled run fall back to debug behaviour.
+- **`Token.Value` is typed `string`, but `true`/`false` arrive as real booleans.** `Parser.Options`
+  depends on that when storing a boolean option. The widening is confined to `TokenTransformer` and
+  one cast in `Lexer.GetNextToken`.
+- **`Blocks.Emittable` is `string | number` on purpose.** Callers pass identifiers *and* numeric
+  literals into the generated text; both interpolate identically.
+
+### The prompt trap
+
+`stdio.prompt` throws `IO error: not a terminal` when stdin is not a TTY. It does not degrade — it
+aborts. This bit the test runner (it could never run in CI) and it bites the CLI in any automated
+pipeline. Always pass `--yes` when driving the CLI from a script, and note that flag order matters:
+`blink <schema> --yes`, never `blink --yes <schema>`.
+
+## Downstream
+
+`dibby-roblox` consumes this compiler (`rokit.toml` pins `1axen/blink@0.18.8`, schema at
+`colony/net/Colony.blink`) and post-processes the generated server module with
+`scripts/patch-net-guard.sh` to close issue #45 by hand. That patch matches anchors in the emitted
+text — **changing the generator's output shape breaks it**. Any change here should be checked by
+regenerating that schema and diffing against its committed output.

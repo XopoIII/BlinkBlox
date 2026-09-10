@@ -24,3 +24,9 @@ sourcemap.json
 *.rbxl
 *.rbxl.lock
 test/Sources/Issue.blink
+
+# Roblox API type dump, downloaded by the type gate (scripts/type-check.sh)
+/globalTypes.d.luau
+
+# Generated sourcemaps for luau-lsp
+/build/sourcemap*.json

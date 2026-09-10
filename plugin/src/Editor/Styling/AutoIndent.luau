@@ -52,10 +52,10 @@ function Hook.OnSourceChanged(Text: string, _PreviousText: string, Cursor: numbe
 	end
 
 	--> Update text and cursor
-	local NextCharacter = string.sub(Text, Cursor, Cursor)
-	if string.gsub(NextCharacter, "%c", "") == "" then
-		NextCharacter = nil
-	end
+	--> A control character (or the end of the text) counts as "nothing follows the cursor", which is
+	--> what decides whether a closing line is inserted below.
+	local Character = string.sub(Text, Cursor, Cursor)
+	local NextCharacter: string? = if string.gsub(Character, "%c", "") == "" then nil else Character
 
 	local Indentation = GetLineIndentation(Previous) + AdditionalIndent
 	Text = string.sub(Text, 1, Cursor - 1)
