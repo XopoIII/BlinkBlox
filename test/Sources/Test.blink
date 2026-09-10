@@ -67,6 +67,34 @@ export enum SizeEnum = {A, B, C}
 export set SizeFlags = {F1, F2, F3}
 export map SizeMap = {[u8]: u16}
 
+-- Fixtures for rate limiting. Rate is events per second and Burst is the bucket capacity, so
+-- "Burst" of them arrive at once and the rest need the clock to move.
+event RateLimited {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Rate: 5,
+    Burst: 10,
+    Data: u8,
+}
+
+event RateLimitedPoll {
+    From: Client,
+    Type: Reliable,
+    Call: Polling,
+    Rate: 5,
+    Burst: 10,
+    Data: u8,
+}
+
+function RateLimitedCall {
+    Yield: Coroutine,
+    Rate: 2,
+    Burst: 2,
+    Data: u8,
+    Return: u8,
+}
+
 enum States = { A, B, C, D }
 
 set Flags8 = {F1, F2, F3, F4, F5, F6, F7, F8}

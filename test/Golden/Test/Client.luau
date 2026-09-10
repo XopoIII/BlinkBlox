@@ -174,58 +174,59 @@ end
 local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Unreliable[0] = table.create(256)
-Queue.Reliable[0] = table.create(256)
-Queue.Reliable[3] = CreateQueue()
+Queue.Reliable[2] = table.create(256)
+Queue.Reliable[3] = table.create(256)
+Queue.Reliable[6] = CreateQueue()
 Queue.Unreliable[3] = CreateQueue()
-Queue.Reliable[4] = CreateQueue()
+Queue.Reliable[7] = CreateQueue()
 Queue.Unreliable[4] = CreateQueue()
-Queue.Reliable[6] = table.create(256)
-Queue.Unreliable[6] = table.create(256)
-Queue.Reliable[7] = table.create(256)
-Queue.Reliable[8] = table.create(256)
 Queue.Reliable[9] = table.create(256)
+Queue.Unreliable[6] = table.create(256)
 Queue.Reliable[10] = table.create(256)
 Queue.Reliable[11] = table.create(256)
 Queue.Reliable[12] = table.create(256)
 Queue.Reliable[13] = table.create(256)
 Queue.Reliable[14] = table.create(256)
 Queue.Reliable[15] = table.create(256)
+Queue.Reliable[16] = table.create(256)
 Queue.Reliable[17] = table.create(256)
 Queue.Reliable[18] = table.create(256)
-Queue.Reliable[19] = table.create(256)
 Queue.Reliable[20] = table.create(256)
 Queue.Reliable[21] = table.create(256)
 Queue.Reliable[22] = table.create(256)
 Queue.Reliable[23] = table.create(256)
+Queue.Reliable[24] = table.create(256)
+Queue.Reliable[25] = table.create(256)
+Queue.Reliable[26] = table.create(256)
 Queue.Unreliable[7] = table.create(256)
 Queue.Unreliable[8] = table.create(256)
-Events.Reliable[24] = {}
-Queue.Reliable[24] = table.create(256)
-Events.Reliable[25] = {}
-Queue.Reliable[25] = table.create(256)
+Events.Reliable[27] = {}
+Queue.Reliable[27] = table.create(256)
+Events.Reliable[28] = {}
+Queue.Reliable[28] = table.create(256)
 Events.Unreliable[9] = {}
 Queue.Unreliable[9] = table.create(256)
 Events.Unreliable[10] = {}
 Queue.Unreliable[10] = table.create(256)
-Queue.Reliable[26] = table.create(256)
-Queue.Reliable[27] = table.create(256)
-Queue.Unreliable[11] = table.create(256)
-Queue.Unreliable[12] = table.create(256)
 Queue.Reliable[29] = table.create(256)
 Queue.Reliable[30] = table.create(256)
-Queue.Reliable[31] = table.create(256)
+Queue.Unreliable[11] = table.create(256)
+Queue.Unreliable[12] = table.create(256)
 Queue.Reliable[32] = table.create(256)
 Queue.Reliable[33] = table.create(256)
 Queue.Reliable[34] = table.create(256)
 Queue.Reliable[35] = table.create(256)
 Queue.Reliable[36] = table.create(256)
 Queue.Reliable[37] = table.create(256)
-Queue.Unreliable[14] = table.create(256)
 Queue.Reliable[38] = table.create(256)
 Queue.Reliable[39] = table.create(256)
 Queue.Reliable[40] = table.create(256)
+Queue.Unreliable[14] = table.create(256)
 Queue.Reliable[41] = table.create(256)
 Queue.Reliable[42] = table.create(256)
+Queue.Reliable[43] = table.create(256)
+Queue.Reliable[44] = table.create(256)
+Queue.Reliable[45] = table.create(256)
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
 export type Indexers_TestFlags = {["a a"]: boolean,}
 export type Indexers_TestEnums = ("b b")
@@ -348,6 +349,55 @@ function SerdesFunctions.Indexers_ReadEVENT_TestEvent(): ({ ["z z"]: number, ["1
 	return Value1, Value2, Value3, Value4
 end
 
+function SerdesFunctions.WriteEVENT_RateLimited(Value: number): ()
+	-- Allocate BLOCK: 2 bytes
+	local BLOCK_START = Allocate(2)
+	-- EVENT_RateLimited (0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+	-- Value: RateLimited
+	if typeof(Value) ~= "number" then
+		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+end
+
+function SerdesFunctions.WriteEVENT_RateLimitedPoll(Value: number): ()
+	-- Allocate BLOCK: 2 bytes
+	local BLOCK_START = Allocate(2)
+	-- EVENT_RateLimitedPoll (1)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+	-- Value: RateLimitedPoll
+	if typeof(Value) ~= "number" then
+		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+end
+
+function SerdesFunctions.WriteFUNCTION_DATA_RateLimitedCall(Value: number, InvocationIdentifier: number): ()
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
+	-- FUNCTION_DATA_RateLimitedCall (2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
+	-- Value: RateLimitedCall
+	if typeof(Value) ~= "number" then
+		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, Value)
+end
+
+function SerdesFunctions.ReadFUNCTION_RETURN_RateLimitedCall(): (number)
+	-- Read BLOCK: 2 bytes
+	local BLOCK_START = Read(2)
+	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if Success ~= 1 then
+		error("Server encountered an error.")
+	end
+	-- Value: RateLimitedCall
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	return Value
+end
+
 function SerdesFunctions.ReadEVENT_SendOccupiedCell(): (Vector3)
 	-- Read BLOCK: 6 bytes
 	local BLOCK_START = Read(6)
@@ -362,8 +412,8 @@ end
 function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 	-- Allocate BLOCK: 23 bytes
 	local BLOCK_START = Allocate(23)
-	-- EVENT_ClientPollEvent (1)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+	-- EVENT_ClientPollEvent (4)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 4)
 	-- Value: ClientPollEvent
 	-- Value.Field: Field
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Field ~= nil and 1 or 0)
@@ -772,8 +822,8 @@ end
 function SerdesFunctions.WriteEVENT_ClientEmptyPollEvent(Value: nil): ()
 	-- Allocate BLOCK: 1 bytes
 	local BLOCK_START = Allocate(1)
-	-- EVENT_ClientEmptyPollEvent (2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+	-- EVENT_ClientEmptyPollEvent (5)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 5)
 end
 
 function SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent(Value: nil): ()
@@ -1150,8 +1200,8 @@ end
 function SerdesFunctions.WriteEVENT_ClientEmptyEvent(Value: nil): ()
 	-- Allocate BLOCK: 1 bytes
 	local BLOCK_START = Allocate(1)
-	-- EVENT_ClientEmptyEvent (5)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 5)
+	-- EVENT_ClientEmptyEvent (8)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 8)
 end
 
 function SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent(Value: nil): ()
@@ -1172,8 +1222,8 @@ end
 function SerdesFunctions.WriteFUNCTION_DATA_EmptyFunction(Value: nil, InvocationIdentifier: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- FUNCTION_DATA_EmptyFunction (7)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 7)
+	-- FUNCTION_DATA_EmptyFunction (10)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 10)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
 end
 
@@ -1190,8 +1240,8 @@ end
 function SerdesFunctions.WriteFUNCTION_DATA_UnitFunction(Value: nil, InvocationIdentifier: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- FUNCTION_DATA_UnitFunction (8)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 8)
+	-- FUNCTION_DATA_UnitFunction (11)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 11)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
 	-- Value: UnitFunction
 end
@@ -1431,8 +1481,8 @@ end
 function SerdesFunctions.WriteEVENT_Booleans(Value: { boolean }): ()
 	-- Allocate BLOCK: 3 bytes
 	local BLOCK_START = Allocate(3)
-	-- EVENT_Booleans (16)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 16)
+	-- EVENT_Booleans (19)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 19)
 	-- Value: Booleans
 	-- START ARRAY
 	buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value)
@@ -1772,8 +1822,8 @@ end
 function SerdesFunctions.WriteEVENT_ReliableClient(Value: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- EVENT_ReliableClient (28)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 28)
+	-- EVENT_ReliableClient (31)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 31)
 	-- Value: ReliableClient
 	if typeof(Value) ~= "number" then
 		error(`Expected Value to be of type number, got {type(Value)} instead.`)
@@ -2175,8 +2225,8 @@ end
 function SerdesFunctions.WriteFUNCTION_DATA_RemoteFunction(Value: number, InvocationIdentifier: number): ()
 	-- Allocate BLOCK: 3 bytes
 	local BLOCK_START = Allocate(3)
-	-- FUNCTION_DATA_RemoteFunction (36)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 36)
+	-- FUNCTION_DATA_RemoteFunction (39)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 39)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
 	-- Value: RemoteFunction
 	if typeof(Value) ~= "number" then
@@ -2305,8 +2355,8 @@ end
 function SerdesFunctions.WriteFUNCTION_DATA_TupleFunction(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, InvocationIdentifier: number): ()
 	-- Allocate BLOCK: 5 bytes
 	local BLOCK_START = Allocate(5)
-	-- FUNCTION_DATA_TupleFunction (38)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 38)
+	-- FUNCTION_DATA_TupleFunction (41)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 41)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
 	-- Value: TupleFunction
 	-- Value1: TupleFunction
@@ -2489,6 +2539,7 @@ if not RunService:IsRunning() then
 	local NOOP_RETURNING = function() return NOOP end
 	local Returns = table.freeze({
 		StepReplication = NOOP,
+		SetRateLimitHandler = NOOP,
 	Indexers = {
 		TestEvent = {
 			On = NOOP_RETURNING,
@@ -3790,6 +3841,15 @@ if not RunService:IsRunning() then
 			return Result
 		end
 	},
+	RateLimited = {
+		Fire = NOOP
+	},
+	RateLimitedPoll = {
+		Fire = NOOP
+	},
+	RateLimitedCall = {
+		Invoke = NOOP
+	},
 	MapNested = {
 		Read = function(Buffer: buffer): (MapNested)
 			-- Buffer overwrite
@@ -4311,6 +4371,10 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EV
 assert(Reliable:IsA("RemoteEvent"), "[Blink]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[Blink]: The unreliable remote is not an UnreliableRemoteEvent.")
 
+--> Present so code shared between contexts can install a handler without branching on which module
+--> it got. The client never rate limits: it is talking to the server, which is trusted.
+local function SetRateLimitHandler(_Handler: ((Player: Player, Event: string) -> ())?) end
+
 local function StepReplication()
     if SendCursor <= 0 then
         return
@@ -4342,33 +4406,44 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		if Index == 0 then
-			local Value: Vector3 = SerdesFunctions.ReadEVENT_SendOccupiedCell()
-			if Events.Reliable[0] ~= nil then
-				SerdesEvent = "SendOccupiedCell"
-				Events.Reliable[0](Value)
-			else
-				if #Queue.Reliable[0] > 256 then
-					warn("[Blink]: Event queue of \"SendOccupiedCell\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[0], {Value} :: {any})
+		if Index == 2 then
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Success, ReturnValue = pcall(function ()
+					return SerdesFunctions.ReadFUNCTION_RETURN_RateLimitedCall()
+				end)
+			if Calls[InvocationIdentifier] ~= nil then
+				task.spawn(Calls[InvocationIdentifier], Success, ReturnValue)
+				Calls[InvocationIdentifier] = nil
 			end
 		elseif Index == 3 then
-			Push(Queue.Reliable[3], table.pack(SerdesFunctions.ReadEVENT_ServerPollEvent()))
-		elseif Index == 4 then
-			Push(Queue.Reliable[4], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyPollEvent()))
-		elseif Index == 6 then
-			local Value: nil = SerdesFunctions.ReadEVENT_EmptyEvent()
-			if Events.Reliable[6] ~= nil then
-				SerdesEvent = "EmptyEvent"
-				Events.Reliable[6](Value)
+			local Value: Vector3 = SerdesFunctions.ReadEVENT_SendOccupiedCell()
+			if Events.Reliable[3] ~= nil then
+				SerdesEvent = "SendOccupiedCell"
+				Events.Reliable[3](Value)
 			else
-				if #Queue.Reliable[6] > 256 then
+				if #Queue.Reliable[3] > 256 then
+					warn("[Blink]: Event queue of \"SendOccupiedCell\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[3], {Value} :: {any})
+			end
+		elseif Index == 6 then
+			Push(Queue.Reliable[6], table.pack(SerdesFunctions.ReadEVENT_ServerPollEvent()))
+		elseif Index == 7 then
+			Push(Queue.Reliable[7], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyPollEvent()))
+		elseif Index == 9 then
+			local Value: nil = SerdesFunctions.ReadEVENT_EmptyEvent()
+			if Events.Reliable[9] ~= nil then
+				SerdesEvent = "EmptyEvent"
+				Events.Reliable[9](Value)
+			else
+				if #Queue.Reliable[9] > 256 then
 					warn("[Blink]: Event queue of \"EmptyEvent\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[6], {Value} :: {any})
+				table.insert(Queue.Reliable[9], {Value} :: {any})
 			end
-		elseif Index == 7 then
+		elseif Index == 10 then
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -4379,7 +4454,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				task.spawn(Calls[InvocationIdentifier], Success, ReturnValue)
 				Calls[InvocationIdentifier] = nil
 			end
-		elseif Index == 8 then
+		elseif Index == 11 then
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -4390,284 +4465,284 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				task.spawn(Calls[InvocationIdentifier], Success, Value)
 				Calls[InvocationIdentifier] = nil
 			end
-		elseif Index == 9 then
-			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,} = SerdesFunctions.ReadEVENT_Flags8()
-			if Events.Reliable[9] ~= nil then
-				SerdesEvent = "Flags8"
-				Events.Reliable[9](Value)
-			else
-				if #Queue.Reliable[9] > 256 then
-					warn("[Blink]: Event queue of \"Flags8\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[9], {Value} :: {any})
-			end
-		elseif Index == 10 then
-			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,} = SerdesFunctions.ReadEVENT_Flags16()
-			if Events.Reliable[10] ~= nil then
-				SerdesEvent = "Flags16"
-				Events.Reliable[10](Value)
-			else
-				if #Queue.Reliable[10] > 256 then
-					warn("[Blink]: Event queue of \"Flags16\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[10], {Value} :: {any})
-			end
-		elseif Index == 11 then
-			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,} = SerdesFunctions.ReadEVENT_Flags32()
-			if Events.Reliable[11] ~= nil then
-				SerdesEvent = "Flags32"
-				Events.Reliable[11](Value)
-			else
-				if #Queue.Reliable[11] > 256 then
-					warn("[Blink]: Event queue of \"Flags32\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[11], {Value} :: {any})
-			end
 		elseif Index == 12 then
-			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,} = SerdesFunctions.ReadEVENT_Flags33()
+			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,} = SerdesFunctions.ReadEVENT_Flags8()
 			if Events.Reliable[12] ~= nil then
-				SerdesEvent = "Flags33"
+				SerdesEvent = "Flags8"
 				Events.Reliable[12](Value)
 			else
 				if #Queue.Reliable[12] > 256 then
-					warn("[Blink]: Event queue of \"Flags33\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"Flags8\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[12], {Value} :: {any})
 			end
 		elseif Index == 13 then
-			local Value: {[number]: { Static: number, Dynamic: buffer }} = SerdesFunctions.ReadEVENT_DynamicMap()
+			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,} = SerdesFunctions.ReadEVENT_Flags16()
 			if Events.Reliable[13] ~= nil then
-				SerdesEvent = "DynamicMap"
+				SerdesEvent = "Flags16"
 				Events.Reliable[13](Value)
 			else
 				if #Queue.Reliable[13] > 256 then
-					warn("[Blink]: Event queue of \"DynamicMap\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"Flags16\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[13], {Value} :: {any})
 			end
 		elseif Index == 14 then
-			local Value: { { Static: number, Dynamic: buffer } } = SerdesFunctions.ReadEVENT_DynamicArray()
+			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,} = SerdesFunctions.ReadEVENT_Flags32()
 			if Events.Reliable[14] ~= nil then
-				SerdesEvent = "DynamicArray"
+				SerdesEvent = "Flags32"
 				Events.Reliable[14](Value)
 			else
 				if #Queue.Reliable[14] > 256 then
-					warn("[Blink]: Event queue of \"DynamicArray\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"Flags32\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[14], {Value} :: {any})
 			end
 		elseif Index == 15 then
-			local Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number } = SerdesFunctions.ReadEVENT_PlayerEvent()
+			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,} = SerdesFunctions.ReadEVENT_Flags33()
 			if Events.Reliable[15] ~= nil then
-				SerdesEvent = "PlayerEvent"
+				SerdesEvent = "Flags33"
 				Events.Reliable[15](Value)
 			else
 				if #Queue.Reliable[15] > 256 then
-					warn("[Blink]: Event queue of \"PlayerEvent\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"Flags33\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[15], {Value} :: {any})
 			end
+		elseif Index == 16 then
+			local Value: {[number]: { Static: number, Dynamic: buffer }} = SerdesFunctions.ReadEVENT_DynamicMap()
+			if Events.Reliable[16] ~= nil then
+				SerdesEvent = "DynamicMap"
+				Events.Reliable[16](Value)
+			else
+				if #Queue.Reliable[16] > 256 then
+					warn("[Blink]: Event queue of \"DynamicMap\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[16], {Value} :: {any})
+			end
 		elseif Index == 17 then
-			local Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } = SerdesFunctions.ReadEVENT_Generic()
+			local Value: { { Static: number, Dynamic: buffer } } = SerdesFunctions.ReadEVENT_DynamicArray()
 			if Events.Reliable[17] ~= nil then
-				SerdesEvent = "Generic"
+				SerdesEvent = "DynamicArray"
 				Events.Reliable[17](Value)
 			else
 				if #Queue.Reliable[17] > 256 then
-					warn("[Blink]: Event queue of \"Generic\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"DynamicArray\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[17], {Value} :: {any})
 			end
 		elseif Index == 18 then
-			local Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }? = SerdesFunctions.ReadEVENT_GenericArray()
+			local Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number } = SerdesFunctions.ReadEVENT_PlayerEvent()
 			if Events.Reliable[18] ~= nil then
-				SerdesEvent = "GenericArray"
+				SerdesEvent = "PlayerEvent"
 				Events.Reliable[18](Value)
 			else
 				if #Queue.Reliable[18] > 256 then
-					warn("[Blink]: Event queue of \"GenericArray\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"PlayerEvent\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[18], {Value} :: {any})
 			end
-		elseif Index == 19 then
-			local Value: any = SerdesFunctions.ReadEVENT_Unknown()
-			if Events.Reliable[19] ~= nil then
-				SerdesEvent = "Unknown"
-				Events.Reliable[19](Value)
-			else
-				if #Queue.Reliable[19] > 256 then
-					warn("[Blink]: Event queue of \"Unknown\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[19], {Value} :: {any})
-			end
 		elseif Index == 20 then
-			local Value: {[string]: number} = SerdesFunctions.ReadEVENT_MapEvent()
+			local Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } = SerdesFunctions.ReadEVENT_Generic()
 			if Events.Reliable[20] ~= nil then
-				SerdesEvent = "MapEvent"
+				SerdesEvent = "Generic"
 				Events.Reliable[20](Value)
 			else
 				if #Queue.Reliable[20] > 256 then
-					warn("[Blink]: Event queue of \"MapEvent\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"Generic\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[20], {Value} :: {any})
 			end
 		elseif Index == 21 then
-			local Value: { Map: {[string]: number} } = SerdesFunctions.ReadEVENT_MapStructEvent()
+			local Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }? = SerdesFunctions.ReadEVENT_GenericArray()
 			if Events.Reliable[21] ~= nil then
-				SerdesEvent = "MapStructEvent"
+				SerdesEvent = "GenericArray"
 				Events.Reliable[21](Value)
 			else
 				if #Queue.Reliable[21] > 256 then
-					warn("[Blink]: Event queue of \"MapStructEvent\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"GenericArray\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[21], {Value} :: {any})
 			end
 		elseif Index == 22 then
-			local Value: {[string]: { number }} = SerdesFunctions.ReadEVENT_MapComplexEvent()
+			local Value: any = SerdesFunctions.ReadEVENT_Unknown()
 			if Events.Reliable[22] ~= nil then
-				SerdesEvent = "MapComplexEvent"
+				SerdesEvent = "Unknown"
 				Events.Reliable[22](Value)
 			else
 				if #Queue.Reliable[22] > 256 then
-					warn("[Blink]: Event queue of \"MapComplexEvent\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"Unknown\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[22], {Value} :: {any})
 			end
 		elseif Index == 23 then
-			local Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}? = SerdesFunctions.ReadEVENT_MapReferenceEvent()
+			local Value: {[string]: number} = SerdesFunctions.ReadEVENT_MapEvent()
 			if Events.Reliable[23] ~= nil then
-				SerdesEvent = "MapReferenceEvent"
+				SerdesEvent = "MapEvent"
 				Events.Reliable[23](Value)
 			else
 				if #Queue.Reliable[23] > 256 then
-					warn("[Blink]: Event queue of \"MapReferenceEvent\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"MapEvent\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[23], {Value} :: {any})
 			end
 		elseif Index == 24 then
-			local Value: number = SerdesFunctions.ReadEVENT_ManyReliableSync()
-			if #Events.Reliable[24] > 0 then
-				for _, Listener in Events.Reliable[24] do
-					SerdesEvent = "ManyReliableSync"
-					Listener(Value)
-				end
+			local Value: { Map: {[string]: number} } = SerdesFunctions.ReadEVENT_MapStructEvent()
+			if Events.Reliable[24] ~= nil then
+				SerdesEvent = "MapStructEvent"
+				Events.Reliable[24](Value)
 			else
 				if #Queue.Reliable[24] > 256 then
-					warn("[Blink]: Event queue of \"ManyReliableSync\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"MapStructEvent\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[24], {Value} :: {any})
 			end
 		elseif Index == 25 then
-			local Value: number = SerdesFunctions.ReadEVENT_ManyReliableAsync()
-			if #Events.Reliable[25] > 0 then
-				for _, Listener in Events.Reliable[25] do
-					task.spawn(Listener, Value)
-				end
+			local Value: {[string]: { number }} = SerdesFunctions.ReadEVENT_MapComplexEvent()
+			if Events.Reliable[25] ~= nil then
+				SerdesEvent = "MapComplexEvent"
+				Events.Reliable[25](Value)
 			else
 				if #Queue.Reliable[25] > 256 then
-					warn("[Blink]: Event queue of \"ManyReliableAsync\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"MapComplexEvent\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[25], {Value} :: {any})
 			end
 		elseif Index == 26 then
-			local Value: number = SerdesFunctions.ReadEVENT_ReliableServer()
+			local Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}? = SerdesFunctions.ReadEVENT_MapReferenceEvent()
 			if Events.Reliable[26] ~= nil then
-				SerdesEvent = "ReliableServer"
+				SerdesEvent = "MapReferenceEvent"
 				Events.Reliable[26](Value)
 			else
 				if #Queue.Reliable[26] > 256 then
-					warn("[Blink]: Event queue of \"ReliableServer\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"MapReferenceEvent\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[26], {Value} :: {any})
 			end
 		elseif Index == 27 then
-			local Value: number = SerdesFunctions.ReadEVENT_ReliableServerAsync()
-			if Events.Reliable[27] ~= nil then
-				task.spawn(Events.Reliable[27], Value)
+			local Value: number = SerdesFunctions.ReadEVENT_ManyReliableSync()
+			if #Events.Reliable[27] > 0 then
+				for _, Listener in Events.Reliable[27] do
+					SerdesEvent = "ManyReliableSync"
+					Listener(Value)
+				end
 			else
 				if #Queue.Reliable[27] > 256 then
-					warn("[Blink]: Event queue of \"ReliableServerAsync\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"ManyReliableSync\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[27], {Value} :: {any})
 			end
+		elseif Index == 28 then
+			local Value: number = SerdesFunctions.ReadEVENT_ManyReliableAsync()
+			if #Events.Reliable[28] > 0 then
+				for _, Listener in Events.Reliable[28] do
+					task.spawn(Listener, Value)
+				end
+			else
+				if #Queue.Reliable[28] > 256 then
+					warn("[Blink]: Event queue of \"ManyReliableAsync\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[28], {Value} :: {any})
+			end
 		elseif Index == 29 then
-			local Value: Instance = SerdesFunctions.ReadEVENT_InstanceAny()
+			local Value: number = SerdesFunctions.ReadEVENT_ReliableServer()
 			if Events.Reliable[29] ~= nil then
-				SerdesEvent = "InstanceAny"
+				SerdesEvent = "ReliableServer"
 				Events.Reliable[29](Value)
 			else
 				if #Queue.Reliable[29] > 256 then
-					warn("[Blink]: Event queue of \"InstanceAny\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"ReliableServer\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[29], {Value} :: {any})
 			end
 		elseif Index == 30 then
-			local Value: Sound = SerdesFunctions.ReadEVENT_InstanceOfType()
+			local Value: number = SerdesFunctions.ReadEVENT_ReliableServerAsync()
 			if Events.Reliable[30] ~= nil then
-				SerdesEvent = "InstanceOfType"
-				Events.Reliable[30](Value)
+				task.spawn(Events.Reliable[30], Value)
 			else
 				if #Queue.Reliable[30] > 256 then
-					warn("[Blink]: Event queue of \"InstanceOfType\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"ReliableServerAsync\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[30], {Value} :: {any})
 			end
-		elseif Index == 31 then
-			local Value: Instance? = SerdesFunctions.ReadEVENT_InstanceOptional()
-			if Events.Reliable[31] ~= nil then
-				SerdesEvent = "InstanceOptional"
-				Events.Reliable[31](Value)
-			else
-				if #Queue.Reliable[31] > 256 then
-					warn("[Blink]: Event queue of \"InstanceOptional\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[31], {Value} :: {any})
-			end
 		elseif Index == 32 then
-			local Value: Motor6D = SerdesFunctions.ReadEVENT_InstanceOfClassWithDigit()
+			local Value: Instance = SerdesFunctions.ReadEVENT_InstanceAny()
 			if Events.Reliable[32] ~= nil then
-				SerdesEvent = "InstanceOfClassWithDigit"
+				SerdesEvent = "InstanceAny"
 				Events.Reliable[32](Value)
 			else
 				if #Queue.Reliable[32] > 256 then
-					warn("[Blink]: Event queue of \"InstanceOfClassWithDigit\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"InstanceAny\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[32], {Value} :: {any})
 			end
 		elseif Index == 33 then
-			local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_Reference()
+			local Value: Sound = SerdesFunctions.ReadEVENT_InstanceOfType()
 			if Events.Reliable[33] ~= nil then
-				SerdesEvent = "Reference"
+				SerdesEvent = "InstanceOfType"
 				Events.Reliable[33](Value)
 			else
 				if #Queue.Reliable[33] > 256 then
-					warn("[Blink]: Event queue of \"Reference\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"InstanceOfType\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[33], {Value} :: {any})
 			end
 		elseif Index == 34 then
-			local Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } } = SerdesFunctions.ReadEVENT_ReferenceArray()
+			local Value: Instance? = SerdesFunctions.ReadEVENT_InstanceOptional()
 			if Events.Reliable[34] ~= nil then
-				SerdesEvent = "ReferenceArray"
+				SerdesEvent = "InstanceOptional"
 				Events.Reliable[34](Value)
 			else
 				if #Queue.Reliable[34] > 256 then
-					warn("[Blink]: Event queue of \"ReferenceArray\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"InstanceOptional\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[34], {Value} :: {any})
 			end
 		elseif Index == 35 then
-			local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_ReferenceOptional()
+			local Value: Motor6D = SerdesFunctions.ReadEVENT_InstanceOfClassWithDigit()
 			if Events.Reliable[35] ~= nil then
-				SerdesEvent = "ReferenceOptional"
+				SerdesEvent = "InstanceOfClassWithDigit"
 				Events.Reliable[35](Value)
 			else
 				if #Queue.Reliable[35] > 256 then
-					warn("[Blink]: Event queue of \"ReferenceOptional\" exceeded 256, did you forget to implement a listener?")
+					warn("[Blink]: Event queue of \"InstanceOfClassWithDigit\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[35], {Value} :: {any})
 			end
 		elseif Index == 36 then
+			local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_Reference()
+			if Events.Reliable[36] ~= nil then
+				SerdesEvent = "Reference"
+				Events.Reliable[36](Value)
+			else
+				if #Queue.Reliable[36] > 256 then
+					warn("[Blink]: Event queue of \"Reference\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[36], {Value} :: {any})
+			end
+		elseif Index == 37 then
+			local Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } } = SerdesFunctions.ReadEVENT_ReferenceArray()
+			if Events.Reliable[37] ~= nil then
+				SerdesEvent = "ReferenceArray"
+				Events.Reliable[37](Value)
+			else
+				if #Queue.Reliable[37] > 256 then
+					warn("[Blink]: Event queue of \"ReferenceArray\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[37], {Value} :: {any})
+			end
+		elseif Index == 38 then
+			local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_ReferenceOptional()
+			if Events.Reliable[38] ~= nil then
+				SerdesEvent = "ReferenceOptional"
+				Events.Reliable[38](Value)
+			else
+				if #Queue.Reliable[38] > 256 then
+					warn("[Blink]: Event queue of \"ReferenceOptional\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[38], {Value} :: {any})
+			end
+		elseif Index == 39 then
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -4678,18 +4753,18 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				task.spawn(Calls[InvocationIdentifier], Success, ReturnValue)
 				Calls[InvocationIdentifier] = nil
 			end
-		elseif Index == 37 then
+		elseif Index == 40 then
 			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number } = SerdesFunctions.ReadEVENT_Tuple()
-			if Events.Reliable[37] ~= nil then
+			if Events.Reliable[40] ~= nil then
 				SerdesEvent = "Tuple"
-				Events.Reliable[37](Value1, Value2, Value3, Value4, Value5, Value6)
+				Events.Reliable[40](Value1, Value2, Value3, Value4, Value5, Value6)
 			else
-				if #Queue.Reliable[37] > 256 then
+				if #Queue.Reliable[40] > 256 then
 					warn("[Blink]: Event queue of \"Tuple\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[37], {Value1, Value2, Value3, Value4, Value5, Value6} :: {any})
+				table.insert(Queue.Reliable[40], {Value1, Value2, Value3, Value4, Value5, Value6} :: {any})
 			end
-		elseif Index == 38 then
+		elseif Index == 41 then
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -4700,49 +4775,49 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				task.spawn(Calls[InvocationIdentifier], Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5)
 				Calls[InvocationIdentifier] = nil
 			end
-		elseif Index == 39 then
-			local Value: number = SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent()
-			if Events.Reliable[39] ~= nil then
-				SerdesEvent = "InScopeEvent"
-				Events.Reliable[39](Value)
-			else
-				if #Queue.Reliable[39] > 256 then
-					warn("[Blink]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[39], {Value} :: {any})
-			end
-		elseif Index == 40 then
-			local Value: number = SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_ReadEVENT_InAnotherScopeEvent()
-			if Events.Reliable[40] ~= nil then
-				SerdesEvent = "InAnotherScopeEvent"
-				Events.Reliable[40](Value)
-			else
-				if #Queue.Reliable[40] > 256 then
-					warn("[Blink]: Event queue of \"InAnotherScopeEvent\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[40], {Value} :: {any})
-			end
-		elseif Index == 41 then
-			local Value: number = SerdesFunctions.ExampleScope_ReadEVENT_InScopeEvent()
-			if Events.Reliable[41] ~= nil then
-				SerdesEvent = "InScopeEvent"
-				Events.Reliable[41](Value)
-			else
-				if #Queue.Reliable[41] > 256 then
-					warn("[Blink]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[41], {Value} :: {any})
-			end
 		elseif Index == 42 then
-			local Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") } = SerdesFunctions.Issue33_ReadEVENT_Event()
+			local Value: number = SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent()
 			if Events.Reliable[42] ~= nil then
-				SerdesEvent = "Event"
-				Events.Reliable[42](Value1, Value2, Value3)
+				SerdesEvent = "InScopeEvent"
+				Events.Reliable[42](Value)
 			else
 				if #Queue.Reliable[42] > 256 then
+					warn("[Blink]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[42], {Value} :: {any})
+			end
+		elseif Index == 43 then
+			local Value: number = SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_ReadEVENT_InAnotherScopeEvent()
+			if Events.Reliable[43] ~= nil then
+				SerdesEvent = "InAnotherScopeEvent"
+				Events.Reliable[43](Value)
+			else
+				if #Queue.Reliable[43] > 256 then
+					warn("[Blink]: Event queue of \"InAnotherScopeEvent\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[43], {Value} :: {any})
+			end
+		elseif Index == 44 then
+			local Value: number = SerdesFunctions.ExampleScope_ReadEVENT_InScopeEvent()
+			if Events.Reliable[44] ~= nil then
+				SerdesEvent = "InScopeEvent"
+				Events.Reliable[44](Value)
+			else
+				if #Queue.Reliable[44] > 256 then
+					warn("[Blink]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[44], {Value} :: {any})
+			end
+		elseif Index == 45 then
+			local Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") } = SerdesFunctions.Issue33_ReadEVENT_Event()
+			if Events.Reliable[45] ~= nil then
+				SerdesEvent = "Event"
+				Events.Reliable[45](Value1, Value2, Value3)
+			else
+				if #Queue.Reliable[45] > 256 then
 					warn("[Blink]: Event queue of \"Event\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[42], {Value1, Value2, Value3} :: {any})
+				table.insert(Queue.Reliable[45], {Value1, Value2, Value3} :: {any})
 			end
 		end
 	end
@@ -4825,6 +4900,8 @@ end)
 
 local Returns = table.freeze({
 	StepReplication = StepReplication,
+
+	SetRateLimitHandler = SetRateLimitHandler,
 
 	Indexers = {
 		TestEvent = {
@@ -6139,6 +6216,32 @@ local Returns = table.freeze({
 			return Result
 		end
 	},
+	RateLimited = {
+		Fire = function(Value: number): ()
+			SerdesFunctions.WriteEVENT_RateLimited(Value)
+		end
+	},
+	RateLimitedPoll = {
+		Fire = function(Value: number): ()
+			SerdesFunctions.WriteEVENT_RateLimitedPoll(Value)
+		end
+	},
+	RateLimitedCall = {
+		Invoke = function(Value: number): (number)
+			local InvocationIdentifier = Invoke()
+			if Calls[InvocationIdentifier] ~= nil then
+				Invocations -= 1
+				error("More than 256 calls are awaiting a response, this packet has been dropped.")
+			end
+			SerdesFunctions.WriteFUNCTION_DATA_RateLimitedCall(Value, InvocationIdentifier)
+			Calls[InvocationIdentifier] = coroutine.running()
+			local Success, ReturnValue: number = coroutine.yield()
+			if Success ~= true then
+				error("There was an exception while processing \"RateLimitedCall\".")
+			end
+			return ReturnValue
+		end
+	},
 	MapNested = {
 		Read = function(Buffer: buffer): (MapNested)
 			-- Buffer overwrite
@@ -6422,23 +6525,23 @@ local Returns = table.freeze({
 	},
 	SendOccupiedCell = {
 		On = function(Listener: (Value: Vector3) -> ()): () -> ()
-			Events.Reliable[0] = Listener
-			for Index, Arguments in Queue.Reliable[0] do
+			Events.Reliable[3] = Listener
+			for Index, Arguments in Queue.Reliable[3] do
 				Listener(table.unpack(Arguments))
 			end
-			Queue.Reliable[0] = {}
+			Queue.Reliable[3] = {}
 			return function (): ()
-				if Events.Reliable[0] == Listener then
-					Events.Reliable[0] = nil
+				if Events.Reliable[3] == Listener then
+					Events.Reliable[3] = nil
 				end
 			end
 		end,
 		Predict = function(Value: Vector3): ()
-			if Events.Reliable[0] ~= nil then
+			if Events.Reliable[3] ~= nil then
 				SerdesEvent = "SendOccupiedCell"
-				Events.Reliable[0](Value)
+				Events.Reliable[3](Value)
 			else
-				table.insert(Queue.Reliable[0], {Value} :: {any})
+				table.insert(Queue.Reliable[3], {Value} :: {any})
 			end
 		end
 	},
@@ -6481,7 +6584,7 @@ local Returns = table.freeze({
 	ServerPollEvent = {
 		Iter = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
-			local queue = Queue.Reliable[3]
+			local queue = Queue.Reliable[6]
 			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
@@ -6494,7 +6597,7 @@ local Returns = table.freeze({
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
 		Next = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
-			local queue = Queue.Reliable[3]
+			local queue = Queue.Reliable[6]
 			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
@@ -6535,7 +6638,7 @@ local Returns = table.freeze({
 	ServerEmptyPollEvent = {
 		Iter = function(): () -> (number, nil)
 			local index = 0
-			local queue = Queue.Reliable[4]
+			local queue = Queue.Reliable[7]
 			return function (): (number, nil)
 				index += 1
 				local arguments = Pop(queue)
@@ -6548,7 +6651,7 @@ local Returns = table.freeze({
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
 		Next = function(): () -> (number, nil)
 			local index = 0
-			local queue = Queue.Reliable[4]
+			local queue = Queue.Reliable[7]
 			return function (): (number, nil)
 				index += 1
 				local arguments = Pop(queue)
@@ -6606,23 +6709,23 @@ local Returns = table.freeze({
 	},
 	EmptyEvent = {
 		On = function(Listener: (Value: nil) -> ()): () -> ()
-			Events.Reliable[6] = Listener
-			for Index, Arguments in Queue.Reliable[6] do
+			Events.Reliable[9] = Listener
+			for Index, Arguments in Queue.Reliable[9] do
 				Listener(table.unpack(Arguments))
 			end
-			Queue.Reliable[6] = {}
+			Queue.Reliable[9] = {}
 			return function (): ()
-				if Events.Reliable[6] == Listener then
-					Events.Reliable[6] = nil
+				if Events.Reliable[9] == Listener then
+					Events.Reliable[9] = nil
 				end
 			end
 		end,
 		Predict = function(Value: nil): ()
-			if Events.Reliable[6] ~= nil then
+			if Events.Reliable[9] ~= nil then
 				SerdesEvent = "EmptyEvent"
-				Events.Reliable[6](Value)
+				Events.Reliable[9](Value)
 			else
-				table.insert(Queue.Reliable[6], {Value} :: {any})
+				table.insert(Queue.Reliable[9], {Value} :: {any})
 			end
 		end
 	},
@@ -6676,72 +6779,6 @@ local Returns = table.freeze({
 	},
 	Flags8 = {
 		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}) -> ()): () -> ()
-			Events.Reliable[9] = Listener
-			for Index, Arguments in Queue.Reliable[9] do
-				Listener(table.unpack(Arguments))
-			end
-			Queue.Reliable[9] = {}
-			return function (): ()
-				if Events.Reliable[9] == Listener then
-					Events.Reliable[9] = nil
-				end
-			end
-		end,
-		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
-			if Events.Reliable[9] ~= nil then
-				SerdesEvent = "Flags8"
-				Events.Reliable[9](Value)
-			else
-				table.insert(Queue.Reliable[9], {Value} :: {any})
-			end
-		end
-	},
-	Flags16 = {
-		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}) -> ()): () -> ()
-			Events.Reliable[10] = Listener
-			for Index, Arguments in Queue.Reliable[10] do
-				Listener(table.unpack(Arguments))
-			end
-			Queue.Reliable[10] = {}
-			return function (): ()
-				if Events.Reliable[10] == Listener then
-					Events.Reliable[10] = nil
-				end
-			end
-		end,
-		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
-			if Events.Reliable[10] ~= nil then
-				SerdesEvent = "Flags16"
-				Events.Reliable[10](Value)
-			else
-				table.insert(Queue.Reliable[10], {Value} :: {any})
-			end
-		end
-	},
-	Flags32 = {
-		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}) -> ()): () -> ()
-			Events.Reliable[11] = Listener
-			for Index, Arguments in Queue.Reliable[11] do
-				Listener(table.unpack(Arguments))
-			end
-			Queue.Reliable[11] = {}
-			return function (): ()
-				if Events.Reliable[11] == Listener then
-					Events.Reliable[11] = nil
-				end
-			end
-		end,
-		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
-			if Events.Reliable[11] ~= nil then
-				SerdesEvent = "Flags32"
-				Events.Reliable[11](Value)
-			else
-				table.insert(Queue.Reliable[11], {Value} :: {any})
-			end
-		end
-	},
-	Flags33 = {
-		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}) -> ()): () -> ()
 			Events.Reliable[12] = Listener
 			for Index, Arguments in Queue.Reliable[12] do
 				Listener(table.unpack(Arguments))
@@ -6753,17 +6790,17 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
+		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
 			if Events.Reliable[12] ~= nil then
-				SerdesEvent = "Flags33"
+				SerdesEvent = "Flags8"
 				Events.Reliable[12](Value)
 			else
 				table.insert(Queue.Reliable[12], {Value} :: {any})
 			end
 		end
 	},
-	DynamicMap = {
-		On = function(Listener: (Value: {[number]: { Static: number, Dynamic: buffer }}) -> ()): () -> ()
+	Flags16 = {
+		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}) -> ()): () -> ()
 			Events.Reliable[13] = Listener
 			for Index, Arguments in Queue.Reliable[13] do
 				Listener(table.unpack(Arguments))
@@ -6775,17 +6812,17 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: {[number]: { Static: number, Dynamic: buffer }}): ()
+		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
 			if Events.Reliable[13] ~= nil then
-				SerdesEvent = "DynamicMap"
+				SerdesEvent = "Flags16"
 				Events.Reliable[13](Value)
 			else
 				table.insert(Queue.Reliable[13], {Value} :: {any})
 			end
 		end
 	},
-	DynamicArray = {
-		On = function(Listener: (Value: { { Static: number, Dynamic: buffer } }) -> ()): () -> ()
+	Flags32 = {
+		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}) -> ()): () -> ()
 			Events.Reliable[14] = Listener
 			for Index, Arguments in Queue.Reliable[14] do
 				Listener(table.unpack(Arguments))
@@ -6797,17 +6834,17 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: { { Static: number, Dynamic: buffer } }): ()
+		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
 			if Events.Reliable[14] ~= nil then
-				SerdesEvent = "DynamicArray"
+				SerdesEvent = "Flags32"
 				Events.Reliable[14](Value)
 			else
 				table.insert(Queue.Reliable[14], {Value} :: {any})
 			end
 		end
 	},
-	PlayerEvent = {
-		On = function(Listener: (Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }) -> ()): () -> ()
+	Flags33 = {
+		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}) -> ()): () -> ()
 			Events.Reliable[15] = Listener
 			for Index, Arguments in Queue.Reliable[15] do
 				Listener(table.unpack(Arguments))
@@ -6819,22 +6856,39 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
+		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
 			if Events.Reliable[15] ~= nil then
-				SerdesEvent = "PlayerEvent"
+				SerdesEvent = "Flags33"
 				Events.Reliable[15](Value)
 			else
 				table.insert(Queue.Reliable[15], {Value} :: {any})
 			end
 		end
 	},
-	Booleans = {
-		Fire = function(Value: { boolean }): ()
-			SerdesFunctions.WriteEVENT_Booleans(Value)
+	DynamicMap = {
+		On = function(Listener: (Value: {[number]: { Static: number, Dynamic: buffer }}) -> ()): () -> ()
+			Events.Reliable[16] = Listener
+			for Index, Arguments in Queue.Reliable[16] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[16] = {}
+			return function (): ()
+				if Events.Reliable[16] == Listener then
+					Events.Reliable[16] = nil
+				end
+			end
+		end,
+		Predict = function(Value: {[number]: { Static: number, Dynamic: buffer }}): ()
+			if Events.Reliable[16] ~= nil then
+				SerdesEvent = "DynamicMap"
+				Events.Reliable[16](Value)
+			else
+				table.insert(Queue.Reliable[16], {Value} :: {any})
+			end
 		end
 	},
-	Generic = {
-		On = function(Listener: (Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }) -> ()): () -> ()
+	DynamicArray = {
+		On = function(Listener: (Value: { { Static: number, Dynamic: buffer } }) -> ()): () -> ()
 			Events.Reliable[17] = Listener
 			for Index, Arguments in Queue.Reliable[17] do
 				Listener(table.unpack(Arguments))
@@ -6846,17 +6900,17 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
+		Predict = function(Value: { { Static: number, Dynamic: buffer } }): ()
 			if Events.Reliable[17] ~= nil then
-				SerdesEvent = "Generic"
+				SerdesEvent = "DynamicArray"
 				Events.Reliable[17](Value)
 			else
 				table.insert(Queue.Reliable[17], {Value} :: {any})
 			end
 		end
 	},
-	GenericArray = {
-		On = function(Listener: (Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?) -> ()): () -> ()
+	PlayerEvent = {
+		On = function(Listener: (Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }) -> ()): () -> ()
 			Events.Reliable[18] = Listener
 			for Index, Arguments in Queue.Reliable[18] do
 				Listener(table.unpack(Arguments))
@@ -6868,39 +6922,22 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
+		Predict = function(Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
 			if Events.Reliable[18] ~= nil then
-				SerdesEvent = "GenericArray"
+				SerdesEvent = "PlayerEvent"
 				Events.Reliable[18](Value)
 			else
 				table.insert(Queue.Reliable[18], {Value} :: {any})
 			end
 		end
 	},
-	Unknown = {
-		On = function(Listener: (Value: any) -> ()): () -> ()
-			Events.Reliable[19] = Listener
-			for Index, Arguments in Queue.Reliable[19] do
-				Listener(table.unpack(Arguments))
-			end
-			Queue.Reliable[19] = {}
-			return function (): ()
-				if Events.Reliable[19] == Listener then
-					Events.Reliable[19] = nil
-				end
-			end
-		end,
-		Predict = function(Value: any): ()
-			if Events.Reliable[19] ~= nil then
-				SerdesEvent = "Unknown"
-				Events.Reliable[19](Value)
-			else
-				table.insert(Queue.Reliable[19], {Value} :: {any})
-			end
+	Booleans = {
+		Fire = function(Value: { boolean }): ()
+			SerdesFunctions.WriteEVENT_Booleans(Value)
 		end
 	},
-	MapEvent = {
-		On = function(Listener: (Value: {[string]: number}) -> ()): () -> ()
+	Generic = {
+		On = function(Listener: (Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }) -> ()): () -> ()
 			Events.Reliable[20] = Listener
 			for Index, Arguments in Queue.Reliable[20] do
 				Listener(table.unpack(Arguments))
@@ -6912,17 +6949,17 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: {[string]: number}): ()
+		Predict = function(Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
 			if Events.Reliable[20] ~= nil then
-				SerdesEvent = "MapEvent"
+				SerdesEvent = "Generic"
 				Events.Reliable[20](Value)
 			else
 				table.insert(Queue.Reliable[20], {Value} :: {any})
 			end
 		end
 	},
-	MapStructEvent = {
-		On = function(Listener: (Value: { Map: {[string]: number} }) -> ()): () -> ()
+	GenericArray = {
+		On = function(Listener: (Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?) -> ()): () -> ()
 			Events.Reliable[21] = Listener
 			for Index, Arguments in Queue.Reliable[21] do
 				Listener(table.unpack(Arguments))
@@ -6934,17 +6971,17 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: { Map: {[string]: number} }): ()
+		Predict = function(Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
 			if Events.Reliable[21] ~= nil then
-				SerdesEvent = "MapStructEvent"
+				SerdesEvent = "GenericArray"
 				Events.Reliable[21](Value)
 			else
 				table.insert(Queue.Reliable[21], {Value} :: {any})
 			end
 		end
 	},
-	MapComplexEvent = {
-		On = function(Listener: (Value: {[string]: { number }}) -> ()): () -> ()
+	Unknown = {
+		On = function(Listener: (Value: any) -> ()): () -> ()
 			Events.Reliable[22] = Listener
 			for Index, Arguments in Queue.Reliable[22] do
 				Listener(table.unpack(Arguments))
@@ -6956,17 +6993,17 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: {[string]: { number }}): ()
+		Predict = function(Value: any): ()
 			if Events.Reliable[22] ~= nil then
-				SerdesEvent = "MapComplexEvent"
+				SerdesEvent = "Unknown"
 				Events.Reliable[22](Value)
 			else
 				table.insert(Queue.Reliable[22], {Value} :: {any})
 			end
 		end
 	},
-	MapReferenceEvent = {
-		On = function(Listener: (Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?) -> ()): () -> ()
+	MapEvent = {
+		On = function(Listener: (Value: {[string]: number}) -> ()): () -> ()
 			Events.Reliable[23] = Listener
 			for Index, Arguments in Queue.Reliable[23] do
 				Listener(table.unpack(Arguments))
@@ -6978,12 +7015,78 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
+		Predict = function(Value: {[string]: number}): ()
 			if Events.Reliable[23] ~= nil then
-				SerdesEvent = "MapReferenceEvent"
+				SerdesEvent = "MapEvent"
 				Events.Reliable[23](Value)
 			else
 				table.insert(Queue.Reliable[23], {Value} :: {any})
+			end
+		end
+	},
+	MapStructEvent = {
+		On = function(Listener: (Value: { Map: {[string]: number} }) -> ()): () -> ()
+			Events.Reliable[24] = Listener
+			for Index, Arguments in Queue.Reliable[24] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[24] = {}
+			return function (): ()
+				if Events.Reliable[24] == Listener then
+					Events.Reliable[24] = nil
+				end
+			end
+		end,
+		Predict = function(Value: { Map: {[string]: number} }): ()
+			if Events.Reliable[24] ~= nil then
+				SerdesEvent = "MapStructEvent"
+				Events.Reliable[24](Value)
+			else
+				table.insert(Queue.Reliable[24], {Value} :: {any})
+			end
+		end
+	},
+	MapComplexEvent = {
+		On = function(Listener: (Value: {[string]: { number }}) -> ()): () -> ()
+			Events.Reliable[25] = Listener
+			for Index, Arguments in Queue.Reliable[25] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[25] = {}
+			return function (): ()
+				if Events.Reliable[25] == Listener then
+					Events.Reliable[25] = nil
+				end
+			end
+		end,
+		Predict = function(Value: {[string]: { number }}): ()
+			if Events.Reliable[25] ~= nil then
+				SerdesEvent = "MapComplexEvent"
+				Events.Reliable[25](Value)
+			else
+				table.insert(Queue.Reliable[25], {Value} :: {any})
+			end
+		end
+	},
+	MapReferenceEvent = {
+		On = function(Listener: (Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?) -> ()): () -> ()
+			Events.Reliable[26] = Listener
+			for Index, Arguments in Queue.Reliable[26] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[26] = {}
+			return function (): ()
+				if Events.Reliable[26] == Listener then
+					Events.Reliable[26] = nil
+				end
+			end
+		end,
+		Predict = function(Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
+			if Events.Reliable[26] ~= nil then
+				SerdesEvent = "MapReferenceEvent"
+				Events.Reliable[26](Value)
+			else
+				table.insert(Queue.Reliable[26], {Value} :: {any})
 			end
 		end
 	},
@@ -7021,20 +7124,20 @@ local Returns = table.freeze({
 	},
 	ManyReliableSync = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			table.insert(Events.Reliable[24], Listener)
-			for Index, Arguments in Queue.Reliable[24] do
+			table.insert(Events.Reliable[27], Listener)
+			for Index, Arguments in Queue.Reliable[27] do
 				Listener(table.unpack(Arguments))
 			end
-			Queue.Reliable[24] = {}
+			Queue.Reliable[27] = {}
 			return function (): ()
-				local Index = table.find(Events.Reliable[24], Listener)
+				local Index = table.find(Events.Reliable[27], Listener)
 				if Index ~= nil then
-					table.remove(Events.Reliable[24], Index)
+					table.remove(Events.Reliable[27], Index)
 				end
 			end
 		end,
 		Predict = function(Value: number): ()
-			for _, Listener in Events.Reliable[24] do
+			for _, Listener in Events.Reliable[27] do
 				SerdesEvent = "ManyReliableSync"
 				Listener(Value)
 			end
@@ -7042,20 +7145,20 @@ local Returns = table.freeze({
 	},
 	ManyReliableAsync = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			table.insert(Events.Reliable[25], Listener)
-			for Index, Arguments in Queue.Reliable[25] do
+			table.insert(Events.Reliable[28], Listener)
+			for Index, Arguments in Queue.Reliable[28] do
 				task.spawn(Listener, table.unpack(Arguments))
 			end
-			Queue.Reliable[25] = {}
+			Queue.Reliable[28] = {}
 			return function (): ()
-				local Index = table.find(Events.Reliable[25], Listener)
+				local Index = table.find(Events.Reliable[28], Listener)
 				if Index ~= nil then
-					table.remove(Events.Reliable[25], Index)
+					table.remove(Events.Reliable[28], Index)
 				end
 			end
 		end,
 		Predict = function(Value: number): ()
-			for _, Listener in Events.Reliable[25] do
+			for _, Listener in Events.Reliable[28] do
 				task.spawn(Listener, Value)
 			end
 		end
@@ -7095,44 +7198,44 @@ local Returns = table.freeze({
 	},
 	ReliableServer = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			Events.Reliable[26] = Listener
-			for Index, Arguments in Queue.Reliable[26] do
+			Events.Reliable[29] = Listener
+			for Index, Arguments in Queue.Reliable[29] do
 				Listener(table.unpack(Arguments))
 			end
-			Queue.Reliable[26] = {}
+			Queue.Reliable[29] = {}
 			return function (): ()
-				if Events.Reliable[26] == Listener then
-					Events.Reliable[26] = nil
+				if Events.Reliable[29] == Listener then
+					Events.Reliable[29] = nil
 				end
 			end
 		end,
 		Predict = function(Value: number): ()
-			if Events.Reliable[26] ~= nil then
+			if Events.Reliable[29] ~= nil then
 				SerdesEvent = "ReliableServer"
-				Events.Reliable[26](Value)
+				Events.Reliable[29](Value)
 			else
-				table.insert(Queue.Reliable[26], {Value} :: {any})
+				table.insert(Queue.Reliable[29], {Value} :: {any})
 			end
 		end
 	},
 	ReliableServerAsync = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			Events.Reliable[27] = Listener
-			for Index, Arguments in Queue.Reliable[27] do
+			Events.Reliable[30] = Listener
+			for Index, Arguments in Queue.Reliable[30] do
 				task.spawn(Listener, table.unpack(Arguments))
 			end
-			Queue.Reliable[27] = {}
+			Queue.Reliable[30] = {}
 			return function (): ()
-				if Events.Reliable[27] == Listener then
-					Events.Reliable[27] = nil
+				if Events.Reliable[30] == Listener then
+					Events.Reliable[30] = nil
 				end
 			end
 		end,
 		Predict = function(Value: number): ()
-			if Events.Reliable[27] ~= nil then
-				task.spawn(Events.Reliable[27], Value)
+			if Events.Reliable[30] ~= nil then
+				task.spawn(Events.Reliable[30], Value)
 			else
-				table.insert(Queue.Reliable[27], {Value} :: {any})
+				table.insert(Queue.Reliable[30], {Value} :: {any})
 			end
 		end
 	},
@@ -7187,72 +7290,6 @@ local Returns = table.freeze({
 	},
 	InstanceAny = {
 		On = function(Listener: (Value: Instance) -> ()): () -> ()
-			Events.Reliable[29] = Listener
-			for Index, Arguments in Queue.Reliable[29] do
-				Listener(table.unpack(Arguments))
-			end
-			Queue.Reliable[29] = {}
-			return function (): ()
-				if Events.Reliable[29] == Listener then
-					Events.Reliable[29] = nil
-				end
-			end
-		end,
-		Predict = function(Value: Instance): ()
-			if Events.Reliable[29] ~= nil then
-				SerdesEvent = "InstanceAny"
-				Events.Reliable[29](Value)
-			else
-				table.insert(Queue.Reliable[29], {Value} :: {any})
-			end
-		end
-	},
-	InstanceOfType = {
-		On = function(Listener: (Value: Sound) -> ()): () -> ()
-			Events.Reliable[30] = Listener
-			for Index, Arguments in Queue.Reliable[30] do
-				Listener(table.unpack(Arguments))
-			end
-			Queue.Reliable[30] = {}
-			return function (): ()
-				if Events.Reliable[30] == Listener then
-					Events.Reliable[30] = nil
-				end
-			end
-		end,
-		Predict = function(Value: Sound): ()
-			if Events.Reliable[30] ~= nil then
-				SerdesEvent = "InstanceOfType"
-				Events.Reliable[30](Value)
-			else
-				table.insert(Queue.Reliable[30], {Value} :: {any})
-			end
-		end
-	},
-	InstanceOptional = {
-		On = function(Listener: (Value: Instance?) -> ()): () -> ()
-			Events.Reliable[31] = Listener
-			for Index, Arguments in Queue.Reliable[31] do
-				Listener(table.unpack(Arguments))
-			end
-			Queue.Reliable[31] = {}
-			return function (): ()
-				if Events.Reliable[31] == Listener then
-					Events.Reliable[31] = nil
-				end
-			end
-		end,
-		Predict = function(Value: Instance?): ()
-			if Events.Reliable[31] ~= nil then
-				SerdesEvent = "InstanceOptional"
-				Events.Reliable[31](Value)
-			else
-				table.insert(Queue.Reliable[31], {Value} :: {any})
-			end
-		end
-	},
-	InstanceOfClassWithDigit = {
-		On = function(Listener: (Value: Motor6D) -> ()): () -> ()
 			Events.Reliable[32] = Listener
 			for Index, Arguments in Queue.Reliable[32] do
 				Listener(table.unpack(Arguments))
@@ -7264,17 +7301,17 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: Motor6D): ()
+		Predict = function(Value: Instance): ()
 			if Events.Reliable[32] ~= nil then
-				SerdesEvent = "InstanceOfClassWithDigit"
+				SerdesEvent = "InstanceAny"
 				Events.Reliable[32](Value)
 			else
 				table.insert(Queue.Reliable[32], {Value} :: {any})
 			end
 		end
 	},
-	Reference = {
-		On = function(Listener: (Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?) -> ()): () -> ()
+	InstanceOfType = {
+		On = function(Listener: (Value: Sound) -> ()): () -> ()
 			Events.Reliable[33] = Listener
 			for Index, Arguments in Queue.Reliable[33] do
 				Listener(table.unpack(Arguments))
@@ -7286,17 +7323,17 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+		Predict = function(Value: Sound): ()
 			if Events.Reliable[33] ~= nil then
-				SerdesEvent = "Reference"
+				SerdesEvent = "InstanceOfType"
 				Events.Reliable[33](Value)
 			else
 				table.insert(Queue.Reliable[33], {Value} :: {any})
 			end
 		end
 	},
-	ReferenceArray = {
-		On = function(Listener: (Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }) -> ()): () -> ()
+	InstanceOptional = {
+		On = function(Listener: (Value: Instance?) -> ()): () -> ()
 			Events.Reliable[34] = Listener
 			for Index, Arguments in Queue.Reliable[34] do
 				Listener(table.unpack(Arguments))
@@ -7308,17 +7345,17 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
+		Predict = function(Value: Instance?): ()
 			if Events.Reliable[34] ~= nil then
-				SerdesEvent = "ReferenceArray"
+				SerdesEvent = "InstanceOptional"
 				Events.Reliable[34](Value)
 			else
 				table.insert(Queue.Reliable[34], {Value} :: {any})
 			end
 		end
 	},
-	ReferenceOptional = {
-		On = function(Listener: (Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?) -> ()): () -> ()
+	InstanceOfClassWithDigit = {
+		On = function(Listener: (Value: Motor6D) -> ()): () -> ()
 			Events.Reliable[35] = Listener
 			for Index, Arguments in Queue.Reliable[35] do
 				Listener(table.unpack(Arguments))
@@ -7330,12 +7367,78 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+		Predict = function(Value: Motor6D): ()
 			if Events.Reliable[35] ~= nil then
-				SerdesEvent = "ReferenceOptional"
+				SerdesEvent = "InstanceOfClassWithDigit"
 				Events.Reliable[35](Value)
 			else
 				table.insert(Queue.Reliable[35], {Value} :: {any})
+			end
+		end
+	},
+	Reference = {
+		On = function(Listener: (Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?) -> ()): () -> ()
+			Events.Reliable[36] = Listener
+			for Index, Arguments in Queue.Reliable[36] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[36] = {}
+			return function (): ()
+				if Events.Reliable[36] == Listener then
+					Events.Reliable[36] = nil
+				end
+			end
+		end,
+		Predict = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+			if Events.Reliable[36] ~= nil then
+				SerdesEvent = "Reference"
+				Events.Reliable[36](Value)
+			else
+				table.insert(Queue.Reliable[36], {Value} :: {any})
+			end
+		end
+	},
+	ReferenceArray = {
+		On = function(Listener: (Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }) -> ()): () -> ()
+			Events.Reliable[37] = Listener
+			for Index, Arguments in Queue.Reliable[37] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[37] = {}
+			return function (): ()
+				if Events.Reliable[37] == Listener then
+					Events.Reliable[37] = nil
+				end
+			end
+		end,
+		Predict = function(Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
+			if Events.Reliable[37] ~= nil then
+				SerdesEvent = "ReferenceArray"
+				Events.Reliable[37](Value)
+			else
+				table.insert(Queue.Reliable[37], {Value} :: {any})
+			end
+		end
+	},
+	ReferenceOptional = {
+		On = function(Listener: (Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?) -> ()): () -> ()
+			Events.Reliable[38] = Listener
+			for Index, Arguments in Queue.Reliable[38] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[38] = {}
+			return function (): ()
+				if Events.Reliable[38] == Listener then
+					Events.Reliable[38] = nil
+				end
+			end
+		end,
+		Predict = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+			if Events.Reliable[38] ~= nil then
+				SerdesEvent = "ReferenceOptional"
+				Events.Reliable[38](Value)
+			else
+				table.insert(Queue.Reliable[38], {Value} :: {any})
 			end
 		end
 	},
@@ -7357,23 +7460,23 @@ local Returns = table.freeze({
 	},
 	Tuple = {
 		On = function(Listener: (Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }) -> ()): () -> ()
-			Events.Reliable[37] = Listener
-			for Index, Arguments in Queue.Reliable[37] do
+			Events.Reliable[40] = Listener
+			for Index, Arguments in Queue.Reliable[40] do
 				Listener(table.unpack(Arguments))
 			end
-			Queue.Reliable[37] = {}
+			Queue.Reliable[40] = {}
 			return function (): ()
-				if Events.Reliable[37] == Listener then
-					Events.Reliable[37] = nil
+				if Events.Reliable[40] == Listener then
+					Events.Reliable[40] = nil
 				end
 			end
 		end,
 		Predict = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-			if Events.Reliable[37] ~= nil then
+			if Events.Reliable[40] ~= nil then
 				SerdesEvent = "Tuple"
-				Events.Reliable[37](Value1, Value2, Value3, Value4, Value5, Value6)
+				Events.Reliable[40](Value1, Value2, Value3, Value4, Value5, Value6)
 			else
-				table.insert(Queue.Reliable[37], {Value1, Value2, Value3, Value4, Value5, Value6} :: {any})
+				table.insert(Queue.Reliable[40], {Value1, Value2, Value3, Value4, Value5, Value6} :: {any})
 			end
 		end
 	},
@@ -7412,78 +7515,6 @@ local Returns = table.freeze({
 	AnotherScope = {
 		InScopeEvent = {
 			On = function(Listener: (Value: number) -> ()): () -> ()
-				Events.Reliable[39] = Listener
-				for Index, Arguments in Queue.Reliable[39] do
-					Listener(table.unpack(Arguments))
-				end
-				Queue.Reliable[39] = {}
-				return function (): ()
-					if Events.Reliable[39] == Listener then
-						Events.Reliable[39] = nil
-					end
-				end
-			end,
-			Predict = function(Value: number): ()
-				if Events.Reliable[39] ~= nil then
-					SerdesEvent = "InScopeEvent"
-					Events.Reliable[39](Value)
-				else
-					table.insert(Queue.Reliable[39], {Value} :: {any})
-				end
-			end
-		},
-		ScopeWithinAnotherScope = {
-			InAnotherScopeEvent = {
-				On = function(Listener: (Value: number) -> ()): () -> ()
-					Events.Reliable[40] = Listener
-					for Index, Arguments in Queue.Reliable[40] do
-						Listener(table.unpack(Arguments))
-					end
-					Queue.Reliable[40] = {}
-					return function (): ()
-						if Events.Reliable[40] == Listener then
-							Events.Reliable[40] = nil
-						end
-					end
-				end,
-				Predict = function(Value: number): ()
-					if Events.Reliable[40] ~= nil then
-						SerdesEvent = "InAnotherScopeEvent"
-						Events.Reliable[40](Value)
-					else
-						table.insert(Queue.Reliable[40], {Value} :: {any})
-					end
-				end
-			},
-		},
-	},
-	ExampleScope = {
-		InScopeEvent = {
-			On = function(Listener: (Value: number) -> ()): () -> ()
-				Events.Reliable[41] = Listener
-				for Index, Arguments in Queue.Reliable[41] do
-					Listener(table.unpack(Arguments))
-				end
-				Queue.Reliable[41] = {}
-				return function (): ()
-					if Events.Reliable[41] == Listener then
-						Events.Reliable[41] = nil
-					end
-				end
-			end,
-			Predict = function(Value: number): ()
-				if Events.Reliable[41] ~= nil then
-					SerdesEvent = "InScopeEvent"
-					Events.Reliable[41](Value)
-				else
-					table.insert(Queue.Reliable[41], {Value} :: {any})
-				end
-			end
-		},
-	},
-	Issue33 = {
-		Event = {
-			On = function(Listener: (Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }) -> ()): () -> ()
 				Events.Reliable[42] = Listener
 				for Index, Arguments in Queue.Reliable[42] do
 					Listener(table.unpack(Arguments))
@@ -7495,12 +7526,84 @@ local Returns = table.freeze({
 					end
 				end
 			end,
-			Predict = function(Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
+			Predict = function(Value: number): ()
 				if Events.Reliable[42] ~= nil then
-					SerdesEvent = "Event"
-					Events.Reliable[42](Value1, Value2, Value3)
+					SerdesEvent = "InScopeEvent"
+					Events.Reliable[42](Value)
 				else
-					table.insert(Queue.Reliable[42], {Value1, Value2, Value3} :: {any})
+					table.insert(Queue.Reliable[42], {Value} :: {any})
+				end
+			end
+		},
+		ScopeWithinAnotherScope = {
+			InAnotherScopeEvent = {
+				On = function(Listener: (Value: number) -> ()): () -> ()
+					Events.Reliable[43] = Listener
+					for Index, Arguments in Queue.Reliable[43] do
+						Listener(table.unpack(Arguments))
+					end
+					Queue.Reliable[43] = {}
+					return function (): ()
+						if Events.Reliable[43] == Listener then
+							Events.Reliable[43] = nil
+						end
+					end
+				end,
+				Predict = function(Value: number): ()
+					if Events.Reliable[43] ~= nil then
+						SerdesEvent = "InAnotherScopeEvent"
+						Events.Reliable[43](Value)
+					else
+						table.insert(Queue.Reliable[43], {Value} :: {any})
+					end
+				end
+			},
+		},
+	},
+	ExampleScope = {
+		InScopeEvent = {
+			On = function(Listener: (Value: number) -> ()): () -> ()
+				Events.Reliable[44] = Listener
+				for Index, Arguments in Queue.Reliable[44] do
+					Listener(table.unpack(Arguments))
+				end
+				Queue.Reliable[44] = {}
+				return function (): ()
+					if Events.Reliable[44] == Listener then
+						Events.Reliable[44] = nil
+					end
+				end
+			end,
+			Predict = function(Value: number): ()
+				if Events.Reliable[44] ~= nil then
+					SerdesEvent = "InScopeEvent"
+					Events.Reliable[44](Value)
+				else
+					table.insert(Queue.Reliable[44], {Value} :: {any})
+				end
+			end
+		},
+	},
+	Issue33 = {
+		Event = {
+			On = function(Listener: (Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }) -> ()): () -> ()
+				Events.Reliable[45] = Listener
+				for Index, Arguments in Queue.Reliable[45] do
+					Listener(table.unpack(Arguments))
+				end
+				Queue.Reliable[45] = {}
+				return function (): ()
+					if Events.Reliable[45] == Listener then
+						Events.Reliable[45] = nil
+					end
+				end
+			end,
+			Predict = function(Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
+				if Events.Reliable[45] ~= nil then
+					SerdesEvent = "Event"
+					Events.Reliable[45](Value1, Value2, Value3)
+				else
+					table.insert(Queue.Reliable[45], {Value1, Value2, Value3} :: {any})
 				end
 			end
 		},

@@ -1,0 +1,13 @@
+-- expect W3020
+-- Rate limits apply to inbound traffic. A rate on a Server event would silently do nothing, so it
+-- warns rather than being accepted in silence.
+option ClientOutput = "../../Network/OutboundClient.luau"
+option ServerOutput = "../../Network/OutboundServer.luau"
+
+event Broadcast {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Rate: 5,
+    Data: u8,
+}

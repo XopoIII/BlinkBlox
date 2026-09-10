@@ -119,6 +119,31 @@ option MaxUnreliableSize = 900
     unreliable event carrying one always warns.
 </Callout>
 
+## `DefaultRate`, `RequireRates`
+Defaults: none, `false`
+
+Rate limiting for inbound events and functions.
+
+Per-event limits are declared on the event itself with [`Rate` and `Burst`](5-events#rate-burst).
+`DefaultRate` supplies a rate for every inbound event and function that does not declare one, and
+`RequireRates` turns a missing rate into a compile error — the flag a project sets so that a
+forgotten limit fails the build instead of shipping.
+
+```blink copy
+option DefaultRate = 30
+option RequireRates = true
+```
+
+<Callout type="info">
+    Rate limiting is off unless asked for. A silently dropped legitimate event looks like lag rather
+    than like a bug, and no compiler can guess how much traffic a game means to send — so the
+    decision is yours, and `RequireRates` is how you make sure it gets made.
+</Callout>
+
+The packet limits above and this are different axes and neither replaces the other.
+`MaxEventsPerPacket` bounds the work one packet can cause; two hundred well-formed packets a second
+pass every one of those checks. The bucket bounds events per second, per player, per event.
+
 ## `Predict`
 Default: `false`
 

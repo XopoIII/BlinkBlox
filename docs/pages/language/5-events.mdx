@@ -38,6 +38,52 @@ Determines the listening API exposed on the receiving side.
     Yielding or erroring in sync event can cause <b>undefined and sometimes game-breaking behaviour</b>.
 </Callout>
 
+#### `Rate`, `Burst`
+Limits how often one player may send this event. Both fields are optional, and both are ignored on an
+event the server sends -- only inbound traffic is limited.
+
+`Rate` is the sustained number of events per second accepted from a single player. `Burst` is the
+bucket capacity: how many may arrive at once before the rate applies. It defaults to `Rate` rounded
+up.
+
+```blink copy
+event Purchase {
+    From: Client,
+    Type: Reliable,
+    Call: SingleAsync,
+    Rate: 5,
+    Burst: 10,
+    Data: u16
+}
+```
+
+Refused events are dropped before they reach your listener, and reported at most once per player per
+event per second. To do something else about them -- log to your analytics, flag the account -- pass
+a handler to `SetRateLimitHandler`:
+
+```lua copy
+Net.SetRateLimitHandler(function(Player: Player, Event: string)
+    Analytics:Record(Player, Event)
+end)
+```
+
+<Callout type="info">
+    Nobody is kicked automatically. A false positive under server lag would eject a legitimate player,
+    and whether that is the right response depends on the game -- so the decision is left to you.
+</Callout>
+
+The limit is checked after the event is deserialised and before it is dispatched. Payloads are
+variable length, so an event cannot be skipped without reading it: the cursor would be left
+mid-event and the rest of the packet would decode as garbage. What the limit saves is the listener
+and the game logic behind it. Bounding the decoding itself is what
+[`MaxEventsPerPacket`](1-options#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) does.
+
+A refused [function](6-functions.mdx) call is still answered -- with a failure, so the caller's
+`Invoke` raises promptly rather than hanging.
+
+See [`DefaultRate` and `RequireRates`](1-options#defaultrate-requirerates) for applying a limit
+across a whole schema, and for making a missing one a compile error.
+
 #### `Data`
 Determines the data that is sent through the event, can be any [type](./4-types.mdx).<br/>
 This field can be omitted if no data is required.

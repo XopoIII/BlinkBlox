@@ -1,0 +1,12 @@
+-- expect E3020
+-- A burst with nothing to refill it empties once and stays empty, which is never what anyone means.
+option ClientOutput = "../../Network/BurstClient.luau"
+option ServerOutput = "../../Network/BurstServer.luau"
+
+event Purchase {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Burst: 10,
+    Data: u8,
+}

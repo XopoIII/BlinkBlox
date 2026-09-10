@@ -101,6 +101,7 @@ local Error = {
 	AnalyzeDeprecatedOption = 3017,
 	AnalyzeOversizeUnreliable = 3018,
 	AnalyzePotentiallyOversizeUnreliable = 3019,
+	AnalyzeMissingRateLimit = 3020,
 }
 
 Error.__index = Error

@@ -105,6 +105,17 @@ local TOKENS: { TokenRule } = {
 	{ `^%[{DOTS}{NUMBER}%]`, "Array" },
 	{ `^%[{NUMBER}{DOTS}{NUMBER}%]`, "Array" },
 
+	--> A bare number, as in `option MaxPacketSize = 8192` or an event's `Rate: 5`.
+	-->
+	--> It has to sit AFTER the range and array rules, which match a number wrapped in brackets: put
+	--> ahead of them, this would take the `1` out of `(1..5)` and leave the parser with nonsense.
+	--> Nothing above matches a leading digit, so ordering against the identifier rules is moot.
+	-->
+	--> Its absence is why numeric options never worked. `Parser.Options` has always had a branch for
+	--> them and `OPTIONS` has always listed three, but no schema could reach it: the lexer rejected
+	--> the value as an unexpected token before the parser saw the option at all.
+	{ `^{NUMBER}`, "Number" },
+
 	{ "^%(", "OpenParentheses" },
 	{ "^%)", "CloseParentheses" },
 	{ "^%[", "OpenBrackets" },

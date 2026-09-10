@@ -264,6 +264,7 @@ local function MockRequire(Path: string, Environment)
 	})
 
 	Environment._G = {}
+	Environment.os = Shared.Os
 	Environment.task = task
 	Environment.typeof = MockTypeof
 	Environment.require = function()
@@ -1719,6 +1720,103 @@ RunClosure("Predict delivers to local listeners", function()
 
 	if Delivered ~= 0 then
 		ErrorPrint(`Failed "Predict": {Delivered} packet(s) went over the wire.`)
+	end
+end)
+
+RunClosure("Rate limiting", function()
+	--> Neither zap nor upstream's rewrite has this, and it is the axis the packet caps cannot cover:
+	--> MaxEventsPerPacket bounds one packet, while 200 well-formed packets a second pass every check
+	--> there is. The bucket bounds events per second, per player, per event.
+	-->
+	--> The clock is the mock one from Shared, so "a second passes" is an exact statement rather than
+	--> a race with the machine running the suite.
+
+	--> Two things have to be settled before anything is counted.
+	-->
+	--> Earlier tests reach this event with raw buffers, and events that arrive with no listener bound
+	--> are QUEUED and replayed the moment one is -- so attaching a listener and immediately counting
+	--> credits this test with traffic it never sent. Attach first, let the replay land, then zero.
+	-->
+	--> The bucket those earlier events already spent from is cleared through PlayerRemoving, which
+	--> dispatches via task.spawn, so it needs a moment of its own.
+	ServerEnvironment.Services.Players.PlayerRemoving:Fire(Shared.Player)
+
+	local Received = 0
+	local Disconnect = Server.RateLimited.On(function()
+		Received += 1
+	end)
+
+	task.wait(0.2)
+	Received = 0
+
+	--> An event with Rate 5 and Burst 10: ten arrive at once, the rest are refused.
+	for _ = 1, 15 do
+		Client.RateLimited.Fire(1)
+	end
+
+	task.wait(0.4)
+
+	if Received ~= 10 then
+		ErrorPrint(`Failed "Rate limiting": {Received} of 15 events arrived, expected the burst of 10.`)
+	end
+
+	--> One second of clock buys exactly five more tokens.
+	Shared.AdvanceClock(1)
+
+	for _ = 1, 15 do
+		Client.RateLimited.Fire(1)
+	end
+
+	task.wait(0.4)
+	Disconnect()
+
+	if Received ~= 15 then
+		ErrorPrint(`Failed "Rate limiting": {Received - 10} events arrived after a second, expected 5.`)
+	end
+
+	--> The polling path enqueues instead of dispatching, and is gated in the same place.
+	Shared.AdvanceClock(10)
+
+	for _ = 1, 15 do
+		Client.RateLimitedPoll.Fire(1)
+	end
+
+	task.wait(0.4)
+
+	local Polled = 0
+	for _ in Server.RateLimitedPoll.Iter() do
+		Polled += 1
+	end
+
+	if Polled ~= 10 then
+		ErrorPrint(`Failed "Rate limiting": {Polled} of 15 polled events were queued, expected 10.`)
+	end
+
+	--> A refused INVOCATION still has to be answered. The caller is suspended with no timeout, so a
+	--> silently dropped call would hang that coroutine until its slot was reused by an unrelated
+	--> call -- which would then resume the wrong thread.
+	Shared.AdvanceClock(10)
+	Server.RateLimitedCall.On(function(_Player, Value)
+		return Value
+	end)
+
+	local Succeeded, Refused = 0, 0
+	for _ = 1, 4 do
+		local Ok = pcall(function()
+			return Client.RateLimitedCall.Invoke(1)
+		end)
+
+		if Ok then
+			Succeeded += 1
+		else
+			Refused += 1
+		end
+	end
+
+	if Succeeded ~= 2 or Refused ~= 2 then
+		ErrorPrint(
+			`Failed "Rate limiting": {Succeeded} invocations succeeded and {Refused} were refused, expected 2 and 2.`
+		)
 	end
 end)
 

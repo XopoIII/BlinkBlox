@@ -165,6 +165,7 @@ if not RunService:IsRunning() then
 	local NOOP_RETURNING = function() return NOOP end
 	local Returns = table.freeze({
 		StepReplication = NOOP,
+		SetRateLimitHandler = NOOP,
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -181,6 +182,10 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EV
 --> outgoing packet is then handed to an object of the attacker's choosing.
 assert(Reliable:IsA("RemoteEvent"), "[Blink]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[Blink]: The unreliable remote is not an UnreliableRemoteEvent.")
+
+--> Present so code shared between contexts can install a handler without branching on which module
+--> it got. The client never rate limits: it is talking to the server, which is trusted.
+local function SetRateLimitHandler(_Handler: ((Player: Player, Event: string) -> ())?) end
 
 local function StepReplication()
     if SendCursor <= 0 then
@@ -236,6 +241,8 @@ end)
 
 local Returns = table.freeze({
 	StepReplication = StepReplication,
+
+	SetRateLimitHandler = SetRateLimitHandler,
 
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)

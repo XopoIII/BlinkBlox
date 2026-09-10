@@ -60,6 +60,10 @@ type EventOption = {
 	Type: Lexer.Types,
 	Values: { any },
 	Optional: true?,
+	--- Field whose value is a NUMBER the author chooses rather than one of a fixed set of keywords.
+	--- `Values` cannot express that: it is checked with `table.find`, so a rate of 5 would have to be
+	--- listed alongside every other rate anyone might want.
+	Numeric: true?,
 }
 
 type Attributes = {
@@ -100,6 +104,12 @@ export type Options = {
 	--> roughly 900 bytes, so this is a property of the platform rather than a preference -- it is
 	--> configurable only because that ceiling has moved before.
 	MaxUnreliableSize: number?,
+
+	--> Rate limiting. `DefaultRate` applies to every inbound event and function that does not set its
+	--> own `Rate`; `RequireRates` turns a missing rate into a compile error, which is how a project
+	--> stops one from being forgotten.
+	DefaultRate: number?,
+	RequireRates: boolean?,
 
 	--> Generates a Predict entry point on each event, which dispatches to local listeners without
 	--> touching remotes. See the generator.
@@ -183,20 +193,32 @@ export type Tuple = Node<"Tuple", {
 --- this Luau version does not parse).
 export type EventCall = "SingleSync" | "SingleAsync" | "ManySync" | "ManyAsync" | "Polling"
 
-export type Event = Node<"Event", {
-	From: "Client" | "Server",
-	Type: "Reliable" | "Unreliable",
-	Call: EventCall,
-	Data: (TypeNode | Tuple)?,
-}, {
-	Identifier: Token,
-}>
+export type Event = Node<
+	"Event",
+	{
+		From: "Client" | "Server",
+		Type: "Reliable" | "Unreliable",
+		Call: EventCall,
+		Data: (TypeNode | Tuple)?,
+		--> Sustained events per second accepted from one player, and the bucket capacity that lets a
+		--> burst through. Absent means unlimited -- see the generator's rate limiting.
+		Rate: number?,
+		Burst: number?,
+	},
+	{
+		Identifier: Token,
+	}
+>
 
 export type Function = Node<"Function", {
 	Yield: "Future" | "Promise" | "Coroutine",
 	Data: (TypeNode | Tuple)?,
 	Return: (TypeNode | Tuple)?,
-}, {}>
+	Rate: number?,
+	Burst: number?,
+}, {
+	Identifier: Token,
+}>
 
 export type ScopeNode = Node<
 	"Scope",
@@ -232,6 +254,8 @@ local OPTIONS: { [string]: Lexer.Types } = {
 	MaxEventsPerPacket = "Number",
 	MaxInstancesPerPacket = "Number",
 	MaxUnreliableSize = "Number",
+	DefaultRate = "Number",
+	RequireRates = "Boolean",
 	Predict = "Boolean",
 }
 
@@ -240,11 +264,15 @@ local EVENT: { EventOption } = {
 	{ Key = "Type", Type = "Identifier", Values = { "Reliable", "Unreliable" } },
 	{ Key = "Call", Type = "Identifier", Values = { "SingleSync", "SingleAsync", "ManySync", "ManyAsync", "Polling" } },
 	{ Key = "Poll", Type = "Boolean", Values = { true, false }, Optional = true },
+	{ Key = "Rate", Type = "Number", Values = {}, Optional = true, Numeric = true },
+	{ Key = "Burst", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Data", Type = "Identifier", Values = {}, Optional = true },
 }
 
 local FUNCTION: { EventOption } = {
 	{ Key = "Yield", Type = "Identifier", Values = { "Future", "Promise", "Coroutine" } },
+	{ Key = "Rate", Type = "Number", Values = {}, Optional = true, Numeric = true },
+	{ Key = "Burst", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Data", Type = "Identifier", Values = {}, Optional = true },
 	{ Key = "Return", Type = "Identifier", Values = {}, Optional = true },
 }
@@ -324,6 +352,7 @@ local GENERICS_TYPES = {
 
 local RESERVED = {
 	StepReplication = true,
+	SetRateLimitHandler = true,
 }
 
 --- Roblox drops an UnreliableRemoteEvent payload past roughly this many bytes. It does so silently
@@ -857,6 +886,74 @@ end
 
 ---- Top-Level Parsing Functions ----
 
+--- Checks the rate limiting fields. Same file-scoping rule as AnalyzeUnreliableSizes: imported
+--- declarations are diagnosed by the parse of the file they came from.
+local function AnalyzeRateLimits(self: Parser, Declarations: { Declaration }, Options: Options)
+	for _, Declaration in Declarations do
+		if Declaration.Type == "Scope" then
+			local Scope = Declaration :: ScopeNode
+			if not Scope.Value.Imported then
+				AnalyzeRateLimits(self, Scope.Value.Values, Options)
+			end
+
+			continue
+		end
+
+		local IsEvent = (Declaration.Type == "Event")
+		if not IsEvent and Declaration.Type ~= "Function" then
+			continue
+		end
+
+		local Value = Declaration.Value
+		local Identifier: Token = Declaration.Tokens.Identifier
+
+		--> Functions are always client to server; only an event can go the other way. Nothing limits
+		--> the server: it is the party being protected, and throttling its own replication would drop
+		--> traffic the game meant to send.
+		local Inbound = if IsEvent then Value.From == "Client" else true
+
+		if not Inbound then
+			if Value.Rate or Value.Burst then
+				Error.new(
+					Error.AnalyzeMissingRateLimit,
+					self.Source,
+					`Rate limiting a Server event has no effect`,
+					self.File,
+					"Warning"
+				)
+					:Primary(Identifier, "This event is sent BY the server, not to it")
+					:Note("Rate limits apply to inbound traffic only. Remove the field.")
+					:Warn()
+			end
+
+			continue
+		end
+
+		local Effective = Value.Rate or Options.DefaultRate
+
+		--> A burst without a sustained rate has nothing to refill it: the bucket would empty once and
+		--> stay empty, which is never what anyone means.
+		if Value.Burst and not Effective then
+			Error.new(Error.AnalyzeMissingRateLimit, self.Source, `"Burst" was set without a "Rate"`, self.File)
+				:Primary(Identifier, "Add a Rate, or remove the Burst")
+				:Note("Burst is the bucket's capacity; Rate is what refills it.")
+				:Emit()
+		end
+
+		if Options.RequireRates and not Effective then
+			Error.new(
+				Error.AnalyzeMissingRateLimit,
+				self.Source,
+				`Inbound "{Declaration.Name}" has no rate limit`,
+				self.File
+			)
+				:Primary(Identifier, "Add a Rate, in events per second")
+				:Note("option RequireRates is set, so every inbound event and function must declare one.")
+				:Emit()
+		end
+	end
+end
+
 --- Refuses unreliable events that cannot fit in a single unreliable packet, and warns about the ones
 --- that merely might not.
 ---
@@ -950,6 +1047,7 @@ function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
 	Options.SyncValidation = if Options.SyncValidation ~= nil then Options.SyncValidation else true
 
 	AnalyzeUnreliableSizes(self, Declarations, Options)
+	AnalyzeRateLimits(self, Declarations, Options)
 
 	return {
 		Type = "Body",
@@ -1276,7 +1374,19 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 		end
 
 		--> Parse non data/return field
-		if Option.Key ~= "Data" and Option.Key ~= "Return" then
+		if Option.Numeric then
+			local Token = self:Consume(Option.Type)
+			local Numeric = tonumber(Token.Value)
+
+			if not Numeric or Numeric <= 0 then
+				Error.new(Error.ParserUnknownOption, self.Source, `Invalid value for "{Option.Key}"`, self.File)
+					:Primary(Token, "Expected a number greater than zero")
+					:Emit()
+			end
+
+			--> Stored as a number: every consumer does arithmetic with it.
+			Value = Numeric
+		elseif Option.Key ~= "Data" and Option.Key ~= "Return" then
 			local Token = self:Consume(Option.Type)
 			Value = Token.Value
 
@@ -1337,6 +1447,8 @@ function Parser.Event(self: Parser, Name: Token): Event
 			Type = Structure.Type,
 			Call = Call,
 			Data = Structure.Data,
+			Rate = Structure.Rate,
+			Burst = Structure.Burst,
 		},
 		Tokens = {
 			Identifier = Name,
@@ -1354,8 +1466,12 @@ function Parser.Function(self: Parser, Name: Token): Function
 			Yield = Structure.Yield,
 			Data = Structure.Data,
 			Return = Structure.Return,
+			Rate = Structure.Rate,
+			Burst = Structure.Burst,
 		},
-		Tokens = {},
+		Tokens = {
+			Identifier = Name,
+		},
 	}
 end
 

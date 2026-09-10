@@ -1,0 +1,13 @@
+-- expect E3020
+-- RequireRates is the flag a project sets so that a forgotten rate fails the build rather than
+-- shipping as an unlimited inbound event.
+option RequireRates = true
+option ClientOutput = "../../Network/RequireClient.luau"
+option ServerOutput = "../../Network/RequireServer.luau"
+
+event Purchase {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8,
+}

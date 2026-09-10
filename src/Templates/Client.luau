@@ -15,6 +15,10 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EV
 assert(Reliable:IsA("RemoteEvent"), "[Blink]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[Blink]: The unreliable remote is not an UnreliableRemoteEvent.")
 
+--> Present so code shared between contexts can install a handler without branching on which module
+--> it got. The client never rate limits: it is talking to the server, which is trusted.
+local function SetRateLimitHandler(_Handler: ((Player: Player, Event: string) -> ())?) end
+
 local function StepReplication()
     if SendCursor <= 0 then
         return

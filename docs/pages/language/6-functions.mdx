@@ -21,6 +21,14 @@ Determines the library used to handle yielding to the requester.<br/>
 * `Future` - The user provided future library, use of redblox's future library is recommended.
 * `Promise` - The user provided promise library, use of evaera's promise library (or forks of it) is recommended.
 
+#### `Rate`, `Burst`
+Limits how often one player may invoke this function, exactly as on
+[events](5-events#rate-burst). Functions are always client to server, so a rate here always applies.
+
+A refused invocation is answered with a failure rather than dropped: the caller is suspended with no
+timeout, so a silently discarded call would hang that thread until its slot was reused by an
+unrelated call.
+
 #### `Data`
 The data sent to the server by the client.<br/>
 For more information take a look at the [data field](./5-events.mdx#data) for events.

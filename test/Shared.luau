@@ -7,6 +7,14 @@ Metatable.__tostring = function()
 	return "Player"
 end
 
+--> A clock the tests drive by hand.
+---
+--> Generated server code reads `os.clock()` to refill rate buckets. Left as the real clock, a rate
+--> limiting test would depend on how fast the machine running it happens to be -- the classic test
+--> that passes on a laptop and fails in CI. This one starts at zero and only moves when a test says
+--> so, which makes "spend the bucket, wait a second, spend it again" an exact assertion.
+local Clock = 0
+
 --> Whether the mock player is still in the game. Generated server code asks before writing a
 --> player's buffer back into PlayersMap, so a test can drive that path by flipping this.
 local PlayerInGame = true
@@ -147,6 +155,22 @@ end
 return {
 	Signal = Signal,
 	Player = Player,
+
+	--> Injected into every mocked module's environment, since `luau.load` replaces globals wholesale
+	--> and the generated code would otherwise index a nil `os`.
+	Os = {
+		clock = function()
+			return Clock
+		end,
+		time = os.time,
+		date = os.date,
+	},
+
+	--> Moves the mock clock forward. Rate buckets refill lazily off the difference, so this is how a
+	--> test buys itself more tokens.
+	AdvanceClock = function(Seconds: number)
+		Clock += Seconds
+	end,
 	Bridge = Signal.new(),
 	GetEnvironment = GetEnvironment,
 	ServerOnlyInstance = roblox.Instance.new("Instance"),

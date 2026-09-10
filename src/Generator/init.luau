@@ -121,6 +121,10 @@ local Options: Parser.Options
 local Generators = {}
 local Declarations = {}
 
+--> One entry per rate-limited event or function, in the order they were generated. Each takes three
+--> consecutive numbers in the per-player bucket, so the entry at index N starts at slot (N - 1) * 3 + 1.
+local RateSlots: { { Rate: number, Burst: number } } = {}
+
 local Channels: { [string]: { Count: number, Listening: boolean } } = {
 	Reliable = { Count = 0, Listening = false },
 	Unreliable = { Count = 0, Listening = false },
@@ -138,6 +142,31 @@ local function FormatKey(Key: string): string
 		return `["{Key}"]`
 	end
 	return Key
+end
+
+--- Claims a bucket slot for an inbound declaration that declares a rate, and returns the call that
+--- spends a token from it. Returns nil when nothing limits this declaration, in which case no guard
+--- is emitted at all -- an unlimited schema produces exactly the code it always did.
+---
+--- Server-only: the client trusts the server, and the bucket state lives in the server template.
+local function RateGuardExpression(Value: { Rate: number?, Burst: number? }, Name: string): string?
+	if Context ~= "Server" then
+		return nil
+	end
+
+	local Rate = Value.Rate or Options.DefaultRate
+	if not Rate then
+		return nil
+	end
+
+	--> A burst of one would refuse the very first event of a frame whenever the previous frame used
+	--> its budget, so the floor is one whole token.
+	local Burst = Value.Burst or math.max(math.ceil(Rate), 1)
+
+	table.insert(RateSlots, { Rate = Rate, Burst = Burst })
+	local Slot = ((#RateSlots - 1) * 3) + 1
+
+	return `RateAccept(Player, {Slot}, {Rate}, {Burst}, "{Name}")`
 end
 
 local function FormatIndex(Index: string): string
@@ -419,6 +448,14 @@ function Declarations.Event(Declaration: Parser.Event)
 
 		Block:Line(`local {Values} = {Util.GetPath(Identifier, false, Scope)}()`)
 
+		--> The decode above has to happen either way: payloads are variable length, so skipping an
+		--> event without reading it would leave the cursor mid-event and turn the rest of the packet
+		--> into garbage. What the limit saves is the listener and everything behind it.
+		local RateGuard = RateGuardExpression(Value, Declaration.Name)
+		if RateGuard then
+			Block = Block:Compare(RateGuard, "true", "Equals")
+		end
+
 		local Disconnect = Blocks.Function("", "", "()")
 		if IsSingle then
 			Disconnect = Disconnect:Compare(Connection, "Listener", "Equals"):Line(`{Connection} = nil`):End()
@@ -470,6 +507,10 @@ function Declarations.Event(Declaration: Parser.Event)
 				:End()
 		end
 
+		if RateGuard then
+			Block = Block:End()
+		end
+
 		--> Predict (upstream issue #59, and the other half of #81).
 		-->
 		--> Delivers an event to this side's own listeners without going near a remote, so a test or a
@@ -513,9 +554,21 @@ function Declarations.Event(Declaration: Parser.Event)
 		end
 
 		Channel.Listening = true
-		Block:Line(
-			`Push({Queue}, table.pack({Context == "Server" and "Player, " or ""}{Util.GetPath(Identifier, false, Scope)}()))`
-		)
+
+		local PollArguments =
+			`table.pack({Context == "Server" and "Player, " or ""}{Util.GetPath(Identifier, false, Scope)}())`
+		local PollRateGuard = RateGuardExpression(Value, Declaration.Name)
+
+		if PollRateGuard then
+			--> Split because the one-liner decodes and enqueues at once, and only the enqueue may be
+			--> skipped.
+			Block:Line(`local Arguments = {PollArguments}`)
+			Block:Line(`if {PollRateGuard} then`)
+			Block:Line(`\tPush({Queue}, Arguments)`)
+			Block:Line("end")
+		else
+			Block:Line(`Push({Queue}, {PollArguments})`)
+		end
 
 		local IterTypes = `number, {Context == "Server" and "Player, " or ""}{DataTypes}`
 
@@ -729,7 +782,28 @@ function Declarations.Function(Declaration: Parser.Function)
 		--> Data recieve body
 		Types.u8.Read("InvocationIdentifier", Block)
 		Block:Line(`local {DataValues} = {Util.GetPath(DataIdentifier, false, Scope)}()`)
-			:Compare(Connection, "nil", "Not")
+
+		--> A refused invocation still has to be ANSWERED. The caller is suspended on `Calls[id]` with
+		--> no timeout, so dropping the call silently leaks that entry and hangs the coroutine until
+		--> the slot is reused by an unrelated call -- which then resumes the wrong thread. This is
+		--> the same three-byte failure reply the error path writes, so the caller rejects promptly.
+		-->
+		--> `return` rather than `continue`: this sits inside the per-event `pcall(function()`, and
+		--> returning from it lands back in the decode loop exactly as continuing would.
+		local RateGuard = RateGuardExpression(Value, Name)
+		if RateGuard then
+			Block:Line(`if not {RateGuard} then`)
+			Block:Line("\tLoad(PlayersMap[Player])")
+			Block:Line("\tlocal Position = Allocate(3)")
+			Block:Line(`\tbuffer.writeu8(SendBuffer, Position, {Index})`)
+			Block:Line("\tbuffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)")
+			Block:Line("\tbuffer.writeu8(SendBuffer, Position + 2, 0)")
+			Block:Line("\tSavePlayerBuffer(Player)")
+			Block:Line("\treturn")
+			Block:Line("end")
+		end
+
+		Block:Compare(Connection, "nil", "Not")
 			:Line(`task.spawn({Connection}, Player, {DataArguments}, InvocationIdentifier)`)
 			:Branch("Default")
 			:Compare(`#{Queue}`, "256", "Greater")
@@ -1255,6 +1329,8 @@ function Generator.Reset()
 	LuauTypes = Builder.new()
 	Return = Builder.new()
 
+	table.clear(RateSlots)
+
 	--> Reset channels
 	Channels.Reliable.Count = 0
 	Channels.Unreliable.Count = 0
@@ -1390,6 +1466,9 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> itself, and its absence here made that a nil call rather than a no-op.
 	Noop.Push(`{Casing.StepReplication} = NOOP,`, 0, 2)
 
+	Return.Push(`{Casing.SetRateLimitHandler} = SetRateLimitHandler,`, 1, 1)
+	Noop.Push(`{Casing.SetRateLimitHandler} = NOOP,`, 0, 2)
+
 	if not Options.ManualReplication then
 		Replication.Push("RunService.Heartbeat:Connect(StepReplication)")
 	end
@@ -1477,6 +1556,19 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		}
 	end
 
+	--> Initial contents of a player's rate bucket: tokens, refill clock, report clock, per limited
+	--> declaration. Cloned per player on first use, so one allocation per player per session rather
+	--> than a table per event.
+	local RateTemplateBody = {}
+	if Context == "Server" then
+		local Entries = {}
+		for _, Slot in RateSlots do
+			table.insert(Entries, `{Slot.Burst}, 0, 0`)
+		end
+
+		RateTemplateBody = { `local RATE_TEMPLATE = table.freeze(\{{table.concat(Entries, ", ")}\})\n` }
+	end
+
 	local MergedOutput = Table.Merge(
 		DIRECTIVES,
 		VERSION_HEADER,
@@ -1486,6 +1578,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		{ "local SerdesFunctions = {}\n" },
 		{ `local BASE_EVENT_NAME = "{Options.RemoteScope and Options.RemoteScope .. "_" or ""}BLINK"\n` },
 		string.split(Sources.Base, "\r"),
+		RateTemplateBody,
 		UnreliableGuardBody,
 		(if Options.SyncValidation then SYNC_VALIDATION_BODY else {}),
 		Events.DumpLines(),
