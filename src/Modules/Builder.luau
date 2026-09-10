@@ -10,16 +10,16 @@ function Builder.new(): Builder
 		local Size = #Lines
 		local Last = Lines[Size]
 
-		local Tabs = Tabs or 0
-		local Returns = Returns or 0
+		local TabCount = Tabs or 0
+		local ReturnCount = Returns or 0
 
 		--> FAST PATH :SUNGLASSES:
-		if Tabs == 0 and Returns == 0 then
+		if TabCount == 0 and ReturnCount == 0 then
 			table.move(Lines, 1, Size, #Strings + 1, Strings)
 			return
 		end
 
-		local Indentation = string.rep("\t", Tabs)
+		local Indentation = string.rep("\t", TabCount)
 
 		if Last == "" then
 			Size -= 1
@@ -27,7 +27,7 @@ function Builder.new(): Builder
 		end
 
 		for Index, Line in Lines do
-			table.insert(Strings, `{Indentation}{Line}{Index == Size and string.rep("\n", Returns) or ""}`)
+			table.insert(Strings, `{Indentation}{Line}{Index == Size and string.rep("\n", ReturnCount) or ""}`)
 		end
 	end
 

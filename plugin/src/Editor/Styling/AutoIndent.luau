@@ -6,7 +6,7 @@ local IndentKeywords = {
 }
 
 local function ShouldAutoIndent(Text: string, Cursor: number): boolean
-	for Index, Keyword in IndentKeywords do
+	for _, Keyword in IndentKeywords do
 		local Position = (Cursor - #Keyword)
 		if Position <= 0 then
 			continue
@@ -25,7 +25,7 @@ local function GetLineIndentation(Line: string): number
 	return #(string.match(Line, "^\t*") :: string)
 end
 
-function Hook.OnSourceChanged(Text: string, PreviousText: string, Cursor: number, Gain: number): (string, number)
+function Hook.OnSourceChanged(Text: string, _PreviousText: string, Cursor: number, Gain: number): (string, number)
 	if Gain ~= 1 then
 		return Text, Cursor
 	end

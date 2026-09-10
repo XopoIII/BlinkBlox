@@ -63,7 +63,7 @@ local FileTemplate = Template.Side.Content.Top.Files.File:Clone()
 --Template.Editor.Text.Line:Destroy()
 Template.Side.Content.Top.Files.File:Destroy()
 
-local ErrorWidget = plugin:CreateDockWidgetPluginGui("Generation Error", ERROR_WIDGET)
+local ErrorWidget = plugin:CreateDockWidgetPluginGuiAsync("Generation Error", ERROR_WIDGET)
 ErrorWidget.Name = "Generation Error"
 ErrorWidget.Title = "Error"
 ErrorWidget.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -74,7 +74,7 @@ ErrorInterface.Parent = ErrorWidget
 
 local ErrorText: TextLabel = ErrorInterface.Text
 
-local EditorWidget = plugin:CreateDockWidgetPluginGui("Configuration Editor", EDITOR_WIDGET)
+local EditorWidget = plugin:CreateDockWidgetPluginGuiAsync("Configuration Editor", EDITOR_WIDGET)
 EditorWidget.Name = "Blink Editor"
 EditorWidget.Title = "Configuration Editor"
 EditorWidget.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -158,8 +158,8 @@ local function ShowError(Error: string)
 	ErrorWidget.Enabled = true
 end
 
-local function PlayTweens(Tweens: { [string]: Tween })
-	for _, Tween in Tweens do
+local function PlayTweens(Collection: { [string]: Tween })
+	for _, Tween in Collection do
 		Tween:Play()
 	end
 end
@@ -177,7 +177,10 @@ end
 
 local function RequestScriptPermissions(): boolean
 	local Success = pcall(function()
-		local Script = Instance.new("Script", script)
+		-- Parenting through `Instance.new`'s second argument is deprecated; assigning `.Parent`
+		-- afterwards is the supported form and keeps the permission probe identical.
+		local Script = Instance.new("Script")
+		Script.Parent = script
 		Script:Destroy()
 	end)
 
@@ -185,7 +188,7 @@ local function RequestScriptPermissions(): boolean
 end
 
 local function ClearChildrenWhichAre(Parent: Instance, Class: string)
-	for Index, Child in Parent:GetChildren() do
+	for _, Child in Parent:GetChildren() do
 		if Child:IsA(Class) then
 			Child:Destroy()
 		end
@@ -265,21 +268,21 @@ local function LoadFiles()
 	for _, File: StringValue in FileInstances :: { any } do
 		local Name = File.Name
 		local Frame = FileTemplate:Clone()
-		local Buttons = Frame.Buttons
+		local FileButtons = Frame.Buttons
 
 		Frame.Name = Name
 		Frame.Title.Text = Name
 
-		Buttons.Edit.MouseButton1Click:Connect(function()
+		FileButtons.Edit.MouseButton1Click:Connect(function()
 			LoadFile(File)
 		end)
 
-		Buttons.Delete.MouseButton1Click:Connect(function()
+		FileButtons.Delete.MouseButton1Click:Connect(function()
 			File:Destroy()
 			LoadFiles()
 		end)
 
-		Buttons.Generate.MouseButton1Click:Connect(function()
+		FileButtons.Generate.MouseButton1Click:Connect(function()
 			if GeneratePrompt.Visible then
 				return
 			end

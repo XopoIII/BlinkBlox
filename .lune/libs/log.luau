@@ -1,5 +1,5 @@
 local function log(text: string)
-    print(`* {text}`)
+	print(`* {text}`)
 end
 
 return log

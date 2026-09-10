@@ -176,20 +176,20 @@ local function ScrollTowards(Direction: number)
 	Scroll:Set(math.clamp(Value + (Direction * SCROLL_LINES), 0, Maximum))
 end
 
-local function Color(Text: string, Color: Color3): string
-	return `<font color="#{Color:ToHex()}">{Text}</font>`
+local function Color(Text: string, ColorValue: Color3): string
+	return `<font color="#{ColorValue:ToHex()}">{Text}</font>`
 end
 
 local function Escape(Text: string)
-	for Symbol, Escape in RICH_TEXT_ESCAPES do
-		Text = string.gsub(Text, Symbol, Escape)
+	for Symbol, Replacement in RICH_TEXT_ESCAPES do
+		Text = string.gsub(Text, Symbol, Replacement)
 	end
 
 	return Text
 end
 
 local function ClearChildrenWhichAre(Parent: Instance, Class: string)
-	for Index, Child in Parent:GetChildren() do
+	for _, Child in Parent:GetChildren() do
 		if Child:IsA(Class) then
 			Child:Destroy()
 		end
@@ -489,25 +489,25 @@ local function OnPredictionsChanged()
 end
 
 local function OnAnalysisErrorChanged()
-	local Error = AnalysisError:Get()
+	local Diagnostic = AnalysisError:Get()
 
 	--> Clear previous error
 	ErrorContainer.Visible = false
 	ClearChildrenWhichAre(ErrorSelection, "Frame")
 
 	--> No errors
-	if not Error then
+	if not Diagnostic then
 		return
 	end
 
-	local Labels = Error.Labels
+	local Labels = Diagnostic.Labels
 	if #Labels == 0 then
 		return
 	end
 
 	--> Error message
 	local Message =
-		`{Error.GetNameFromCode(Error.Code)}: {Error.RawMessage} <font transparency="0.5"><i>Blink({Error.Code})</i></font>`
+		`{Error.GetNameFromCode(Diagnostic.Code)}: {Diagnostic.RawMessage} <font transparency="0.5"><i>Blink({Diagnostic.Code})</i></font>`
 	for _, Label in Labels do
 		local Line = Utility.GetCurrentLine(Input.Text, Label.Span.Start)
 		Message ..= `\n{Label.Text} [L{Line}]`
@@ -633,11 +633,11 @@ local function OnCursorPositionChanged()
 		if PreviousCursorPosition ~= nil then
 			local InputText = Input.Text
 			local CurrentLine = GetLineAtPosition(InputText, CursorPosition)
-			local PreviousLine = GetLineAtPosition(InputText, PreviousCursorPosition)
+			local PriorLine = GetLineAtPosition(InputText, PreviousCursorPosition)
 
-			if math.abs(CurrentLine - PreviousLine) == 1 and math.abs(CursorPosition - PreviousCursorPosition) > 1 then
+			if math.abs(CurrentLine - PriorLine) == 1 and math.abs(CursorPosition - PreviousCursorPosition) > 1 then
 				NavigationPending = {
-					Direction = CurrentLine > PreviousLine and 1 or -1,
+					Direction = CurrentLine > PriorLine and 1 or -1,
 					Position = PreviousCursorPosition,
 				}
 			end
@@ -738,8 +738,8 @@ local function OnSourceChanged()
 		Profiler.profileBegin("Insertion")
 
 		local Item = GetPrediction()
-		local Cursor = (Input.CursorPosition - 1)
-		local Character = string.sub(Text, Cursor, Cursor)
+		local CursorIndex = (Input.CursorPosition - 1)
+		local Character = string.sub(Text, CursorIndex, CursorIndex)
 
 		if Item and Character == "\t" then
 			local Insert = Item.Insert
@@ -752,24 +752,24 @@ local function OnSourceChanged()
 			end
 
 			--> Move cursor behind tab character
-			Cursor -= 1
+			CursorIndex -= 1
 
-			local Line = Utility.GetLineRangeAtPosition(Text, Cursor)
-			local Position = (Cursor - Line.Start + 1)
+			local Line = Utility.GetLineRangeAtPosition(Text, CursorIndex)
+			local Position = (CursorIndex - Line.Start + 1)
 
 			local Word = Utility.GetWordRangeAtPosition(Line.Text, Position)
 			local Length = #Word.Text
 
-			Cursor -= Length
+			CursorIndex -= Length
 
 			--> Match characters before replacement and after tab (2)
-			Text = (string.sub(Text, 1, Cursor) .. Insert .. string.sub(Text, Cursor + Length + 2))
+			Text = (string.sub(Text, 1, CursorIndex) .. Insert .. string.sub(Text, CursorIndex + Length + 2))
 
 			PreviousText = Text
 			Input.Text = Text
 
 			Input.CursorPosition = -1
-			Input.CursorPosition = (Cursor + Offset)
+			Input.CursorPosition = (CursorIndex + Offset)
 
 			Profiler.profileEnd()
 			return
@@ -782,7 +782,7 @@ local function OnSourceChanged()
 	Profiler.profileBegin("Styling")
 
 	local FinalText, FinalCursor = Text, Input.CursorPosition
-	for Index, Hook in StylingHooks do
+	for _, Hook in StylingHooks do
 		FinalText, FinalCursor = Hook.OnSourceChanged(FinalText, PreviousText, FinalCursor, Gain)
 	end
 

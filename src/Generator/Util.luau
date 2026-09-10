@@ -27,7 +27,7 @@ end
 
 local function GenerateEnumLiterals(Variants: { string }): string
 	local Literals = {}
-	for Index, EnumItem in Variants do
+	for _, EnumItem in Variants do
 		table.insert(Literals, `"{EnumItem}"`)
 	end
 	return `{table.concat(Literals, " | ")}`

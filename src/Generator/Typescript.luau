@@ -3,7 +3,6 @@
 local Parser = require("../Parser")
 local Settings = require("../Settings")
 
-local Blocks = require("./Blocks")
 local Prefabs = require("./Prefabs")
 local Util = require("./Util")
 
@@ -78,7 +77,7 @@ local function GetTypescriptType(State: State, Declaration: Type): (string, stri
 		local Value = (Declaration :: Parser.TagEnum).Value
 		local Literals = {}
 
-		for Index, Variant in Value.Values do
+		for _, Variant in Value.Values do
 			local TagField = `{Value.Tag}: "{Variant.Name}"`
 			local ValueType = GetTypescriptType(State, Variant)
 			table.insert(Literals, `\{ {TagField},{string.sub(ValueType, 2)}`)
@@ -109,14 +108,12 @@ local function GetTypescriptType(State: State, Declaration: Type): (string, stri
 		local TupleValues = Value.Values
 
 		local Types = {}
-		local Variables = {}
 		local VariableTypes = {}
 
 		for Index, TupleValue in TupleValues do
 			local Variable = `Value{Index}`
 			local ValueType = GetTypescriptType(State, TupleValue)
 			table.insert(Types, ValueType)
-			table.insert(Variables, Variable)
 			table.insert(VariableTypes, `{Variable}: {ValueType}`)
 		end
 
@@ -135,7 +132,7 @@ local function GetTypescriptType(State: State, Declaration: Type): (string, stri
 		local Parameters = {}
 
 		--> Generate luau types for parameters
-		for Index, Parameter in Value.Parameters do
+		for _, Parameter in Value.Parameters do
 			local ParameterType = GetTypescriptType(State, Parameter)
 			table.insert(Parameters, ParameterType)
 		end
@@ -292,7 +289,7 @@ function Generators.Scope(State: State, Scope: Parser.ScopeNode)
 end
 
 function Generators.Tree(State: State, Tree: { Parser.Declaration })
-	for Index, Declaration in Tree do
+	for _, Declaration in Tree do
 		if Declaration.Type == "Scope" then
 			Generators.Scope(State, Declaration :: Parser.ScopeNode)
 		elseif Declaration.Type == "Event" then

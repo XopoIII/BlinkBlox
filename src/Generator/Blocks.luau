@@ -124,7 +124,7 @@ function Block._appendOperations(self: Block): Block
 end
 
 function Block.Declare(self: Block, Variable: string, Initialize: boolean?): string
-	local Block = self
+	local Current = self
 	local Declared = false
 	local IsFieldAccess = (string.find(Variable, "[%.%[]", 1) ~= nil)
 
@@ -134,13 +134,13 @@ function Block.Declare(self: Block, Variable: string, Initialize: boolean?): str
 	end
 
 	--> Search for variable declaration in block hierarchy
-	while Block do
-		if Block.Variables[Variable] then
+	while Current do
+		if Current.Variables[Variable] then
 			Declared = true
 			break
 		end
 
-		Block = Block.Parent
+		Current = Current.Parent
 	end
 
 	if Declared then
@@ -182,17 +182,17 @@ function Block.Comment(self: Block, Content: string): Block
 end
 
 function Block.Lines(self: Block, Lines: { string }, Indent: number?): Block
-	local Indent = Indent or 0
+	local IndentLevel = Indent or 0
 
 	--> FAST PATH
-	if Indent == 0 then
+	if IndentLevel == 0 then
 		table.move(Lines, 1, #Lines, #self.Content + 1, self.Content)
 		return self
 	end
 
-	local Indentation = string.rep("\t", Indent)
+	local Indentation = string.rep("\t", IndentLevel)
 
-	for Index, Line in Lines do
+	for _, Line in Lines do
 		table.insert(self.Content, `{Indentation}{Line}`)
 	end
 
@@ -201,7 +201,7 @@ end
 
 function Block.Multiline(self: Block, Content: string, Indent: number?): Block
 	local Lines = string.split(Content, "\n")
-	for Index, Line in Lines do
+	for _, Line in Lines do
 		table.insert(self.Content, `{string.rep("\t", Indent or 0)}{Line}\n`)
 	end
 
@@ -292,21 +292,21 @@ Function.__index = Function
 setmetatable(Function, Block)
 
 function Function.new(Name: string, Arguments: string, Return: string?, IsInlined: boolean?, Localised: boolean?): Block
-	local Block = Block.new(nil)
-	setmetatable(Block, Function)
+	local NewBlock = Block.new(nil)
+	setmetatable(NewBlock, Function)
 
 	local Suffix = Return and `: {Return}` or ""
-	Block:Advance(1)
+	NewBlock:Advance(1)
 
 	if IsInlined then
-		Block:Line(`{Name} = function({Arguments}){Suffix}`, 0)
+		NewBlock:Line(`{Name} = function({Arguments}){Suffix}`, 0)
 	elseif Localised then
-		Block:Line(`local function {Name}({Arguments}){Suffix}`, 0)
+		NewBlock:Line(`local function {Name}({Arguments}){Suffix}`, 0)
 	else
-		Block:Line(`function {Name}({Arguments}){Suffix}`, 0)
+		NewBlock:Line(`function {Name}({Arguments}){Suffix}`, 0)
 	end
 
-	return Block
+	return NewBlock
 end
 
 local Connection = {}
@@ -314,14 +314,14 @@ Connection.__index = Connection
 setmetatable(Connection, Block)
 
 function Connection.new(Signal: string, Arguments: string): Block
-	local Block = Block.new()
-	setmetatable(Block, Connection)
-	Block:Advance(1)
-	Block:Line(`{Signal}:Connect(function({Arguments})`, 0)
-	return Block
+	local NewBlock = Block.new()
+	setmetatable(NewBlock, Connection)
+	NewBlock:Advance(1)
+	NewBlock:Line(`{Signal}:Connect(function({Arguments})`, 0)
+	return NewBlock
 end
 
-function Connection.End(self: Block, Return: string?): Block
+function Connection.End(self: Block): Block
 	self:Line("end)", 0)
 	return self
 end

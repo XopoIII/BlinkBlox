@@ -64,14 +64,14 @@ local INDENT = string.rep(" ", 3)
 local function Noop() end
 
 local function Format(Value: any, Filter: ((Value: any) -> boolean)?, Depth: number?): string
-	local Depth = Depth or 0
-	local Filter = (Filter or Noop) :: (Value: any) -> boolean
+	local CurrentDepth = Depth or 0
+	local FilterFunction = (Filter or Noop) :: (Value: any) -> boolean
 
-	if Depth == 0 then
+	if CurrentDepth == 0 then
 		Cache = {}
 	end
 
-	if Filter(Value) == false then
+	if FilterFunction(Value) == false then
 		return ""
 	end
 
@@ -94,26 +94,26 @@ local function Format(Value: any, Filter: ((Value: any) -> boolean)?, Depth: num
 			return `{Color("{CACHED}", "red")} {Style(Address, "dim")}`
 		end
 
-		local Tabs = string.rep(INDENT, Depth)
+		local Tabs = string.rep(INDENT, CurrentDepth)
 		local Newline = ("\n" .. INDENT .. Tabs)
 		local Text = Style(`\{ ({Address})`, "dim") .. Newline
 
 		Cache[Value] = true
 
 		local First = true
-		for Key, Value in Value do
-			if Filter(Key) == false then
+		for Key, Entry in Value do
+			if FilterFunction(Key) == false then
 				continue
 			end
 
-			local KeyText = ShouldntWrap(Key) and Key or `["{Format(Key, Filter, Depth + 1)}"]`
+			local KeyText = ShouldntWrap(Key) and Key or `["{Format(Key, FilterFunction, CurrentDepth + 1)}"]`
 
 			if not First then
 				Text ..= Style(",", "dim") .. Newline
 			end
 
 			First = false
-			Text ..= `{KeyText} = {Format(Value, Filter, Depth + 1)}`
+			Text ..= `{KeyText} = {Format(Entry, FilterFunction, CurrentDepth + 1)}`
 		end
 
 		Text ..= "\n" .. Tabs .. Style("}", "dim")

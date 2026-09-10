@@ -69,7 +69,7 @@ function Utility.GetLineRangeAtPosition(Source: string, Cursor: number): Range
 	local Position = 0
 	local Slices = string.split(Source, "\n")
 
-	for Index, Slice in Slices do
+	for _, Slice in Slices do
 		local Start = Position
 		Position += (#Slice + 1)
 		if Cursor <= Position then

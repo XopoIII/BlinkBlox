@@ -290,7 +290,6 @@ local RESERVED = {
 
 local PRIMITIVES = Settings.Primtives
 local ARRAY_BOUNDS = NumberRange.new(0, (PRIMITIVES.u16.Bounds :: NumberRange).Max)
-local UINT_BOUNDS = PRIMITIVES.u32.Bounds :: NumberRange
 local DOUBLE_BOUNDS = PRIMITIVES.f64.Bounds :: NumberRange
 
 ---- Variables -----
@@ -648,10 +647,10 @@ function Parser.Range(self: Parser, Primitive: Settings.Primitive): { Range: Num
 		return
 	end
 
-	local NumberRange = self:NumberRange(Token, Primitive.Bounds or DOUBLE_BOUNDS, Primitive.Integer)
+	local ParsedRange = self:NumberRange(Token, Primitive.Bounds or DOUBLE_BOUNDS, Primitive.Integer)
 
 	return {
-		Range = NumberRange,
+		Range = ParsedRange,
 		Token = Token,
 	}
 end
@@ -673,10 +672,10 @@ function Parser.Array(self: Parser): { Range: NumberRange, Token: Token }?
 	end
 
 	--> Parse range
-	local NumberRange = self:NumberRange(Token, ARRAY_BOUNDS, true)
+	local ParsedRange = self:NumberRange(Token, ARRAY_BOUNDS, true)
 
 	return {
-		Range = NumberRange,
+		Range = ParsedRange,
 		Token = Token,
 	}
 end
@@ -698,7 +697,7 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 	local Components = {}
 	local Primitives = {}
 
-	for Index = 1, Primitive.AllowedComponents do
+	for _ = 1, Primitive.AllowedComponents do
 		table.insert(Primitives, self:Consume("Primitive"))
 		if self:TryConsume("CloseChevrons") then
 			break
@@ -707,7 +706,7 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 		self:Consume("Comma")
 	end
 
-	for Index, Token in Primitives do
+	for _, Token in Primitives do
 		local Component = Token.Value
 		local ComponentPrimitive = PRIMITIVES[Component]
 
@@ -746,7 +745,7 @@ end
 --> struct MergeStruct { ..GenericStruct<u8> }
 --> GenericStruct is merged just fine but GenericMap loses the reference to the table for `T` somewhere along the process (likely at the deep clone stage)
 
-function Parser.ReplaceGenerics(self: Parser, Of: TypeNode, Previous: { [string]: TypeNode }?): TypeNode
+function Parser.ReplaceGenerics(self: Parser, Of: TypeNode): TypeNode
 	local Clone = Table.DeepClone(Of) :: Struct
 	local Generics = Clone.Value.Generics :: Generics
 	local Replacements: { [string]: TypeNode } = {}
@@ -784,8 +783,8 @@ function Parser.ReplaceGenerics(self: Parser, Of: TypeNode, Previous: { [string]
 		if Type.Type == "Array" or Type.Type == "Optional" then
 			Traverse(Type.Value.Of)
 		elseif Type.Type == "TagEnum" or Type.Type == "Struct" or Type.Type == "Map" then
-			for _, Type in Type.Value.Values :: { any } do
-				Traverse(Type)
+			for _, Nested in Type.Value.Values :: { any } do
+				Traverse(Nested)
 			end
 		elseif Type.Type == "Generic" then
 			local Key = Type.Value.Generic
@@ -924,7 +923,7 @@ end
 
 function Parser.Options(self: Parser): Options
 	local Options: Options = {}
-	for Index = 1, TotalOptions do
+	for _ = 1, TotalOptions do
 		local Keyword = self:Peek()
 		if Keyword.Value ~= "option" then
 			break
@@ -1068,7 +1067,7 @@ end
 
 function Parser.GetOptionFromToken(self: Parser, Token: Token, Structure: { EventOption }): EventOption
 	local Value = Token.Value
-	for Index, Option in Structure do
+	for _, Option in Structure do
 		local Key = Option.Key
 		if Key == Value or string.lower(Key) == Value then
 			return Option

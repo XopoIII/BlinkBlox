@@ -110,20 +110,20 @@ export type Class = typeof(setmetatable(
 
 local Symbols = IS_ROBLOX and SpecialSymbols.ROBLOX or SpecialSymbols.CLI
 
-local function Color(Text: string, Color: Color): string
+local function Color(Text: string, ColorName: Color): string
 	if IS_ROBLOX then
-		return `<font color="{Colors[Color]}">{Text}</font>`
+		return `<font color="{Colors[ColorName]}">{Text}</font>`
 	end
 
-	return `{stdio.color(Color)}{Text}{stdio.color("reset")}`
+	return `{stdio.color(ColorName)}{Text}{stdio.color("reset")}`
 end
 
-local function Style(Text: string, Style: "bold" | "dim"): string
+local function Style(Text: string, StyleName: "bold" | "dim"): string
 	if IS_ROBLOX then
 		return Text
 	end
 
-	return `{stdio.style(Style)}{Text}{stdio.style("reset")}`
+	return `{stdio.style(StyleName)}{Text}{stdio.style("reset")}`
 end
 
 function Error.SetCompact(Value: boolean)

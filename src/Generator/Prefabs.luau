@@ -129,7 +129,7 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 	)
 		local Value = Declaration.Value
 		local Tokens = Declaration.Tokens
-		local Variable = Variable or "Value"
+		local Target = Variable or "Value"
 
 		local Range = Value.Range
 		local Class = Value.Class
@@ -137,14 +137,16 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 		local Primitive = Tokens.Primitive.Value
 		local IsVariableSize = (Range and Range.Max ~= Range.Min)
 
-		local function GenerateValidation(Block: Block, Variable: string)
+		local function GenerateValidation(Block: Block, TargetVariable: string)
 			if Block == Write and WriteValidations ~= true then
 				return
 			end
 
 			if Block == Write and Type ~= "any" then
-				Block:Compare(`typeof({Variable})`, `"{Type}"`, "Not")
-					:Line(`error(\`Expected {Variable} to be of type {Type}, got \{type({Variable})} instead.\`)`)
+				Block:Compare(`typeof({TargetVariable})`, `"{Type}"`, "Not")
+					:Line(
+						`error(\`Expected {TargetVariable} to be of type {Type}, got \{type({TargetVariable})} instead.\`)`
+					)
 					:End()
 			end
 
@@ -153,7 +155,7 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 			end
 
 			if Range then
-				local Assert = AssertGenerator(Variable, Range.Min, Range.Max)
+				local Assert = AssertGenerator(TargetVariable, Range.Min, Range.Max)
 				if not IsVariableSize and Assert.Exact then
 					Block:Line(Assert.Exact)
 				else
@@ -161,19 +163,19 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 					Block:Line(Assert.Upper)
 				end
 			elseif Primitive == "Instance" and Class then
-				local Assert = AssertGenerator(Variable, Class)
+				local Assert = AssertGenerator(TargetVariable, Class)
 				if Block == Write then
-					Block:Compare(Variable, "nil", "Not"):Multiline(Assert.Exact, Block.Indent + 1):End()
+					Block:Compare(TargetVariable, "nil", "Not"):Multiline(Assert.Exact, Block.Indent + 1):End()
 				else
 					Block:Multiline(Assert.Exact, Block.Indent)
 				end
 			end
 		end
 
-		GenerateValidation(Write, Variable)
-		Prefab.Read(Variable, Read, Range, Components)
-		Prefab.Write(Variable, Write, Range, Components)
-		GenerateValidation(Read, Variable)
+		GenerateValidation(Write, Target)
+		Prefab.Read(Target, Read, Range, Components)
+		Prefab.Write(Target, Write, Range, Components)
+		GenerateValidation(Read, Target)
 	end
 end
 

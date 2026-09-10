@@ -23,7 +23,27 @@ local function PrettyPrint(Color: stdio.Color, Message: string, DontReturn: bool
 	stdio.write(`{stdio.color(Color)}{Message}{not DontReturn and "\n" or ""}{stdio.color("reset")}`)
 end
 
-if stdio.prompt("confirm" :: "confirm", "Compile files?") then
+--- Whether to regenerate the network modules before running the suite.
+---
+--- Compiling is the DEFAULT and a prompt is only ever a convenience. `stdio.prompt` throws
+--- "IO error: not a terminal" when stdin is not a TTY — CI, a pipe, an editor task — and that throw
+--- used to abort the whole runner before a single spec ran, which reads exactly like a broken test
+--- suite. It is the same defect the compiler CLI has, and it is why the suite could never be gated
+--- in CI. Pass `--no-compile` to run against the already generated modules.
+local function ShouldCompile(): boolean
+	for _, Argument in process.args do
+		if Argument == "--yes" or Argument == "-y" or Argument == "--ci" then
+			return true
+		elseif Argument == "--no-compile" then
+			return false
+		end
+	end
+
+	local Success, Answer = pcall(stdio.prompt, "confirm" :: "confirm", "Compile files?")
+	return if Success then Answer else true
+end
+
+if ShouldCompile() then
 	PrettyPrint("blue", "Clearing Network folder...")
 	if fs.isDir("../Network") then
 		fs.removeDir("../Network")
@@ -116,25 +136,25 @@ end
 
 local function Equals(a: any, b: any)
 	local Cyclic = {}
-	local function Compare(a: any, b: any)
-		local TypeA = type(a)
-		local TypeB = type(b)
+	local function Compare(Left: any, Right: any)
+		local TypeA = type(Left)
+		local TypeB = type(Right)
 
 		if TypeA ~= TypeB then
 			return false
 		end
 
 		if TypeA == "table" then
-			if Cyclic[a] then
-				return Cyclic[a] == b
+			if Cyclic[Left] then
+				return Cyclic[Left] == Right
 			end
 
-			Cyclic[a] = b
+			Cyclic[Left] = Right
 
 			local KeysB = {}
 			local TableKeysB = {}
 
-			for Key in b do
+			for Key in Right do
 				if type(Key) == "table" then
 					table.insert(TableKeysB, Key)
 				end
@@ -142,12 +162,12 @@ local function Equals(a: any, b: any)
 				KeysB[Key] = true
 			end
 
-			for KeyA, ValueA in pairs(a) do
-				local ValueB = b[KeyA]
+			for KeyA, ValueA in pairs(Left) do
+				local ValueB = Right[KeyA]
 				if type(KeyA) == "table" then
 					local Match = false
 					for Index, Key in TableKeysB do
-						if Equals(KeyA, Key) and Compare(ValueA, b[Key]) then
+						if Equals(KeyA, Key) and Compare(ValueA, Right[Key]) then
 							Match = true
 							KeysB[Key] = nil
 							table.remove(TableKeysB, Index)
@@ -177,10 +197,10 @@ local function Equals(a: any, b: any)
 
 			return true
 		elseif TypeA == "buffer" then
-			return buffer.tostring(a) == buffer.tostring(b)
+			return buffer.tostring(Left) == buffer.tostring(Right)
 		end
 
-		return a == b
+		return Left == Right
 	end
 
 	return Compare(a, b)
@@ -385,10 +405,10 @@ local function FireAllAndExpectAll(
 	end
 
 	--> Fire events
-	for Index, Event in Events do
+	for _, Event in Events do
 		local Outgoing = Event.Outgoing
 		local Method = Outgoing.FireAll or Outgoing.Fire
-		for Index = 1, Times do
+		for _ = 1, Times do
 			Method(table.unpack(Event.Data))
 		end
 	end
@@ -629,7 +649,7 @@ end
 --> Tests
 local Instance = setmetatable({
 	__typeof = "Instance",
-	IsA = function(self)
+	IsA = function(_self)
 		return true
 	end,
 }, {
@@ -641,7 +661,7 @@ local Instance = setmetatable({
 local InstanceNeverIsA = setmetatable({
 	__typeof = "Instance",
 	ClassName = "Never",
-	IsA = function(self)
+	IsA = function(_self)
 		return false
 	end,
 }, {
@@ -819,21 +839,21 @@ RunClosure("Color3", function()
 end)
 
 RunClosure("Color3 Array", function()
-	local Array = {}
+	local Colors = {}
 	for _ = 1, 32 do
 		table.insert(
-			Array,
+			Colors,
 			BaseEnvironment.Color3.fromRGB(math.random(0, 255), math.random(0, 255), math.random(0, 255))
 		)
 	end
 
-	local Serialized = Server.ColorArray.Write(Array)
+	local Serialized = Server.ColorArray.Write(Colors)
 	local Deserialized = Server.ColorArray.Read(Serialized)
 
-	assert(#Array == #Deserialized, `Expected {#Array} elements`)
+	assert(#Colors == #Deserialized, `Expected {#Colors} elements`)
 
 	for Index, Got in Deserialized do
-		local Expected = Array[Index]
+		local Expected = Colors[Index]
 		assert(Expected.R == Got.R, `Expected {Expected.R}, got {Got.R}`)
 		assert(Expected.G == Got.G, `Expected {Expected.G}, got {Got.G}`)
 		assert(Expected.B == Got.B, `Expected {Expected.B}, got {Got.B}`)
@@ -1047,11 +1067,11 @@ RunClosure("Queue up and poll", function()
 
 	task.wait(1 / 30)
 
-	for Index, Value in Client.ServerPollEvent.Iter() do
+	for _, Value in Client.ServerPollEvent.Iter() do
 		table.insert(Results.Client, Value)
 	end
 
-	for Index, Player, Value in Server.ClientPollEvent.Iter() do
+	for _, Player, Value in Server.ClientPollEvent.Iter() do
 		if tostring(Player) ~= "Player" then
 			ErrorPrint(`Expected argument #1 to be Player, got {Player} instead.`)
 		end
@@ -1145,12 +1165,12 @@ RunClosure("Ranges should be enforced", function()
 end)
 
 RunClosure("Multi Dimensional Array", function()
-	local Array = { { { 1, 2, 3, 4, 5, 6 } } }
-	local Serialized = Client.MultiDimensionalArray.Write(Array)
+	local Nested = { { { 1, 2, 3, 4, 5, 6 } } }
+	local Serialized = Client.MultiDimensionalArray.Write(Nested)
 	local Deserialized = Client.MultiDimensionalArray.Read(Serialized)
 
-	if not Equals(Array, Deserialized) then
-		ErrorPrint(`Expected: {Format(Array)}, got: {Format(Deserialized)} instead`)
+	if not Equals(Nested, Deserialized) then
+		ErrorPrint(`Expected: {Format(Nested)}, got: {Format(Deserialized)} instead`)
 	end
 end)
 

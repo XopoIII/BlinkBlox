@@ -56,12 +56,12 @@ local ARGUMENTS: { [string]: Argument } = {
 
 ---- Functions -----
 
-local function Style(Text: string, Style: stdio.Style): string
-	return `{stdio.style(Style)}{Text}{stdio.style("reset")}`
+local function Style(Text: string, StyleName: stdio.Style): string
+	return `{stdio.style(StyleName)}{Text}{stdio.style("reset")}`
 end
 
-local function Color(Text: string, Color: stdio.Color): string
-	return `{stdio.color(Color)}{Text}{stdio.color("reset")}`
+local function Color(Text: string, ColorName: stdio.Color): string
+	return `{stdio.color(ColorName)}{Text}{stdio.color("reset")}`
 end
 
 local function PrintHelpMessage()

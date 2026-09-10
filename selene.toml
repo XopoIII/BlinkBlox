@@ -1,0 +1,43 @@
+# Selene linter config for the compiler itself.
+# https://kampfkarren.github.io/selene/
+#
+# `std = "luau+roblox"` because `src/` is DUAL-TARGET, which is not obvious from the directory
+# layout: the same lexer, parser and error modules run on Lune for the CLI *and* inside Roblox for
+# the Studio plugin, which requires them through the `@compiler` alias in `.luaurc`. They branch on
+# the environment at runtime — `src/Parser.luau:344` tests `task ~= nil`, `src/Modules/Error.luau:4`
+# tests `game ~= nil` — so a Lune-only standard library reports those five references as undefined
+# variables when they are deliberate.
+std = "luau+roblox"
+
+exclude = [
+	# Runtime FRAGMENTS, not standalone modules. These are concatenated into the generated output
+	# (see src/Generator/init.luau's Table.Merge) and reference identifiers that only exist once
+	# they are spliced into that file — `RecieveBuffer`, `PlayersMap`, `Read`. Linting them in
+	# isolation reports undefined variables for every one of them.
+	"src/Templates/**",
+	# Generated network code and build output.
+	"test/Network/**",
+	"release/**",
+	"build/**",
+	# The benchmark tree pulls in third-party transports (zap, bytenet) for comparison.
+	"benchmark/**",
+	# Docs are a Next.js site, not Luau.
+	"docs/**",
+]
+
+[lints]
+# Empty `if` branches / loops are almost always a mistake.
+empty_if = "warn"
+# Shadowing is easy to do by accident and hides bugs.
+shadowing = "warn"
+# Multiple statements on one line hurt readability.
+multiple_statements = "warn"
+# Flag deprecated API usage.
+deprecated = "warn"
+# `_G` IS THE BUILD-CONSTANT CHANNEL HERE, not sloppiness. `build/.darklua.json` declares two
+# `inject_global_value` rules, so darklua replaces `_G.VERSION` and `_G.RELEASE` with literals when
+# it bundles a release; the source reads them through `_G` precisely so an unbundled run (running
+# from source, or the Studio plugin) falls back to `"DEBUG"` and debug-mode output instead.
+# `_G.WATCH_THREAD` marks the CLI's watch thread, and `_G._BLINK` is part of the generated runtime's
+# own scope-collision protocol. None of these can be restructured away without changing the build.
+global_usage = "allow"

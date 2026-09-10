@@ -22,20 +22,20 @@ local function Fire(Reliable: boolean, ...)
 end
 
 ServerEnviornment.Instances.BLINK_RELIABLE_REMOTE = {
-	FireClient = function(self, Player, ...)
+	FireClient = function(_self, _Player, ...)
 		Fire(true, ...)
 	end,
-	FireAllClients = function(self, ...)
+	FireAllClients = function(_self, ...)
 		Fire(true, ...)
 	end,
 	OnServerEvent = Signal.new(),
 }
 
 ServerEnviornment.Instances.BLINK_UNRELIABLE_REMOTE = {
-	FireClient = function(Player, ...)
+	FireClient = function(_self, _Player, ...)
 		Fire(false, ...)
 	end,
-	FireAllClients = function(self, ...)
+	FireAllClients = function(_self, ...)
 		Fire(false, ...)
 	end,
 	OnServerEvent = Signal.new(),

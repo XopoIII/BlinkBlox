@@ -7,8 +7,6 @@ Metatable.__tostring = function()
 	return "Player"
 end
 
-local ServerOnlyInstance = (newproxy() :: any) :: Instance
-
 local Signal = {}
 Signal.__index = Signal
 
@@ -40,14 +38,14 @@ local function GetEnvironment()
 	local Services = {
 		Players = {
 			PlayerRemoving = Signal.new(),
-			GetPlayers = function(self)
+			GetPlayers = function(_self)
 				return { Player }
 			end,
 		},
 
 		ReplicatedStorage = {
 			Instances = Instances,
-			FindFirstChild = function(self, Name: string)
+			FindFirstChild = function(_self, Name: string)
 				assert(Instances[Name], `Attempted to find child: "{Name}", but it was not defined.`)
 				return Instances[Name]
 			end,
@@ -55,13 +53,13 @@ local function GetEnvironment()
 
 		RunService = {
 			Heartbeat = Signal.new(),
-			IsClient = function(self)
+			IsClient = function(_self)
 				return true
 			end,
-			IsServer = function(self)
+			IsServer = function(_self)
 				return true
 			end,
-			IsRunning = function(self)
+			IsRunning = function(_self)
 				return true
 			end,
 		},
@@ -72,7 +70,7 @@ local function GetEnvironment()
 	task.spawn(function()
 		while true do
 			local DeltaTime = task.wait(1 / 60)
-			for Index, Function in Services.RunService.Heartbeat.Connections do
+			for _, Function in Services.RunService.Heartbeat.Connections do
 				Function(DeltaTime)
 			end
 		end
@@ -103,7 +101,7 @@ local function GetEnvironment()
 
 	return {
 		game = {
-			GetService = function(self, Service: string)
+			GetService = function(_self, Service: string)
 				assert(Services[Service], `Attempted to get service: "{Service}", but it was not defined.`)
 				return Services[Service]
 			end,

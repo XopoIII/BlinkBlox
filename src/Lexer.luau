@@ -97,7 +97,7 @@ local TOKENS = {
 	--> String patterns
 	{
 		'^""',
-		function(Toke: string)
+		function(_Token: string)
 			return "String", ""
 		end,
 	},
@@ -198,7 +198,7 @@ function Lexer.GetNextToken(self: Lexer, DontAdvanceCursor: boolean?, StartAt: n
 		return Text, Position, math.min(Position + #Text, self.Size)
 	end
 
-	for Index, Token in TOKENS do
+	for _, Token in TOKENS do
 		local Pattern = Token[1]
 		local Type: (Types | (Text: string) -> Types)? = Token[2]
 

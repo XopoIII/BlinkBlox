@@ -1,0 +1,14 @@
+# Selene config for the Studio plugin.
+#
+# The plugin is the one part of this repository that runs inside Roblox rather than on Lune, so it
+# needs the Roblox standard library. Selene resolves the nearest config walking up from each file,
+# which is why this sits next to the code it applies to instead of being a section in the root
+# config — the root sets `std = "luau"` for the compiler.
+std = "roblox"
+
+[lints]
+empty_if = "warn"
+shadowing = "warn"
+multiple_statements = "warn"
+deprecated = "warn"
+roblox_incorrect_roblox_env = "deny"

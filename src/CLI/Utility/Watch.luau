@@ -32,8 +32,8 @@ local Utility = {}
 
 ---- Private Functions ----
 
-local function Color(Color: stdio.Color, Text: string): string
-	return `{stdio.color(Color)}{Text}{stdio.color("reset")}`
+local function Color(ColorName: stdio.Color, Text: string): string
+	return `{stdio.color(ColorName)}{Text}{stdio.color("reset")}`
 end
 
 local function BuildImportsArray(Entry: string, PreviousArray: { string }?): { string }

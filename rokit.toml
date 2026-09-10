@@ -1,11 +1,15 @@
 # This file lists tools managed by Rokit, a toolchain manager for Roblox projects.
 # For more information, see https://github.com/rojo-rbx/rokit
-
-# New tools can be added by running `rokit add <tool>` in a terminal.
+#
+# Every version here is pinned exactly. Run `rokit install` after cloning to get all of them.
+# Versions are the latest releases as of 2026-09-10.
 
 [tools]
-rojo = "rojo-rbx/rojo@7.6.0"
-lune = "filiptibell/lune@0.10.4"
-stylua = "JohnnyMorganz/StyLua@2.3.0"
-darklua = "seaofvoices/darklua@0.17.2"
+rojo = "rojo-rbx/rojo@7.7.0"                # file <-> Studio sync, and sourcemaps for luau-lsp
+lune = "lune-org/lune@0.10.5"               # Luau runtime: runs the compiler CLI and the test suite
+stylua = "JohnnyMorganz/StyLua@2.5.2"       # formatter
+selene = "Kampfkarren/selene@0.31.0"        # linter
+luau-lsp = "JohnnyMorganz/luau-lsp@1.69.0"  # editor LSP, and `luau-lsp analyze` for the type gate
+lefthook = "evilmartians/lefthook@2.1.12"   # git hooks
+darklua = "seaofvoices/darklua@0.19.0"      # bundler for release builds and the Studio plugin
 run-in-roblox = "rojo-rbx/run-in-roblox@0.3.0"
