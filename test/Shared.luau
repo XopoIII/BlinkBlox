@@ -105,8 +105,20 @@ local function GetEnvironment()
 
 	Services.ReplicatedStorage.WaitForChild = Services.ReplicatedStorage.FindFirstChild
 
+	--> Drives Heartbeat for the generated modules.
+	-->
+	--> It stops on a deadline rather than running forever, and that is about failure reporting rather
+	--> than tidiness. Lune keeps the process alive while a task is pending, so an unhandled error in
+	--> a spec used to print its stack and then HANG — the suite reported nothing further and had to
+	--> be killed from outside. In CI that turned a failing test into a stuck job with no logs until
+	--> the runner gave up.
+	-->
+	--> The whole suite takes well under a minute; the deadline is generous enough to be invisible in
+	--> a healthy run, and short enough that a broken one exits on its own.
+	local Deadline = os.clock() + 300
+
 	task.spawn(function()
-		while true do
+		while os.clock() < Deadline do
 			local DeltaTime = task.wait(1 / 60)
 			for _, Function in Services.RunService.Heartbeat.Connections do
 				Function(DeltaTime)
