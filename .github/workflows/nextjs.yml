@@ -1,8 +1,17 @@
 name: Deploy to GitHub Pages
 
+# Publishes on every push to main rather than on a release, for two reasons.
+#
+# Documentation describes what the compiler does NOW; tying it to releases meant a corrected option
+# or a new page sat unpublished until the next version was cut.
+#
+# And a release-triggered run deploys from the TAG, which the `github-pages` environment refuses:
+# "Tag v0.19.0 is not allowed to deploy to github-pages due to environment protection rules". The
+# environment allows protected branches, so main is the source it expects. Loosening that protection
+# to admit tags would be the wrong half of the problem to fix.
 on:
-  release:
-    types: [released]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
