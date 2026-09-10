@@ -12,6 +12,15 @@ A maintained fork of the project. Upstream stopped taking changes on this line o
 moved to a rewrite, leaving reported defects — including an unbounded parse of hostile client input —
 closed as out of scope. This fork fixes them and continues from there:
 
+- **Rate limiting, per player and per event.** Declare `Rate` and `Burst` on an inbound event or
+  function and the generated server spends tokens from a bucket before dispatching. Refused events
+  are dropped and reported to a handler of your choosing rather than kicking anyone. Neither of the
+  comparable compilers has this. See [`Rate`, `Burst`](language/5-events#rate-burst).
+- **Unreliable events that cannot fit are refused at compile time.** Roblox drops an unreliable
+  payload past ~900 bytes silently; the compiler measures every unreliable event, errors on the ones
+  that can never fit, warns about the ones that might not, and names the field with no upper bound.
+  A runtime check catches the rest and says which event lost the packet. See
+  [`MaxUnreliableSize`](language/1-options#maxunreliablesize).
 - **Inbound packets are bounded.** Packet size, decoded-event count and instance references are
   capped, an unrecognised event id stops the parse, and a truncated packet is contained instead of
   raising out of the remote handler. See [`MaxPacketSize`](language/1-options#maxpacketsize-maxeventsperpacket-maxinstancesperpacket).
@@ -21,6 +30,11 @@ closed as out of scope. This fork fixes them and continues from there:
 - **Edit mode keeps the shape of the real API**, so Roblox stories no longer raise on stubs.
 - **[`Predict`](language/1-options#predict)** delivers an event to local listeners without a remote,
   for tests and for stories.
+- **Remote arguments are checked before they are trusted.** A client can call `FireServer` with
+  anything; the generated handler establishes the argument types before reading them, stops decoding
+  for a player who has left, and refuses a remote of the wrong class planted under the right name.
+- **Invocation slots are recycled.** Outstanding calls take slots from a bitset and give them back
+  when answered, instead of a counter that wrapped and refused legitimate calls.
 
 ## Performance
 

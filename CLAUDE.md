@@ -50,6 +50,14 @@ Neither protects a live server from its own clients. That is the gap this fork f
 generated server module should be safe to point at the open internet** — without giving up the
 TypeScript output, the Studio plugin or the docs. Bandwidth parity is a second-order goal.
 
+What that means concretely, as of 0.20.0: per-player per-event token buckets (`Rate` / `Burst`,
+`option DefaultRate`, `option RequireRates`), compile-time size analysis that refuses unreliable
+events which cannot fit and warns about the ones that might not, argument-type checks before a
+client's remote arguments are read, a decode loop that stops when the player leaves, class checks on
+both remotes, and a bitset that recycles invocation slots. Bandwidth work — the shared bitfield,
+offset-encoded lengths, `OrderedUnreliable` — is deliberately deferred: it changes the wire format
+and belongs in one release, not three.
+
 ## Commands
 
 | Task | Command |
