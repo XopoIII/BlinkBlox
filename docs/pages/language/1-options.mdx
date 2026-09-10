@@ -66,6 +66,35 @@ Default: `false`
 Controls if Blink will replicate events and functions automatically at the end of every frame.  
 When set to `true` automatic replication will be disabled and a `StepReplication` function will be exposed instead.
 
+## `MaxPacketSize`, `MaxEventsPerPacket`, `MaxInstancesPerPacket`
+Defaults: `8192` bytes, `64` events, `256` instances
+
+Bound what a single inbound packet can make the **server** do.
+
+The server decodes a client's buffer in a loop, one event per iteration. Without a limit, a client
+that sends `buffer.create(1000000)` buys up to a million decode-and-dispatch cycles inside one
+remote callback — enough to stall or crash the server.
+
+A packet larger than `MaxPacketSize`, or carrying more instance references than
+`MaxInstancesPerPacket`, is dropped before any of it is parsed. Once `MaxEventsPerPacket` events have
+been decoded from one packet, the rest is discarded. An unrecognised event id also stops the parse:
+the cursor is no longer at an event boundary, so nothing after it can be trusted.
+
+```blink copy
+option MaxPacketSize = 16384
+option MaxEventsPerPacket = 128
+option MaxInstancesPerPacket = 512
+```
+
+<Callout>
+    The defaults are generous for real traffic — a client batches a handful of events per frame into
+    a few hundred bytes. Raise them only if your game legitimately sends more in one frame, and
+    remember that whatever you allow is also what an attacker is allowed.
+</Callout>
+
+Only inbound server traffic is checked. The client trusts the server by construction, and capping
+what the server sends would drop legitimate replication.
+
 ## `RemoteScope`
 Default: `""`
 

@@ -1291,6 +1291,102 @@ RunClosure("Firing at a player who left does not resurrect their buffer", functi
 	end
 end)
 
+RunClosure("Inbound packets are bounded", function()
+	--> Upstream issue #45. The server parses a client's buffer in an unbounded loop, one event per
+	--> iteration, so `buffer.create(1000000)` used to buy a million listener dispatches inside one
+	--> remote callback. Three limits now bound that, and each is checked here.
+	local MaxEventsPerPacket = 64
+
+	--> 1. An oversized buffer is refused outright, before anything is parsed.
+	do
+		local Received = 0
+		local Disconnect = Server.ReliableClient.On(function()
+			Received += 1
+		end)
+
+		local Remote = ServerEnvironment.Instances.BLINK_RELIABLE_REMOTE
+		Remote.OnServerEvent:Fire(Shared.Player, buffer.create(64 * 1024), {})
+
+		task.wait(0.2)
+		Disconnect()
+
+		if Received ~= 0 then
+			ErrorPrint(`Failed "Inbound packets are bounded": an oversized packet was parsed ({Received} events).`)
+		end
+	end
+
+	--> 2. A packet carrying more events than the cap is truncated, not parsed whole. Sent through
+	--> the real client API so this exercises the same path a legitimate flood would take.
+	do
+		local Received = 0
+		local Disconnect = Server.ReliableClient.On(function()
+			Received += 1
+		end)
+
+		for _ = 1, MaxEventsPerPacket * 2 do
+			Client.ReliableClient.Fire(1)
+		end
+
+		task.wait(0.5)
+		Disconnect()
+
+		if Received > MaxEventsPerPacket then
+			ErrorPrint(
+				`Failed "Inbound packets are bounded": {Received} events decoded from one packet, cap is {MaxEventsPerPacket}.`
+			)
+		end
+
+		if Received == 0 then
+			ErrorPrint(`Failed "Inbound packets are bounded": the cap swallowed legitimate traffic entirely.`)
+		end
+	end
+
+	--> 3. The guard's shape, asserted against the emitted code.
+	-->
+	--> The remaining protections cannot be observed through these mocks: `Signal:Fire` dispatches via
+	--> `task.spawn`, so a throw inside the remote handler lands in another thread and never reaches a
+	--> pcall here — a behavioural test would pass whether or not the guard exists, which is worse
+	--> than no test. What matters is that the generator still emits them, and that is checkable.
+	-->
+	--> A TRUNCATED packet is why the pcall is there: one byte tagging an event that carries data
+	--> makes the reader run off the end of the buffer, and `Read` advances the cursor with no bounds
+	--> check. That packet is SMALLER than a legitimate one, so no size cap can catch it.
+	do
+		local Source = fs.readFile("../Network/Server.luau")
+		local Required = {
+			["oversized packet check"] = "if buffer.len(Buffer) >",
+			["instance count check"] = "if #Instances >",
+			["decoded event counter"] = "DecodedEvents += 1",
+			["decode pcall"] = "local Parsed = pcall(function()",
+			["decode failure stops the packet"] = "if not Parsed then break end",
+			["unknown event id stops the packet"] = `error("[Blink]: Unknown event index.")`,
+		}
+
+		for Name, Fragment in Required do
+			if not string.find(Source, Fragment, 1, true) then
+				ErrorPrint(`Failed "Inbound packets are bounded": generated server code has no {Name}.`)
+			end
+		end
+	end
+
+	--> 4. Ordinary traffic still arrives untouched — a cap that breaks the normal path is worse than
+	--> the hole it closes.
+	do
+		local Received = 0
+		local Disconnect = Server.ReliableClient.On(function()
+			Received += 1
+		end)
+
+		Client.ReliableClient.Fire(1)
+		task.wait(0.3)
+		Disconnect()
+
+		if Received ~= 1 then
+			ErrorPrint(`Failed "Inbound packets are bounded": a single legitimate event arrived {Received} time(s).`)
+		end
+	end
+end)
+
 PrettyPrint("green", `All tests passed successfully!`)
 
 process.exit(0)

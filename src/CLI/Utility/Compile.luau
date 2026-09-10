@@ -152,7 +152,11 @@ function Utility.Compile(Path: string, Options: CompileOptions)
 
 	local TypesSource: string?
 	if FileOptions.TypesOutput then
-		TypesOutput = if PathParser.PathType(Path) == "absolute"
+		--> The OUTPUT path decides whether it needs the schema's directory prepended -- not the path
+		--> of the schema itself, which is what this used to test. Compiling by absolute path with a
+		--> relative TypesOutput therefore wrote the types module relative to the working directory
+		--> while the server and client modules landed correctly next to the schema.
+		TypesOutput = if PathParser.PathType(FileOptions.TypesOutput) == "absolute"
 			then FileOptions.TypesOutput
 			else `{FileDirectory}{FileOptions.TypesOutput}`
 		TypesSource = Generator.GenerateShared(AbstractSyntaxTree)

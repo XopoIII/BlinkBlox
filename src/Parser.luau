@@ -88,6 +88,12 @@ export type Options = {
 	WriteValidations: boolean?,
 	ManualReplication: boolean?,
 	RemoteScope: string?,
+
+	--> Inbound limits. These bound what a hostile client can make the server do inside a single
+	--> packet; see the generator's INBOUND_GUARD.
+	MaxPacketSize: number?,
+	MaxEventsPerPacket: number?,
+	MaxInstancesPerPacket: number?,
 }
 
 export type Body = Node<"Body", {
@@ -201,6 +207,9 @@ local OPTIONS: { [string]: Lexer.Types } = {
 	WriteValidations = "Boolean",
 	ManualReplication = "Boolean",
 	RemoteScope = "String",
+	MaxPacketSize = "Number",
+	MaxEventsPerPacket = "Number",
+	MaxInstancesPerPacket = "Number",
 }
 
 local EVENT: { EventOption } = {
@@ -954,7 +963,19 @@ function Parser.Options(self: Parser): Options
 		end
 
 		local Value = self:Consume(Type)
-		Options[Name] = Value.Value
+		if Type == "Number" then
+			--> Number tokens carry their text; every consumer of a numeric option wants the number.
+			local Numeric = tonumber(Value.Value)
+			if not Numeric or Numeric < 1 or not IsInteger(Numeric) then
+				Error.new(Error.ParserUnknownOption, self.Source, `Invalid value for option "{Name}"`, self.File)
+					:Primary(Value, "Expected a positive whole number")
+					:Emit()
+			end
+
+			Options[Name] = Numeric
+		else
+			Options[Name] = Value.Value
+		end
 	end
 
 	return Options

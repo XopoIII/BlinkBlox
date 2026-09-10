@@ -42,6 +42,23 @@ local EVENT_BODY = {
 	"local Size = buffer.len(RecieveBuffer)\n",
 }
 
+--> INBOUND LIMITS (upstream issue #45). The server parses whatever a client sends in an unbounded
+--> `while RecieveCursor < Size` loop, one event per iteration, so a client that sends
+--> `buffer.create(1000000)` makes the server decode up to a million events -- each with its own
+--> listener dispatch -- inside a single remote callback.
+-->
+--> The defaults are generous for legitimate traffic: a real client batches a handful of events per
+--> frame into a few hundred bytes. Override them per schema when a game genuinely needs more:
+-->     option MaxPacketSize = 16384
+-->     option MaxEventsPerPacket = 128
+-->     option MaxInstancesPerPacket = 512
+-->
+--> Only the SERVER is guarded. The client trusts the server by construction, and capping the
+--> server's own traffic would silently drop legitimate replication.
+local DEFAULT_MAX_PACKET_SIZE = 8192
+local DEFAULT_MAX_EVENTS_PER_PACKET = 64
+local DEFAULT_MAX_INSTANCES_PER_PACKET = 256
+
 local SYNC_VALIDATION_BODY = {
 	`local SerdesEvent = "?"\n`,
 	"local SerdesThread: thread?\n",
@@ -79,7 +96,8 @@ local IGNORED_TYPES_IN_SHARED = {
 type Type = Parser.TypeNode
 type Scope = Parser.Scope
 type Context = "Client" | "Server" | "Shared"
-type NumberRange = { Min: number, Max: number }
+--> One definition shared with Settings, Parser and Prefabs, not Roblox NumberRange userdata.
+type NumberRange = Parser.NumberRange
 
 local Scope: Scope
 local Context: Context
@@ -1220,6 +1238,27 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	Reliables = Blocks.Connection(`Reliable.{Signal}`, Arguments)
 	Unreliables = Blocks.Connection(`Unreliable.{Signal}`, Arguments)
 
+	--> Reject a hostile packet before any of it is parsed. Both checks read the arguments the remote
+	--> handed us, so they must come before EVENT_BODY copies them into the module-level cursors.
+	if Context == "Server" then
+		local MaxPacketSize = Options.MaxPacketSize or DEFAULT_MAX_PACKET_SIZE
+		local MaxInstances = Options.MaxInstancesPerPacket or DEFAULT_MAX_INSTANCES_PER_PACKET
+
+		local function EmitInboundGuard(Channel: Blocks.Block)
+			Channel:Line(`if buffer.len(Buffer) > {MaxPacketSize} then`, 1)
+			Channel:Line(`\twarn(\`[Blink]: Dropped an oversized packet from \{Player.Name\}.\`)`, 1)
+			Channel:Line("\treturn", 1)
+			Channel:Line("end", 1)
+			Channel:Line(`if #Instances > {MaxInstances} then`, 1)
+			Channel:Line(`\twarn(\`[Blink]: Dropped a packet with too many instances from \{Player.Name\}.\`)`, 1)
+			Channel:Line("\treturn", 1)
+			Channel:Line("end", 1)
+		end
+
+		EmitInboundGuard(Reliables)
+		EmitInboundGuard(Unreliables)
+	end
+
 	Reliables:Lines(EVENT_BODY, 1)
 	Unreliables:Lines(EVENT_BODY, 1)
 
@@ -1228,8 +1267,39 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Unreliables:Lines(EVENT_SYNC_VALIDATION, 1)
 	end
 
+	--> The size cap alone does not bound the work: a packet of single-byte event tags decodes one
+	--> event per byte, so an 8 KB packet still means thousands of listener dispatches. Counting the
+	--> decoded events bounds that directly.
+	local MaxEvents = Options.MaxEventsPerPacket or DEFAULT_MAX_EVENTS_PER_PACKET
+	if Context == "Server" then
+		Reliables:Line("local DecodedEvents = 0", 1)
+		Unreliables:Line("local DecodedEvents = 0", 1)
+	end
+
 	Reliables = Reliables:While("RecieveCursor < Size")
 	Unreliables = Unreliables:While("RecieveCursor < Size")
+
+	if Context == "Server" then
+		local function EmitEventCap(Channel: Blocks.Block)
+			Channel:Line("DecodedEvents += 1")
+			Channel:Line(`if DecodedEvents > {MaxEvents} then`)
+			Channel:Line(`\twarn(\`[Blink]: Dropped the rest of a packet from \{Player.Name\}, too many events.\`)`)
+			Channel:Line("\tbreak")
+			Channel:Line("end")
+
+			--> A TRUNCATED packet defeats every limit above, because it is SMALLER than a legitimate
+			--> one: two bytes tagged as a five-byte event make `buffer.readu16` throw from inside the
+			--> OnServerEvent connection, where no user pcall can reach it. `Read` advances the cursor
+			--> without a bounds check, so the only place to contain that is around the decode itself.
+			--> The cursor is wherever the throw left it afterwards, so the packet cannot be resumed —
+			--> hence `break` rather than `continue`.
+			Channel:Line("local Parsed = pcall(function()")
+		end
+
+		EmitEventCap(Reliables)
+		EmitEventCap(Unreliables)
+	end
+
 	Types.u8.Read("Index", Reliables)
 	Types.u8.Read("Index", Unreliables)
 
@@ -1256,12 +1326,37 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> Generate context source
 	local Source = Sources[Context]
 
+	--> An unknown event index means the packet is not what it claims to be: the byte came from a
+	--> client, and the cursor is no longer at an event boundary, so nothing after it can be trusted.
+	--> Without this branch the loop silently fell through and kept reading, which is how a buffer of
+	--> unrecognised tags turned into a full-length parse.
+	--> `error` and not `break`: this branch sits inside the pcall'd decode function opened above, and
+	--> Luau cannot break out of a loop across a function boundary. Raising here lands in that pcall,
+	--> which turns into the `break` below — the same stop, expressed where it is legal.
+	local UNKNOWN_EVENT = `error("[Blink]: Unknown event index.")`
+
 	if Channels.Reliable.Listening then
+		if Context == "Server" then
+			Reliables = Reliables:Branch("Default"):Line(UNKNOWN_EVENT)
+		end
+
 		Reliables = Reliables:End()
 	end
 
 	if Channels.Unreliable.Listening then
+		if Context == "Server" then
+			Unreliables = Unreliables:Branch("Default"):Line(UNKNOWN_EVENT)
+		end
+
 		Unreliables = Unreliables:End()
+	end
+
+	--> Close the decode function opened by EmitEventCap and act on its result.
+	if Context == "Server" then
+		Reliables:Line("end)")
+		Reliables:Line("if not Parsed then break end")
+		Unreliables:Line("end)")
+		Unreliables:Line("if not Parsed then break end")
 	end
 
 	Reliables = Reliables:End():End()

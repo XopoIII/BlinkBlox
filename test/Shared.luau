@@ -17,6 +17,10 @@ Metatable.__index = {
 	IsDescendantOf = function(_self, _Ancestor)
 		return PlayerInGame
 	end,
+
+	--> Used by the inbound guard's warnings. Without it they report "from nil", which would hide
+	--> exactly the detail those warnings exist to give.
+	Name = "Player",
 }
 
 local Signal = {}
