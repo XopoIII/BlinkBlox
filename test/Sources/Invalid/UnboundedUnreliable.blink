@@ -1,0 +1,12 @@
+-- expect W3019
+-- An unbounded string may or may not fit. That is a warning, not an error: refusing to compile a
+-- schema that might be fine is worse than compiling it with a note saying where the bound is missing.
+option ClientOutput = "../../Network/UnboundedClient.luau"
+option ServerOutput = "../../Network/UnboundedServer.luau"
+
+event Chat {
+    From: Client,
+    Type: Unreliable,
+    Call: SingleSync,
+    Data: string,
+}

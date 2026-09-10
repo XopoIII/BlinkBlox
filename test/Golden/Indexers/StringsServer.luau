@@ -159,6 +159,19 @@ local Queue: any = {
     Unreliable = table.create(256)
 }
 
+
+--> Roblox drops an unreliable payload past this size and tells nobody. The compiler
+--> refuses schemas that can never fit; this catches the ones that merely overflow at
+--> runtime, and says which event did it.
+local MAX_UNRELIABLE_SIZE = 900
+local function CheckUnreliableSize(Name: string): boolean
+	if SendCursor <= MAX_UNRELIABLE_SIZE then
+		return true
+	end
+
+	warn(`[Blink]: Dropped unreliable event "{Name}", {SendCursor} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+	return false
+end
 local SerdesEvent = "?"
 local SerdesThread: thread?
 export type TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
@@ -374,6 +387,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+			if not CheckUnreliableSize("TestEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -381,6 +395,7 @@ local Returns = table.freeze({
 		FireAll = function(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+			if not CheckUnreliableSize("TestEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -388,6 +403,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+			if not CheckUnreliableSize("TestEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -397,6 +413,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+			if not CheckUnreliableSize("TestEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do

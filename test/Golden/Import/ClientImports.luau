@@ -158,6 +158,19 @@ local Queue: any = {
     Unreliable = table.create(256)
 }
 
+
+--> Roblox drops an unreliable payload past this size and tells nobody. The compiler
+--> refuses schemas that can never fit; this catches the ones that merely overflow at
+--> runtime, and says which event did it.
+local MAX_UNRELIABLE_SIZE = 900
+local function CheckUnreliableSize(Name: string): boolean
+	if SendCursor <= MAX_UNRELIABLE_SIZE then
+		return true
+	end
+
+	warn(`[Blink]: Dropped unreliable event "{Name}", {SendCursor} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+	return false
+end
 local SerdesEvent = "?"
 local SerdesThread: thread?
 export type Generics_a = { Type: "Header", Sequence: number, Fragments: number } | { Type: "Fragment", Fragment: number, Fragments: number }
@@ -532,9 +545,11 @@ local Returns = table.freeze({
 				local Previous = Save()
 				Load()
 				SerdesFunctions.Generics_WriteEVENT_Snapshot(Value)
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				Unreliable:FireServer(Buffer, SendInstances)
+				if CheckUnreliableSize("Snapshot") then
+					local Buffer = buffer.create(SendCursor)
+					buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+					Unreliable:FireServer(Buffer, SendInstances)
+				end
 				Load(Previous)
 			end
 		},
@@ -597,9 +612,11 @@ local Returns = table.freeze({
 				local Previous = Save()
 				Load()
 				SerdesFunctions.Example_WriteEVENT_Snapshot(Value)
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				Unreliable:FireServer(Buffer, SendInstances)
+				if CheckUnreliableSize("Snapshot") then
+					local Buffer = buffer.create(SendCursor)
+					buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+					Unreliable:FireServer(Buffer, SendInstances)
+				end
 				Load(Previous)
 			end
 		},

@@ -99,6 +99,8 @@ local Error = {
 	AnalyzeErrorWhileImporting = 3015,
 	AnalyzeOptionAfterStart = 3016,
 	AnalyzeDeprecatedOption = 3017,
+	AnalyzeOversizeUnreliable = 3018,
+	AnalyzePotentiallyOversizeUnreliable = 3019,
 }
 
 Error.__index = Error

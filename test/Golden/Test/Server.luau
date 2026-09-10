@@ -159,6 +159,19 @@ local Queue: any = {
     Unreliable = table.create(256)
 }
 
+
+--> Roblox drops an unreliable payload past this size and tells nobody. The compiler
+--> refuses schemas that can never fit; this catches the ones that merely overflow at
+--> runtime, and says which event did it.
+local MAX_UNRELIABLE_SIZE = 900
+local function CheckUnreliableSize(Name: string): boolean
+	if SendCursor <= MAX_UNRELIABLE_SIZE then
+		return true
+	end
+
+	warn(`[Blink]: Dropped unreliable event "{Name}", {SendCursor} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+	return false
+end
 local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Reliable[1] = CreateQueue()
@@ -207,6 +220,17 @@ export type InstanceArray = { Sound }
 export type InstanceArrayOptional = { Sound }?
 export type ConstrainedArray = { number }
 export type MultiDimensionalArray = { { { number } } }
+export type SizeByte = number
+export type SizeFixedString = string
+export type SizeBoundedString = string
+export type SizeFixedArray = { number }
+export type SizeBoundedArray = { number }
+export type SizeOptionalByte = number?
+export type SizeVector = Vector3
+export type SizeStruct = { A: number, B: boolean, C: number }
+export type SizeEnum = ("A" | "B" | "C")
+export type SizeFlags = {F1: boolean,F2: boolean,F3: boolean,}
+export type SizeMap = {[number]: number}
 export type States = ("A" | "B" | "C" | "D")
 export type Flags8 = {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}
 export type Flags16 = {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}
@@ -3332,6 +3356,559 @@ if not RunService:IsRunning() then
 			return Result
 		end
 	},
+	SizeByte = {
+		Read = function(Buffer: buffer): (SizeByte)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeByte
+			local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeByte): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeByte
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeFixedString = {
+		Read = function(Buffer: buffer): (SizeFixedString)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 8 bytes
+			local BLOCK_START = Read(8)
+			-- Buffer read
+			-- Value: SizeFixedString
+			local Value = buffer.readstring(RecieveBuffer, BLOCK_START + 0, 8)
+			if #Value ~= 8 then error(`Expected length of "Value" to equal to 8, got {#Value} instead.`) end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeFixedString): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 8 bytes
+			local BLOCK_START = Allocate(8)
+			-- Buffer write
+			-- Value: SizeFixedString
+			if typeof(Value) ~= "string" then
+				error(`Expected Value to be of type string, got {type(Value)} instead.`)
+			end
+			if #Value ~= 8 then error(`Expected length of "Value" to equal to 8, got {#Value} instead.`) end
+			buffer.writestring(SendBuffer, BLOCK_START + 0, Value, 8)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeBoundedString = {
+		Read = function(Buffer: buffer): (SizeBoundedString)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeBoundedString
+			local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			if #Value < 0 then error(`Expected length of "Value" to be larger than 0, got {#Value} instead.`) end
+			if #Value > 64 then error(`Expected length of "Value" to be smaller than 64, got {#Value} instead.`) end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeBoundedString): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeBoundedString
+			if typeof(Value) ~= "string" then
+				error(`Expected Value to be of type string, got {type(Value)} instead.`)
+			end
+			if #Value < 0 then error(`Expected length of "Value" to be larger than 0, got {#Value} instead.`) end
+			if #Value > 64 then error(`Expected length of "Value" to be smaller than 64, got {#Value} instead.`) end
+			local Length = #Value
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Length)
+			Allocate(Length)
+			buffer.writestring(SendBuffer, SendOffset, Value, Length)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeFixedArray = {
+		Read = function(Buffer: buffer): (SizeFixedArray)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Buffer read
+			-- Value: SizeFixedArray
+			-- START ARRAY
+			local Length = 4
+			local Value = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_1 = Read(1 * Length)
+			for Index = 1, Length do
+				-- Item_1: SizeFixedArray
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeFixedArray): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Buffer write
+			-- Value: SizeFixedArray
+			-- START ARRAY
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * 4)
+			for Index = 1, 4 do
+				local Item_1 = Value[Index]
+				-- Item_1: SizeFixedArray
+				if typeof(Item_1) ~= "number" then
+					error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+				end
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeBoundedArray = {
+		Read = function(Buffer: buffer): (SizeBoundedArray)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeBoundedArray
+			-- START ARRAY
+			local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
+			if Length > 10 then error(`Expected "Length" to be smaller than 10, got {Length} instead.`) end
+			local Value = table.create(Length)
+				-- Read BLOCK: 2 bytes
+			local ARRAY_START_1 = Read(2 * Length)
+			for Index = 1, Length do
+				-- Item_1: SizeBoundedArray
+				-- Read 2
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local Item_1 = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeBoundedArray): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeBoundedArray
+			-- START ARRAY
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, #Value)
+				-- Allocate BLOCK: 2 bytes
+			local ARRAY_START_1 = Allocate(2 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: SizeBoundedArray
+				if typeof(Item_1) ~= "number" then
+					error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+				end
+				-- Allocate 2
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeOptionalByte = {
+		Read = function(Buffer: buffer): (SizeOptionalByte)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeOptionalByte
+			local Value
+			if buffer.readu8(RecieveBuffer, BLOCK_START + 0) == 1 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Value: SizeOptionalByte
+				Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeOptionalByte): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeOptionalByte
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value ~= nil and 1 or 0)
+			if Value ~= nil then
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: SizeOptionalByte
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
+			end
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeVector = {
+		Read = function(Buffer: buffer): (SizeVector)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 12 bytes
+			local BLOCK_START = Read(12)
+			-- Buffer read
+			-- Value: SizeVector
+			local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+			local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+			local Value = Vector3.new(X, Y, Z)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeVector): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 12 bytes
+			local BLOCK_START = Allocate(12)
+			-- Buffer write
+			-- Value: SizeVector
+			if typeof(Value) ~= "Vector3" then
+				error(`Expected Value to be of type Vector3, got {type(Value)} instead.`)
+			end
+			local Vector = Value
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeStruct = {
+		Read = function(Buffer: buffer): (SizeStruct)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			-- Buffer read
+			-- Value: SizeStruct
+			local Value = {} :: any
+			-- Value.A: A
+			Value.A = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Value.B: B
+			Value.B = (buffer.readu8(RecieveBuffer, BLOCK_START + 1) == 1)
+			-- Value.C: C
+			Value.C = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeStruct): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Buffer write
+			-- Value: SizeStruct
+			-- Value.A: A
+			if typeof(Value.A) ~= "number" then
+				error(`Expected Value.A to be of type number, got {type(Value.A)} instead.`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.A)
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.B and 1 or 0)
+			-- Value.C: C
+			if typeof(Value.C) ~= "number" then
+				error(`Expected Value.C to be of type number, got {type(Value.C)} instead.`)
+			end
+			buffer.writeu16(SendBuffer, BLOCK_START + 2, Value.C)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeEnum = {
+		Read = function(Buffer: buffer): (SizeEnum)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeEnum
+			local Value = true :: any
+			local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if Index == 0 then
+				Value = "A"
+			elseif Index == 1 then
+				Value = "B"
+			elseif Index == 2 then
+				Value = "C"
+			else
+				error(`Unexpected enum: {Index}`)
+			end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeEnum): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeEnum
+			if Value == "A" then
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+			elseif Value == "B" then
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+			elseif Value == "C" then
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+			else
+				error(`Unexpected enum: {Value}, expected one of "A" or "B" or "C".`)
+			end
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeFlags = {
+		Read = function(Buffer: buffer): (SizeFlags)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeFlags
+			local Value = {}
+			local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.F1 = bit32.btest(SET_BITS, 0x1);
+			Value.F2 = bit32.btest(SET_BITS, 0x2);
+			Value.F3 = bit32.btest(SET_BITS, 0x4);
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeFlags): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeFlags
+			local SET_BITS = 0
+			if Value.F1 == true then SET_BITS += 0x1 end
+			if Value.F2 == true then SET_BITS += 0x2 end
+			if Value.F3 == true then SET_BITS += 0x4 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, SET_BITS)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeMap = {
+		Read = function(Buffer: buffer): (SizeMap)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: SizeMap
+			local Value = {}
+			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			for _ = 1, Elements_1 do
+				-- Key_1: SizeMap
+				local OFFSET_0 = Read(1)
+				local Key_1 = buffer.readu8(RecieveBuffer, OFFSET_0)
+				-- Element_1: SizeMap
+				local OFFSET_1 = Read(2)
+				local Element_1 = buffer.readu16(RecieveBuffer, OFFSET_1)
+				Value[Key_1] = Element_1
+			end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeMap): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: SizeMap
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: SizeMap
+				if typeof(Key_1) ~= "number" then
+					error(`Expected Key_1 to be of type number, got {type(Key_1)} instead.`)
+				end
+				local OFFSET_0 = Allocate(1)
+				buffer.writeu8(SendBuffer, OFFSET_0, Key_1)
+				-- Element_1: SizeMap
+				if typeof(Element_1) ~= "number" then
+					error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
+				end
+				local OFFSET_1 = Allocate(2)
+				buffer.writeu16(SendBuffer, OFFSET_1, Element_1)
+			end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
 	MapNested = {
 		Read = function(Buffer: buffer): (MapNested)
 			-- Buffer overwrite
@@ -4204,6 +4781,7 @@ local Returns = table.freeze({
 			Fire = function(Player: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
 				Load()
 				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+				if not CheckUnreliableSize("TestEvent") then return end
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -4211,6 +4789,7 @@ local Returns = table.freeze({
 			FireAll = function(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
 				Load()
 				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+				if not CheckUnreliableSize("TestEvent") then return end
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireAllClients(Buffer, SendInstances)
@@ -4218,6 +4797,7 @@ local Returns = table.freeze({
 			FireList = function(List: {Player}, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
 				Load()
 				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+				if not CheckUnreliableSize("TestEvent") then return end
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				for _, Player in List do
@@ -4227,6 +4807,7 @@ local Returns = table.freeze({
 			FireExcept = function(Except: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
 				Load()
 				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+				if not CheckUnreliableSize("TestEvent") then return end
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				for _, Player in Players:GetPlayers() do
@@ -4980,6 +5561,559 @@ local Returns = table.freeze({
 			return Result
 		end
 	},
+	SizeByte = {
+		Read = function(Buffer: buffer): (SizeByte)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeByte
+			local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeByte): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeByte
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeFixedString = {
+		Read = function(Buffer: buffer): (SizeFixedString)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 8 bytes
+			local BLOCK_START = Read(8)
+			-- Buffer read
+			-- Value: SizeFixedString
+			local Value = buffer.readstring(RecieveBuffer, BLOCK_START + 0, 8)
+			if #Value ~= 8 then error(`Expected length of "Value" to equal to 8, got {#Value} instead.`) end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeFixedString): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 8 bytes
+			local BLOCK_START = Allocate(8)
+			-- Buffer write
+			-- Value: SizeFixedString
+			if typeof(Value) ~= "string" then
+				error(`Expected Value to be of type string, got {type(Value)} instead.`)
+			end
+			if #Value ~= 8 then error(`Expected length of "Value" to equal to 8, got {#Value} instead.`) end
+			buffer.writestring(SendBuffer, BLOCK_START + 0, Value, 8)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeBoundedString = {
+		Read = function(Buffer: buffer): (SizeBoundedString)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeBoundedString
+			local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			if #Value < 0 then error(`Expected length of "Value" to be larger than 0, got {#Value} instead.`) end
+			if #Value > 64 then error(`Expected length of "Value" to be smaller than 64, got {#Value} instead.`) end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeBoundedString): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeBoundedString
+			if typeof(Value) ~= "string" then
+				error(`Expected Value to be of type string, got {type(Value)} instead.`)
+			end
+			if #Value < 0 then error(`Expected length of "Value" to be larger than 0, got {#Value} instead.`) end
+			if #Value > 64 then error(`Expected length of "Value" to be smaller than 64, got {#Value} instead.`) end
+			local Length = #Value
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Length)
+			Allocate(Length)
+			buffer.writestring(SendBuffer, SendOffset, Value, Length)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeFixedArray = {
+		Read = function(Buffer: buffer): (SizeFixedArray)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Buffer read
+			-- Value: SizeFixedArray
+			-- START ARRAY
+			local Length = 4
+			local Value = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_1 = Read(1 * Length)
+			for Index = 1, Length do
+				-- Item_1: SizeFixedArray
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeFixedArray): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Buffer write
+			-- Value: SizeFixedArray
+			-- START ARRAY
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * 4)
+			for Index = 1, 4 do
+				local Item_1 = Value[Index]
+				-- Item_1: SizeFixedArray
+				if typeof(Item_1) ~= "number" then
+					error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+				end
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeBoundedArray = {
+		Read = function(Buffer: buffer): (SizeBoundedArray)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeBoundedArray
+			-- START ARRAY
+			local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
+			if Length > 10 then error(`Expected "Length" to be smaller than 10, got {Length} instead.`) end
+			local Value = table.create(Length)
+				-- Read BLOCK: 2 bytes
+			local ARRAY_START_1 = Read(2 * Length)
+			for Index = 1, Length do
+				-- Item_1: SizeBoundedArray
+				-- Read 2
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local Item_1 = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeBoundedArray): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeBoundedArray
+			-- START ARRAY
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, #Value)
+				-- Allocate BLOCK: 2 bytes
+			local ARRAY_START_1 = Allocate(2 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: SizeBoundedArray
+				if typeof(Item_1) ~= "number" then
+					error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+				end
+				-- Allocate 2
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeOptionalByte = {
+		Read = function(Buffer: buffer): (SizeOptionalByte)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeOptionalByte
+			local Value
+			if buffer.readu8(RecieveBuffer, BLOCK_START + 0) == 1 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Value: SizeOptionalByte
+				Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeOptionalByte): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeOptionalByte
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value ~= nil and 1 or 0)
+			if Value ~= nil then
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: SizeOptionalByte
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
+			end
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeVector = {
+		Read = function(Buffer: buffer): (SizeVector)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 12 bytes
+			local BLOCK_START = Read(12)
+			-- Buffer read
+			-- Value: SizeVector
+			local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+			local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+			local Value = Vector3.new(X, Y, Z)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeVector): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 12 bytes
+			local BLOCK_START = Allocate(12)
+			-- Buffer write
+			-- Value: SizeVector
+			if typeof(Value) ~= "Vector3" then
+				error(`Expected Value to be of type Vector3, got {type(Value)} instead.`)
+			end
+			local Vector = Value
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeStruct = {
+		Read = function(Buffer: buffer): (SizeStruct)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			-- Buffer read
+			-- Value: SizeStruct
+			local Value = {} :: any
+			-- Value.A: A
+			Value.A = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Value.B: B
+			Value.B = (buffer.readu8(RecieveBuffer, BLOCK_START + 1) == 1)
+			-- Value.C: C
+			Value.C = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeStruct): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Buffer write
+			-- Value: SizeStruct
+			-- Value.A: A
+			if typeof(Value.A) ~= "number" then
+				error(`Expected Value.A to be of type number, got {type(Value.A)} instead.`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.A)
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.B and 1 or 0)
+			-- Value.C: C
+			if typeof(Value.C) ~= "number" then
+				error(`Expected Value.C to be of type number, got {type(Value.C)} instead.`)
+			end
+			buffer.writeu16(SendBuffer, BLOCK_START + 2, Value.C)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeEnum = {
+		Read = function(Buffer: buffer): (SizeEnum)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeEnum
+			local Value = true :: any
+			local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if Index == 0 then
+				Value = "A"
+			elseif Index == 1 then
+				Value = "B"
+			elseif Index == 2 then
+				Value = "C"
+			else
+				error(`Unexpected enum: {Index}`)
+			end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeEnum): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeEnum
+			if Value == "A" then
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+			elseif Value == "B" then
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+			elseif Value == "C" then
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+			else
+				error(`Unexpected enum: {Value}, expected one of "A" or "B" or "C".`)
+			end
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeFlags = {
+		Read = function(Buffer: buffer): (SizeFlags)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: SizeFlags
+			local Value = {}
+			local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.F1 = bit32.btest(SET_BITS, 0x1);
+			Value.F2 = bit32.btest(SET_BITS, 0x2);
+			Value.F3 = bit32.btest(SET_BITS, 0x4);
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeFlags): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: SizeFlags
+			local SET_BITS = 0
+			if Value.F1 == true then SET_BITS += 0x1 end
+			if Value.F2 == true then SET_BITS += 0x2 end
+			if Value.F3 == true then SET_BITS += 0x4 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, SET_BITS)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	SizeMap = {
+		Read = function(Buffer: buffer): (SizeMap)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: SizeMap
+			local Value = {}
+			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			for _ = 1, Elements_1 do
+				-- Key_1: SizeMap
+				local OFFSET_0 = Read(1)
+				local Key_1 = buffer.readu8(RecieveBuffer, OFFSET_0)
+				-- Element_1: SizeMap
+				local OFFSET_1 = Read(2)
+				local Element_1 = buffer.readu16(RecieveBuffer, OFFSET_1)
+				Value[Key_1] = Element_1
+			end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: SizeMap): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: SizeMap
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: SizeMap
+				if typeof(Key_1) ~= "number" then
+					error(`Expected Key_1 to be of type number, got {type(Key_1)} instead.`)
+				end
+				local OFFSET_0 = Allocate(1)
+				buffer.writeu8(SendBuffer, OFFSET_0, Key_1)
+				-- Element_1: SizeMap
+				if typeof(Element_1) ~= "number" then
+					error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
+				end
+				local OFFSET_1 = Allocate(2)
+				buffer.writeu16(SendBuffer, OFFSET_1, Element_1)
+			end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
 	MapNested = {
 		Read = function(Buffer: buffer): (MapNested)
 			-- Buffer overwrite
@@ -5465,6 +6599,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -5472,6 +6607,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -5479,6 +6615,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -5488,6 +6625,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -5548,6 +6686,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -5555,6 +6694,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -5562,6 +6702,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -5571,6 +6712,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -5669,6 +6811,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -5676,6 +6819,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -5683,6 +6827,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -5692,6 +6837,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -6427,6 +7573,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -6434,6 +7581,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: { number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -6441,6 +7589,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: { number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -6450,6 +7599,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: { number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -6464,6 +7614,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -6471,6 +7622,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: number?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -6478,6 +7630,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: number?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -6487,6 +7640,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: number?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -6593,6 +7747,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -6600,6 +7755,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -6607,6 +7763,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -6616,6 +7773,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -6630,6 +7788,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -6637,6 +7796,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -6644,6 +7804,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -6653,6 +7814,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -6781,6 +7943,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -6788,6 +7951,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -6795,6 +7959,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -6804,6 +7969,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -6818,6 +7984,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -6825,6 +7992,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -6832,6 +8000,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -6841,6 +8010,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -7267,6 +8437,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -7274,6 +8445,7 @@ local Returns = table.freeze({
 		FireAll = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -7281,6 +8453,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -7290,6 +8463,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do

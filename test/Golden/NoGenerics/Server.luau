@@ -159,6 +159,19 @@ local Queue: any = {
     Unreliable = table.create(256)
 }
 
+
+--> Roblox drops an unreliable payload past this size and tells nobody. The compiler
+--> refuses schemas that can never fit; this catches the ones that merely overflow at
+--> runtime, and says which event did it.
+local MAX_UNRELIABLE_SIZE = 900
+local function CheckUnreliableSize(Name: string): boolean
+	if SendCursor <= MAX_UNRELIABLE_SIZE then
+		return true
+	end
+
+	warn(`[Blink]: Dropped unreliable event "{Name}", {SendCursor} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+	return false
+end
 local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Reliable[0] = CreateQueue()
@@ -3693,6 +3706,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -3700,6 +3714,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -3707,6 +3722,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -3716,6 +3732,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -3776,6 +3793,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -3783,6 +3801,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -3790,6 +3809,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -3799,6 +3819,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -3883,6 +3904,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -3890,6 +3912,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -3897,6 +3920,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -3906,6 +3930,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: nil): ()
 			Load()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -4514,6 +4539,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -4521,6 +4547,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: { number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -4528,6 +4555,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: { number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -4537,6 +4565,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: { number }): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -4551,6 +4580,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -4558,6 +4588,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: number?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -4565,6 +4596,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: number?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -4574,6 +4606,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: number?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -4680,6 +4713,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -4687,6 +4721,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -4694,6 +4729,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -4703,6 +4739,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -4717,6 +4754,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -4724,6 +4762,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -4731,6 +4770,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -4740,6 +4780,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -4860,6 +4901,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -4867,6 +4909,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -4874,6 +4917,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -4883,6 +4927,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -4897,6 +4942,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -4904,6 +4950,7 @@ local Returns = table.freeze({
 		FireAll = function(Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -4911,6 +4958,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -4920,6 +4968,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value: number): ()
 			Load()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -5294,6 +5343,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -5301,6 +5351,7 @@ local Returns = table.freeze({
 		FireAll = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
@@ -5308,6 +5359,7 @@ local Returns = table.freeze({
 		FireList = function(List: {Player}, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
@@ -5317,6 +5369,7 @@ local Returns = table.freeze({
 		FireExcept = function(Except: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
 			Load()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do

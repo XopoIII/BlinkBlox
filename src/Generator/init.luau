@@ -59,6 +59,13 @@ local DEFAULT_MAX_PACKET_SIZE = 8192
 local DEFAULT_MAX_EVENTS_PER_PACKET = 64
 local DEFAULT_MAX_INSTANCES_PER_PACKET = 256
 
+--> OUTBOUND UNRELIABLE LIMIT. Roblox drops an UnreliableRemoteEvent payload past roughly this size,
+--> silently. The compiler already refuses a schema whose unreliable events cannot fit (see the
+--> parser's AnalyzeUnreliableSizes), but a bounded schema can still overflow at runtime -- a map with
+--> more entries than expected, a string longer than the game assumed -- and a dropped packet nobody
+--> is told about is the worst possible failure mode. This is the runtime half of that check.
+local DEFAULT_MAX_UNRELIABLE_SIZE = 900
+
 local SYNC_VALIDATION_BODY = {
 	`local SerdesEvent = "?"\n`,
 	"local SerdesThread: thread?\n",
@@ -549,9 +556,13 @@ function Declarations.Event(Declaration: Parser.Event)
 			Fire:Line(`local Previous = Save()`)
 			Fire:Line(`Load()`)
 			Fire:Line(WriteEvent)
-			Fire:Line("local Buffer = buffer.create(SendCursor)")
-			Fire:Line("buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)")
-			Fire:Line("Unreliable:FireServer(Buffer, SendInstances)")
+			--> Wrapped rather than returned out of: the saved buffer has to be restored either way,
+			--> and an early return here would leave the caller's outgoing state swapped out.
+			Fire:Line(`if CheckUnreliableSize("{Declaration.Name}") then`)
+			Fire:Line("\tlocal Buffer = buffer.create(SendCursor)")
+			Fire:Line("\tbuffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)")
+			Fire:Line("\tUnreliable:FireServer(Buffer, SendInstances)")
+			Fire:Line("end")
 			Fire:Line("Load(Previous)")
 		end
 		Fire:End()
@@ -567,6 +578,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		else
 			Fire:Line("Load()")
 			Fire:Line(WriteEvent)
+			Fire:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
 			Fire:Lines(UNRELIABLE_BODY, 1)
 			Fire:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
 		end
@@ -581,6 +593,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		else
 			FireAll:Line("Load()")
 			FireAll:Line(WriteEvent)
+			FireAll:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
 			FireAll:Lines(UNRELIABLE_BODY, 1)
 			FireAll:Line("Unreliable:FireAllClients(Buffer, SendInstances)")
 		end
@@ -595,6 +608,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		else
 			FireList:Line("Load()")
 			FireList:Line(WriteEvent)
+			FireList:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
 			FireList:Lines(UNRELIABLE_BODY, 1)
 			FireList:Iterator("_", "Player", "List"):Line("Unreliable:FireClient(Player, Buffer, SendInstances)"):End()
 		end
@@ -614,6 +628,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		else
 			FireExcept:Line("Load()")
 			FireExcept:Line(WriteEvent)
+			FireExcept:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
 			FireExcept:Lines(UNRELIABLE_BODY, 1)
 			FireExcept:Iterator("_", "Player", "Players:GetPlayers()")
 				:Compare("Player", "Except", "Equals")
@@ -1440,6 +1455,28 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		}
 	end
 
+	--> Emitted only when the schema actually has unreliable events -- most do not, and a helper
+	--> nothing calls is noise in a file people read when debugging their own traffic.
+	local UnreliableGuardBody = {}
+	if Channels.Unreliable.Count > 0 then
+		local MaxUnreliableSize = Options.MaxUnreliableSize or DEFAULT_MAX_UNRELIABLE_SIZE
+		UnreliableGuardBody = {
+			"\n",
+			"--> Roblox drops an unreliable payload past this size and tells nobody. The compiler\n",
+			"--> refuses schemas that can never fit; this catches the ones that merely overflow at\n",
+			"--> runtime, and says which event did it.\n",
+			`local MAX_UNRELIABLE_SIZE = {MaxUnreliableSize}\n`,
+			"local function CheckUnreliableSize(Name: string): boolean\n",
+			"\tif SendCursor <= MAX_UNRELIABLE_SIZE then\n",
+			"\t\treturn true\n",
+			"\tend\n",
+			"\n",
+			'\twarn(`[Blink]: Dropped unreliable event "{Name}", {SendCursor} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)\n',
+			"\treturn false\n",
+			"end\n",
+		}
+	end
+
 	local MergedOutput = Table.Merge(
 		DIRECTIVES,
 		VERSION_HEADER,
@@ -1449,6 +1486,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		{ "local SerdesFunctions = {}\n" },
 		{ `local BASE_EVENT_NAME = "{Options.RemoteScope and Options.RemoteScope .. "_" or ""}BLINK"\n` },
 		string.split(Sources.Base, "\r"),
+		UnreliableGuardBody,
 		(if Options.SyncValidation then SYNC_VALIDATION_BODY else {}),
 		Events.DumpLines(),
 		LuauTypes.DumpLines(),

@@ -23,7 +23,7 @@ Currently Blink supports either `Server` or `Client`.
 #### `Type`
 Determines the type (reliability) of the event.
 * `Reliable` - Events are guaranteed to arrive at their destination in the order they were sent in.
-* `Unreliable` - Events are not guaranteed to arrive at their destination or to arrive in the order they were sent in. They also have a maximum size of 1000 bytes.
+* `Unreliable` - Events are not guaranteed to arrive at their destination or to arrive in the order they were sent in. They also have a maximum size of roughly 1000 bytes, which Blink enforces at compile time and again on send -- see [`MaxUnreliableSize`](1-options#maxunreliablesize).
 
 #### `Call`
 Determines the listening API exposed on the receiving side.

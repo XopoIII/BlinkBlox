@@ -95,6 +95,30 @@ option MaxInstancesPerPacket = 512
 Only inbound server traffic is checked. The client trusts the server by construction, and capping
 what the server sends would drop legitimate replication.
 
+## `MaxUnreliableSize`
+Default: `900` bytes
+
+The largest payload an unreliable event may carry.
+
+Roblox drops an `UnreliableRemoteEvent` payload past roughly this size. It does so silently, and
+only under the conditions that produce a large packet, so the failure shows up in production for
+some players and never in testing.
+
+Blink checks this twice. At compile time it measures every unreliable event: one that can **never**
+fit is a hard error, and one that merely **might not** is a warning naming the field that has no
+upper bound. At runtime the send path checks the finished buffer and warns with the event's name
+rather than letting the packet vanish.
+
+```blink copy
+option MaxUnreliableSize = 900
+```
+
+<Callout>
+    Bounding the variable-length fields is what silences the warning: `string(0..64)` instead of
+    `string`, `u8[..16]` instead of `u8[]`. A `map` cannot be bounded in the language at all, so an
+    unreliable event carrying one always warns.
+</Callout>
+
 ## `Predict`
 Default: `false`
 

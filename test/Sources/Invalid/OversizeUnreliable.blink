@@ -1,0 +1,12 @@
+-- expect E3018
+-- 1000 fixed bytes plus the event index can never fit in an unreliable packet, so this is refused
+-- rather than left to fail intermittently in production.
+option ClientOutput = "../../Network/OversizeClient.luau"
+option ServerOutput = "../../Network/OversizeServer.luau"
+
+event Telemetry {
+    From: Client,
+    Type: Unreliable,
+    Call: SingleSync,
+    Data: u8[1000],
+}

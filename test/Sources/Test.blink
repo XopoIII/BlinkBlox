@@ -49,6 +49,24 @@ type ConstrainedArray = u8(0..10)[10]
 
 export type MultiDimensionalArray = u8[][][]
 
+-- Fixtures for the static size analysis. Each one exercises a branch of src/Modules/Size.luau, and
+-- the suite checks the measured bounds against the byte length the emitter actually produces.
+export type SizeByte = u8
+export type SizeFixedString = string(8)
+export type SizeBoundedString = string(0..64)
+export type SizeFixedArray = u8[4]
+export type SizeBoundedArray = u16[0..10]
+export type SizeOptionalByte = u8?
+export type SizeVector = vector
+export struct SizeStruct {
+    A: u8,
+    B: boolean,
+    C: u16,
+}
+export enum SizeEnum = {A, B, C}
+export set SizeFlags = {F1, F2, F3}
+export map SizeMap = {[u8]: u16}
+
 enum States = { A, B, C, D }
 
 set Flags8 = {F1, F2, F3, F4, F5, F6, F7, F8}

@@ -33,6 +33,17 @@ export type Primitive = {
 	AllowsRange: boolean,
 	AllowsOptional: boolean,
 	AllowedComponents: number,
+
+	--- Bytes this primitive occupies on the wire when its size is FIXED. Zero means the size is not
+	--- a property of the primitive alone: `string` and `buffer` depend on their range, `vector` and
+	--- `CFrame` on their component types, and `Instance`/`unknown` occupy no buffer bytes at all --
+	--- they ride the remote's second argument. `src/Modules/Size.luau` handles those cases and reads
+	--- this field for everything else.
+	---
+	--- It lives here rather than next to the prefabs that emit the writes because the Studio plugin
+	--- cannot reach `src/Generator/Prefabs.luau` -- it never loads `Blocks` -- and the size analysis
+	--- has to run in the editor for the oversize-unreliable diagnostic to appear there.
+	Bytes: number,
 }
 
 local Indexes = {
@@ -64,6 +75,7 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 1,
 	},
 	u16 = {
 		Bounds = NumberRange.new(0, 65535),
@@ -72,6 +84,7 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 2,
 	},
 	u32 = {
 		Bounds = NumberRange.new(0, 4294967295),
@@ -80,6 +93,7 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 4,
 	},
 	i8 = {
 		Bounds = NumberRange.new(-128, 127),
@@ -88,6 +102,7 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 1,
 	},
 	i16 = {
 		Bounds = NumberRange.new(-32768, 32767),
@@ -96,6 +111,7 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 2,
 	},
 	i32 = {
 		Bounds = NumberRange.new(-2147483648, 2147483647),
@@ -104,6 +120,7 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 4,
 	},
 	f16 = {
 		Bounds = NumberRange.new(-65504, 65504),
@@ -111,6 +128,7 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 2,
 	},
 	f32 = {
 		Bounds = NumberRange.new(-16777216, 16777216),
@@ -118,6 +136,7 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 4,
 	},
 	f64 = {
 		Bounds = NumberRange.new(-2 ^ 53, 2 ^ 53),
@@ -125,12 +144,14 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 8,
 	},
 	boolean = {
 		Component = false,
 		AllowsRange = false,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 1,
 	},
 	string = {
 		Bounds = NumberRange.new(0, 4294967295),
@@ -139,12 +160,14 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 0,
 	},
 	vector = {
 		Component = false,
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 1,
+		Bytes = 0,
 	},
 	buffer = {
 		Bounds = NumberRange.new(0, 4294967295),
@@ -153,48 +176,56 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = true,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 0,
 	},
 	Color3 = {
 		Component = false,
 		AllowsRange = false,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 3,
 	},
 	CFrame = {
 		Component = false,
 		AllowsRange = false,
 		AllowsOptional = true,
 		AllowedComponents = 2,
+		Bytes = 0,
 	},
 	Instance = {
 		Component = false,
 		AllowsRange = false,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 0,
 	},
 	BrickColor = {
 		Component = false,
 		AllowsRange = false,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 2,
 	},
 	unknown = {
 		Component = false,
 		AllowsRange = false,
 		AllowsOptional = false,
 		AllowedComponents = 0,
+		Bytes = 0,
 	},
 	DateTime = {
 		Component = false,
 		AllowsRange = false,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 8,
 	},
 	DateTimeMillis = {
 		Component = false,
 		AllowsRange = false,
 		AllowsOptional = true,
 		AllowedComponents = 0,
+		Bytes = 8,
 	},
 }
 

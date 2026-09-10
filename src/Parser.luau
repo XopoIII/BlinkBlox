@@ -5,6 +5,7 @@
 local Error = require("./Modules/Error")
 local Lexer = require("./Lexer")
 local PathParser = require("./Modules/Path")
+local Size = require("./Modules/Size")
 local Table = require("./Modules/Table")
 
 local Settings = require("./Settings")
@@ -95,6 +96,11 @@ export type Options = {
 	MaxEventsPerPacket: number?,
 	MaxInstancesPerPacket: number?,
 
+	--> Largest payload an unreliable event may carry. Roblox drops an UnreliableRemoteEvent past
+	--> roughly 900 bytes, so this is a property of the platform rather than a preference -- it is
+	--> configurable only because that ceiling has moved before.
+	MaxUnreliableSize: number?,
+
 	--> Generates a Predict entry point on each event, which dispatches to local listeners without
 	--> touching remotes. See the generator.
 	Predict: boolean?,
@@ -182,7 +188,9 @@ export type Event = Node<"Event", {
 	Type: "Reliable" | "Unreliable",
 	Call: EventCall,
 	Data: (TypeNode | Tuple)?,
-}, {}>
+}, {
+	Identifier: Token,
+}>
 
 export type Function = Node<"Function", {
 	Yield: "Future" | "Promise" | "Coroutine",
@@ -190,10 +198,19 @@ export type Function = Node<"Function", {
 	Return: (TypeNode | Tuple)?,
 }, {}>
 
-export type ScopeNode = Node<"Scope", {
-	Scope: Scope,
-	Values: { Declaration },
-}, {}>
+export type ScopeNode = Node<
+	"Scope",
+	{
+		Scope: Scope,
+		Values: { Declaration },
+		--- Set when the scope came from an `import` rather than a `scope` block in this file. Its
+		--- declarations carry spans into the IMPORTED source, so any diagnostic about them has to be
+		--- raised by the parse of that file -- pointing at those offsets in this one underlines
+		--- whatever text happens to sit there.
+		Imported: boolean?,
+	},
+	{}
+>
 
 ---- Settings ----
 
@@ -214,6 +231,7 @@ local OPTIONS: { [string]: Lexer.Types } = {
 	MaxPacketSize = "Number",
 	MaxEventsPerPacket = "Number",
 	MaxInstancesPerPacket = "Number",
+	MaxUnreliableSize = "Number",
 	Predict = "Boolean",
 }
 
@@ -307,6 +325,11 @@ local GENERICS_TYPES = {
 local RESERVED = {
 	StepReplication = true,
 }
+
+--- Roblox drops an UnreliableRemoteEvent payload past roughly this many bytes. It does so silently
+--- and intermittently, which is why the compiler refuses a schema that cannot fit instead of leaving
+--- it to be discovered in production.
+local DEFAULT_MAX_UNRELIABLE_SIZE = 900
 
 local PRIMITIVES = Settings.Primtives
 local ARRAY_BOUNDS = NumberRange.new(0, (PRIMITIVES.u16.Bounds :: NumberRange).Max)
@@ -834,6 +857,82 @@ end
 
 ---- Top-Level Parsing Functions ----
 
+--- Refuses unreliable events that cannot fit in a single unreliable packet, and warns about the ones
+--- that merely might not.
+---
+--- Only declarations from THIS file are walked. An imported scope holds nodes whose spans index the
+--- imported source, so the parse of that file raises its own diagnostics -- underlining those offsets
+--- here would point at unrelated text.
+local function AnalyzeUnreliableSizes(self: Parser, Declarations: { Declaration }, Options: Options)
+	local Limit = Options.MaxUnreliableSize or DEFAULT_MAX_UNRELIABLE_SIZE
+
+	for _, Declaration in Declarations do
+		if Declaration.Type == "Scope" then
+			local Scope = Declaration :: ScopeNode
+			if not Scope.Value.Imported then
+				AnalyzeUnreliableSizes(self, Scope.Value.Values, Options)
+			end
+
+			continue
+		end
+
+		if Declaration.Type ~= "Event" then
+			continue
+		end
+
+		local Event = Declaration :: Event
+		if Event.Value.Type ~= "Unreliable" then
+			continue
+		end
+
+		local Data = Event.Value.Data
+		local Measured = if Data then Size.Measure(Data :: any) else nil
+
+		--> The event index is one byte, written ahead of the payload.
+		local Minimum = 1 + (if Measured then Measured.Min else 0)
+		local Maximum = 1 + (if Measured then Measured.Max else 0)
+		local Identifier = Event.Tokens.Identifier
+
+		if Minimum > Limit then
+			Error.new(
+				Error.AnalyzeOversizeUnreliable,
+				self.Source,
+				`Unreliable event "{Event.Name}" cannot fit in one packet`,
+				self.File
+			)
+				:Primary(Identifier, `Always at least {Minimum} bytes, the limit is {Limit}`)
+				:Note("Roblox drops unreliable payloads past this size. Send it as a Reliable event instead.")
+				:Emit()
+		end
+
+		if Maximum <= Limit then
+			continue
+		end
+
+		--> An unbounded type reports a real but absurd maximum -- a map of structs measures in the
+		--> gigabytes -- and quoting that number reads as a compiler bug rather than as advice.
+		local Bound = if (Measured and Measured.Unbounded)
+			then `Unbounded, and the limit is {Limit} bytes`
+			else `Up to {Maximum} bytes, the limit is {Limit}`
+
+		local Diagnostic = Error.new(
+			Error.AnalyzePotentiallyOversizeUnreliable,
+			self.Source,
+			`Unreliable event "{Event.Name}" may exceed the packet limit`,
+			self.File,
+			"Warning"
+		):Primary(Identifier, Bound)
+
+		local Culprit = if Measured then Measured.Culprit else nil
+		if Culprit then
+			Diagnostic:Secondary(Culprit, "This has no upper bound")
+		end
+
+		Diagnostic:Note("Bound the variable-length fields -- `string(0..64)`, `u8[..16]` -- or send it reliably.")
+			:Warn()
+	end
+end
+
 function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
 	--> Set state
 	self.Scope = Scope or { Name = { Value = "", Start = 0, End = 0 } :: any, Symbols = { Types = {}, Scopes = {} } }
@@ -849,6 +948,8 @@ function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
 	local Declarations = self:Declarations()
 
 	Options.SyncValidation = if Options.SyncValidation ~= nil then Options.SyncValidation else true
+
+	AnalyzeUnreliableSizes(self, Declarations, Options)
 
 	return {
 		Type = "Body",
@@ -942,6 +1043,7 @@ function Parser.Import(self: Parser): ScopeNode
 		Value = {
 			Scope = Scope,
 			Values = AST.Value.Declarations,
+			Imported = true,
 		},
 		Tokens = {},
 	}
@@ -1236,7 +1338,9 @@ function Parser.Event(self: Parser, Name: Token): Event
 			Call = Call,
 			Data = Structure.Data,
 		},
-		Tokens = {},
+		Tokens = {
+			Identifier = Name,
+		},
 	}
 end
 
