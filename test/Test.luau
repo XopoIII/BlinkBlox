@@ -1941,6 +1941,63 @@ RunClosure("Decoding stops when the player leaves", function()
 	end
 end)
 
+RunClosure("Offset-encoded lengths", function()
+	--> A length is written relative to the declared minimum, in the smallest numeral that holds the
+	--> SPAN. `u8[300..400]` has a hundred possible lengths, so one byte carries it -- where encoding
+	--> 400 directly would have needed two.
+
+	local Bounded = table.create(300, 7)
+	local ArrayBuffer = Client.OffsetArray.Write(Bounded)
+
+	if buffer.len(ArrayBuffer) ~= 301 then
+		ErrorPrint(
+			`Failed "Offset-encoded lengths": a 300-element array took {buffer.len(ArrayBuffer)} bytes, expected 301.`
+		)
+	end
+
+	if not Equals(Client.OffsetArray.Read(ArrayBuffer), Bounded) then
+		ErrorPrint(`Failed "Offset-encoded lengths": the array did not survive the round trip.`)
+	end
+
+	--> The far end of the range must round-trip too: that is where the offset is largest.
+	local Full = table.create(400, 3)
+	if not Equals(Client.OffsetArray.Read(Client.OffsetArray.Write(Full)), Full) then
+		ErrorPrint(`Failed "Offset-encoded lengths": a full-length array did not survive the round trip.`)
+	end
+
+	local Text = string.rep("a", 320)
+	local TextBuffer = Client.OffsetString.Write(Text)
+
+	if buffer.len(TextBuffer) ~= 321 then
+		ErrorPrint(
+			`Failed "Offset-encoded lengths": a 320-character string took {buffer.len(TextBuffer)} bytes, expected 321.`
+		)
+	end
+
+	if Client.OffsetString.Read(TextBuffer) ~= Text then
+		ErrorPrint(`Failed "Offset-encoded lengths": the string did not survive the round trip.`)
+	end
+
+	local Bytes = buffer.create(350)
+	local BytesBuffer = Client.OffsetBuffer.Write(Bytes)
+
+	if buffer.len(BytesBuffer) ~= 351 then
+		ErrorPrint(
+			`Failed "Offset-encoded lengths": a 350-byte buffer took {buffer.len(BytesBuffer)} bytes, expected 351.`
+		)
+	end
+
+	--> Below the minimum the offset would go negative and wrap. It has to be refused by the SENDER,
+	--> not discovered by the receiver as an unattributable length violation.
+	local Refused = pcall(function()
+		return Client.OffsetArray.Write(table.create(10, 1))
+	end)
+
+	if Refused then
+		ErrorPrint(`Failed "Offset-encoded lengths": an array below the minimum was encoded anyway.`)
+	end
+end)
+
 RunClosure("Bit packing", function()
 	--> Booleans and optional presence flags take one BIT of a shared byte rather than a byte each.
 	--> The numbers that matter are the ones either side of a byte boundary, and the round trip

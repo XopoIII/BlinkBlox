@@ -284,6 +284,9 @@ export type SizeStruct = { A: number, B: boolean, C: number }
 export type SizeEnum = ("A" | "B" | "C")
 export type SizeFlags = {F1: boolean,F2: boolean,F3: boolean,}
 export type SizeMap = {[number]: number}
+export type OffsetArray = { number }
+export type OffsetString = string
+export type OffsetBuffer = buffer
 export type BitsOne = { A: boolean }
 export type BitsSeven = { A: boolean, B: boolean, C: boolean, D: boolean, E: boolean, F: boolean, G: boolean }
 export type BitsEight = { A: boolean, B: boolean, C: boolean, D: boolean, E: boolean, F: boolean, G: boolean, H: boolean }
@@ -3898,6 +3901,176 @@ if not RunService:IsRunning() then
 			return Result
 		end
 	},
+	OffsetArray = {
+		Read = function(Buffer: buffer): (OffsetArray)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: OffsetArray
+			-- START ARRAY
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 300
+			if Length < 300 then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
+			if Length > 400 then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
+			local Value = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_1 = Read(1 * Length)
+			for Index = 1, Length do
+				-- Item_1: OffsetArray
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: OffsetArray): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: OffsetArray
+			-- START ARRAY
+			if #Value < 300 then error(`Expected "#Value" to be larger than 300, got {#Value} instead.`) end
+			if #Value > 400 then error(`Expected "#Value" to be smaller than 400, got {#Value} instead.`) end
+			local LengthOffset = #Value - 300
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: OffsetArray
+				if typeof(Item_1) ~= "number" then
+					error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+				end
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	OffsetString = {
+		Read = function(Buffer: buffer): (OffsetString)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: OffsetString
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 300
+			local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			if #Value < 300 then error(`Expected length of "Value" to be larger than 300, got {#Value} instead.`) end
+			if #Value > 400 then error(`Expected length of "Value" to be smaller than 400, got {#Value} instead.`) end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: OffsetString): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: OffsetString
+			if typeof(Value) ~= "string" then
+				error(`Expected Value to be of type string, got {type(Value)} instead.`)
+			end
+			if #Value < 300 then error(`Expected length of "Value" to be larger than 300, got {#Value} instead.`) end
+			if #Value > 400 then error(`Expected length of "Value" to be smaller than 400, got {#Value} instead.`) end
+			local Length = #Value
+			if Length < 300 then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
+			if Length > 400 then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
+			local LengthOffset = Length - 300
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+			Allocate(Length)
+			buffer.writestring(SendBuffer, SendOffset, Value, Length)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	OffsetBuffer = {
+		Read = function(Buffer: buffer): (OffsetBuffer)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: OffsetBuffer
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 300
+			local Value = buffer.create(Length)
+			buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
+			if buffer.len(Value) < 300 then error(`Expected size of "Value" to be larger than 300, got {buffer.len(Value)} instead.`) end
+			if buffer.len(Value) > 400 then error(`Expected size of "Value" to be smaller than 400, got {buffer.len(Value)} instead.`) end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: OffsetBuffer): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: OffsetBuffer
+			if typeof(Value) ~= "buffer" then
+				error(`Expected Value to be of type buffer, got {type(Value)} instead.`)
+			end
+			if buffer.len(Value) < 300 then error(`Expected size of "Value" to be larger than 300, got {buffer.len(Value)} instead.`) end
+			if buffer.len(Value) > 400 then error(`Expected size of "Value" to be smaller than 400, got {buffer.len(Value)} instead.`) end
+			local Length = buffer.len(Value)
+			if Length < 300 then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
+			if Length > 400 then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
+			local LengthOffset = Length - 300
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+			Allocate(Length)
+			buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
 	BitsOne = {
 		Read = function(Buffer: buffer): (BitsOne)
 			-- Buffer overwrite
@@ -6870,6 +7043,176 @@ local Returns = table.freeze({
 				buffer.writeu16(SendBuffer, OFFSET_1, Element_1)
 			end
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	OffsetArray = {
+		Read = function(Buffer: buffer): (OffsetArray)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: OffsetArray
+			-- START ARRAY
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 300
+			if Length < 300 then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
+			if Length > 400 then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
+			local Value = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_1 = Read(1 * Length)
+			for Index = 1, Length do
+				-- Item_1: OffsetArray
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: OffsetArray): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: OffsetArray
+			-- START ARRAY
+			if #Value < 300 then error(`Expected "#Value" to be larger than 300, got {#Value} instead.`) end
+			if #Value > 400 then error(`Expected "#Value" to be smaller than 400, got {#Value} instead.`) end
+			local LengthOffset = #Value - 300
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: OffsetArray
+				if typeof(Item_1) ~= "number" then
+					error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+				end
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	OffsetString = {
+		Read = function(Buffer: buffer): (OffsetString)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: OffsetString
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 300
+			local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			if #Value < 300 then error(`Expected length of "Value" to be larger than 300, got {#Value} instead.`) end
+			if #Value > 400 then error(`Expected length of "Value" to be smaller than 400, got {#Value} instead.`) end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: OffsetString): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: OffsetString
+			if typeof(Value) ~= "string" then
+				error(`Expected Value to be of type string, got {type(Value)} instead.`)
+			end
+			if #Value < 300 then error(`Expected length of "Value" to be larger than 300, got {#Value} instead.`) end
+			if #Value > 400 then error(`Expected length of "Value" to be smaller than 400, got {#Value} instead.`) end
+			local Length = #Value
+			if Length < 300 then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
+			if Length > 400 then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
+			local LengthOffset = Length - 300
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+			Allocate(Length)
+			buffer.writestring(SendBuffer, SendOffset, Value, Length)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	OffsetBuffer = {
+		Read = function(Buffer: buffer): (OffsetBuffer)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: OffsetBuffer
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 300
+			local Value = buffer.create(Length)
+			buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
+			if buffer.len(Value) < 300 then error(`Expected size of "Value" to be larger than 300, got {buffer.len(Value)} instead.`) end
+			if buffer.len(Value) > 400 then error(`Expected size of "Value" to be smaller than 400, got {buffer.len(Value)} instead.`) end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: OffsetBuffer): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: OffsetBuffer
+			if typeof(Value) ~= "buffer" then
+				error(`Expected Value to be of type buffer, got {type(Value)} instead.`)
+			end
+			if buffer.len(Value) < 300 then error(`Expected size of "Value" to be larger than 300, got {buffer.len(Value)} instead.`) end
+			if buffer.len(Value) > 400 then error(`Expected size of "Value" to be smaller than 400, got {buffer.len(Value)} instead.`) end
+			local Length = buffer.len(Value)
+			if Length < 300 then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
+			if Length > 400 then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
+			local LengthOffset = Length - 300
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+			Allocate(Length)
+			buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
 			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)

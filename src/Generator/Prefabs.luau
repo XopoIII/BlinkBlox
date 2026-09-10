@@ -314,10 +314,20 @@ do
 				return
 			end
 
+			--> The length is encoded RELATIVE to the declared minimum, in the smallest numeral that
+			--> holds the span: `string(300..400)` spends one byte on a hundred possible lengths rather
+			--> than the two that 400 alone would need.
 			local Upper = Range and Range.Max or (2 ^ 16 - 1)
-			local LengthType = GetTypeToUse(Upper)
+			local Lower = Range and Range.Min or 0
+			local LengthType = GetTypeToUse(Upper - Lower)
 
-			LengthType.Read("Length", Block)
+			if Lower > 0 then
+				LengthType.Read("LengthOffset", Block)
+				Block:Line(`local Length = LengthOffset + {Lower}`)
+			else
+				LengthType.Read("Length", Block)
+			end
+
 			Block:Line(`{Block:Declare(Variable)} = buffer.readstring({RECIEVE_BUFFER}, Read(Length), Length)`)
 		end,
 		Write = function(Value: string, Block: Block, Range: NumberRange?)
@@ -327,10 +337,24 @@ do
 			end
 
 			local Upper = Range and Range.Max or (2 ^ 16 - 1)
-			local LengthType = GetTypeToUse(Upper)
+			local Lower = Range and Range.Min or 0
+			local LengthType = GetTypeToUse(Upper - Lower)
 
 			Block:Line(`local Length = #{Value}`)
-			LengthType.Write("Length", Block)
+
+			if Lower > 0 then
+				--> Checked on send, unconditionally: a string shorter than the minimum would encode as
+				--> a negative offset, wrap to a large unsigned value, and fail on the receiver as a
+				--> length violation that names neither the field nor the sender.
+				local Assert = Asserts.number("Length", Lower, Upper)
+				Block:Line(Assert.Lower)
+				Block:Line(Assert.Upper)
+				Block:Line(`local LengthOffset = Length - {Lower}`)
+				LengthType.Write("LengthOffset", Block)
+			else
+				LengthType.Write("Length", Block)
+			end
+
 			Block:Line(`Allocate(Length)`)
 			Block:Line(`buffer.writestring({SEND_BUFFER}, {SEND_POSITION}, {Value}, Length)`)
 		end,
@@ -387,8 +411,16 @@ do
 			end
 
 			local Upper = Range and Range.Max or (2 ^ 16 - 1)
-			local LengthType = GetTypeToUse(Upper)
-			LengthType.Read("Length", Block)
+			local Lower = Range and Range.Min or 0
+			local LengthType = GetTypeToUse(Upper - Lower)
+
+			if Lower > 0 then
+				LengthType.Read("LengthOffset", Block)
+				Block:Line(`local Length = LengthOffset + {Lower}`)
+			else
+				LengthType.Read("Length", Block)
+			end
+
 			Block:Line(`{Block:Declare(Variable)} = buffer.create(Length)`)
 			Block:Line(`buffer.copy({Variable}, 0, {RECIEVE_BUFFER}, Read(Length), Length)`)
 		end,
@@ -399,9 +431,21 @@ do
 			end
 
 			local Upper = Range and Range.Max or (2 ^ 16 - 1)
-			local LengthType = GetTypeToUse(Upper)
+			local Lower = Range and Range.Min or 0
+			local LengthType = GetTypeToUse(Upper - Lower)
+
 			Block:Line(`local Length = buffer.len({Value})`)
-			LengthType.Write("Length", Block)
+
+			if Lower > 0 then
+				local Assert = Asserts.number("Length", Lower, Upper)
+				Block:Line(Assert.Lower)
+				Block:Line(Assert.Upper)
+				Block:Line(`local LengthOffset = Length - {Lower}`)
+				LengthType.Write("LengthOffset", Block)
+			else
+				LengthType.Write("Length", Block)
+			end
+
 			Block:Line(`Allocate(Length)`)
 			Block:Line(`buffer.copy({SEND_BUFFER}, {SEND_POSITION}, {Value}, 0, Length)`)
 		end,

@@ -62,7 +62,8 @@ local MAP_LENGTH = (2 ^ 16 - 1)
 
 local BITS_PER_BYTE = 8
 
---- Bytes the generator spends on a length prefix, mirroring `Prefabs.GetTypeToUse`.
+--- Bytes the generator spends on a length prefix, mirroring `Prefabs.GetTypeToUse`. The argument is
+--- the SPAN between the bounds, not the upper bound: lengths are encoded relative to the minimum.
 local function LengthPrefixBytes(Upper: number): number
 	if Upper <= 255 then
 		return 1
@@ -166,7 +167,7 @@ local function MeasurePrimitive(Node: Node): Measurement
 
 		local Upper = if Range then Range.Max else DEFAULT_LENGTH
 		local Lower = if Range then Range.Min else 0
-		local Prefix = LengthPrefixBytes(Upper)
+		local Prefix = LengthPrefixBytes(Upper - Lower)
 
 		Result.Min = Prefix + Lower
 		Result.Max = Prefix + Upper
@@ -232,7 +233,7 @@ local function MeasureArray(Node: Node): Measurement
 		return Result
 	end
 
-	local Prefix = LengthPrefixBytes(Upper)
+	local Prefix = LengthPrefixBytes(Upper - Lower)
 	Result.Min = Prefix + (Of.Min * Lower)
 	Result.Max = Prefix + (Of.Max * Upper)
 	Result.Refs = Of.Refs * Upper

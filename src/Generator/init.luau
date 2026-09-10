@@ -951,13 +951,35 @@ function Declarations.Array(Declaration: Parser.Array, Read: Blocks.Block, Write
 
 	--> Length
 	if IsVariableSize then
-		local LengthType = Prefabs.GetTypeToUse(Upper)
-		LengthType.Read("Length", Read)
+		--> Encoded RELATIVE to the declared minimum, in the smallest numeral that can hold the span.
+		--> `u8[300..400]` needs one byte for a hundred possible lengths, not the two that 400 would
+		--> otherwise demand -- and a length below the minimum can no longer be written at all.
+		local Span = (Upper - Lower)
+		local LengthType = Prefabs.GetTypeToUse(Span)
 		local Assert = Prefabs.Asserts.number("Length", Lower, Upper)
+
+		if Lower > 0 then
+			LengthType.Read("LengthOffset", Read)
+			Read:Line(`local Length = LengthOffset + {Lower}`)
+		else
+			LengthType.Read("Length", Read)
+		end
 
 		Read:Line(Assert.Lower)
 		Read:Line(Assert.Upper)
-		LengthType.Write(`#{Variable}`, Write)
+
+		if Lower > 0 then
+			--> Checked on the SEND side too, and unconditionally. An array shorter than the minimum
+			--> would otherwise encode as a negative offset, wrap to a large unsigned value, and fail
+			--> on the receiver as a length violation that names neither the array nor the sender.
+			local WriteAssert = Prefabs.Asserts.number(`#{Variable}`, Lower, Upper)
+			Write:Line(WriteAssert.Lower)
+			Write:Line(WriteAssert.Upper)
+			Write:Line(`local LengthOffset = #{Variable} - {Lower}`)
+			LengthType.Write("LengthOffset", Write)
+		else
+			LengthType.Write(`#{Variable}`, Write)
+		end
 	else
 		Read:Line(`local Length = {Upper}`)
 	end

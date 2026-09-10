@@ -67,6 +67,12 @@ export enum SizeEnum = {A, B, C}
 export set SizeFlags = {F1, F2, F3}
 export map SizeMap = {[u8]: u16}
 
+-- Fixtures for offset-encoded lengths. A span of a hundred fits in one byte however high the bounds
+-- sit, so these cost one byte of length where they used to cost two.
+export type OffsetArray = u8[300..400]
+export type OffsetString = string(300..400)
+export type OffsetBuffer = buffer(300..400)
+
 -- Fixtures for bit packing. The interesting numbers are the ones either side of a byte boundary:
 -- one bit and seven bits still cost a byte, eight exactly fill it, nine spill into a second.
 export struct BitsOne {
