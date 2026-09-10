@@ -94,10 +94,15 @@ Consequences worth remembering:
 
 ### The prompt trap
 
-`stdio.prompt` throws `IO error: not a terminal` when stdin is not a TTY. It does not degrade — it
-aborts. This bit the test runner (it could never run in CI) and it bites the CLI in any automated
-pipeline. Always pass `--yes` when driving the CLI from a script, and note that flag order matters:
-`blink <schema> --yes`, never `blink --yes <schema>`.
+`stdio.prompt` does not degrade when stdin is not a TTY — it throws `IO error: not a terminal`, and
+under some runners simply blocks with nothing printed. Any prompt reached from a script, a git hook
+or CI must therefore be guarded.
+
+Both callers are fixed: the CLI creates a missing output directory instead of asking when no
+terminal is attached, and the test runner compiles by default. `--yes` still forces it explicitly,
+and flag order no longer matters — the config path is the first non-flag argument.
+
+Keep this in mind before adding any new prompt.
 
 ## Downstream
 

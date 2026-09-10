@@ -57,8 +57,17 @@ local function CreateDirectoryIfNotFound(Path: string, Options: CompileOptions)
 		return
 	end
 
+	--> `stdio.prompt` does not degrade when stdin is not a TTY -- it throws
+	--> "IO error: not a terminal", and under some runners it simply blocks with nothing printed. So
+	--> a build driven by a script, a git hook or CI used to hang or fail here for no visible reason,
+	--> which is why every automated caller has to remember `--yes`.
+	--> Asking is only meaningful when someone is there to answer: with no terminal, creating the
+	--> directory is the answer the user already gave by naming that output path in the schema.
 	local Result = Options.YesToEverything
-		or stdio.prompt("confirm", `Directory {Directory} doesn't exist, create directory?`)
+	if not Result then
+		local Asked, Answer = pcall(stdio.prompt, "confirm", `Directory {Directory} doesn't exist, create directory?`)
+		Result = if Asked then Answer else true
+	end
 
 	if Result then
 		fs.writeDir(Directory)

@@ -97,13 +97,13 @@ if #RawArguments < 1 then
 	return nil
 end
 
-local Path = RawArguments[1]
-
 --> Parse optional arguments
 local Arguments = {}
+local IsFlag: { [string]: true } = {}
 for Key, Argument in ARGUMENTS do
 	local IsSupplied = false
 	for _, Alias in Argument.Aliases do
+		IsFlag[Alias] = true
 		if table.find(RawArguments, Alias) ~= nil then
 			IsSupplied = true
 			break
@@ -113,12 +113,30 @@ for Key, Argument in ARGUMENTS do
 	Arguments[Key] = IsSupplied
 end
 
+--> The config path is the first argument that is not a flag, rather than argument #1.
+--> Taking position 1 blindly meant `blink --yes input.blink` read a file literally named "--yes",
+--> so flag order was load-bearing in a way nothing announced -- and the failure surfaced as a
+--> missing-file error naming the flag, which reads like a bug in the caller.
+local Path: string?
+for _, Argument in RawArguments do
+	if not IsFlag[Argument] then
+		Path = Argument
+		break
+	end
+end
+
 if Arguments.Help then
 	PrintHelpMessage()
 	return nil
 end
 
 if Arguments.Version then
+	return nil
+end
+
+--> Flags only, no config: the same situation as no arguments at all.
+if not Path then
+	PrintHelpMessage()
 	return nil
 end
 
