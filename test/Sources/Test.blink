@@ -87,6 +87,15 @@ event RateLimitedPoll {
     Data: u8,
 }
 
+-- An unbounded string over an unreliable channel: the compiler warns (W3019) and the runtime guard
+-- catches the payloads that actually overflow.
+event UnreliableOversize {
+    From: Client,
+    Type: Unreliable,
+    Call: SingleSync,
+    Data: string,
+}
+
 function RateLimitedCall {
     Yield: Coroutine,
     Rate: 2,

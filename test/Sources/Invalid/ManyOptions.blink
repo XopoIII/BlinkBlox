@@ -1,0 +1,28 @@
+-- expect W3017
+-- Twenty option statements. The parser used to stop reading them once it had seen as many as there
+-- are KNOWN options, so everything past the cut was reported as "Option set after start of file"
+-- instead of being applied. UseColon sits last on purpose: its deprecation warning only appears if
+-- the parser actually got that far.
+option Casing = Pascal
+option UsePolling = false
+option Typescript = false
+option SyncValidation = true
+option WriteValidations = false
+option ManualReplication = false
+option RemoteScope = "MANY"
+option MaxPacketSize = 8192
+option MaxEventsPerPacket = 64
+option MaxInstancesPerPacket = 256
+option MaxUnreliableSize = 900
+option DefaultRate = 30
+option RequireRates = false
+option Predict = false
+option ClientOutput = "../../Network/ManyClient.luau"
+option ServerOutput = "../../Network/ManyServer.luau"
+option UseColon = true
+
+event Ping {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+}

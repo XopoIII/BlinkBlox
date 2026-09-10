@@ -190,18 +190,19 @@ local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Reliable[0] = table.create(256)
 Queue.Reliable[1] = CreateQueue()
+Queue.Unreliable[1] = table.create(256)
 Queue.Reliable[2] = table.create(256)
 Queue.Reliable[4] = CreateQueue()
-Queue.Unreliable[1] = CreateQueue()
-Queue.Reliable[5] = CreateQueue()
 Queue.Unreliable[2] = CreateQueue()
+Queue.Reliable[5] = CreateQueue()
+Queue.Unreliable[3] = CreateQueue()
 Queue.Reliable[8] = table.create(256)
-Queue.Unreliable[5] = table.create(256)
+Queue.Unreliable[6] = table.create(256)
 Queue.Reliable[10] = table.create(256)
 Queue.Reliable[11] = table.create(256)
 Queue.Reliable[19] = table.create(256)
 Queue.Reliable[31] = table.create(256)
-Queue.Unreliable[13] = table.create(256)
+Queue.Unreliable[14] = table.create(256)
 Queue.Reliable[39] = table.create(256)
 Queue.Reliable[41] = table.create(256)
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
@@ -349,6 +350,15 @@ function SerdesFunctions.ReadEVENT_RateLimitedPoll(): (number)
 	local BLOCK_START = Read(1)
 	-- Value: RateLimitedPoll
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	return Value
+end
+
+function SerdesFunctions.ReadEVENT_UnreliableOversize(): (string)
+	-- Read BLOCK: 2 bytes
+	local BLOCK_START = Read(2)
+	-- Value: UnreliableOversize
+	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
 	return Value
 end
 
@@ -961,8 +971,8 @@ end
 function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 	-- Allocate BLOCK: 23 bytes
 	local BLOCK_START = Allocate(23)
-	-- EVENT_ServerUnreliablePollEvent (3)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
+	-- EVENT_ServerUnreliablePollEvent (4)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 4)
 	-- Value: ServerUnreliablePollEvent
 	-- Value.Field: Field
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Field ~= nil and 1 or 0)
@@ -1173,8 +1183,8 @@ end
 function SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value: nil): ()
 	-- Allocate BLOCK: 1 bytes
 	local BLOCK_START = Allocate(1)
-	-- EVENT_ServerEmptyUnreliablePollEvent (4)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 4)
+	-- EVENT_ServerEmptyUnreliablePollEvent (5)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 5)
 end
 
 function SerdesFunctions.ReadEVENT_ClientEmptyEvent(): (nil)
@@ -1195,8 +1205,8 @@ end
 function SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value: nil): ()
 	-- Allocate BLOCK: 1 bytes
 	local BLOCK_START = Allocate(1)
-	-- EVENT_EmptyUnreliableEvent (6)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 6)
+	-- EVENT_EmptyUnreliableEvent (7)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 7)
 end
 
 function SerdesFunctions.ReadFUNCTION_DATA_EmptyFunction(): (nil)
@@ -1785,8 +1795,8 @@ end
 function SerdesFunctions.WriteEVENT_ArrayPrimitive(Value: { number }): ()
 	-- Allocate BLOCK: 1 bytes
 	local BLOCK_START = Allocate(1)
-	-- EVENT_ArrayPrimitive (7)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 7)
+	-- EVENT_ArrayPrimitive (8)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 8)
 	-- Value: ArrayPrimitive
 	-- START ARRAY
 		-- Allocate BLOCK: 1 bytes
@@ -1808,8 +1818,8 @@ end
 function SerdesFunctions.WriteEVENT_OptionalPrimitive(Value: number?): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- EVENT_OptionalPrimitive (8)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 8)
+	-- EVENT_OptionalPrimitive (9)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 9)
 	-- Value: OptionalPrimitive
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value ~= nil and 1 or 0)
 	if Value ~= nil then
@@ -1850,8 +1860,8 @@ end
 function SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- EVENT_ManyUnreliableSync (9)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 9)
+	-- EVENT_ManyUnreliableSync (10)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 10)
 	-- Value: ManyUnreliableSync
 	if typeof(Value) ~= "number" then
 		error(`Expected Value to be of type number, got {type(Value)} instead.`)
@@ -1862,8 +1872,8 @@ end
 function SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- EVENT_ManyUnreliableAsync (10)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 10)
+	-- EVENT_ManyUnreliableAsync (11)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 11)
 	-- Value: ManyUnreliableAsync
 	if typeof(Value) ~= "number" then
 		error(`Expected Value to be of type number, got {type(Value)} instead.`)
@@ -1906,8 +1916,8 @@ end
 function SerdesFunctions.WriteEVENT_UnreliableServer(Value: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- EVENT_UnreliableServer (11)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 11)
+	-- EVENT_UnreliableServer (12)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 12)
 	-- Value: UnreliableServer
 	if typeof(Value) ~= "number" then
 		error(`Expected Value to be of type number, got {type(Value)} instead.`)
@@ -1918,8 +1928,8 @@ end
 function SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- EVENT_UnreliableServerAsync (12)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 12)
+	-- EVENT_UnreliableServerAsync (13)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 13)
 	-- Value: UnreliableServerAsync
 	if typeof(Value) ~= "number" then
 		error(`Expected Value to be of type number, got {type(Value)} instead.`)
@@ -2427,8 +2437,8 @@ end
 function SerdesFunctions.WriteEVENT_TupleUnreliable(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
 	-- Allocate BLOCK: 4 bytes
 	local BLOCK_START = Allocate(4)
-	-- EVENT_TupleUnreliable (14)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 14)
+	-- EVENT_TupleUnreliable (15)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 15)
 	-- Value: TupleUnreliable
 	-- Value1: TupleUnreliable
 	if typeof(Value1) ~= "number" then
@@ -3973,6 +3983,10 @@ if not RunService:IsRunning() then
 		Iter = NOOP_RETURNING,
 		Next = NOOP_RETURNING
 	},
+	UnreliableOversize = {
+		On = NOOP_RETURNING,
+		Predict = NOOP
+	},
 	RateLimitedCall = {
 		On = NOOP_RETURNING
 	},
@@ -4920,20 +4934,26 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		local Parsed = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		if Index == 1 then
-			Push(Queue.Unreliable[1], table.pack(Player, SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent()))
-		elseif Index == 2 then
-			Push(Queue.Unreliable[2], table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyUnreliablePollEvent()))
-		elseif Index == 5 then
-			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyUnreliableEvent()
-			if Events.Unreliable[5] ~= nil then
-				SerdesEvent = "ClientEmptyUnreliableEvent"
-				Events.Unreliable[5](Player, Value)
+			local Value: string = SerdesFunctions.ReadEVENT_UnreliableOversize()
+			if Events.Unreliable[1] ~= nil then
+				SerdesEvent = "UnreliableOversize"
+				Events.Unreliable[1](Player, Value)
 			end
-		elseif Index == 13 then
+		elseif Index == 2 then
+			Push(Queue.Unreliable[2], table.pack(Player, SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent()))
+		elseif Index == 3 then
+			Push(Queue.Unreliable[3], table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyUnreliablePollEvent()))
+		elseif Index == 6 then
+			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyUnreliableEvent()
+			if Events.Unreliable[6] ~= nil then
+				SerdesEvent = "ClientEmptyUnreliableEvent"
+				Events.Unreliable[6](Player, Value)
+			end
+		elseif Index == 14 then
 			local Value: number = SerdesFunctions.ReadEVENT_UnreliableClient()
-			if Events.Unreliable[13] ~= nil then
+			if Events.Unreliable[14] ~= nil then
 				SerdesEvent = "UnreliableClient"
-				Events.Unreliable[13](Player, Value)
+				Events.Unreliable[14](Player, Value)
 			end
 		else
 			error("[Blink]: Unknown event index.")
@@ -6336,6 +6356,22 @@ local Returns = table.freeze({
 			end
 		end
 	},
+	UnreliableOversize = {
+		On = function(Listener: (Player: Player, Value: string) -> ()): () -> ()
+			Events.Unreliable[1] = Listener
+			return function (): ()
+				if Events.Unreliable[1] == Listener then
+					Events.Unreliable[1] = nil
+				end
+			end
+		end,
+		Predict = function(Player: Player, Value: string): ()
+			if Events.Unreliable[1] ~= nil then
+				SerdesEvent = "UnreliableOversize"
+				Events.Unreliable[1](Player, Value)
+			end
+		end
+	},
 	RateLimitedCall = {
 		On = function(Listener: (Player, number) -> (number)): ()
 			Events.Reliable[2] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
@@ -6721,7 +6757,7 @@ local Returns = table.freeze({
 	ClientUnreliablePollEvent = {
 		Iter = function(): () -> (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
-			local queue = Queue.Unreliable[1]
+			local queue = Queue.Unreliable[2]
 			return function (): (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
@@ -6734,7 +6770,7 @@ local Returns = table.freeze({
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
 		Next = function(): () -> (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
-			local queue = Queue.Unreliable[1]
+			local queue = Queue.Unreliable[2]
 			return function (): (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
@@ -6775,7 +6811,7 @@ local Returns = table.freeze({
 	ClientEmptyUnreliablePollEvent = {
 		Iter = function(): () -> (number, Player, nil)
 			local index = 0
-			local queue = Queue.Unreliable[2]
+			local queue = Queue.Unreliable[3]
 			return function (): (number, Player, nil)
 				index += 1
 				local arguments = Pop(queue)
@@ -6788,7 +6824,7 @@ local Returns = table.freeze({
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
 		Next = function(): () -> (number, Player, nil)
 			local index = 0
-			local queue = Queue.Unreliable[2]
+			local queue = Queue.Unreliable[3]
 			return function (): (number, Player, nil)
 				index += 1
 				local arguments = Pop(queue)
@@ -6997,17 +7033,17 @@ local Returns = table.freeze({
 	},
 	ClientEmptyUnreliableEvent = {
 		On = function(Listener: (Player: Player, Value: nil) -> ()): () -> ()
-			Events.Unreliable[5] = Listener
+			Events.Unreliable[6] = Listener
 			return function (): ()
-				if Events.Unreliable[5] == Listener then
-					Events.Unreliable[5] = nil
+				if Events.Unreliable[6] == Listener then
+					Events.Unreliable[6] = nil
 				end
 			end
 		end,
 		Predict = function(Player: Player, Value: nil): ()
-			if Events.Unreliable[5] ~= nil then
+			if Events.Unreliable[6] ~= nil then
 				SerdesEvent = "ClientEmptyUnreliableEvent"
-				Events.Unreliable[5](Player, Value)
+				Events.Unreliable[6](Player, Value)
 			end
 		end
 	},
@@ -8273,17 +8309,17 @@ local Returns = table.freeze({
 	},
 	UnreliableClient = {
 		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			Events.Unreliable[13] = Listener
+			Events.Unreliable[14] = Listener
 			return function (): ()
-				if Events.Unreliable[13] == Listener then
-					Events.Unreliable[13] = nil
+				if Events.Unreliable[14] == Listener then
+					Events.Unreliable[14] = nil
 				end
 			end
 		end,
 		Predict = function(Player: Player, Value: number): ()
-			if Events.Unreliable[13] ~= nil then
+			if Events.Unreliable[14] ~= nil then
 				SerdesEvent = "UnreliableClient"
-				Events.Unreliable[13](Player, Value)
+				Events.Unreliable[14](Player, Value)
 			end
 		end
 	},

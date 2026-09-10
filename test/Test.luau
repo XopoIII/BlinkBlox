@@ -1869,6 +1869,69 @@ RunClosure("Invocation slots are recycled", function()
 	end
 end)
 
+RunClosure("Oversized unreliable payloads are dropped, not sent", function()
+	--> Roblox drops an unreliable payload past ~900 bytes silently. The compiler refuses schemas that
+	--> can never fit and warns about the ones that might not, but a bounded schema can still overflow
+	--> at runtime -- a string longer than the game assumed -- and that packet would vanish with
+	--> nobody told which event lost it.
+	local Received = 0
+	local Disconnect = Server.UnreliableOversize.On(function()
+		Received += 1
+	end)
+
+	task.wait(0.2)
+	Received = 0
+
+	--> Well under the limit: ordinary traffic must be untouched.
+	Client.UnreliableOversize.Fire(string.rep("a", 32))
+	task.wait(0.3)
+
+	if Received ~= 1 then
+		ErrorPrint(`Failed "Oversized unreliable": a small payload arrived {Received} time(s), expected 1.`)
+	end
+
+	--> Past the limit: dropped at the send, with a warning naming the event.
+	Client.UnreliableOversize.Fire(string.rep("a", 2000))
+	task.wait(0.3)
+	Disconnect()
+
+	if Received ~= 1 then
+		ErrorPrint(`Failed "Oversized unreliable": an oversized payload was sent anyway.`)
+	end
+end)
+
+RunClosure("Decoding stops when the player leaves", function()
+	--> Every listener that runs past this point is handed a Player already detached from the
+	--> DataModel, and anything it does with them -- a leaderstats write, a save -- is work aimed at
+	--> nobody. The loop condition now checks, so the rest of that packet is not decoded.
+	local Received = 0
+	local Disconnect = Server.ReliableClient.On(function()
+		Received += 1
+	end)
+
+	task.wait(0.2)
+	Received = 0
+
+	Shared.SetPlayerInGame(false)
+	Client.ReliableClient.Fire(1)
+	task.wait(0.3)
+	Shared.SetPlayerInGame(true)
+
+	if Received ~= 0 then
+		ErrorPrint(`Failed "Decoding stops when the player leaves": {Received} event(s) were still dispatched.`)
+	end
+
+	--> And a present player is unaffected -- a guard that broke the normal path would be worse than
+	--> the case it closes.
+	Client.ReliableClient.Fire(1)
+	task.wait(0.3)
+	Disconnect()
+
+	if Received ~= 1 then
+		ErrorPrint(`Failed "Decoding stops when the player leaves": a present player received {Received}, expected 1.`)
+	end
+end)
+
 PrettyPrint("green", `All tests passed successfully!`)
 
 process.exit(0)
