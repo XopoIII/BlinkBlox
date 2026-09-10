@@ -12,6 +12,12 @@ A maintained fork of the project. Upstream stopped taking changes on this line o
 moved to a rewrite, leaving reported defects — including an unbounded parse of hostile client input —
 closed as out of scope. This fork fixes them and continues from there:
 
+- **Booleans and optional flags share a byte.** Eight of them cost one byte rather than eight; a
+  struct with two booleans and two optionals, one absent, went from 5 bytes to 2.
+- **Lengths are encoded relative to their minimum.** `u8[300..400]` spends one byte describing its
+  length instead of two, and the same applies to bounded strings and buffers.
+- **[`OrderedUnreliable`](language/5-events#type)** discards an unreliable packet that arrives after a
+  newer one, so a position or aim direction never snaps backwards.
 - **Rate limiting, per player and per event.** Declare `Rate` and `Burst` on an inbound event or
   function and the generated server spends tokens from a bucket before dispatching. Refused events
   are dropped and reported to a handler of your choosing rather than kicking anyone. Neither of the
