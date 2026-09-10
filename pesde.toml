@@ -11,7 +11,7 @@ includes = [
 license = "MIT"
 name = "xopoiii/blink"
 repository = "https://github.com/XopoIII/blink"
-version = "0.20.0"
+version = "0.21.0"
 
 [indices]
 default = "https://github.com/pesde-pkg/index"

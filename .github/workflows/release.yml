@@ -7,7 +7,7 @@
 # would have failed on its last step regardless.
 #
 # Install this fork from the release artifacts instead, for example through rokit:
-#     rokit add XopoIII/blink@0.20.0
+#     rokit add XopoIII/blink@0.21.0
 name: Release
 
 on:
