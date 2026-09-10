@@ -3,7 +3,9 @@
 An IDL compiler for ROBLOX buffer networking, written in Luau. A schema (`.blink`) compiles to
 server, client and shared Luau modules that serialise events into buffers.
 
-This is a fork of [`1Axen/blink`](https://github.com/1Axen/blink) at `v0.18.8`.
+A maintained fork, `XopoIII/blink`, forked from the upstream project at `v0.18.8` and released from
+`0.19.0` onward. MIT licensed, and the upstream copyright stays in LICENSE — a fork is a derivative
+work, so removing it is not an option.
 
 ## Everything here is written in English
 
@@ -106,8 +108,15 @@ Keep this in mind before adding any new prompt.
 
 ## Downstream
 
-`dibby-roblox` consumes this compiler (`rokit.toml` pins `1axen/blink@0.18.8`, schema at
-`colony/net/Colony.blink`) and post-processes the generated server module with
-`scripts/patch-net-guard.sh` to close issue #45 by hand. That patch matches anchors in the emitted
-text — **changing the generator's output shape breaks it**. Any change here should be checked by
-regenerating that schema and diffing against its committed output.
+`dibby-roblox` consumes this compiler (schema at `colony/net/Colony.blink`) and, while it still pins
+`1axen/blink@0.18.8`, post-processes the generated server module with `scripts/patch-net-guard.sh` to
+close the unbounded-parse hole by hand.
+
+**As of 0.19.0 that patch is redundant** — the same guard is generated, plus a stop on unrecognised
+event ids that the patch never had. Moving that repository to `XopoIII/blink@0.19.0` means it can
+delete `patch-net-guard.sh` and drop the guard step from `scripts/net-build.sh`; rate limiting stays
+in its own `Inbound.accept`, which needs per-player state over time.
+
+The patch matches anchors in the emitted text, so **while it is still in use, changing the
+generator's output shape breaks that build**. Check any generator change by regenerating that schema
+and diffing against its committed output.

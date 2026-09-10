@@ -1,3 +1,13 @@
+# Builds the CLI binaries and the Studio plugin, and attaches them to a published release.
+#
+# ⚠️ THIS FORK DOES NOT PUBLISH TO PESDE, AND THAT IS DELIBERATE. Upstream's workflow ended with
+# `pesde publish`, which pushes to the `1axen/blink` scope — a scope this fork cannot write to, and
+# should not: publishing there would put fork builds in front of everyone who installs the upstream
+# package. The step needed a PESDE_TOKEN secret that does not exist here either, so every release
+# would have failed on its last step regardless.
+#
+# Install this fork from the release artifacts instead, for example through rokit:
+#     rokit add XopoIII/blink@0.19.0
 name: Release
 
 on:
@@ -17,14 +27,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Setup rokit
         uses: CompeyDev/setup-rokit@v0.1.0
-
-      - name: Setup pesde
-        uses: axiom-co/setup-pesde@v0.4.1
-        with:
-          token: ${{ secrets.PESDE_TOKEN }}
 
       - name: Build binaries
         run: lune run build
@@ -46,6 +51,3 @@ jobs:
 
       - name: plugin
         run: gh release upload ${{github.event.release.tag_name}} release/blink-plugin.rbxm
-      
-      - name: pesde
-        run: pesde publish -y

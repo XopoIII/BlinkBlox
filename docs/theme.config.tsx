@@ -16,20 +16,20 @@ const config: DocsThemeConfig = {
         <img
           width="40"
           height="40"
-          src="https://raw.githubusercontent.com/1Axen/blink/main/docs/public/letter.png"
+          src="https://raw.githubusercontent.com/XopoIII/blink/main/docs/public/letter.png"
         />
       </>
   ),
   project: {
-    link: 'https://github.com/1Axen/blink',
+    link: 'https://github.com/XopoIII/blink',
   },
-  docsRepositoryBase: 'https://github.com/1Axen/blink',
+  docsRepositoryBase: 'https://github.com/XopoIII/blink',
   footer: {
-    text: '© 2024 Blink',
+    text: 'Blink — MIT licensed. Originally by Axen, maintained fork by XopoIII.',
   },
   head: (
     <>
-      <link rel="shortcut icon" href="https://raw.githubusercontent.com/1Axen/blink/main/docs/public/letter.png" type="img/png"/>
+      <link rel="shortcut icon" href="https://raw.githubusercontent.com/XopoIII/blink/main/docs/public/letter.png" type="img/png"/>
       <meta property="og:description" content="An IDL compiler written in Luau for ROBLOX buffer networking." />
     </>
   )
