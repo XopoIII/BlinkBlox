@@ -993,8 +993,14 @@ function Declarations.Optional(Declaration: Parser.Optional, Read: Blocks.Block,
 		Read = Read:Compare("typeof(RecieveInstances[RecieveInstanceCursor])", '"Instance"', "Equals")
 		Read:Line("RecieveInstanceCursor -= 1")
 	else
-		Types.u8.Write(`{Variable} ~= nil and 1 or 0`, Write)
-		Read = Read:Compare(`buffer.readu8(RecieveBuffer, {Read:Read(1)})`, "1", "Equals")
+		--> The presence flag is one BIT, sharing a byte with any other flags and booleans in the same
+		--> block. It is claimed on both sides before the payload branch, so read and write reserve the
+		--> same byte at the same offset.
+		local WriteAccumulator, WriteMask = Write:Bit("Allocate")
+		Write:Line(`if {Variable} ~= nil then {WriteAccumulator} += {WriteMask} end`)
+
+		local ReadAccumulator, ReadMask = Read:Bit("Read")
+		Read = Read:Compare(`bit32.btest({ReadAccumulator}, {ReadMask})`, "true", "Equals")
 		Write = Write:Compare(Variable, "nil", "Not")
 	end
 
@@ -1208,6 +1214,11 @@ function Generators.Export(Declaration: Type)
 
 	Generators.UserType(Declaration, Read, Write)
 
+	--> The payload is complete, so any half-filled bitfield has to reach the buffer BEFORE the trim
+	--> and the return below. Left to `End`, it would be emitted after the return.
+	Read:FlushBits()
+	Write:FlushBits()
+
 	--> Restore buffer
 	Read:Comment("Buffer restore")
 	Write:Comment("Buffer restore")
@@ -1274,6 +1285,9 @@ function Generators.Event(
 	if Data then
 		Generators.UserType(Data, Read, Write)
 	end
+
+	Read:FlushBits()
+	Write:FlushBits()
 
 	return Read:Return(Returns):End().Content, Write:End().Content
 end

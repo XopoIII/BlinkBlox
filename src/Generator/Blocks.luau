@@ -20,6 +20,17 @@ type Operation = {
 local DEFAULT_UNIQUE = "BLOCK_START"
 local ARRAY_UNIQUE = "ARRAY_START"
 
+--> Names of the runtime buffers, spliced in from src/Templates/Base.luau. Hardcoded here for the
+--> same reason `Declarations.Enum` hardcodes them: this DSL only ever emits into generated
+--> modules, where both names are in scope by construction.
+local SEND_BUFFER = "SendBuffer"
+local RECIEVE_BUFFER = "RecieveBuffer"
+
+--> One mask per bit position. Hex because that is how the emitted code reads best beside
+--> `bit32.btest`, and it is what the set packing already uses.
+local BIT_MASKS = { "0x01", "0x02", "0x04", "0x08", "0x10", "0x20", "0x40", "0x80" }
+local BITS_PER_BYTE = 8
+
 local Operators = {
 	Not = "~=",
 	Equals = "==",
@@ -43,6 +54,15 @@ export type Block = typeof(setmetatable(
 		Operation: Operation,
 		Variables: { [string]: boolean },
 		OperationOffset: number,
+
+		--> Bit packing state. A boolean, or an optional's presence flag, costs one BIT rather than a
+		--> whole byte: the block reserves a byte on the first bit and keeps filling it until either
+		--> it holds eight or the block ends.
+		BitCursor: number,
+		BitCount: number,
+		BitMethod: Method,
+		BitOffset: string?,
+		BitAccumulator: string?,
 	},
 	Block
 ))
@@ -64,6 +84,12 @@ function Block.new<Parent>(Parent: Block?, Unique: string?): Block
 			},
 			Variables = {},
 			OperationOffset = 0,
+
+			BitCursor = 0,
+			BitCount = 0,
+			BitMethod = "None",
+			BitOffset = nil,
+			BitAccumulator = nil,
 		} :: any,
 		Block
 	)
@@ -119,7 +145,80 @@ function Block._lineFront(self: Block, Text: string, Indent: number?): Block
 	return self
 end
 
+--- Writes out the byte a write-side bitfield has been filling, and closes the current bit scope.
+---
+--- Only the WRITE side needs this. A reader has the byte in hand the moment it reserves it, so it
+--- reads bits straight out of a local; a writer accumulates into that local and has to put it back
+--- into the buffer at the offset it reserved earlier.
+---
+--- Reserving early and writing late is safe even if the buffer grew in between: `Allocate` copies
+--- the existing contents forward and offsets stay valid.
+function Block._flushBits(self: Block): Block
+	local Accumulator = self.BitAccumulator
+	if Accumulator and self.BitMethod == "Allocate" then
+		self:Line(`buffer.writeu8({SEND_BUFFER}, {self.BitOffset}, {Accumulator})`)
+	end
+
+	self.BitCursor = 0
+	self.BitOffset = nil
+	self.BitAccumulator = nil
+	self.BitMethod = "None"
+
+	return self
+end
+
+--- Closes the current bit scope explicitly.
+---
+--- Needed where a block keeps receiving lines after the serialisation is finished -- an exported
+--- Write appends its buffer trim and `return Result` afterwards, and a bitfield flushed at
+--- `End` would land after that return, where it is both unreachable and a syntax error.
+function Block.FlushBits(self: Block): Block
+	return self:_flushBits()
+end
+
+--- Claims one bit and returns the accumulator holding it together with its mask.
+---
+--- Callers emit their own test or set: `bit32.btest(BITFIELD_0, 0x04)` on read,
+--- `if Value then BITFIELD_0 += 0x04 end` on write.
+---
+--- THE POINT OF DOING IT THIS WAY: the total number of bits does not have to be known in advance.
+--- The ninth bit simply reserves another byte, which coalesces into the same block allocation at
+--- whatever offset it lands. Read and write walk the identical AST in the identical order, so both
+--- sides reserve the same number of bytes at the same relative offsets without either side counting
+--- anything ahead of time. That is what removes the need for an IR here: zap needs a bit budget
+--- because its IR flushes explicitly, while the tree walk gives determinism for free.
+function Block.Bit(self: Block, Method: Method): (string, string)
+	if self.BitAccumulator == nil or self.BitCursor >= BITS_PER_BYTE then
+		self:_flushBits()
+
+		local Offset = self:_operation(Method, 1)
+		local Accumulator = `BITFIELD_{self.BitCount}`
+
+		self.BitCount += 1
+		self.BitMethod = Method
+		self.BitOffset = Offset
+		self.BitAccumulator = Accumulator
+		self.BitCursor = 0
+
+		if Method == "Read" then
+			self:Line(`local {Accumulator} = buffer.readu8({RECIEVE_BUFFER}, {Offset})`)
+		else
+			self:Line(`local {Accumulator} = 0`)
+		end
+	end
+
+	local Mask = BIT_MASKS[self.BitCursor + 1]
+	self.BitCursor += 1
+
+	return self.BitAccumulator :: string, Mask
+end
+
 function Block._appendOperations(self: Block): Block
+	--> Before the allocation header, and before the block's content goes anywhere: a half-filled
+	--> bitfield still has to reach the buffer. This runs from both End and Branch, which are
+	--> exactly the points where a bit scope ends.
+	self:_flushBits()
+
 	local Operation = self.Operation
 	local Variable = Operation.Variable
 	if Operation.Method == "None" then

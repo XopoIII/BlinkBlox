@@ -1417,7 +1417,7 @@ RunClosure("Static size analysis matches the emitter", function()
 			ErrorPrint(`Failed "Static size analysis": Test.blink has no exported type "{Sample.Name}".`)
 		end
 
-		local Measured = Size.Measure(Declaration)
+		local Measured = Size.Sealed(Declaration)
 		local Length = buffer.len(Client[Sample.Name].Write(Sample.Value))
 
 		if Length < Measured.Min or Length > Measured.Max then
@@ -1938,6 +1938,71 @@ RunClosure("Decoding stops when the player leaves", function()
 
 	if Received ~= 1 then
 		ErrorPrint(`Failed "Decoding stops when the player leaves": a present player received {Received}, expected 1.`)
+	end
+end)
+
+RunClosure("Bit packing", function()
+	--> Booleans and optional presence flags take one BIT of a shared byte rather than a byte each.
+	--> The numbers that matter are the ones either side of a byte boundary, and the round trip
+	--> matters more than the size: a packing that loses a bit is worse than one that saves nothing.
+
+	local function Booleans(Count: number): { [string]: boolean }
+		local Value = {}
+		for Index = 1, Count do
+			--> Alternating rather than uniform, so a mask applied to the wrong bit shows up.
+			Value[string.char(64 + Index)] = (Index % 2 == 1)
+		end
+
+		return Value
+	end
+
+	local Cases = {
+		{ Name = "BitsOne", Count = 1, Bytes = 1 },
+		{ Name = "BitsSeven", Count = 7, Bytes = 1 },
+		{ Name = "BitsEight", Count = 8, Bytes = 1 },
+		{ Name = "BitsNine", Count = 9, Bytes = 2 },
+		{ Name = "BitsSeventeen", Count = 17, Bytes = 3 },
+	}
+
+	for _, Case in Cases do
+		local Value = Booleans(Case.Count)
+		local Buffer = Client[Case.Name].Write(Value)
+
+		if buffer.len(Buffer) ~= Case.Bytes then
+			ErrorPrint(
+				`Failed "Bit packing": {Case.Count} booleans serialised to {buffer.len(Buffer)} bytes, `
+					.. `expected {Case.Bytes}.`
+			)
+		end
+
+		if not Equals(Client[Case.Name].Read(Buffer), Value) then
+			ErrorPrint(`Failed "Bit packing": {Case.Count} booleans did not survive the round trip.`)
+		end
+	end
+
+	--> Flags and booleans draw from the same byte, and an absent optional costs its bit and nothing
+	--> else: four flags is one byte, plus one byte for the present u8.
+	local Mixed = { A = true, B = 7, C = false }
+	local MixedBuffer = Client.BitsMixed.Write(Mixed)
+
+	if buffer.len(MixedBuffer) ~= 2 then
+		ErrorPrint(`Failed "Bit packing": mixed flags serialised to {buffer.len(MixedBuffer)} bytes, expected 2.`)
+	end
+
+	if not Equals(Client.BitsMixed.Read(MixedBuffer), Mixed) then
+		ErrorPrint(`Failed "Bit packing": mixed flags and optionals did not survive the round trip.`)
+	end
+
+	--> All four optionals absent: one byte of flags, nothing else.
+	local Sparse = { A = false, C = true }
+	local SparseBuffer = Client.BitsMixed.Write(Sparse)
+
+	if buffer.len(SparseBuffer) ~= 1 then
+		ErrorPrint(`Failed "Bit packing": absent optionals cost {buffer.len(SparseBuffer)} bytes, expected 1.`)
+	end
+
+	if not Equals(Client.BitsMixed.Read(SparseBuffer), Sparse) then
+		ErrorPrint(`Failed "Bit packing": absent optionals did not survive the round trip.`)
 	end
 end)
 

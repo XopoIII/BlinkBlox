@@ -205,6 +205,12 @@ export type SizeStruct = { A: number, B: boolean, C: number }
 export type SizeEnum = ("A" | "B" | "C")
 export type SizeFlags = {F1: boolean,F2: boolean,F3: boolean,}
 export type SizeMap = {[number]: number}
+export type BitsOne = { A: boolean }
+export type BitsSeven = { A: boolean, B: boolean, C: boolean, D: boolean, E: boolean, F: boolean, G: boolean }
+export type BitsEight = { A: boolean, B: boolean, C: boolean, D: boolean, E: boolean, F: boolean, G: boolean, H: boolean }
+export type BitsNine = { A: boolean, B: boolean, C: boolean, D: boolean, E: boolean, F: boolean, G: boolean, H: boolean, I: boolean }
+export type BitsSeventeen = { A: boolean, B: boolean, C: boolean, D: boolean, E: boolean, F: boolean, G: boolean, H: boolean, I: boolean, J: boolean, K: boolean, L: boolean, M: boolean, N: boolean, O: boolean, P: boolean, Q: boolean }
+export type BitsMixed = { A: boolean, B: number?, C: boolean, D: number? }
 export type States = ("A" | "B" | "C" | "D")
 export type Flags8 = {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}
 export type Flags16 = {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}
@@ -1248,7 +1254,8 @@ return {
 			-- Buffer read
 			-- Value: SizeOptionalByte
 			local Value
-			if buffer.readu8(RecieveBuffer, BLOCK_START + 0) == 1 then
+			local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if bit32.btest(BITFIELD_0, 0x01) == true then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				-- Value: SizeOptionalByte
@@ -1268,7 +1275,8 @@ return {
 			local BLOCK_START = Allocate(1)
 			-- Buffer write
 			-- Value: SizeOptionalByte
-			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value ~= nil and 1 or 0)
+			local BITFIELD_0 = 0
+			if Value ~= nil then BITFIELD_0 += 0x01 end
 			if Value ~= nil then
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
@@ -1278,6 +1286,7 @@ return {
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
 			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
 			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
@@ -1345,7 +1354,8 @@ return {
 			-- Value.A: A
 			Value.A = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 			-- Value.B: B
-			Value.B = (buffer.readu8(RecieveBuffer, BLOCK_START + 1) == 1)
+			local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			Value.B = bit32.btest(BITFIELD_0, 0x01)
 			-- Value.C: C
 			Value.C = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
 			-- Buffer restore
@@ -1371,12 +1381,14 @@ return {
 			if typeof(Value.B) ~= "boolean" then
 				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
 			end
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.B and 1 or 0)
+			local BITFIELD_0 = 0
+			if Value.B then BITFIELD_0 += 0x01 end
 			-- Value.C: C
 			if typeof(Value.C) ~= "number" then
 				error(`Expected Value.C to be of type number, got {type(Value.C)} instead.`)
 			end
 			buffer.writeu16(SendBuffer, BLOCK_START + 2, Value.C)
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
 			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
@@ -1534,6 +1546,581 @@ return {
 				buffer.writeu16(SendBuffer, OFFSET_1, Element_1)
 			end
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	BitsOne = {
+		Read = function(Buffer: buffer): (BitsOne)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: BitsOne
+			local Value = {} :: any
+			-- Value.A: A
+			local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_0, 0x01)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: BitsOne): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: BitsOne
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
+			end
+			local BITFIELD_0 = 0
+			if Value.A then BITFIELD_0 += 0x01 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	BitsSeven = {
+		Read = function(Buffer: buffer): (BitsSeven)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: BitsSeven
+			local Value = {} :: any
+			-- Value.A: A
+			local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_0, 0x01)
+			-- Value.B: B
+			Value.B = bit32.btest(BITFIELD_0, 0x02)
+			-- Value.C: C
+			Value.C = bit32.btest(BITFIELD_0, 0x04)
+			-- Value.D: D
+			Value.D = bit32.btest(BITFIELD_0, 0x08)
+			-- Value.E: E
+			Value.E = bit32.btest(BITFIELD_0, 0x10)
+			-- Value.F: F
+			Value.F = bit32.btest(BITFIELD_0, 0x20)
+			-- Value.G: G
+			Value.G = bit32.btest(BITFIELD_0, 0x40)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: BitsSeven): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: BitsSeven
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
+			end
+			local BITFIELD_0 = 0
+			if Value.A then BITFIELD_0 += 0x01 end
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
+			end
+			if Value.B then BITFIELD_0 += 0x02 end
+			-- Value.C: C
+			if typeof(Value.C) ~= "boolean" then
+				error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.`)
+			end
+			if Value.C then BITFIELD_0 += 0x04 end
+			-- Value.D: D
+			if typeof(Value.D) ~= "boolean" then
+				error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.`)
+			end
+			if Value.D then BITFIELD_0 += 0x08 end
+			-- Value.E: E
+			if typeof(Value.E) ~= "boolean" then
+				error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.`)
+			end
+			if Value.E then BITFIELD_0 += 0x10 end
+			-- Value.F: F
+			if typeof(Value.F) ~= "boolean" then
+				error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.`)
+			end
+			if Value.F then BITFIELD_0 += 0x20 end
+			-- Value.G: G
+			if typeof(Value.G) ~= "boolean" then
+				error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.`)
+			end
+			if Value.G then BITFIELD_0 += 0x40 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	BitsEight = {
+		Read = function(Buffer: buffer): (BitsEight)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: BitsEight
+			local Value = {} :: any
+			-- Value.A: A
+			local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_0, 0x01)
+			-- Value.B: B
+			Value.B = bit32.btest(BITFIELD_0, 0x02)
+			-- Value.C: C
+			Value.C = bit32.btest(BITFIELD_0, 0x04)
+			-- Value.D: D
+			Value.D = bit32.btest(BITFIELD_0, 0x08)
+			-- Value.E: E
+			Value.E = bit32.btest(BITFIELD_0, 0x10)
+			-- Value.F: F
+			Value.F = bit32.btest(BITFIELD_0, 0x20)
+			-- Value.G: G
+			Value.G = bit32.btest(BITFIELD_0, 0x40)
+			-- Value.H: H
+			Value.H = bit32.btest(BITFIELD_0, 0x80)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: BitsEight): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: BitsEight
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
+			end
+			local BITFIELD_0 = 0
+			if Value.A then BITFIELD_0 += 0x01 end
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
+			end
+			if Value.B then BITFIELD_0 += 0x02 end
+			-- Value.C: C
+			if typeof(Value.C) ~= "boolean" then
+				error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.`)
+			end
+			if Value.C then BITFIELD_0 += 0x04 end
+			-- Value.D: D
+			if typeof(Value.D) ~= "boolean" then
+				error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.`)
+			end
+			if Value.D then BITFIELD_0 += 0x08 end
+			-- Value.E: E
+			if typeof(Value.E) ~= "boolean" then
+				error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.`)
+			end
+			if Value.E then BITFIELD_0 += 0x10 end
+			-- Value.F: F
+			if typeof(Value.F) ~= "boolean" then
+				error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.`)
+			end
+			if Value.F then BITFIELD_0 += 0x20 end
+			-- Value.G: G
+			if typeof(Value.G) ~= "boolean" then
+				error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.`)
+			end
+			if Value.G then BITFIELD_0 += 0x40 end
+			-- Value.H: H
+			if typeof(Value.H) ~= "boolean" then
+				error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.`)
+			end
+			if Value.H then BITFIELD_0 += 0x80 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	BitsNine = {
+		Read = function(Buffer: buffer): (BitsNine)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: BitsNine
+			local Value = {} :: any
+			-- Value.A: A
+			local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_0, 0x01)
+			-- Value.B: B
+			Value.B = bit32.btest(BITFIELD_0, 0x02)
+			-- Value.C: C
+			Value.C = bit32.btest(BITFIELD_0, 0x04)
+			-- Value.D: D
+			Value.D = bit32.btest(BITFIELD_0, 0x08)
+			-- Value.E: E
+			Value.E = bit32.btest(BITFIELD_0, 0x10)
+			-- Value.F: F
+			Value.F = bit32.btest(BITFIELD_0, 0x20)
+			-- Value.G: G
+			Value.G = bit32.btest(BITFIELD_0, 0x40)
+			-- Value.H: H
+			Value.H = bit32.btest(BITFIELD_0, 0x80)
+			-- Value.I: I
+			local BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			Value.I = bit32.btest(BITFIELD_1, 0x01)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: BitsNine): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: BitsNine
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
+			end
+			local BITFIELD_0 = 0
+			if Value.A then BITFIELD_0 += 0x01 end
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
+			end
+			if Value.B then BITFIELD_0 += 0x02 end
+			-- Value.C: C
+			if typeof(Value.C) ~= "boolean" then
+				error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.`)
+			end
+			if Value.C then BITFIELD_0 += 0x04 end
+			-- Value.D: D
+			if typeof(Value.D) ~= "boolean" then
+				error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.`)
+			end
+			if Value.D then BITFIELD_0 += 0x08 end
+			-- Value.E: E
+			if typeof(Value.E) ~= "boolean" then
+				error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.`)
+			end
+			if Value.E then BITFIELD_0 += 0x10 end
+			-- Value.F: F
+			if typeof(Value.F) ~= "boolean" then
+				error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.`)
+			end
+			if Value.F then BITFIELD_0 += 0x20 end
+			-- Value.G: G
+			if typeof(Value.G) ~= "boolean" then
+				error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.`)
+			end
+			if Value.G then BITFIELD_0 += 0x40 end
+			-- Value.H: H
+			if typeof(Value.H) ~= "boolean" then
+				error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.`)
+			end
+			if Value.H then BITFIELD_0 += 0x80 end
+			-- Value.I: I
+			if typeof(Value.I) ~= "boolean" then
+				error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+			local BITFIELD_1 = 0
+			if Value.I then BITFIELD_1 += 0x01 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	BitsSeventeen = {
+		Read = function(Buffer: buffer): (BitsSeventeen)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 3 bytes
+			local BLOCK_START = Read(3)
+			-- Buffer read
+			-- Value: BitsSeventeen
+			local Value = {} :: any
+			-- Value.A: A
+			local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_0, 0x01)
+			-- Value.B: B
+			Value.B = bit32.btest(BITFIELD_0, 0x02)
+			-- Value.C: C
+			Value.C = bit32.btest(BITFIELD_0, 0x04)
+			-- Value.D: D
+			Value.D = bit32.btest(BITFIELD_0, 0x08)
+			-- Value.E: E
+			Value.E = bit32.btest(BITFIELD_0, 0x10)
+			-- Value.F: F
+			Value.F = bit32.btest(BITFIELD_0, 0x20)
+			-- Value.G: G
+			Value.G = bit32.btest(BITFIELD_0, 0x40)
+			-- Value.H: H
+			Value.H = bit32.btest(BITFIELD_0, 0x80)
+			-- Value.I: I
+			local BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			Value.I = bit32.btest(BITFIELD_1, 0x01)
+			-- Value.J: J
+			Value.J = bit32.btest(BITFIELD_1, 0x02)
+			-- Value.K: K
+			Value.K = bit32.btest(BITFIELD_1, 0x04)
+			-- Value.L: L
+			Value.L = bit32.btest(BITFIELD_1, 0x08)
+			-- Value.M: M
+			Value.M = bit32.btest(BITFIELD_1, 0x10)
+			-- Value.N: N
+			Value.N = bit32.btest(BITFIELD_1, 0x20)
+			-- Value.O: O
+			Value.O = bit32.btest(BITFIELD_1, 0x40)
+			-- Value.P: P
+			Value.P = bit32.btest(BITFIELD_1, 0x80)
+			-- Value.Q: Q
+			local BITFIELD_2 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+			Value.Q = bit32.btest(BITFIELD_2, 0x01)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: BitsSeventeen): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- Buffer write
+			-- Value: BitsSeventeen
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
+			end
+			local BITFIELD_0 = 0
+			if Value.A then BITFIELD_0 += 0x01 end
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
+			end
+			if Value.B then BITFIELD_0 += 0x02 end
+			-- Value.C: C
+			if typeof(Value.C) ~= "boolean" then
+				error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.`)
+			end
+			if Value.C then BITFIELD_0 += 0x04 end
+			-- Value.D: D
+			if typeof(Value.D) ~= "boolean" then
+				error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.`)
+			end
+			if Value.D then BITFIELD_0 += 0x08 end
+			-- Value.E: E
+			if typeof(Value.E) ~= "boolean" then
+				error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.`)
+			end
+			if Value.E then BITFIELD_0 += 0x10 end
+			-- Value.F: F
+			if typeof(Value.F) ~= "boolean" then
+				error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.`)
+			end
+			if Value.F then BITFIELD_0 += 0x20 end
+			-- Value.G: G
+			if typeof(Value.G) ~= "boolean" then
+				error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.`)
+			end
+			if Value.G then BITFIELD_0 += 0x40 end
+			-- Value.H: H
+			if typeof(Value.H) ~= "boolean" then
+				error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.`)
+			end
+			if Value.H then BITFIELD_0 += 0x80 end
+			-- Value.I: I
+			if typeof(Value.I) ~= "boolean" then
+				error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+			local BITFIELD_1 = 0
+			if Value.I then BITFIELD_1 += 0x01 end
+			-- Value.J: J
+			if typeof(Value.J) ~= "boolean" then
+				error(`Expected Value.J to be of type boolean, got {type(Value.J)} instead.`)
+			end
+			if Value.J then BITFIELD_1 += 0x02 end
+			-- Value.K: K
+			if typeof(Value.K) ~= "boolean" then
+				error(`Expected Value.K to be of type boolean, got {type(Value.K)} instead.`)
+			end
+			if Value.K then BITFIELD_1 += 0x04 end
+			-- Value.L: L
+			if typeof(Value.L) ~= "boolean" then
+				error(`Expected Value.L to be of type boolean, got {type(Value.L)} instead.`)
+			end
+			if Value.L then BITFIELD_1 += 0x08 end
+			-- Value.M: M
+			if typeof(Value.M) ~= "boolean" then
+				error(`Expected Value.M to be of type boolean, got {type(Value.M)} instead.`)
+			end
+			if Value.M then BITFIELD_1 += 0x10 end
+			-- Value.N: N
+			if typeof(Value.N) ~= "boolean" then
+				error(`Expected Value.N to be of type boolean, got {type(Value.N)} instead.`)
+			end
+			if Value.N then BITFIELD_1 += 0x20 end
+			-- Value.O: O
+			if typeof(Value.O) ~= "boolean" then
+				error(`Expected Value.O to be of type boolean, got {type(Value.O)} instead.`)
+			end
+			if Value.O then BITFIELD_1 += 0x40 end
+			-- Value.P: P
+			if typeof(Value.P) ~= "boolean" then
+				error(`Expected Value.P to be of type boolean, got {type(Value.P)} instead.`)
+			end
+			if Value.P then BITFIELD_1 += 0x80 end
+			-- Value.Q: Q
+			if typeof(Value.Q) ~= "boolean" then
+				error(`Expected Value.Q to be of type boolean, got {type(Value.Q)} instead.`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1)
+			local BITFIELD_2 = 0
+			if Value.Q then BITFIELD_2 += 0x01 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_2)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	BitsMixed = {
+		Read = function(Buffer: buffer): (BitsMixed)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: BitsMixed
+			local Value = {} :: any
+			-- Value.A: A
+			local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_0, 0x01)
+			-- Value.B: B
+			if bit32.btest(BITFIELD_0, 0x02) == true then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Value.B: B
+				Value.B = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			end
+			-- Value.C: C
+			Value.C = bit32.btest(BITFIELD_0, 0x04)
+			-- Value.D: D
+			if bit32.btest(BITFIELD_0, 0x08) == true then
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value.D: D
+				Value.D = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: BitsMixed): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: BitsMixed
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
+			end
+			local BITFIELD_0 = 0
+			if Value.A then BITFIELD_0 += 0x01 end
+			-- Value.B: B
+			if Value.B ~= nil then BITFIELD_0 += 0x02 end
+			if Value.B ~= nil then
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value.B: B
+				if typeof(Value.B) ~= "number" then
+					error(`Expected Value.B to be of type number, got {type(Value.B)} instead.`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.B)
+			end
+			-- Value.C: C
+			if typeof(Value.C) ~= "boolean" then
+				error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.`)
+			end
+			if Value.C then BITFIELD_0 += 0x04 end
+			-- Value.D: D
+			if Value.D ~= nil then BITFIELD_0 += 0x08 end
+			if Value.D ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value.D: D
+				if typeof(Value.D) ~= "number" then
+					error(`Expected Value.D to be of type number, got {type(Value.D)} instead.`)
+				end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Value.D)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
 			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)

@@ -67,6 +67,74 @@ export enum SizeEnum = {A, B, C}
 export set SizeFlags = {F1, F2, F3}
 export map SizeMap = {[u8]: u16}
 
+-- Fixtures for bit packing. The interesting numbers are the ones either side of a byte boundary:
+-- one bit and seven bits still cost a byte, eight exactly fill it, nine spill into a second.
+export struct BitsOne {
+    A: boolean,
+}
+
+export struct BitsSeven {
+    A: boolean,
+    B: boolean,
+    C: boolean,
+    D: boolean,
+    E: boolean,
+    F: boolean,
+    G: boolean,
+}
+
+export struct BitsEight {
+    A: boolean,
+    B: boolean,
+    C: boolean,
+    D: boolean,
+    E: boolean,
+    F: boolean,
+    G: boolean,
+    H: boolean,
+}
+
+export struct BitsNine {
+    A: boolean,
+    B: boolean,
+    C: boolean,
+    D: boolean,
+    E: boolean,
+    F: boolean,
+    G: boolean,
+    H: boolean,
+    I: boolean,
+}
+
+export struct BitsSeventeen {
+    A: boolean,
+    B: boolean,
+    C: boolean,
+    D: boolean,
+    E: boolean,
+    F: boolean,
+    G: boolean,
+    H: boolean,
+    I: boolean,
+    J: boolean,
+    K: boolean,
+    L: boolean,
+    M: boolean,
+    N: boolean,
+    O: boolean,
+    P: boolean,
+    Q: boolean,
+}
+
+-- Booleans and optional presence flags share the same bitfield: four flags, one byte, plus whatever
+-- the present payloads cost.
+export struct BitsMixed {
+    A: boolean,
+    B: u8?,
+    C: boolean,
+    D: u16?,
+}
+
 -- Fixtures for rate limiting. Rate is events per second and Burst is the bucket capacity, so
 -- "Burst" of them arrive at once and the rest need the clock to move.
 event RateLimited {

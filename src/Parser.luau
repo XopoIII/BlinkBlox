@@ -983,7 +983,7 @@ local function AnalyzeUnreliableSizes(self: Parser, Declarations: { Declaration 
 		end
 
 		local Data = Event.Value.Data
-		local Measured = if Data then Size.Measure(Data :: any) else nil
+		local Measured = if Data then Size.Sealed(Data :: any) else nil
 
 		--> The event index is one byte, written ahead of the payload.
 		local Minimum = 1 + (if Measured then Measured.Min else 0)
@@ -1310,7 +1310,7 @@ function Parser.Declarations(self: Parser): { Declaration }
 			--> encoded into the buffer -- they are appended to a table that travels as the remote's
 			--> second argument -- and an export has no remote and no such table, so the value would
 			--> be silently lost on write and read back as nil. Nothing checked this before.
-			local Measured = Size.Measure(Declaration :: any)
+			local Measured = Size.Sealed(Declaration :: any)
 			if Measured.Refs > 0 then
 				Error.new(
 					Error.AnalyzeInvalidExport,

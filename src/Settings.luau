@@ -154,7 +154,9 @@ local Primitives: { [string]: Primitive } = {
 		AllowsRange = false,
 		AllowsOptional = true,
 		AllowedComponents = 0,
-		Bytes = 1,
+		--> Zero because a boolean is not measured in bytes at all: it takes one bit of the enclosing
+		--> block's bitfield, and `src/Modules/Size.luau` counts it there.
+		Bytes = 0,
 	},
 	string = {
 		Bounds = NumberRange.new(0, 4294967295),

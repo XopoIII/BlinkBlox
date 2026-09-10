@@ -284,12 +284,15 @@ Primitives.f16 = {
 
 --> Boolean
 do
+	--> One BIT, not one byte. Eight booleans in the same block share a byte; see `Block.Bit`.
 	Types.boolean = {
 		Read = function(Variable: string, Block: Block)
-			Block:Line(`{Block:Declare(Variable)} = (buffer.readu8({RECIEVE_BUFFER}, {Block:Read(BYTE)}) == 1)`)
+			local Accumulator, Mask = Block:Bit("Read")
+			Block:Line(`{Block:Declare(Variable)} = bit32.btest({Accumulator}, {Mask})`)
 		end,
 		Write = function(Value: string, Block: Block)
-			Block:Line(`buffer.writeu8({SEND_BUFFER}, {Block:Allocate(BYTE)}, {Value} and 1 or 0)`)
+			local Accumulator, Mask = Block:Bit("Allocate")
+			Block:Line(`if {Value} then {Accumulator} += {Mask} end`)
 		end,
 	}
 

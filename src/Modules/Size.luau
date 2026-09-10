@@ -40,6 +40,10 @@ export type Measurement = {
 	--- Whether that maximum comes from a bound the author wrote or from the default ceiling. A
 	--- `string` is Unbounded; a `string(0..64)` is not, even though both have a finite maximum.
 	Unbounded: boolean,
+	--- Bits this type contributes to the bitfield of the scope it sits in -- booleans and optional
+	--- presence flags. They are NOT bytes yet: eight of them share one, and which ones share depends
+	--- on the scope, so they are carried separately until the scope closes. `Seal` converts them.
+	Bits: number,
 	--- Slots taken in the instance side table, which travels as the remote's second argument rather
 	--- than in the buffer. Counted separately because the packet caps count them separately.
 	Refs: number,
@@ -55,6 +59,8 @@ local DEFAULT_LENGTH = (2 ^ 16 - 1)
 
 --- Ceiling on the element count of a map. The generator writes it as a u16, unconditionally.
 local MAP_LENGTH = (2 ^ 16 - 1)
+
+local BITS_PER_BYTE = 8
 
 --- Bytes the generator spends on a length prefix, mirroring `Prefabs.GetTypeToUse`.
 local function LengthPrefixBytes(Upper: number): number
@@ -92,8 +98,27 @@ local function Empty(): Measurement
 		Min = 0,
 		Max = 0,
 		Unbounded = false,
+		Bits = 0,
 		Refs = 0,
 		Culprit = nil,
+	}
+end
+
+--- Closes a bit scope: turns however many bits accumulated into the bytes they actually occupy.
+---
+--- A scope here is a generated BLOCK, which is what the emitter packs bits into -- a loop body, a
+--- branch, an optional's payload. A struct is NOT a scope: its fields share the enclosing block, and
+--- therefore share its bitfield, which is why eight booleans in a struct cost one byte.
+local function Seal(Measured: Measurement): Measurement
+	local Bytes = math.ceil(Measured.Bits / BITS_PER_BYTE)
+
+	return {
+		Min = Measured.Min + Bytes,
+		Max = Measured.Max + Bytes,
+		Unbounded = Measured.Unbounded,
+		Bits = 0,
+		Refs = Measured.Refs,
+		Culprit = Measured.Culprit,
 	}
 end
 
@@ -103,6 +128,7 @@ local function Add(Total: Measurement, Part: Measurement, Times: number?)
 
 	Total.Min += Part.Min * Count
 	Total.Max += Part.Max * Count
+	Total.Bits += Part.Bits * Count
 	Total.Refs += Part.Refs * Count
 
 	if Part.Unbounded and not Total.Unbounded then
@@ -175,6 +201,13 @@ local function MeasurePrimitive(Node: Node): Measurement
 		return Result
 	end
 
+	--> A boolean is one bit in the enclosing scope's bitfield rather than a byte of its own.
+	if Name == "boolean" then
+		local Result = Empty()
+		Result.Bits = 1
+		return Result
+	end
+
 	local Result = Empty()
 	Result.Min = if Primitive then Primitive.Bytes else 0
 	Result.Max = Result.Min
@@ -184,7 +217,10 @@ end
 local function MeasureArray(Node: Node): Measurement
 	local Value = Node.Value
 	local Range = Value.Range
-	local Of = Measure(Value.Of)
+
+	--> The loop body is a block of its own, so the element's bits are packed per element rather than
+	--> shared with whatever surrounds the array.
+	local Of = Seal(Measure(Value.Of))
 
 	local Lower = Range.Min
 	local Upper = Range.Max
@@ -214,15 +250,20 @@ end
 
 local function MeasureMap(Node: Node): Measurement
 	local Values = Node.Value.Values
-	local Key = Measure(Values[1])
-	local Element = Measure(Values[2])
+
+	--> Key and value are emitted into the SAME loop body, so they share one bitfield -- sealing them
+	--> together rather than separately is what keeps this in step with the emitter.
+	local Pair = Empty()
+	Add(Pair, Measure(Values[1]))
+	Add(Pair, Measure(Values[2]))
+	Pair = Seal(Pair)
 
 	--> The element count is an unconditional u16 and nothing in the language can bound it, so every
 	--> map is unbounded by construction.
 	local Result = Empty()
 	Result.Min = 2
-	Result.Max = 2 + ((Key.Max + Element.Max) * MAP_LENGTH)
-	Result.Refs = (Key.Refs + Element.Refs) * MAP_LENGTH
+	Result.Max = 2 + (Pair.Max * MAP_LENGTH)
+	Result.Refs = Pair.Refs * MAP_LENGTH
 	Result.Unbounded = true
 	Result.Culprit = Node.Tokens.Primitive
 
@@ -284,7 +325,9 @@ local function MeasureTagEnum(Node: Node): Measurement
 	local Culprit: Token? = nil
 
 	for _, Variant in Variants do
-		local Measured = MeasureFields(Variant :: Node)
+		--> Each variant is generated into its own branch, so its bits never share a byte with another
+		--> variant's -- or with anything outside the tagged enum.
+		local Measured = Seal(MeasureFields(Variant :: Node))
 
 		Smallest = if Smallest then math.min(Smallest, Measured.Min) else Measured.Min
 		Largest = math.max(Largest, Measured.Max)
@@ -315,14 +358,17 @@ local function MeasureOptional(Node: Node): Measurement
 		return Measure(Of)
 	end
 
-	local Measured = Measure(Of)
+	--> The presence flag is one bit in the ENCLOSING scope; the payload is generated inside a branch,
+	--> which is a scope of its own. So an absent optional costs a bit and nothing else.
+	local Payload = Seal(Measure(Of))
 	local Result = Empty()
 
-	Result.Min = 1
-	Result.Max = 1 + Measured.Max
-	Result.Refs = Measured.Refs
-	Result.Unbounded = Measured.Unbounded
-	Result.Culprit = Measured.Culprit
+	Result.Bits = 1
+	Result.Min = 0
+	Result.Max = Payload.Max
+	Result.Refs = Payload.Refs
+	Result.Unbounded = Payload.Unbounded
+	Result.Culprit = Payload.Culprit
 
 	return Result
 end
@@ -357,7 +403,15 @@ function Measure(Node: Node): Measurement
 	return Empty()
 end
 
+--- Measures a type as a complete, self-contained payload: bits converted into the bytes they
+--- occupy. This is what every caller outside this module wants -- `Measure` alone leaves bits
+--- pending, because whether they share a byte depends on what encloses them.
+local function Sealed(Node: Node): Measurement
+	return Seal(Measure(Node))
+end
+
 return {
 	Measure = Measure,
+	Sealed = Sealed,
 	DefaultLength = DEFAULT_LENGTH,
 }
