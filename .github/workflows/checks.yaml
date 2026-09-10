@@ -17,6 +17,10 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # The whole suite runs in about half a minute. A gate that HANGS is worse than one that fails —
+    # it holds a runner, reports nothing, and hides its own logs until it finishes — so cap it and
+    # let a stall surface as a failure with output.
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4

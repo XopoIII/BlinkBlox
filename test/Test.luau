@@ -6,7 +6,16 @@ local stdio = require("@lune/stdio")
 local task = require("@lune/task")
 
 local Compiler = "init"
+
+--- Schemas to compile, in a fixed order.
+---
+--- `fs.readDir` returns whatever order the filesystem gives, which is alphabetical on APFS and hash
+--- order on ext4. That difference used to decide the outcome of the suite: two schemas wrote to the
+--- same Network modules, so on a Linux runner the wrong one landed last and half the events the
+--- tests reference simply did not exist. The overlap is gone, and sorting keeps any future one from
+--- depending on which machine ran it.
 local Sources = fs.readDir("./Sources")
+table.sort(Sources)
 
 local COMPILE_TEST_FILE = "../../test/Sources/Test"
 

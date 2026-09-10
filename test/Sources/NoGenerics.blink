@@ -1,8 +1,8 @@
 option Casing = Pascal
 option Typescript = true
-option TypesOutput = "../../Network/Types.luau"
-option ClientOutput = "../../Network/Client.luau"
-option ServerOutput = "../../Network/Server.luau"
+option TypesOutput = "../../Network/NoGenericsTypes.luau"
+option ClientOutput = "../../Network/NoGenericsClient.luau"
+option ServerOutput = "../../Network/NoGenericsServer.luau"
 option WriteValidations = true
 option ManualReplication = false
 
