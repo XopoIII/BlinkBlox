@@ -1,28 +1,21 @@
 {
-  "name": "nextra-docs-template",
+  "name": "blink-docs",
   "version": "0.0.1",
-  "description": "Nextra docs template",
+  "description": "Documentation site for the Blink IDL compiler",
+  "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/shuding/nextra-docs-template.git"
-  },
-  "author": "Shu Ding <g@shud.in>",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/shuding/nextra-docs-template/issues"
-  },
-  "homepage": "https://github.com/shuding/nextra-docs-template#readme",
   "dependencies": {
     "next": "^14.2.21",
     "nextra": "^2.13.4",
     "nextra-theme-docs": "^2.13.4",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "shiki": "^0.14.7"
   },
   "devDependencies": {
     "@types/node": "18.11.10",

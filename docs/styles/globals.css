@@ -1,0 +1,48 @@
+/*
+ * Code blocks stay dark in both site themes.
+ *
+ * Upstream issue #60: syntax highlighting is unreadable in light mode. The cause is a mismatch
+ * rather than a missing feature — `next.config.mjs` gives Shiki one theme, Catppuccin Mocha, whose
+ * token colours are chosen for a dark background, while Nextra painted the block's background from
+ * the SITE theme (`nx-bg-primary-700/5`, a near-white tint). In light mode that put dark-theme
+ * tokens on a light block.
+ *
+ * Two ways to fix a mismatch: change the tokens, or change the background. Changing the tokens
+ * means a second theme, which needs rehype-pretty-code >= 0.10 and therefore a Nextra 3/4 migration
+ * (see the note in next.config.mjs). Changing the background is a few lines and makes the pairing
+ * correct immediately, so that is what this does.
+ *
+ * Colours are Mocha's own `editor.background` and `editor.foreground`, so the block matches the
+ * palette its tokens were designed against.
+ */
+
+:root {
+	--blink-code-background: #1e1e2e;
+	--blink-code-foreground: #cdd6f4;
+	--blink-code-border: #313244;
+}
+
+/*
+ * `html:not(.dark)` only: in dark mode Nextra already produces the right background, and overriding
+ * it there would fight the theme for no gain.
+ *
+ * `pre[data-language]` targets exactly the highlighted blocks — the attribute is added by
+ * rehype-pretty-code — so prose and inline `code` are left to the site theme. `!important` is
+ * required because Nextra's background arrives as a Tailwind utility class on the same element.
+ */
+html:not(.dark) pre[data-language] {
+	background-color: var(--blink-code-background) !important;
+	color: var(--blink-code-foreground) !important;
+}
+
+/* The filename tag sits directly above the block; leaving it light breaks the pairing visually. */
+html:not(.dark) .nextra-code-block div[data-rehype-pretty-code-title] {
+	background-color: var(--blink-code-background) !important;
+	color: var(--blink-code-foreground) !important;
+	border-color: var(--blink-code-border) !important;
+}
+
+/* Copy and line-number affordances sit on top of the block and inherit its light colours. */
+html:not(.dark) .nextra-code-block pre .nextra-copy-icon {
+	color: var(--blink-code-foreground) !important;
+}
