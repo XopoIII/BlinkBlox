@@ -166,6 +166,7 @@ local CompletionPending: boolean?
 local IgnoreCursorChange: boolean?
 
 local AnalysisError: State.Class<Error.Class?> = State.new(nil :: any)
+local RenderedDiagnostic: string?
 local AbstractSyntaxTree: Parser.Body?
 
 ---- Private Functions ----
@@ -427,8 +428,49 @@ local function OnPredictionsChanged()
 	end
 end
 
+--- Everything the rendered diagnostic depends on, as one string.
+---
+--- The point is to answer "would this draw the same thing again?" without drawing it. What the
+--- render reads is the diagnostic itself and the source UP TO the end of its span -- that decides
+--- which line the underline sits on, how wide it is, and what line numbers the message quotes.
+--- Anything typed after the error touches none of it.
+local function DiagnosticKey(Diagnostic: Error.Class?): string?
+	if not Diagnostic then
+		return nil
+	end
+
+	local Labels = Diagnostic.Labels
+	local Primary = Labels[#Labels]
+	if not Primary then
+		return nil
+	end
+
+	local Parts = { `{Diagnostic.Code}|{Diagnostic.Severity}|{Diagnostic.RawMessage}` }
+	for _, Label in Labels do
+		table.insert(Parts, `{Label.Span.Start}:{Label.Span.End}:{Label.Text}`)
+	end
+
+	table.insert(Parts, string.sub(Input.ContentText, 1, Primary.Span.End))
+	return table.concat(Parts, "|")
+end
+
 local function OnAnalysisErrorChanged()
 	local Diagnostic = AnalysisError:Get()
+
+	--> Nothing to redraw.
+	-->
+	--> This is not a micro-optimisation. State.Set re-notifies unconditionally for table values, and
+	--> UpdateAnalysis builds a fresh Error object on every parse -- and while a schema is being typed
+	--> it is almost always incomplete, so the parser throws on almost every keystroke. The result was
+	--> that this whole function ran per character even when the error had not changed: it destroyed
+	--> and rebuilt the underline frames, cloning one per line from the top of the file down to the
+	--> error, and called the YIELDING GetTextBoundsAsync up to twice for the line it kept.
+	local Key = DiagnosticKey(Diagnostic)
+	if Key == RenderedDiagnostic then
+		return
+	end
+
+	RenderedDiagnostic = Key
 
 	--> Clear previous error
 	ErrorContainer.Visible = false
