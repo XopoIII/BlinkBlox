@@ -21,6 +21,9 @@ type Generate = (
 type TypePrefab = {
 	Read: Reader,
 	Write: Writer,
+	--> Set when the reader checks the decoded length itself, before the read. The generic post-read
+	--> assert in `GenerateValidation` would then be a second copy of a check that has already passed.
+	ValidatesOnRead: boolean?,
 }
 
 type AssertPrefab = {
@@ -33,6 +36,7 @@ type AssertGenerator = (Variable: string, ...any) -> AssertPrefab
 
 local SEND_BUFFER = "SendBuffer"
 local RECIEVE_BUFFER = "RecieveBuffer"
+local RECIEVE_CURSOR = "RecieveCursor"
 local SEND_POSITION = "SendOffset"
 
 local BYTE = 1
@@ -52,11 +56,14 @@ local Asserts = {
 		}
 	end,
 
-	string = function(Variable: string, Min: number, Max: number): AssertPrefab
+	string = function(Variable: string, Min: number, Max: number, Measure: string?): AssertPrefab
+		--> `Measure` names the expression to compare. The read path passes the decoded length so the
+		--> bound is checked before the string is read; the write path omits it and measures the value.
+		local Length = Measure or `#{Variable}`
 		return {
-			Lower = `if #{Variable} < {Min} then error(\`Expected length of "{Variable}" to be larger than {Min}, got \{#{Variable}} instead.\`) end`,
-			Upper = `if #{Variable} > {Max} then error(\`Expected length of "{Variable}" to be smaller than {Max}, got \{#{Variable}} instead.\`) end`,
-			Exact = `if #{Variable} ~= {Max} then error(\`Expected length of "{Variable}" to equal to {Max}, got \{#{Variable}} instead.\`) end`,
+			Lower = `if {Length} < {Min} then error(\`Expected length of "{Variable}" to be larger than {Min}, got \{{Length}} instead.\`) end`,
+			Upper = `if {Length} > {Max} then error(\`Expected length of "{Variable}" to be smaller than {Max}, got \{{Length}} instead.\`) end`,
+			Exact = `if {Length} ~= {Max} then error(\`Expected length of "{Variable}" to equal to {Max}, got \{{Length}} instead.\`) end`,
 		}
 	end,
 
@@ -68,11 +75,13 @@ local Asserts = {
 		}
 	end,
 
-	buffer = function(Variable: string, Min: number, Max: number): AssertPrefab
+	buffer = function(Variable: string, Min: number, Max: number, Measure: string?): AssertPrefab
+		--> See the note on `Asserts.string` for what `Measure` is for.
+		local Length = Measure or `buffer.len({Variable})`
 		return {
-			Lower = `if buffer.len({Variable}) < {Min} then error(\`Expected size of "{Variable}" to be larger than {Min}, got \{buffer.len({Variable})} instead.\`) end`,
-			Upper = `if buffer.len({Variable}) > {Max} then error(\`Expected size of "{Variable}" to be smaller than {Max}, got \{buffer.len({Variable})} instead.\`) end`,
-			Exact = `if buffer.len({Variable}) ~= {Max} then error(\`Expected size of "{Variable}" to equal to {Max}, got \{buffer.len({Variable})} instead.\`) end`,
+			Lower = `if {Length} < {Min} then error(\`Expected size of "{Variable}" to be larger than {Min}, got \{{Length}} instead.\`) end`,
+			Upper = `if {Length} > {Max} then error(\`Expected size of "{Variable}" to be smaller than {Max}, got \{{Length}} instead.\`) end`,
+			Exact = `if {Length} ~= {Max} then error(\`Expected size of "{Variable}" to equal to {Max}, got \{{Length}} instead.\`) end`,
 		}
 	end,
 
@@ -112,6 +121,15 @@ local function GetTypeToUse(UpperSize: number): TypePrefab
 	error("Value is too large to be written to a buffer.")
 end
 
+--> A length read out of a hostile packet may name more bytes than the packet still holds. Reading
+--> that far throws inside `buffer.read*` and the decode loop's pcall turns it into a dropped packet,
+--> but `buffer` would have allocated the whole span first. Checking the remaining space keeps a
+--> length prefix from buying an allocation, and it is exact rather than conservative: block reads
+--> reserve their fixed bytes up front, so at this point the cursor sits where the payload begins.
+local function GenerateSpaceGuard(Length: string, Variable: string): string
+	return `if {Length} > buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR} then error(\`Expected "{Variable}" to fit in the \{buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR}} bytes left in the packet, got a length of \{{Length}} instead.\`) end`
+end
+
 local function GetTypeToUseByBits(UpperBits: number): TypePrefab
 	for _, NumberType in NumberTypeBounds do
 		if NumberType.Bits >= UpperBits then
@@ -142,6 +160,12 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 
 		local function GenerateValidation(Block: Block, TargetVariable: string)
 			if Block == Write and WriteValidations ~= true then
+				return
+			end
+
+			--> The reader has already asserted the decoded length, and a read of `Length` bytes
+			--> yields exactly `Length` bytes, so measuring the value again tests an identity.
+			if Block == Read and Prefab.ValidatesOnRead and Range and IsVariableSize then
 				return
 			end
 
@@ -328,6 +352,17 @@ do
 				LengthType.Read("Length", Block)
 			end
 
+			--> Checked before the read, and against the reconstructed length rather than the raw
+			--> numeral: the prefix is sized from the span, so `string(300..400)` fits a u8 whose 255
+			--> decodes to 555. The bound named here is the one the schema author actually wrote.
+			if Range then
+				local Assert = Asserts.string(Variable, Lower, Upper, "Length")
+				Block:Line(Assert.Lower)
+				Block:Line(Assert.Upper)
+			end
+
+			Block:Line(GenerateSpaceGuard("Length", Variable))
+
 			Block:Line(`{Block:Declare(Variable)} = buffer.readstring({RECIEVE_BUFFER}, Read(Length), Length)`)
 		end,
 		Write = function(Value: string, Block: Block, Range: NumberRange?)
@@ -358,6 +393,8 @@ do
 			Block:Line(`Allocate(Length)`)
 			Block:Line(`buffer.writestring({SEND_BUFFER}, {SEND_POSITION}, {Value}, Length)`)
 		end,
+
+		ValidatesOnRead = true,
 	}
 
 	Primitives.string = {
@@ -421,6 +458,17 @@ do
 				LengthType.Read("Length", Block)
 			end
 
+			--> Checked before the read, and against the reconstructed length rather than the raw
+			--> numeral: the prefix is sized from the span, so `string(300..400)` fits a u8 whose 255
+			--> decodes to 555. The bound named here is the one the schema author actually wrote.
+			if Range then
+				local Assert = Asserts.buffer(Variable, Lower, Upper, "Length")
+				Block:Line(Assert.Lower)
+				Block:Line(Assert.Upper)
+			end
+
+			Block:Line(GenerateSpaceGuard("Length", Variable))
+
 			Block:Line(`{Block:Declare(Variable)} = buffer.create(Length)`)
 			Block:Line(`buffer.copy({Variable}, 0, {RECIEVE_BUFFER}, Read(Length), Length)`)
 		end,
@@ -449,6 +497,8 @@ do
 			Block:Line(`Allocate(Length)`)
 			Block:Line(`buffer.copy({SEND_BUFFER}, {SEND_POSITION}, {Value}, 0, Length)`)
 		end,
+
+		ValidatesOnRead = true,
 	}
 
 	Primitives.buffer = {
