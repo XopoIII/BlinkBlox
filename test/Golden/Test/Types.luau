@@ -358,6 +358,7 @@ return {
 			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
 			if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
+			if Length * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Value = table.create(Length)
 				-- Read BLOCK: 3 bytes
 			local ARRAY_START_1 = Read(3 * Length)
@@ -896,6 +897,7 @@ return {
 			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
 			if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
+			if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Value = table.create(Length)
 				-- Read BLOCK: 2 bytes
 			local ARRAY_START_1 = Read(2 * Length)
@@ -908,6 +910,7 @@ return {
 				Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
 				if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
 				if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
+				if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Item_1 = table.create(Length)
 					-- Read BLOCK: 2 bytes
 				local ARRAY_START_2 = Read(2 * Length)
@@ -920,6 +923,7 @@ return {
 					Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
 					if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
 					if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Item_2 = table.create(Length)
 						-- Read BLOCK: 1 bytes
 					local ARRAY_START_3 = Read(1 * Length)
@@ -1198,6 +1202,7 @@ return {
 			local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 			if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
 			if Length > 10 then error(`Expected "Length" to be smaller than 10, got {Length} instead.`) end
+			if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Value = table.create(Length)
 				-- Read BLOCK: 2 bytes
 			local ARRAY_START_1 = Read(2 * Length)
@@ -1576,6 +1581,7 @@ return {
 			local Length = LengthOffset + 300
 			if Length < 300 then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
 			if Length > 400 then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Value = table.create(Length)
 				-- Read BLOCK: 1 bytes
 			local ARRAY_START_1 = Read(1 * Length)

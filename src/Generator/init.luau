@@ -979,6 +979,9 @@ function Declarations.Array(Declaration: Parser.Array, Read: Blocks.Block, Write
 	end
 
 	--> Array
+	if IsVariableSize then
+		Prefabs.EmitCapacityGuard(Read, "Length", Variable, Of)
+	end
 	Read:Line(`{Read:Declare(Variable)} = table.create(Length)`)
 
 	--> Body

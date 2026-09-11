@@ -4,6 +4,7 @@
 
 local Blocks = require("./Blocks")
 local Parser = require("../Parser")
+local Size = require("../Modules/Size")
 
 type Block = Blocks.Block
 --> The compiler's range table, not Roblox's NumberRange userdata (which does not exist on Lune).
@@ -130,6 +131,36 @@ local function GenerateSpaceGuard(Length: string, Variable: string): string
 	return `if {Length} > buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR} then error(\`Expected "{Variable}" to fit in the \{buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR}} bytes left in the packet, got a length of \{{Length}} instead.\`) end`
 end
 
+--- Emits a guard on a decoded element count, before the array behind it is allocated.
+---
+--- `table.create(Length)` reserves every slot up front, so a count the packet cannot possibly back
+--- still buys that allocation even though the loop fails on its first iteration: two bytes reserve
+--- 65535 slots, and `u8[]` is enough to ask for them. Comparing the count against what is left of
+--- whatever its elements read closes that.
+---
+--- The comparison uses the MINIMUM an element costs, which is the most that can be assumed about
+--- it, so the guard errs towards letting a packet through rather than refusing an honest one. An
+--- element that costs nothing either way is refused at compile time instead -- there is no resource
+--- left to measure it against.
+local function EmitCapacityGuard(Block: Block, Length: string, Variable: string, Of: Parser.TypeNode)
+	local Element = Size.Sealed(Of :: any)
+
+	if Element.Min > 0 then
+		local Needed = if Element.Min == 1 then Length else `{Length} * {Element.Min}`
+		Block:Line(
+			`if {Needed} > buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR} then error(\`Expected "{Variable}" to fit in the \{buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR}} bytes left in the packet, got a length of \{{Length}} instead.\`) end`
+		)
+		return
+	end
+
+	if Element.Refs > 0 then
+		local Needed = if Element.Refs == 1 then Length else `{Length} * {Element.Refs}`
+		Block:Line(
+			`if {Needed} > #RecieveInstances - RecieveInstanceCursor then error(\`Expected "{Variable}" to fit in the \{#RecieveInstances - RecieveInstanceCursor} values left beside the packet, got a length of \{{Length}} instead.\`) end`
+		)
+	end
+end
+
 local function GetTypeToUseByBits(UpperBits: number): TypePrefab
 	for _, NumberType in NumberTypeBounds do
 		if NumberType.Bits >= UpperBits then
@@ -211,13 +242,13 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 	end
 end
 
-local function GenerateNumberGenerator(Type: string, Size: number): (TypePrefab, { Type: string, Generate: Generate })
+local function GenerateNumberGenerator(Type: string, Bytes: number): (TypePrefab, { Type: string, Generate: Generate })
 	local Prefab = {
 		Read = function(Variable: string, Block: Block)
-			Block:Line(`{Block:Declare(Variable)} = buffer.read{Type}({RECIEVE_BUFFER}, {Block:Read(Size)})`)
+			Block:Line(`{Block:Declare(Variable)} = buffer.read{Type}({RECIEVE_BUFFER}, {Block:Read(Bytes)})`)
 		end,
 		Write = function(Value: string, Block: Block)
-			Block:Line(`buffer.write{Type}({SEND_BUFFER}, {Block:Allocate(Size)}, {Value})`)
+			Block:Line(`buffer.write{Type}({SEND_BUFFER}, {Block:Allocate(Bytes)}, {Value})`)
 		end,
 	}
 
@@ -678,6 +709,7 @@ end
 return {
 	Types = Types,
 	Asserts = Asserts,
+	EmitCapacityGuard = EmitCapacityGuard,
 	Primitives = Primitives,
 	Structures = Structures,
 	GetTypeToUse = GetTypeToUse,

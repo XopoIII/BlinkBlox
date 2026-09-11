@@ -980,6 +980,7 @@ function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
 	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
 	if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 	local Value = table.create(Length)
 		-- Read BLOCK: 1 bytes
 	local ARRAY_START_1 = Read(1 * Length)

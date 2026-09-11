@@ -88,6 +88,18 @@ ExpectRejection(
 	`bytes left in the packet`
 )
 
+--> `table.create(Length)` reserves every slot before the loop runs, so a count the packet cannot
+--> back still buys the allocation even though the first iteration fails. `ColorArray` is `Color3[]`
+--> at three bytes an element, so 65535 of them would need 196605 bytes the packet does not have.
+local OversizeArray = buffer.create(2)
+buffer.writeu16(OversizeArray, 0, 65535)
+ExpectRejection(
+	"An array is refused before its slots are reserved",
+	Client.ColorArray.Read,
+	OversizeArray,
+	`bytes left in the packet`
+)
+
 --> The instance table travels beside the buffer as the remote's second argument, and a client
 --> chooses both. `unknown` reads from it without checking, so a buffer that claims values the table
 --> does not hold used to decode as nil -- and inside a loop, to decode as nil for as long as the

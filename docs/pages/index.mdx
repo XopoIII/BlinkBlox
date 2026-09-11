@@ -39,7 +39,9 @@ closed as out of scope. This fork fixes them and continues from there:
   read from the packet, so the work it buys has to stay proportional to what the packet paid. An
   element that reads bytes runs out of packet; one that takes a value from the instance table now
   runs out of instances, which `unknown` never checked. An element that does neither is refused at
-  compile time -- `struct {}[]` turned two bytes into 65535 iterations.
+  compile time -- `struct {}[]` turned two bytes into 65535 iterations. The count is also checked
+  before `table.create` reserves the slots, so a `u8[]` claiming 65535 elements no longer buys the
+  allocation on its way to failing.
 - **A player who leaves mid-call no longer lingers** in the replication map, taking a buffer
   allocation and a remote call every Heartbeat for the rest of the server's life.
 - **Instance classes containing a digit** — `Instance(Vector3Value)`, `Instance(Motor6D)` — parse.
