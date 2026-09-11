@@ -357,7 +357,13 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	while (RecieveCursor < Size) do
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		local Parsed = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		end)
+		if not Parsed then
+			warn("[Blink]: Dropped a packet that could not be decoded.")
+			break
+		end
 	end
 end)
 Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -374,7 +380,13 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	while (RecieveCursor < Size) do
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		local Parsed = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		end)
+		if not Parsed then
+			warn("[Blink]: Dropped a packet that could not be decoded.")
+			break
+		end
 	end
 end)
 

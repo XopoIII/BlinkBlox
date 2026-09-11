@@ -1138,6 +1138,7 @@ end)
 --> These live apart, but they run as part of the same suite. New specs go in files like these rather
 --> than on the end of this one, which is on the size ratchet in scripts/check-file-size.sh.
 require("./TypePacks")
+require("./ClientDecoding")
 require("./Highlighting")
 require("./WireFormat")
 require("./Decoding")

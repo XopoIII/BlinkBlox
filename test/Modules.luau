@@ -30,6 +30,14 @@ local function MockRequire(Path: string, Environment)
 	Environment.os = Shared.Os
 	Environment.task = task
 	Environment.typeof = MockTypeof
+
+	--> Records what the module warns about before passing it on, so a spec can assert on it. The
+	--> generated code reports several things through `warn` and nothing else, and none of that was
+	--> checkable before.
+	Environment.warn = function(...)
+		table.insert(Shared.Warnings, table.concat({ ... }, " "))
+		warn(...)
+	end
 	Environment.require = function()
 		error("require is not supported")
 	end

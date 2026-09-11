@@ -2632,6 +2632,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	while (RecieveCursor < Size) do
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		local Parsed = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		if Index == 2 then
 			Push(Queue.Reliable[2], table.pack(SerdesFunctions.ReadEVENT_ServerPollEvent()))
@@ -2981,6 +2982,13 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end
 				table.insert(Queue.Reliable[36], {Value} :: {any})
 			end
+		else
+			error("[Blink]: Unknown event index.")
+		end
+		end)
+		if not Parsed then
+			warn("[Blink]: Dropped a packet that could not be decoded.")
+			break
 		end
 	end
 end)
@@ -2998,6 +3006,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	while (RecieveCursor < Size) do
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		local Parsed = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		if Index == 2 then
 			Push(Queue.Unreliable[2], table.pack(SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent()))
@@ -3049,6 +3058,13 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				SerdesEvent = "TupleUnreliable"
 				Events.Unreliable[13](Value1, Value2, Value3, Value4, Value5)
 			end
+		else
+			error("[Blink]: Unknown event index.")
+		end
+		end)
+		if not Parsed then
+			warn("[Blink]: Dropped a packet that could not be decoded.")
+			break
 		end
 	end
 end)

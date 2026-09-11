@@ -16,6 +16,9 @@ end
 --> so, which makes "spend the bucket, wait a second, spend it again" an exact assertion.
 local Clock = 0
 
+--> Collected by the `warn` injected into each generated module's environment; see Modules.luau.
+local Warnings: { string } = {}
+
 --> Whether the mock player is still in the game. Generated server code asks before writing a
 --> player's buffer back into PlayersMap, so a test can drive that path by flipping this.
 local PlayerInGame = true
@@ -187,6 +190,18 @@ return {
 	Bridge = Signal.new(),
 	GetEnvironment = GetEnvironment,
 	ServerOnlyInstance = roblox.Instance.new("Instance"),
+
+	--> Every `warn` the generated modules have emitted since the last drain, newest last.
+	-->
+	--> The generated code reports a good deal through warnings and nothing else -- a refused rate
+	--> limit, an oversized unreliable payload, a packet it could not decode. None of that was
+	--> assertable before, so a guard could stop warning and the suite would still be green.
+	Warnings = Warnings,
+	DrainWarnings = function(): { string }
+		local Drained = table.clone(Warnings)
+		table.clear(Warnings)
+		return Drained
+	end,
 
 	--> Simulates the player leaving (and coming back), so a test can exercise what generated server
 	--> code does when a listener resumes after its player is gone.

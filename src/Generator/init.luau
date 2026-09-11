@@ -1464,19 +1464,28 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 			Channel:Line(`\twarn(\`[Blink]: Dropped the rest of a packet from \{Player.Name\}, too many events.\`)`)
 			Channel:Line("\tbreak")
 			Channel:Line("end")
-
-			--> A TRUNCATED packet defeats every limit above, because it is SMALLER than a legitimate
-			--> one: two bytes tagged as a five-byte event make `buffer.readu16` throw from inside the
-			--> OnServerEvent connection, where no user pcall can reach it. `Read` advances the cursor
-			--> without a bounds check, so the only place to contain that is around the decode itself.
-			--> The cursor is wherever the throw left it afterwards, so the packet cannot be resumed —
-			--> hence `break` rather than `continue`.
-			Channel:Line("local Parsed = pcall(function()")
 		end
 
 		EmitEventCap(Reliables)
 		EmitEventCap(Unreliables)
 	end
+
+	--> A TRUNCATED packet defeats every limit above, because it is SMALLER than a legitimate one: two
+	--> bytes tagged as a five-byte event make `buffer.readu16` throw from inside the remote's
+	--> connection, where no user pcall can reach it. `Read` advances the cursor without a bounds
+	--> check, so the only place to contain that is around the decode itself. The cursor is wherever
+	--> the throw left it afterwards, so the packet cannot be resumed -- hence `break` rather than
+	--> `continue`.
+	-->
+	--> BOTH sides, not just the server. The client cannot be attacked this way, but it can still be
+	--> handed a packet it cannot parse: a listener that yields in a Sync call leaves the module-level
+	--> cursor pointing mid-event, and a client built from a different schema than the server decodes
+	--> every index one event out. Without this the user gets a raw `buffer access out of bounds` from
+	--> inside OnClientEvent, which is what upstream issue #26 and the devforum report were.
+	--> Measured at +109ns per decoded event, against ~20ns for the buffer read it guards -- real, and
+	--> irrelevant next to the listener dispatch that follows it.
+	Reliables:Line("local Parsed = pcall(function()")
+	Unreliables:Line("local Parsed = pcall(function()")
 
 	Types.u8.Read("Index", Reliables)
 	Types.u8.Read("Index", Unreliables)
@@ -1520,28 +1529,33 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	local UNKNOWN_EVENT = `error("[Blink]: Unknown event index.")`
 
 	if Channels.Reliable.Listening then
-		if Context == "Server" then
-			Reliables = Reliables:Branch("Default"):Line(UNKNOWN_EVENT)
-		end
-
-		Reliables = Reliables:End()
+		Reliables = Reliables:Branch("Default"):Line(UNKNOWN_EVENT):End()
 	end
 
 	if Channels.Unreliable.Listening then
-		if Context == "Server" then
-			Unreliables = Unreliables:Branch("Default"):Line(UNKNOWN_EVENT)
+		Unreliables = Unreliables:Branch("Default"):Line(UNKNOWN_EVENT):End()
+	end
+
+	--> Close the decode function opened above and act on its result.
+	-->
+	--> The server says nothing: the packet came from a client, and letting one fill a server's output
+	--> window is its own denial of service. The client says so once, because a packet it cannot parse
+	--> is a bug in the game rather than an attack, and silence there is what made the original report
+	--> so hard to diagnose -- events simply stopped arriving.
+	local function EmitDecodeResult(Channel: Blocks.Block)
+		Channel:Line("end)")
+		if Context == "Client" then
+			Channel:Line("if not Parsed then")
+			Channel:Line(`\twarn("[Blink]: Dropped a packet that could not be decoded.")`)
+			Channel:Line("\tbreak")
+			Channel:Line("end")
+		else
+			Channel:Line("if not Parsed then break end")
 		end
-
-		Unreliables = Unreliables:End()
 	end
 
-	--> Close the decode function opened by EmitEventCap and act on its result.
-	if Context == "Server" then
-		Reliables:Line("end)")
-		Reliables:Line("if not Parsed then break end")
-		Unreliables:Line("end)")
-		Unreliables:Line("if not Parsed then break end")
-	end
+	EmitDecodeResult(Reliables)
+	EmitDecodeResult(Unreliables)
 
 	Reliables = Reliables:End():End()
 	Unreliables = Unreliables:End():End()
