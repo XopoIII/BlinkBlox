@@ -12,6 +12,7 @@ local Blocks = require("@self/Blocks")
 local Fragments = require("@self/Fragments")
 local GenerateTypescript = require("@self/Typescript")
 local Prefabs = require("@self/Prefabs")
+local Serde = require("@self/Serde")
 local Util = require("@self/Util")
 
 local EVENTS_TYPE = Fragments.EVENTS_TYPE
@@ -55,7 +56,11 @@ local Return: Builder.Builder
 local Options: Parser.Options
 
 local Generators = {}
-local Declarations = {}
+
+--> The serde half -- how each kind of type is read from and written to a buffer -- lives in
+--> Serde.luau, and the rest of this file adds to the same table. What stays here is the half that
+--> needs the generator's own state: events, functions, and the API surface around them.
+local Declarations = Serde
 
 --> Set when the schema declares at least one OrderedUnreliable event, so the sequence bookkeeping
 --> is emitted only where something uses it.
@@ -71,8 +76,6 @@ local Channels: { [string]: { Count: number, Listening: boolean } } = {
 }
 
 local FormatKey = Util.FormatKey
-local FormatIndex = Util.FormatIndex
-local BitIndexToHex = Util.BitIndexToHex
 
 local Types = Prefabs.Types
 local Primitives = Prefabs.Primitives
@@ -120,191 +123,6 @@ local function OrderGuardExpression(IsOrdered: boolean, Index: number): string?
 end
 
 --> Declaration functions
-
-function Declarations.Primitive(
-	Declaration: Parser.Primitive,
-	Read: Blocks.Block,
-	Write: Blocks.Block,
-	Variable: string
-)
-	local Tokens = Declaration.Tokens
-	local Primitive = Tokens.Primitive.Value
-	local Generator = Primitives[Primitive]
-	Generator.Generate(Declaration, Variable, Read, Write, Options.WriteValidations)
-end
-
-function Declarations.Set(Declaration: Parser.Set, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
-	local Value = Declaration.Value
-	local Flags = Value.Values
-
-	do
-		--> Read Flags
-
-		Read:Line(`{Read:Declare(Variable)} = \{\}`)
-
-		local Remaining = #Flags
-		local FlagIndex = 1
-
-		while Remaining > 0 do
-			local Partition = math.min(Remaining, 32)
-			Prefabs.GetTypeToUseByBits(Partition).Read("SET_BITS", Read)
-
-			for Index = 1, Partition do
-				local Flag = Flags[FlagIndex]
-
-				Read:EmptyDeclare(Flag)
-				Read:Line(`{Variable}{FormatIndex(Flag)} = bit32.btest(SET_BITS, {BitIndexToHex(Index - 1)});`)
-
-				FlagIndex += 1
-			end
-
-			Remaining -= Partition
-		end
-	end
-
-	do
-		--> Write body
-
-		local Remaining = #Flags
-		local FlagIndex = 1
-
-		while Remaining > 0 do
-			local Partition = math.min(Remaining, 32)
-			Write:Line(`{Write:Declare("SET_BITS")} = 0`)
-
-			for Index = 1, Partition do
-				local Flag = Flags[FlagIndex]
-				Write:Line(`if {Variable}{FormatIndex(Flag)} == true then SET_BITS += {BitIndexToHex(Index - 1)} end`)
-				FlagIndex += 1
-			end
-
-			Prefabs.GetTypeToUseByBits(Partition).Write("SET_BITS", Write)
-
-			Remaining -= Partition
-		end
-	end
-end
-
-function Declarations.Enum(Declaration: Parser.Enum, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
-	local Value = Declaration.Value
-	local Enums = Value.Values
-	local Literal = Util.GenerateEnumLiterals(Enums)
-	Literal = string.gsub(Literal, "|", "or")
-
-	--> Read body
-	Read:Line(`{Read:Declare(Variable)} = true :: any`)
-	Types.u8.Read(`Index`, Read)
-	Read = Read:Compare("Index", "0", "Equals")
-	for Index, EnumItem in Enums do
-		if Index > 1 then
-			Read = Read:Branch("Conditional", "Index", `{Index - 1}`, "Equals")
-		end
-
-		Read:Line(`{Variable} = "{EnumItem}"`)
-	end
-	Read:Branch("Default"):Line(`error(\`Unexpected enum: \{Index\}\`)`):End()
-
-	--> Write body
-	local Allocation = Write:Allocate(1)
-	for Index, EnumItem in Enums do
-		if Index == 1 then
-			Write = Write:Compare(Variable, `"{EnumItem}"`, "Equals")
-		else
-			Write = Write:Branch("Conditional", Variable, `"{EnumItem}"`, "Equals")
-		end
-
-		Write:Line(`buffer.writeu8(SendBuffer, {Allocation}, {Index - 1})`)
-	end
-	Write:Branch("Default"):Line(`error(\`Unexpected enum: \{{Variable}\}, expected one of {Literal}.\`)`):End()
-end
-
-function Declarations.Map(Declaration: Parser.Map, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
-	local MapValue = Declaration.Value
-	local Key = MapValue.Values[1]
-	local Value = MapValue.Values[2]
-
-	local KeyVariable = `Key_{Read.Indent}`
-	local ElementVariable = `Element_{Write.Indent}`
-	local ElementsVariable = `Elements_{Write.Indent}`
-	local ElementsAllocation = Write:Allocate(2)
-
-	Read:Line(`{Read:Declare(Variable)} = \{\}`)
-	Write:Line(`local {ElementsVariable} = 0`)
-	Types.u16.Read(ElementsVariable, Read)
-
-	local ReadLoop = Read:Loop("_ = 1", ElementsVariable)
-	local WriteLoop = Write:Iterator(KeyVariable, ElementVariable, Variable)
-
-	--> Maps are unsafe
-	ReadLoop:DisableOperationOptimisations()
-	WriteLoop:DisableOperationOptimisations()
-
-	--ReadLoop:Line(`local Key: {KeyType}, Element: {ValueType};`)
-	WriteLoop:Line(`{ElementsVariable} += 1`)
-	Generators.UserType(Key :: Type, ReadLoop, WriteLoop, KeyVariable)
-	Generators.UserType(Value :: Type, ReadLoop, WriteLoop, ElementVariable)
-	ReadLoop:Line(`{Variable}[{KeyVariable}] = {ElementVariable}`)
-
-	WriteLoop:End()
-	ReadLoop:End()
-
-	Write:Line(`buffer.writeu16(SendBuffer, {ElementsAllocation}, {ElementsVariable})`)
-end
-
-function Declarations.Struct(Declaration: Parser.Struct, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
-	local Value = Declaration.Value
-	Read:Line(`{Read:Declare(Variable)} = \{\} :: any`)
-
-	for _, Field in Value.Values do
-		local Name = Field.Name
-		local FieldVariable = `{Variable}{FormatIndex(Name)}`
-		Generators.UserType(Field :: Type, Read, Write, FieldVariable)
-	end
-end
-
-function Declarations.Tuple(Declaration: Parser.Tuple, Read: Blocks.Block, Write: Blocks.Block)
-	local Names = Declaration.Value.Names
-	for Index, Value in Declaration.Value.Values do
-		local Variable = Names[Index] or `Value{Index}`
-		Generators.UserType(Value :: Type, Read, Write, Variable)
-	end
-end
-
-function Declarations.TagEnum(Declaration: Parser.TagEnum, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
-	local Value = Declaration.Value
-	local Values = Value.Values
-
-	--> Body
-	local Tag = Value.Tag
-	local Header = `"{Values[1].Name}"`
-	local TagIndex = `{Variable}{FormatIndex(Tag)}`
-
-	Types.u8.Read(`Tag`, Read)
-	Read:Line(`{Read:Declare(Variable)} = true :: any`)
-
-	local Allocation = Write:Allocate(1)
-
-	Read = Read:Compare("Tag", "0", "Equals")
-	Write = Write:Compare(TagIndex, Header, "Equals")
-
-	for Index, Variant in Values do
-		local Name = `"{Variant.Name}"`
-		if Index > 1 then
-			Read = Read:Branch("Conditional", "Tag", tostring(Index - 1), "Equals")
-			Write = Write:Branch("Conditional", TagIndex, Name, "Equals")
-		end
-
-		Write:_lineFront(`buffer.writeu8(SendBuffer, {Allocation}, {Index - 1})`)
-		Write:Advance(1)
-
-		Generators.UserType(Variant, Read, Write, Variable)
-		Read:Line(`{TagIndex} = {Name}`)
-	end
-
-	Read:Branch("Default"):Line(`error(\`Unexpected variant: \{Tag\}\`)`):End()
-
-	Write:Branch("Default"):Line(`error(\`Unexpected variant: \{{TagIndex}\}\`)`):End()
-end
 
 function Declarations.Event(Declaration: Parser.Event)
 	local Value = Declaration.Value
@@ -358,6 +176,25 @@ function Declarations.Event(Declaration: Parser.Event)
 	if Value.From ~= Context and IsPolling ~= true then
 		local IsSync = (Value.Call == "SingleSync" or Value.Call == "ManySync")
 		local IsSingle = (Value.Call == "SingleSync" or Value.Call == "SingleAsync")
+
+		--> Binding the listener. A Single event keeps one, and a second `.On()` replaces it -- which
+		--> is the documented behaviour and stays that way. What it did not do is say so, and the
+		--> silence hides a second-order effect: the FIRST listener's returned disconnect function is
+		--> guarded by `Events[n] == Listener`, so once it has been replaced that disconnect quietly
+		--> stops doing anything. Two systems that each connect and later disconnect therefore leave a
+		--> listener attached that neither of them believes it owns. Upstream #167.
+		local function BindListener(Target: Blocks.Block): Blocks.Block
+			if not IsSingle then
+				return Target:Line(`table.insert({Connection}, Listener)`)
+			end
+
+			return Target:Line(`if {Connection} ~= nil then`)
+				:Line(
+					`\twarn("[Blink]: \\"{Declaration.Name}\\" already has a listener. {Value.Call} keeps only the newest one, and the replaced listener's disconnect stops working.")`
+				)
+				:Line("end")
+				:Line(`{Connection} = Listener`)
+		end
 
 		--> Create queue and event branch
 		if not IsSingle then
@@ -447,8 +284,7 @@ function Declarations.Event(Declaration: Parser.Event)
 				:Line(`table.insert({Queue}, \{{ListenerArguments}\} :: \{any\})`)
 				:End()
 
-			Listener = Blocks.Function(Casing.On, ContextArguments, `() -> ()`, true)
-				:Line(IsSingle and `{Connection} = Listener` or `table.insert({Connection}, Listener)`)
+			Listener = BindListener(Blocks.Function(Casing.On, ContextArguments, `() -> ()`, true))
 				:Iterator("Index", "Arguments", Queue)
 				:Line(IsSync and `Listener(table.unpack(Arguments))` or `task.spawn(Listener, table.unpack(Arguments))`)
 				:End()
@@ -462,8 +298,7 @@ function Declarations.Event(Declaration: Parser.Event)
 				Block:Iterator("_", "Listener", Connection):Lines(CallListener.Content, Block.Indent):End()
 			end
 
-			Listener = Blocks.Function(Casing.On, ContextArguments, `() -> ()`, true)
-				:Line(IsSingle and `{Connection} = Listener` or `table.insert({Connection}, Listener)`)
+			Listener = BindListener(Blocks.Function(Casing.On, ContextArguments, `() -> ()`, true))
 				:Lines(Disconnect.Content, 1)
 				:End()
 		end
@@ -912,109 +747,9 @@ function Declarations.Function(Declaration: Parser.Function)
 	Return.PushLines(Body.DumpLines(), 0)
 end
 
-function Declarations.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
-	local Value = Declaration.Value
-	local Of = Value.Of
-	local Range = Value.Range :: NumberRange
-
-	Read:Comment("START ARRAY")
-	Write:Comment("START ARRAY")
-
-	local Lower = Range.Min
-	local Upper = Range.Max
-
-	local Iterator = `Item_{Read.Indent}`
-	local IsVariableSize = (Lower ~= Upper)
-
-	--> Length
-	if IsVariableSize then
-		--> Encoded RELATIVE to the declared minimum, in the smallest numeral that can hold the span.
-		--> `u8[300..400]` needs one byte for a hundred possible lengths, not the two that 400 would
-		--> otherwise demand -- and a length below the minimum can no longer be written at all.
-		local Span = (Upper - Lower)
-		local LengthType = Prefabs.GetTypeToUse(Span)
-		local Assert = Prefabs.Asserts.number("Length", Lower, Upper)
-
-		if Lower > 0 then
-			LengthType.Read("LengthOffset", Read)
-			Read:Line(`local Length = LengthOffset + {Lower}`)
-		else
-			LengthType.Read("Length", Read)
-		end
-
-		Read:Line(Assert.Lower)
-		Read:Line(Assert.Upper)
-
-		if Lower > 0 then
-			--> Checked on the SEND side too, and unconditionally. An array shorter than the minimum
-			--> would otherwise encode as a negative offset, wrap to a large unsigned value, and fail
-			--> on the receiver as a length violation that names neither the array nor the sender.
-			local WriteAssert = Prefabs.Asserts.number(`#{Variable}`, Lower, Upper)
-			Write:Line(WriteAssert.Lower)
-			Write:Line(WriteAssert.Upper)
-			Write:Line(`local LengthOffset = #{Variable} - {Lower}`)
-			LengthType.Write("LengthOffset", Write)
-		else
-			LengthType.Write(`#{Variable}`, Write)
-		end
-	else
-		Read:Line(`local Length = {Upper}`)
-	end
-
-	--> Array
-	if IsVariableSize then
-		Prefabs.EmitCapacityGuard(Read, "Length", Variable, Of)
-	end
-	Read:Line(`{Read:Declare(Variable)} = table.create(Length)`)
-
-	--> Body
-	Read = Read:Loop("Index = 1", "Length")
-	Write = Write:Loop("Index = 1", IsVariableSize and `#{Variable}` or Upper)
-
-	Write:Line(`local {Iterator} = {Variable}[Index]`)
-	Generators.UserType(Of, Read, Write, Iterator)
-
-	Read:Line(`table.insert({Variable}, {Iterator})`)
-
-	--> End
-	Read = Read:End()
-	Write = Write:End()
-
-	Read:Comment("END ARRAY")
-	Write:Comment("END ARRAY")
-end
-
-function Declarations.Optional(Declaration: Parser.Optional, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
-	Read:Declare(Variable, true)
-
-	local Of = Declaration.Value.Of
-	local IsInstance = if Of.Type == "Primitive" then Of.Tokens.Primitive.Value == "Instance" else false
-
-	if IsInstance then
-		Read:Line("RecieveInstanceCursor += 1")
-		Read = Read:Compare("typeof(RecieveInstances[RecieveInstanceCursor])", '"Instance"', "Equals")
-		Read:Line("RecieveInstanceCursor -= 1")
-	else
-		--> The presence flag is one BIT, sharing a byte with any other flags and booleans in the same
-		--> block. It is claimed on both sides before the payload branch, so read and write reserve the
-		--> same byte at the same offset.
-		local WriteAccumulator, WriteMask = Write:Bit("Allocate")
-		Write:Line(`if {Variable} ~= nil then {WriteAccumulator} += {WriteMask} end`)
-
-		local ReadAccumulator, ReadMask = Read:Bit("Read")
-		Read = Read:Compare(`bit32.btest({ReadAccumulator}, {ReadMask})`, "true", "Equals")
-		Write = Write:Compare(Variable, "nil", "Not")
-	end
-
-	Generators.UserType(Declaration.Value.Of, Read, Write, Variable)
-	Read:End()
-
-	if not IsInstance then
-		Write:End()
-	end
-end
-
 --> Generator functions
+--- Dispatches a node to the serde function for its kind. Serde.Emit points back here so that a
+--- struct, an array or a map can emit whatever it contains without either file requiring the other.
 function Generators.UserType(Declaration: Type, Read: Blocks.Block, Write: Blocks.Block, Variable: string?)
 	local Name = Declaration.Name
 	local Target = Variable or "Value"
@@ -1375,6 +1110,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	Generator.Reset()
 	Context = FileContext
 	Options = AbstractSyntaxTree.Value.Options
+	Serde.Options = Options
 	Casing = Settings.GetCasing((Options.Casing :: Settings.Case) or "Pascal")
 
 	--> Setup noop
@@ -1702,6 +1438,7 @@ function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 	Generator.Reset()
 	Context = "Shared"
 	Options = AbstractSyntaxTree.Value.Options
+	Serde.Options = Options
 	Casing = Settings.GetCasing((Options.Casing :: Settings.Case) or "Pascal")
 
 	--> Parse declarations
@@ -1730,5 +1467,9 @@ end
 function Generator.GenerateTypescript(FileContext: Context, AbstractSyntaxTree: Parser.Body): string
 	return GenerateTypescript(FileContext, AbstractSyntaxTree)
 end
+
+--> Closes the loop between the two halves. Serde emits the contents of a struct, array or map by
+--> calling back into the dispatcher above, which is defined here because it needs this file's state.
+Serde.Emit = Generators.UserType
 
 return Generator

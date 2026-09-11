@@ -344,6 +344,9 @@ local Returns = table.freeze({
 
 	TestEvent = {
 		On = function(Listener: (Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }) -> ()): () -> ()
+			if Events.Unreliable[0] ~= nil then
+				warn("[Blink]: \"TestEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Unreliable[0] = Listener
 			return function (): ()
 				if Events.Unreliable[0] == Listener then

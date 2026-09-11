@@ -3948,6 +3948,9 @@ local Returns = table.freeze({
 	},
 	ClientEmptyEvent = {
 		On = function(Listener: (Player: Player, Value: nil) -> ()): () -> ()
+			if Events.Reliable[4] ~= nil then
+				warn("[Blink]: \"ClientEmptyEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[4] = Listener
 			for Index, Arguments in Queue.Reliable[4] do
 				Listener(table.unpack(Arguments))
@@ -3962,6 +3965,9 @@ local Returns = table.freeze({
 	},
 	ClientEmptyUnreliableEvent = {
 		On = function(Listener: (Player: Player, Value: nil) -> ()): () -> ()
+			if Events.Unreliable[4] ~= nil then
+				warn("[Blink]: \"ClientEmptyUnreliableEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Unreliable[4] = Listener
 			return function (): ()
 				if Events.Unreliable[4] == Listener then
@@ -4409,6 +4415,9 @@ local Returns = table.freeze({
 	},
 	Booleans = {
 		On = function(Listener: (Player: Player, Value: { boolean }) -> ()): () -> ()
+			if Events.Reliable[14] ~= nil then
+				warn("[Blink]: \"Booleans\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[14] = Listener
 			for Index, Arguments in Queue.Reliable[14] do
 				task.spawn(Listener, table.unpack(Arguments))
@@ -5001,6 +5010,9 @@ local Returns = table.freeze({
 	},
 	ReliableClient = {
 		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+			if Events.Reliable[24] ~= nil then
+				warn("[Blink]: \"ReliableClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[24] = Listener
 			for Index, Arguments in Queue.Reliable[24] do
 				Listener(table.unpack(Arguments))
@@ -5097,6 +5109,9 @@ local Returns = table.freeze({
 	},
 	UnreliableClient = {
 		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+			if Events.Unreliable[12] ~= nil then
+				warn("[Blink]: \"UnreliableClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Unreliable[12] = Listener
 			return function (): ()
 				if Events.Unreliable[12] == Listener then

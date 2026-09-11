@@ -737,6 +737,9 @@ local Returns = table.freeze({
 		},
 		Snapshot = {
 			On = function(Listener: (Player: Player, Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }) -> ()): () -> ()
+				if Events.Unreliable[0] ~= nil then
+					warn("[Blink]: \"Snapshot\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+				end
 				Events.Unreliable[0] = Listener
 				return function (): ()
 					if Events.Unreliable[0] == Listener then
@@ -801,6 +804,9 @@ local Returns = table.freeze({
 		},
 		Snapshot = {
 			On = function(Listener: (Player: Player, Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }) -> ()): () -> ()
+				if Events.Unreliable[1] ~= nil then
+					warn("[Blink]: \"Snapshot\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+				end
 				Events.Unreliable[1] = Listener
 				return function (): ()
 					if Events.Unreliable[1] == Listener then

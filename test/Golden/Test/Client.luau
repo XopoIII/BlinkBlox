@@ -5961,6 +5961,9 @@ local Returns = table.freeze({
 	Indexers = {
 		TestEvent = {
 			On = function(Listener: (Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }) -> ()): () -> ()
+				if Events.Unreliable[0] ~= nil then
+					warn("[Blink]: \"TestEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+				end
 				Events.Unreliable[0] = Listener
 				return function (): ()
 					if Events.Unreliable[0] == Listener then
@@ -8370,6 +8373,9 @@ local Returns = table.freeze({
 	},
 	SendOccupiedCell = {
 		On = function(Listener: (Value: Vector3) -> ()): () -> ()
+			if Events.Reliable[3] ~= nil then
+				warn("[Blink]: \"SendOccupiedCell\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[3] = Listener
 			for Index, Arguments in Queue.Reliable[3] do
 				Listener(table.unpack(Arguments))
@@ -8554,6 +8560,9 @@ local Returns = table.freeze({
 	},
 	EmptyEvent = {
 		On = function(Listener: (Value: nil) -> ()): () -> ()
+			if Events.Reliable[9] ~= nil then
+				warn("[Blink]: \"EmptyEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[9] = Listener
 			for Index, Arguments in Queue.Reliable[9] do
 				Listener(table.unpack(Arguments))
@@ -8576,6 +8585,9 @@ local Returns = table.freeze({
 	},
 	EmptyUnreliableEvent = {
 		On = function(Listener: (Value: nil) -> ()): () -> ()
+			if Events.Unreliable[8] ~= nil then
+				warn("[Blink]: \"EmptyUnreliableEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Unreliable[8] = Listener
 			return function (): ()
 				if Events.Unreliable[8] == Listener then
@@ -8616,6 +8628,9 @@ local Returns = table.freeze({
 	},
 	Flags8 = {
 		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}) -> ()): () -> ()
+			if Events.Reliable[12] ~= nil then
+				warn("[Blink]: \"Flags8\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[12] = Listener
 			for Index, Arguments in Queue.Reliable[12] do
 				Listener(table.unpack(Arguments))
@@ -8638,6 +8653,9 @@ local Returns = table.freeze({
 	},
 	Flags16 = {
 		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}) -> ()): () -> ()
+			if Events.Reliable[13] ~= nil then
+				warn("[Blink]: \"Flags16\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[13] = Listener
 			for Index, Arguments in Queue.Reliable[13] do
 				Listener(table.unpack(Arguments))
@@ -8660,6 +8678,9 @@ local Returns = table.freeze({
 	},
 	Flags32 = {
 		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}) -> ()): () -> ()
+			if Events.Reliable[14] ~= nil then
+				warn("[Blink]: \"Flags32\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[14] = Listener
 			for Index, Arguments in Queue.Reliable[14] do
 				Listener(table.unpack(Arguments))
@@ -8682,6 +8703,9 @@ local Returns = table.freeze({
 	},
 	Flags33 = {
 		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}) -> ()): () -> ()
+			if Events.Reliable[15] ~= nil then
+				warn("[Blink]: \"Flags33\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[15] = Listener
 			for Index, Arguments in Queue.Reliable[15] do
 				Listener(table.unpack(Arguments))
@@ -8704,6 +8728,9 @@ local Returns = table.freeze({
 	},
 	DynamicMap = {
 		On = function(Listener: (Value: {[number]: { Static: number, Dynamic: buffer }}) -> ()): () -> ()
+			if Events.Reliable[16] ~= nil then
+				warn("[Blink]: \"DynamicMap\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[16] = Listener
 			for Index, Arguments in Queue.Reliable[16] do
 				Listener(table.unpack(Arguments))
@@ -8726,6 +8753,9 @@ local Returns = table.freeze({
 	},
 	DynamicArray = {
 		On = function(Listener: (Value: { { Static: number, Dynamic: buffer } }) -> ()): () -> ()
+			if Events.Reliable[17] ~= nil then
+				warn("[Blink]: \"DynamicArray\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[17] = Listener
 			for Index, Arguments in Queue.Reliable[17] do
 				Listener(table.unpack(Arguments))
@@ -8748,6 +8778,9 @@ local Returns = table.freeze({
 	},
 	PlayerEvent = {
 		On = function(Listener: (Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }) -> ()): () -> ()
+			if Events.Reliable[18] ~= nil then
+				warn("[Blink]: \"PlayerEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[18] = Listener
 			for Index, Arguments in Queue.Reliable[18] do
 				Listener(table.unpack(Arguments))
@@ -8775,6 +8808,9 @@ local Returns = table.freeze({
 	},
 	Generic = {
 		On = function(Listener: (Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }) -> ()): () -> ()
+			if Events.Reliable[20] ~= nil then
+				warn("[Blink]: \"Generic\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[20] = Listener
 			for Index, Arguments in Queue.Reliable[20] do
 				Listener(table.unpack(Arguments))
@@ -8797,6 +8833,9 @@ local Returns = table.freeze({
 	},
 	GenericArray = {
 		On = function(Listener: (Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?) -> ()): () -> ()
+			if Events.Reliable[21] ~= nil then
+				warn("[Blink]: \"GenericArray\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[21] = Listener
 			for Index, Arguments in Queue.Reliable[21] do
 				Listener(table.unpack(Arguments))
@@ -8819,6 +8858,9 @@ local Returns = table.freeze({
 	},
 	Unknown = {
 		On = function(Listener: (Value: any) -> ()): () -> ()
+			if Events.Reliable[22] ~= nil then
+				warn("[Blink]: \"Unknown\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[22] = Listener
 			for Index, Arguments in Queue.Reliable[22] do
 				Listener(table.unpack(Arguments))
@@ -8841,6 +8883,9 @@ local Returns = table.freeze({
 	},
 	MapEvent = {
 		On = function(Listener: (Value: {[string]: number}) -> ()): () -> ()
+			if Events.Reliable[23] ~= nil then
+				warn("[Blink]: \"MapEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[23] = Listener
 			for Index, Arguments in Queue.Reliable[23] do
 				Listener(table.unpack(Arguments))
@@ -8863,6 +8908,9 @@ local Returns = table.freeze({
 	},
 	MapStructEvent = {
 		On = function(Listener: (Value: { Map: {[string]: number} }) -> ()): () -> ()
+			if Events.Reliable[24] ~= nil then
+				warn("[Blink]: \"MapStructEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[24] = Listener
 			for Index, Arguments in Queue.Reliable[24] do
 				Listener(table.unpack(Arguments))
@@ -8885,6 +8933,9 @@ local Returns = table.freeze({
 	},
 	MapComplexEvent = {
 		On = function(Listener: (Value: {[string]: { number }}) -> ()): () -> ()
+			if Events.Reliable[25] ~= nil then
+				warn("[Blink]: \"MapComplexEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[25] = Listener
 			for Index, Arguments in Queue.Reliable[25] do
 				Listener(table.unpack(Arguments))
@@ -8907,6 +8958,9 @@ local Returns = table.freeze({
 	},
 	MapReferenceEvent = {
 		On = function(Listener: (Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?) -> ()): () -> ()
+			if Events.Reliable[26] ~= nil then
+				warn("[Blink]: \"MapReferenceEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[26] = Listener
 			for Index, Arguments in Queue.Reliable[26] do
 				Listener(table.unpack(Arguments))
@@ -8929,6 +8983,9 @@ local Returns = table.freeze({
 	},
 	ArrayPrimitive = {
 		On = function(Listener: (Value: { number }) -> ()): () -> ()
+			if Events.Unreliable[9] ~= nil then
+				warn("[Blink]: \"ArrayPrimitive\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Unreliable[9] = Listener
 			return function (): ()
 				if Events.Unreliable[9] == Listener then
@@ -8945,6 +9002,9 @@ local Returns = table.freeze({
 	},
 	OptionalPrimitive = {
 		On = function(Listener: (Value: number?) -> ()): () -> ()
+			if Events.Unreliable[10] ~= nil then
+				warn("[Blink]: \"OptionalPrimitive\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Unreliable[10] = Listener
 			return function (): ()
 				if Events.Unreliable[10] == Listener then
@@ -9035,6 +9095,9 @@ local Returns = table.freeze({
 	},
 	ReliableServer = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Reliable[29] ~= nil then
+				warn("[Blink]: \"ReliableServer\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[29] = Listener
 			for Index, Arguments in Queue.Reliable[29] do
 				Listener(table.unpack(Arguments))
@@ -9057,6 +9120,9 @@ local Returns = table.freeze({
 	},
 	ReliableServerAsync = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Reliable[30] ~= nil then
+				warn("[Blink]: \"ReliableServerAsync\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[30] = Listener
 			for Index, Arguments in Queue.Reliable[30] do
 				task.spawn(Listener, table.unpack(Arguments))
@@ -9083,6 +9149,9 @@ local Returns = table.freeze({
 	},
 	UnreliableServer = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Unreliable[13] ~= nil then
+				warn("[Blink]: \"UnreliableServer\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Unreliable[13] = Listener
 			return function (): ()
 				if Events.Unreliable[13] == Listener then
@@ -9099,6 +9168,9 @@ local Returns = table.freeze({
 	},
 	UnreliableServerAsync = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Unreliable[14] ~= nil then
+				warn("[Blink]: \"UnreliableServerAsync\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Unreliable[14] = Listener
 			return function (): ()
 				if Events.Unreliable[14] == Listener then
@@ -9127,6 +9199,9 @@ local Returns = table.freeze({
 	},
 	InstanceAny = {
 		On = function(Listener: (Value: Instance) -> ()): () -> ()
+			if Events.Reliable[32] ~= nil then
+				warn("[Blink]: \"InstanceAny\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[32] = Listener
 			for Index, Arguments in Queue.Reliable[32] do
 				Listener(table.unpack(Arguments))
@@ -9149,6 +9224,9 @@ local Returns = table.freeze({
 	},
 	InstanceOfType = {
 		On = function(Listener: (Value: Sound) -> ()): () -> ()
+			if Events.Reliable[33] ~= nil then
+				warn("[Blink]: \"InstanceOfType\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[33] = Listener
 			for Index, Arguments in Queue.Reliable[33] do
 				Listener(table.unpack(Arguments))
@@ -9171,6 +9249,9 @@ local Returns = table.freeze({
 	},
 	InstanceOptional = {
 		On = function(Listener: (Value: Instance?) -> ()): () -> ()
+			if Events.Reliable[34] ~= nil then
+				warn("[Blink]: \"InstanceOptional\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[34] = Listener
 			for Index, Arguments in Queue.Reliable[34] do
 				Listener(table.unpack(Arguments))
@@ -9193,6 +9274,9 @@ local Returns = table.freeze({
 	},
 	InstanceOfClassWithDigit = {
 		On = function(Listener: (Value: Motor6D) -> ()): () -> ()
+			if Events.Reliable[35] ~= nil then
+				warn("[Blink]: \"InstanceOfClassWithDigit\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[35] = Listener
 			for Index, Arguments in Queue.Reliable[35] do
 				Listener(table.unpack(Arguments))
@@ -9215,6 +9299,9 @@ local Returns = table.freeze({
 	},
 	Reference = {
 		On = function(Listener: (Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?) -> ()): () -> ()
+			if Events.Reliable[36] ~= nil then
+				warn("[Blink]: \"Reference\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[36] = Listener
 			for Index, Arguments in Queue.Reliable[36] do
 				Listener(table.unpack(Arguments))
@@ -9237,6 +9324,9 @@ local Returns = table.freeze({
 	},
 	ReferenceArray = {
 		On = function(Listener: (Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }) -> ()): () -> ()
+			if Events.Reliable[37] ~= nil then
+				warn("[Blink]: \"ReferenceArray\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[37] = Listener
 			for Index, Arguments in Queue.Reliable[37] do
 				Listener(table.unpack(Arguments))
@@ -9259,6 +9349,9 @@ local Returns = table.freeze({
 	},
 	ReferenceOptional = {
 		On = function(Listener: (Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?) -> ()): () -> ()
+			if Events.Reliable[38] ~= nil then
+				warn("[Blink]: \"ReferenceOptional\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[38] = Listener
 			for Index, Arguments in Queue.Reliable[38] do
 				Listener(table.unpack(Arguments))
@@ -9293,6 +9386,9 @@ local Returns = table.freeze({
 	},
 	Tuple = {
 		On = function(Listener: (Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }) -> ()): () -> ()
+			if Events.Reliable[40] ~= nil then
+				warn("[Blink]: \"Tuple\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[40] = Listener
 			for Index, Arguments in Queue.Reliable[40] do
 				Listener(table.unpack(Arguments))
@@ -9315,6 +9411,9 @@ local Returns = table.freeze({
 	},
 	TupleUnreliable = {
 		On = function(Listener: (Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?) -> ()): () -> ()
+			if Events.Unreliable[16] ~= nil then
+				warn("[Blink]: \"TupleUnreliable\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Unreliable[16] = Listener
 			return function (): ()
 				if Events.Unreliable[16] == Listener then
@@ -9344,6 +9443,9 @@ local Returns = table.freeze({
 	AnotherScope = {
 		InScopeEvent = {
 			On = function(Listener: (Value: number) -> ()): () -> ()
+				if Events.Reliable[42] ~= nil then
+					warn("[Blink]: \"InScopeEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+				end
 				Events.Reliable[42] = Listener
 				for Index, Arguments in Queue.Reliable[42] do
 					Listener(table.unpack(Arguments))
@@ -9367,6 +9469,9 @@ local Returns = table.freeze({
 		ScopeWithinAnotherScope = {
 			InAnotherScopeEvent = {
 				On = function(Listener: (Value: number) -> ()): () -> ()
+					if Events.Reliable[43] ~= nil then
+						warn("[Blink]: \"InAnotherScopeEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+					end
 					Events.Reliable[43] = Listener
 					for Index, Arguments in Queue.Reliable[43] do
 						Listener(table.unpack(Arguments))
@@ -9392,6 +9497,9 @@ local Returns = table.freeze({
 	ExampleScope = {
 		InScopeEvent = {
 			On = function(Listener: (Value: number) -> ()): () -> ()
+				if Events.Reliable[44] ~= nil then
+					warn("[Blink]: \"InScopeEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+				end
 				Events.Reliable[44] = Listener
 				for Index, Arguments in Queue.Reliable[44] do
 					Listener(table.unpack(Arguments))
@@ -9416,6 +9524,9 @@ local Returns = table.freeze({
 	Issue33 = {
 		Event = {
 			On = function(Listener: (Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }) -> ()): () -> ()
+				if Events.Reliable[45] ~= nil then
+					warn("[Blink]: \"Event\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+				end
 				Events.Reliable[45] = Listener
 				for Index, Arguments in Queue.Reliable[45] do
 					Listener(table.unpack(Arguments))
@@ -9444,6 +9555,9 @@ local Returns = table.freeze({
 	},
 	NamedTuple = {
 		On = function(Listener: (chefId: number, dish: string, portions: number?) -> ()): () -> ()
+			if Events.Reliable[47] ~= nil then
+				warn("[Blink]: \"NamedTuple\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[47] = Listener
 			for Index, Arguments in Queue.Reliable[47] do
 				Listener(table.unpack(Arguments))
@@ -9478,6 +9592,9 @@ local Returns = table.freeze({
 	},
 	PartiallyNamedTuple = {
 		On = function(Listener: (Value1: number, named: string, Value3: number) -> ()): () -> ()
+			if Events.Reliable[49] ~= nil then
+				warn("[Blink]: \"PartiallyNamedTuple\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
 			Events.Reliable[49] = Listener
 			for Index, Arguments in Queue.Reliable[49] do
 				Listener(table.unpack(Arguments))

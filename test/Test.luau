@@ -678,6 +678,56 @@ RunClosure("Buffer (Default, Fixed, Bounded)", function()
 	end
 end)
 
+--> Upstream #167. A Single event keeps one listener and a second `.On()` replaces it. That is the
+--> intended behaviour and is not changing; what is new is that it says so, because the silence hid
+--> something worse than the replacement itself.
+RunClosure("A second listener on a Single event is reported, and the first one's disconnect stops working", function()
+	local First, Second = 0, 0
+
+	local DisconnectFirst = Client.ReliableServer.On(function()
+		First += 1
+	end)
+
+	--> Let anything queued reach the first listener before the second one takes over.
+	task.wait(1 / 30)
+	Shared.DrainWarnings()
+
+	local DisconnectSecond = Client.ReliableServer.On(function()
+		Second += 1
+	end)
+
+	local Warned = false
+	for _, Warning in Shared.DrainWarnings() do
+		if string.find(Warning, "already has a listener", 1, true) then
+			Warned = true
+			break
+		end
+	end
+
+	if not Warned then
+		DisconnectSecond()
+		error("replacing a Single listener said nothing about it")
+	end
+
+	First, Second = 0, 0
+
+	--> The replacement is what runs.
+	Server.ReliableServer.FireAll(1)
+	task.wait(1 / 30)
+	assert(First == 0 and Second == 1, `expected only the newest listener to run, got {First} and {Second}`)
+
+	--> And the hazard the warning names: the displaced listener's disconnect is guarded by an
+	--> identity check that no longer matches, so calling it does nothing at all -- including not
+	--> detaching the listener that replaced it.
+	DisconnectFirst()
+
+	Server.ReliableServer.FireAll(1)
+	task.wait(1 / 30)
+	assert(Second == 2, "the displaced listener's disconnect detached the wrong listener")
+
+	DisconnectSecond()
+end)
+
 --> These live apart, but they run as part of the same suite. New specs go in files like these rather
 --> than on the end of this one.
 require("./Guards")

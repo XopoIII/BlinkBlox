@@ -45,6 +45,16 @@ Determines the listening API exposed on the receiving side.
 * `ManyAsync` - Events can have many listeners, and those listeners may yield.
 * `Polling` - Events are iterated through `Event.Iter()`.
 
+<Callout type="warning">
+    A `Single` event keeps exactly one listener. Calling `.On()` a second time **replaces** the first
+    and warns, rather than erroring -- but the displaced listener's disconnect function stops working
+    at that moment, because it only detaches a listener that is still the current one.
+
+    So two systems that each connect and later disconnect will leave a listener attached that neither
+    believes it owns. If more than one place needs to hear an event, declare it `ManySync` or
+    `ManyAsync`.
+</Callout>
+
 <Callout type="error">
     A `Sync` listener runs **on the decode thread**. Yielding in one therefore stops decoding the
     packet it arrived in, and the events behind it in that packet are lost -- see
