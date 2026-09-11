@@ -70,19 +70,12 @@ local Channels: { [string]: { Count: number, Listening: boolean } } = {
 	Unreliable = { Count = 0, Listening = false },
 }
 
+local FormatKey = Util.FormatKey
+local FormatIndex = Util.FormatIndex
+local BitIndexToHex = Util.BitIndexToHex
+
 local Types = Prefabs.Types
 local Primitives = Prefabs.Primitives
-
-local function IsValidIdentifier(Identifier: string): boolean
-	return Identifier:match("%a%w*") == Identifier
-end
-
-local function FormatKey(Key: string): string
-	if not IsValidIdentifier(Key) then
-		return `["{Key}"]`
-	end
-	return Key
-end
 
 --- Claims a bucket slot for an inbound declaration that declares a rate, and returns the call that
 --- spends a token from it. Returns nil when nothing limits this declaration, in which case no guard
@@ -124,17 +117,6 @@ local function OrderGuardExpression(IsOrdered: boolean, Index: number): string?
 	end
 
 	return `OrderAccept({Index}, OrderIdentifier)`
-end
-
-local function FormatIndex(Index: string): string
-	if not IsValidIdentifier(Index) then
-		return `["{Index}"]`
-	end
-	return `.{Index}`
-end
-
-local function BitIndexToHex(Index: number): string
-	return `0x{string.format("%x", 2 ^ Index)}`
 end
 
 --> Declaration functions
@@ -281,8 +263,9 @@ function Declarations.Struct(Declaration: Parser.Struct, Read: Blocks.Block, Wri
 end
 
 function Declarations.Tuple(Declaration: Parser.Tuple, Read: Blocks.Block, Write: Blocks.Block)
+	local Names = Declaration.Value.Names
 	for Index, Value in Declaration.Value.Values do
-		local Variable = `Value{Index}`
+		local Variable = Names[Index] or `Value{Index}`
 		Generators.UserType(Value :: Type, Read, Write, Variable)
 	end
 end
@@ -1135,8 +1118,10 @@ function Generators.LuauType(
 		local Variables = { "Value" }
 		local AnnotatedVariables = { "Value: nil" }
 
+		--> The prefix applies to a named element too: a function's Data and Return packs share a scope
+		--> in the generated body, so it is what keeps `(id: u8)` and `(id: string)` from colliding.
 		for Index, TupleValue in Value.Values do
-			local Variable = `{Prefix}Value{Index}`
+			local Variable = `{Prefix}{Value.Names[Index] or `Value{Index}`}`
 			local ValueType = Generators.LuauType(TupleValue)
 
 			TupleTypes[Index] = ValueType

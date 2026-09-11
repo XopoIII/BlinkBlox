@@ -722,3 +722,28 @@ event UnknownInbound {
     Call: SingleSync,
     Data: unknown,
 }
+
+--> Named type-pack elements. Declared last, like UnknownInbound above, so the event indices already
+--> recorded in the goldens keep their numbers.
+event NamedTuple {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: (chefId: f64, dish: string, portions: u8?)
+}
+
+--> Data and Return deliberately reuse the same names. The two packs share a scope in the generated
+--> body, so this is what proves the Return prefix keeps them apart.
+function NamedTupleFunction {
+    Yield: Coroutine,
+    Data: (id: u8, label: string),
+    Return: (id: u16, label: string)
+}
+
+--> A pack may be named in part.
+event PartiallyNamedTuple {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: (u8, named: string, u16)
+}

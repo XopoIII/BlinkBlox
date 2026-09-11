@@ -4,6 +4,7 @@
 
 local Analysis = require("./Analysis")
 local Error = require("./Modules/Error")
+local Grammar = require("./Modules/Grammar")
 local Lexer = require("./Lexer")
 local PathParser = require("./Modules/Path")
 local Size = require("./Modules/Size")
@@ -56,16 +57,7 @@ export type Scope = {
 	},
 }
 
-type EventOption = {
-	Key: string,
-	Type: Lexer.Types,
-	Values: { any },
-	Optional: true?,
-	--- Field whose value is a NUMBER the author chooses rather than one of a fixed set of keywords.
-	--- `Values` cannot express that: it is checked with `table.find`, so a rate of 5 would have to be
-	--- listed alongside every other rate anyone might want.
-	Numeric: true?,
-}
+type EventOption = Grammar.EventOption
 
 type Attributes = {
 	Scope: Scope?,
@@ -123,20 +115,7 @@ export type Body = Node<"Body", {
 	Declarations: { Declaration },
 }, {}>
 
-type Declarations =
-	"Map"
-	| "Set"
-	| "Enum"
-	| "TagEnum"
-	| "Tuple"
-	| "Struct"
-	| "Primitive"
-	| "Generic"
-	| "Array"
-	| "Event"
-	| "Function"
-	| "Scope"
-	| "Optional"
+type Declarations = Grammar.Declarations
 export type TypeNode = | Map | Set | Enum | TagEnum | Tuple | Struct | Primitive | Generic | Array | Optional
 
 export type Declaration = Node<Declarations, {
@@ -185,8 +164,13 @@ export type Generic = Node<"Generic", {
 	Generic: string,
 } & Attributes, AttributesTokens>
 
+--- `Names` is sparse and indexed alongside `Values`: an element may be named, as in
+--- `(chefId: f64, dish: string)`, and one that is not has no entry. Naming is for the reader and for
+--- the generated signature only -- a type pack is serialised positionally with no field tags, so it
+--- never reaches the wire.
 export type Tuple = Node<"Tuple", {
 	Values: { TypeNode },
+	Names: { [number]: string },
 } & Attributes, AttributesTokens>
 
 --- The listening API generated for an event. Named so `Parser.Event` can annotate its local without
@@ -239,124 +223,17 @@ export type ScopeNode = Node<
 
 ---- Settings ----
 
-local OPTIONS: { [string]: Lexer.Types } = {
-	Casing = "Identifier",
-	UseColon = "Boolean",
-	UsePolling = "Boolean",
-	Typescript = "Boolean",
-	TypesOutput = "String",
-	ClientOutput = "String",
-	ServerOutput = "String",
-	FutureLibrary = "String",
-	PromiseLibrary = "String",
-	SyncValidation = "Boolean",
-	WriteValidations = "Boolean",
-	ManualReplication = "Boolean",
-	RemoteScope = "String",
-	MaxPacketSize = "Number",
-	MaxEventsPerPacket = "Number",
-	MaxInstancesPerPacket = "Number",
-	MaxUnreliableSize = "Number",
-	DefaultRate = "Number",
-	RequireRates = "Boolean",
-	Predict = "Boolean",
-}
+--> The language's shape lives in Modules/Grammar; only its use lives here.
+type Bucket = Grammar.Bucket
 
-local EVENT: { EventOption } = {
-	{ Key = "From", Type = "Identifier", Values = { "Client", "Server" } },
-	{ Key = "Type", Type = "Identifier", Values = { "Reliable", "Unreliable", "OrderedUnreliable" } },
-	{ Key = "Call", Type = "Identifier", Values = { "SingleSync", "SingleAsync", "ManySync", "ManyAsync", "Polling" } },
-	{ Key = "Poll", Type = "Boolean", Values = { true, false }, Optional = true },
-	{ Key = "Rate", Type = "Number", Values = {}, Optional = true, Numeric = true },
-	{ Key = "Burst", Type = "Number", Values = {}, Optional = true, Numeric = true },
-	{ Key = "Data", Type = "Identifier", Values = {}, Optional = true },
-}
-
-local FUNCTION: { EventOption } = {
-	{ Key = "Yield", Type = "Identifier", Values = { "Future", "Promise", "Coroutine" } },
-	{ Key = "Rate", Type = "Number", Values = {}, Optional = true, Numeric = true },
-	{ Key = "Burst", Type = "Number", Values = {}, Optional = true, Numeric = true },
-	{ Key = "Data", Type = "Identifier", Values = {}, Optional = true },
-	{ Key = "Return", Type = "Identifier", Values = {}, Optional = true },
-}
-
-type Bucket = "Types" | "Scopes"
-
-local BUCKETS: { [string]: Bucket } = {
-	Type = "Types",
-	Event = "Scopes",
-	Function = "Scopes",
-	Scope = "Scopes",
-}
-
-type Keyword = {
-	Class: string,
-	Type: Declarations,
-	Generics: boolean,
-	Exportable: boolean,
-}
-
-local KEYWORDS: { [string]: Keyword } = {
-	map = {
-		Type = "Map",
-		Class = "Type",
-		Generics = true,
-		Exportable = true,
-	},
-	set = {
-		Type = "Set",
-		Class = "Type",
-		Generics = true,
-		Exportable = true,
-	},
-	enum = {
-		Type = "Enum",
-		Class = "Type",
-		Generics = true,
-		Exportable = true,
-	},
-	type = {
-		Type = "Primitive",
-		Class = "Type",
-		Generics = false,
-		Exportable = true,
-	},
-	struct = {
-		Type = "Struct",
-		Class = "Type",
-		Generics = true,
-		Exportable = true,
-	},
-	event = {
-		Type = "Event",
-		Class = "Event",
-		Generics = false,
-		Exportable = false,
-	},
-	["function"] = {
-		Type = "Function",
-		Class = "Function",
-		Generics = false,
-		Exportable = false,
-	},
-	scope = {
-		Type = "Scope",
-		Class = "Scope",
-		Generics = false,
-		Exportable = false,
-	},
-}
-
-local GENERICS_TYPES = {
-	Map = true,
-	Struct = true,
-	TagEnum = true,
-}
-
-local RESERVED = {
-	StepReplication = true,
-	SetRateLimitHandler = true,
-}
+local OPTIONS = Grammar.OPTIONS
+local EVENT = Grammar.EVENT
+local FUNCTION = Grammar.FUNCTION
+local BUCKETS = Grammar.BUCKETS
+local KEYWORDS = Grammar.KEYWORDS
+local RESERVED = Grammar.RESERVED
+local LUAU_KEYWORDS = Grammar.LUAU_KEYWORDS
+local GENERICS_TYPES = Grammar.GENERICS_TYPES
 
 local PRIMITIVES = Settings.Primtives
 local ARRAY_BOUNDS = NumberRange.new(0, (PRIMITIVES.u16.Bounds :: NumberRange).Max)
@@ -1698,16 +1575,73 @@ function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 end
 
 function Parser.Tuple(self: Parser, Name: Token): Tuple
+	local Names: { [number]: string } = {}
+	local Taken: { [string]: true } = {}
 	local Values: { TypeNode } = {}
 	self:Consume("OpenParentheses")
+
+	--> An element may carry a name: `(chefId: f64, dish: string)`. Deciding that needs one token of
+	--> lookahead past the candidate -- `(u8)` and `(x: u8)` are indistinguishable where the element
+	--> starts, since a bare type is itself a perfectly good element. `self.LookAhead` is the element's
+	--> first token and the lexer sits just past it, so a non-advancing GetNextToken is the token after.
+	local function TryConsumeName(): Token?
+		if self.Lexer:GetNextToken(true).Type ~= "FieldAssign" then
+			return nil
+		end
+
+		local Text = self:ConsumeText(true)
+		self:Consume("FieldAssign")
+		return Text
+	end
 
 	while true do
 		if self:TryConsume("CloseParentheses") then
 			break
 		end
 
+		local Text = TryConsumeName()
+		if Text then
+			--> Unlike a struct field, which becomes a table key and is quoted on the way out, this name
+			--> becomes a local variable in the generated module. A Luau keyword, or anything that is not
+			--> an identifier, would emit code that does not compile -- so it is refused here, where the
+			--> author can see which name did it, rather than by luau-analyze over generated output.
+			if LUAU_KEYWORDS[Text.Value] or not string.match(Text.Value, "^[%a_][%w_]*$") then
+				error(
+					Error.new(
+						Error.AnalyzeReservedIdentifier,
+						self.Source,
+						`"{Text.Value}" cannot name a type pack element`,
+						self.File
+					)
+						:Primary(Text, "Not usable as a variable name")
+						:Note(
+							"A named element becomes a parameter in the generated code, so it has to be a Luau identifier."
+						)
+						:Emit()
+				)
+			end
+
+			if Taken[Text.Value] then
+				error(
+					Error.new(Error.AnalyzeDuplicateField, self.Source, `Duplicate element "{Text.Value}"`, self.File)
+						:Primary(Text, `Duplicate element`)
+						:Note("Each named element of a type pack becomes a parameter, so the names must differ.")
+						:Emit()
+				)
+			end
+		end
+
+		--> The pack's own token goes through even for a named element. The name is recorded beside the
+		--> value instead of replacing the node's, so a named and an unnamed element are described
+		--> identically -- a diagnostic inside either still points at the declaration, and the
+		--> generated comment still reads `chefId: NamedTuple` rather than `chefId: chefId`.
 		local Value = self:Type(Name)
 		table.insert(Values, Value)
+
+		if Text then
+			Taken[Text.Value] = true
+			Names[#Values] = Text.Value
+		end
 
 		if self:TryConsume("CloseParentheses") then
 			break
@@ -1721,6 +1655,7 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 		Name = Name.Value,
 		Value = {
 			Values = Values,
+			Names = Names,
 		},
 		Tokens = {},
 	}

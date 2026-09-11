@@ -37,6 +37,11 @@ For more information take a look at the [data field](./5-events.mdx#data) for ev
 The data returned by the server to the client.<br/>
 For more information take a look at the [data field](./5-events.mdx#data) for events.
 
+`Data` and `Return` may name their [type pack](./5-events.mdx#type-packs) elements the same way --
+`Data: (id: u8, label: string)` alongside `Return: (id: u16, label: string)` is fine. The generated
+code keeps the two sets apart, so there is no need to invent distinct names for the same thing going
+each way.
+
 ## Usage in Luau
 
 ### Invoking a Function

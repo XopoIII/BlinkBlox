@@ -113,6 +113,30 @@ event MyTypePackEvent {
 }
 ```
 
+Elements may be named. The name is what the parameter is called in the generated code, so a listener
+reads `function(chefId, dish)` rather than `function(Value1, Value2)`:
+```blink copy
+event CookRequest {
+    From: Client,
+    Type: Reliable,
+    Call: SingleAsync,
+    Data: (chefId: f64, dish: string)
+}
+```
+
+Naming is optional and may be partial: `(u8, named: string, u16)` is a valid pack, and the elements
+left unnamed keep their positional `Value1`, `Value3`.
+
+<Callout type="info">
+    Naming an element changes the generated **signature** and nothing else. A type pack is serialised
+    positionally, with no field tags, so a name costs nothing on the wire -- adding one to an existing
+    pack does not change a single byte of what it sends, and the two sides stay compatible.
+</Callout>
+
+A name becomes a Luau variable, so it has to be usable as one: `end`, `local` and anything that is
+not an identifier are refused at compile time, as are two elements sharing a name. That is stricter
+than a [struct](./4-types.mdx) field, which becomes a table key and may be any string.
+
 ## Usage in Luau
 
 ### Firing an Event

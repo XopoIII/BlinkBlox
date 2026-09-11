@@ -256,6 +256,9 @@ Queue.Reliable[42] = table.create(256)
 Queue.Reliable[43] = table.create(256)
 Queue.Reliable[44] = table.create(256)
 Queue.Reliable[45] = table.create(256)
+Queue.Reliable[47] = table.create(256)
+Queue.Reliable[48] = table.create(256)
+Queue.Reliable[49] = table.create(256)
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
 export type Indexers_TestFlags = {["a a"]: boolean,}
 export type Indexers_TestEnums = ("b b")
@@ -2647,6 +2650,82 @@ function SerdesFunctions.WriteEVENT_UnknownInbound(Value: any): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 46)
 	-- Value: UnknownInbound
 	table.insert(SendInstances, if Value == nil then Null else Value)
+end
+
+function SerdesFunctions.ReadEVENT_NamedTuple(): (number, string, number?)
+	-- Read BLOCK: 11 bytes
+	local BLOCK_START = Read(11)
+	-- Value: NamedTuple
+	-- chefId: NamedTuple
+	local chefId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+	-- dish: NamedTuple
+	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "dish" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local dish = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	-- portions: NamedTuple
+	local portions
+	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 10)
+	if bit32.btest(BITFIELD_0, 0x01) == true then
+		-- Read BLOCK: 1 bytes
+		local BLOCK_START = Read(1)
+		-- portions: NamedTuple
+		portions = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	end
+	return chefId, dish, portions
+end
+
+function SerdesFunctions.WriteFUNCTION_DATA_NamedTupleFunction(id: number, label: string, InvocationIdentifier: number): ()
+	-- Allocate BLOCK: 5 bytes
+	local BLOCK_START = Allocate(5)
+	-- FUNCTION_DATA_NamedTupleFunction (48)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 48)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
+	-- Value: NamedTupleFunction
+	-- id: NamedTupleFunction
+	if typeof(id) ~= "number" then
+		error(`Expected id to be of type number, got {type(id)} instead.`)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, id)
+	-- label: NamedTupleFunction
+	if typeof(label) ~= "string" then
+		error(`Expected label to be of type string, got {type(label)} instead.`)
+	end
+	local Length = #label
+	buffer.writeu16(SendBuffer, BLOCK_START + 3, Length)
+	Allocate(Length)
+	buffer.writestring(SendBuffer, SendOffset, label, Length)
+end
+
+function SerdesFunctions.ReadFUNCTION_RETURN_NamedTupleFunction(): (number, string)
+	-- Read BLOCK: 5 bytes
+	local BLOCK_START = Read(5)
+	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if Success ~= 1 then
+		error("Server encountered an error.")
+	end
+	-- Value: NamedTupleFunction
+	-- id: NamedTupleFunction
+	local id = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+	-- label: NamedTupleFunction
+	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "label" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local label = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	return id, label
+end
+
+function SerdesFunctions.ReadEVENT_PartiallyNamedTuple(): (number, string, number)
+	-- Read BLOCK: 5 bytes
+	local BLOCK_START = Read(5)
+	-- Value: PartiallyNamedTuple
+	-- Value1: PartiallyNamedTuple
+	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	-- named: PartiallyNamedTuple
+	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "named" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local named = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	-- Value3: PartiallyNamedTuple
+	local Value3 = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
+	return Value1, named, Value3
 end
 
 if not RunService:IsRunning() then
@@ -5246,6 +5325,17 @@ if not RunService:IsRunning() then
 	UnknownInbound = {
 		Fire = NOOP
 	},
+	NamedTuple = {
+		On = NOOP_RETURNING,
+		Predict = NOOP
+	},
+	NamedTupleFunction = {
+		Invoke = NOOP
+	},
+	PartiallyNamedTuple = {
+		On = NOOP_RETURNING,
+		Predict = NOOP
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -5730,6 +5820,43 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 					warn("[Blink]: Event queue of \"Event\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[45], {Value1, Value2, Value3} :: {any})
+			end
+		elseif Index == 47 then
+			local chefId: number, dish: string, portions: number? = SerdesFunctions.ReadEVENT_NamedTuple()
+			if Events.Reliable[47] ~= nil then
+				SerdesEvent = "NamedTuple"
+				Events.Reliable[47](chefId, dish, portions)
+			else
+				if #Queue.Reliable[47] > 256 then
+					warn("[Blink]: Event queue of \"NamedTuple\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[47], {chefId, dish, portions} :: {any})
+			end
+		elseif Index == 48 then
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Success, Returnid, Returnlabel = pcall(function ()
+					return SerdesFunctions.ReadFUNCTION_RETURN_NamedTupleFunction()
+				end)
+			if Calls[InvocationIdentifier] ~= nil then
+				local Thread = Calls[InvocationIdentifier]
+				Calls[InvocationIdentifier] = nil
+				ReleaseInvocation(InvocationIdentifier)
+				if coroutine.status(Thread) == "suspended" then
+					task.spawn(Thread, Success, Returnid, Returnlabel)
+				end
+			end
+		elseif Index == 49 then
+			local Value1: number, named: string, Value3: number = SerdesFunctions.ReadEVENT_PartiallyNamedTuple()
+			if Events.Reliable[49] ~= nil then
+				SerdesEvent = "PartiallyNamedTuple"
+				Events.Reliable[49](Value1, named, Value3)
+			else
+				if #Queue.Reliable[49] > 256 then
+					warn("[Blink]: Event queue of \"PartiallyNamedTuple\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[49], {Value1, named, Value3} :: {any})
 			end
 		end
 	end
@@ -9297,6 +9424,62 @@ local Returns = table.freeze({
 	UnknownInbound = {
 		Fire = function(Value: any): ()
 			SerdesFunctions.WriteEVENT_UnknownInbound(Value)
+		end
+	},
+	NamedTuple = {
+		On = function(Listener: (chefId: number, dish: string, portions: number?) -> ()): () -> ()
+			Events.Reliable[47] = Listener
+			for Index, Arguments in Queue.Reliable[47] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[47] = {}
+			return function (): ()
+				if Events.Reliable[47] == Listener then
+					Events.Reliable[47] = nil
+				end
+			end
+		end,
+		Predict = function(chefId: number, dish: string, portions: number?): ()
+			if Events.Reliable[47] ~= nil then
+				SerdesEvent = "NamedTuple"
+				Events.Reliable[47](chefId, dish, portions)
+			else
+				table.insert(Queue.Reliable[47], {chefId, dish, portions} :: {any})
+			end
+		end
+	},
+	NamedTupleFunction = {
+		Invoke = function(id: number, label: string): (number, string)
+			local InvocationIdentifier = Invoke()
+			SerdesFunctions.WriteFUNCTION_DATA_NamedTupleFunction(id, label, InvocationIdentifier)
+			Calls[InvocationIdentifier] = coroutine.running()
+			local Success, Returnid: number, Returnlabel: string = coroutine.yield()
+			if Success ~= true then
+				error("There was an exception while processing \"NamedTupleFunction\".")
+			end
+			return Returnid, Returnlabel
+		end
+	},
+	PartiallyNamedTuple = {
+		On = function(Listener: (Value1: number, named: string, Value3: number) -> ()): () -> ()
+			Events.Reliable[49] = Listener
+			for Index, Arguments in Queue.Reliable[49] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[49] = {}
+			return function (): ()
+				if Events.Reliable[49] == Listener then
+					Events.Reliable[49] = nil
+				end
+			end
+		end,
+		Predict = function(Value1: number, named: string, Value3: number): ()
+			if Events.Reliable[49] ~= nil then
+				SerdesEvent = "PartiallyNamedTuple"
+				Events.Reliable[49](Value1, named, Value3)
+			else
+				table.insert(Queue.Reliable[49], {Value1, named, Value3} :: {any})
+			end
 		end
 	},
 })
