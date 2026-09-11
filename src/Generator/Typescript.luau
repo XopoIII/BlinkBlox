@@ -110,8 +110,10 @@ local function GetTypescriptType(State: State, Declaration: Type): (string, stri
 		local Types = {}
 		local VariableTypes = {}
 
+		--> A named element keeps its name here too, so the .d.ts parameter reads the same as the Luau
+		--> one. An unnamed element stays positional.
 		for Index, TupleValue in TupleValues do
-			local Variable = `Value{Index}`
+			local Variable = Value.Names[Index] or `Value{Index}`
 			local ValueType = GetTypescriptType(State, TupleValue)
 			table.insert(Types, ValueType)
 			table.insert(VariableTypes, `{Variable}: {ValueType}`)
