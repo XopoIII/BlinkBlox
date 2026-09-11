@@ -3356,7 +3356,7 @@ ReplicatedStroage.bla.bla.bla]]></string>
 							<YS>0</YS>
 							<YO>0</YO>
 						</UDim2>
-						<bool name="RichText">true</bool>
+						<bool name="RichText">false</bool>
 						<Ref name="RootLocalizationTable">null</Ref>
 						<float name="Rotation">0</float>
 						<bool name="Selectable">true</bool>
