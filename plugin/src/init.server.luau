@@ -164,13 +164,35 @@ local function PlayTweens(Collection: { [string]: Tween })
 	end
 end
 
-local function CreateModuleScript(Name: string, Source: string, Parent: Instance)
-	local ModuleScript = Instance.new("ModuleScript")
-	ModuleScript.Name = Name
-	ModuleScript.Parent = Parent
+--- Writes a generated module, reusing the one already there.
+---
+--- This used to create a fresh ModuleScript every time, after ClearAllChildren had destroyed the old
+--- one. Everything that referred to the previous instance therefore broke on every regeneration: an
+--- ObjectValue pointing at it went nil, an open script tab closed, a breakpoint was lost, and
+--- anything keyed on the instance stopped matching. The path-based `require` survived only because
+--- the names and the parent folder happened to stay the same.
+local function WriteModuleScript(Name: string, Source: string, Parent: Instance)
+	local Existing = Parent:FindFirstChild(Name)
+	local ModuleScript = if Existing and Existing:IsA("ModuleScript") then Existing else nil
 
-	--> Update source after parenting to DM
-	ScriptEditorService:UpdateSourceAsync(ModuleScript, function()
+	if not ModuleScript then
+		--> Something of another class is sitting on the name. Replacing it is the only way forward,
+		--> but it is worth saying so rather than silently destroying whatever it was.
+		if Existing then
+			warn(`[BLINK]: Replacing a {Existing.ClassName} named "{Name}" in the Blink folder.`)
+			Existing:Destroy()
+		end
+
+		local Created = Instance.new("ModuleScript")
+		Created.Name = Name
+		Created.Parent = Parent
+		ModuleScript = Created
+	end
+
+	--> Source is set after parenting: UpdateSourceAsync works on a document, and an unparented
+	--> instance has none. It is used rather than `.Source` because assigning Source refuses anything
+	--> at or past 200000 characters, which a large schema passes easily.
+	ScriptEditorService:UpdateSourceAsync(ModuleScript :: ModuleScript, function()
 		return Source
 	end)
 end
@@ -209,6 +231,43 @@ local function GetSaveFolder(): Folder
 	return SaveFolder
 end
 
+--- Where the last generation went, so it does not have to be picked out of the Explorer every time.
+---
+--- Stored as the full name rather than the instance, because a plugin setting has to survive being
+--- written to disk. The cost is that an instance renamed between sessions is not found, which is
+--- exactly the case where silently generating into the old place would be worse.
+local OUTPUT_SETTING = "OutputLocation"
+
+local function RememberOutput(Directory: Instance)
+	plugin:SetSetting(OUTPUT_SETTING, Directory:GetFullName())
+end
+
+local function RecallOutput(): Instance?
+	local Path = plugin:GetSetting(OUTPUT_SETTING)
+	if type(Path) ~= "string" then
+		return nil
+	end
+
+	local Segments = string.split(Path, ".")
+	local Service = table.remove(Segments, 1)
+	if not Service then
+		return nil
+	end
+
+	--> A service that no longer exists, or a name with a dot in it, lands here. Returning nil is the
+	--> right answer to both: the user picks again.
+	local Found = (pcall(game.GetService, game, Service)) and game:GetService(Service :: any) or nil
+	for _, Segment in Segments do
+		if not Found then
+			return nil
+		end
+
+		Found = Found:FindFirstChild(Segment)
+	end
+
+	return Found
+end
+
 local function GenerateFile(File: StringValue, Directory: Instance)
 	local Source = File.Value
 	local SourceParser = Parser.new()
@@ -239,13 +298,14 @@ local function GenerateFile(File: StringValue, Directory: Instance)
 		BlinkFolder = Folder
 	end
 
-	--> Clear previous files
-	BlinkFolder:ClearAllChildren()
-
-	--> Generate output files
-	CreateModuleScript("Types", TypesSource, BlinkFolder)
-	CreateModuleScript("Server", ServerSource, BlinkFolder)
-	CreateModuleScript("Client", ClientSource, BlinkFolder)
+	--> The three generated modules are overwritten in place. Nothing else in the folder is touched.
+	-->
+	--> This used to be `BlinkFolder:ClearAllChildren()`, which deleted whatever else the user had put
+	--> there -- a wrapper module, a configuration script, anything -- with no warning and no undo
+	--> beyond Ctrl+Z. Blink owns these three names; it does not own the folder.
+	WriteModuleScript("Types", TypesSource, BlinkFolder)
+	WriteModuleScript("Server", ServerSource, BlinkFolder)
+	WriteModuleScript("Client", ClientSource, BlinkFolder)
 end
 
 local function LoadFile(File: StringValue)
@@ -462,6 +522,13 @@ end)
 
 Generating:OnChange(function(File: StringValue?)
 	GeneratePrompt.Visible = (File ~= nil)
+
+	--> Offer last time's destination when the prompt opens with nothing selected. Selecting something
+	--> in the Explorer still overrides it -- this only saves the hunt when the answer has not changed,
+	--> which is almost always.
+	if File and not Selected:Get() then
+		Selected:Set(RecallOutput())
+	end
 end)
 
 Selection.SelectionChanged:Connect(function()
@@ -481,6 +548,7 @@ Generate.MouseButton1Click:Connect(function()
 	end
 
 	Generating:Set()
+	RememberOutput(Directory)
 	GenerateFile(File, Directory)
 end)
 
