@@ -194,12 +194,14 @@ They can be defined using the `map` type. For example, a map of `string` keys an
 map StringToNumber = { [string]: f64 }
 ```
 
-### Bounding Maps
-The number of elements in a map can be bounded by placing [a range](#ranges) within parenthesis after the type.<br/>
-For example, if you wanted to bound the number of elements between `1` and `100` you can do:
-```blink copy
-map StringToNumber = { [string]: f64 }(1..100)
-```
+### Maps cannot be bounded
+Unlike [arrays](#bounding-arrays), a map takes no range. Its element count is written as an
+unconditional `u16`, so every map is unbounded by construction and a decoder will loop over whatever
+count the packet names.
+
+For an inbound event whose size you need to reason about, prefer a bounded array of key-value
+structs. It costs the same bytes, states its ceiling in the schema, and the decoder checks the length
+before it allocates.
 
 ### Generics
 Maps support the use of generics. Generics can be a powerful tool for code reuse.<br/>

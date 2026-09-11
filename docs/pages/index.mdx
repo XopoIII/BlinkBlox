@@ -30,6 +30,11 @@ closed as out of scope. This fork fixes them and continues from there:
 - **Inbound packets are bounded.** Packet size, decoded-event count and instance references are
   capped, an unrecognised event id stops the parse, and a truncated packet is contained instead of
   raising out of the remote handler. See [`MaxPacketSize`](language/1-options#maxpacketsize-maxeventsperpacket-maxinstancesperpacket).
+- **A decoded length is checked before the read it authorises.** A length prefix is sized from the
+  span of its declared range, so `string(0..64)` travels in a byte that holds 255 — the bound used to
+  be checked only once the string existed, and an unbounded `buffer` was allocated at whatever size
+  the packet asked for. Both are now checked first, and every variable-length read is additionally
+  bounded by the bytes left in the packet.
 - **A player who leaves mid-call no longer lingers** in the replication map, taking a buffer
   allocation and a remote call every Heartbeat for the rest of the server's life.
 - **Instance classes containing a digit** — `Instance(Vector3Value)`, `Instance(Motor6D)` — parse.
