@@ -1699,6 +1699,7 @@ function SerdesFunctions.ReadEVENT_Unknown(): (any)
 	-- Value: Unknown
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
+	if Value == nil then error(`Expected a value for "Value", the packet carried only {#RecieveInstances} of them.`) end
 	return Value
 end
 
@@ -2628,6 +2629,15 @@ function SerdesFunctions.Issue33_ReadEVENT_Event(): ({[("One" | "Two")]: number}
 		error(`Unexpected enum: {Index}`)
 	end
 	return Value1, Value2, Value3
+end
+
+function SerdesFunctions.WriteEVENT_UnknownInbound(Value: any): ()
+	-- Allocate BLOCK: 1 bytes
+	local BLOCK_START = Allocate(1)
+	-- EVENT_UnknownInbound (46)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 46)
+	-- Value: UnknownInbound
+	table.insert(SendInstances, if Value == nil then Null else Value)
 end
 
 if not RunService:IsRunning() then
@@ -5217,6 +5227,9 @@ if not RunService:IsRunning() then
 			On = NOOP_RETURNING,
 			Predict = NOOP
 		},
+	},
+	UnknownInbound = {
+		Fire = NOOP
 	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
@@ -9259,6 +9272,11 @@ local Returns = table.freeze({
 				end
 			end
 		},
+	},
+	UnknownInbound = {
+		Fire = function(Value: any): ()
+			SerdesFunctions.WriteEVENT_UnknownInbound(Value)
+		end
 	},
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)

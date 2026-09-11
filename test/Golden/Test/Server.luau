@@ -229,6 +229,7 @@ Queue.Reliable[31] = table.create(256)
 Queue.Unreliable[15] = table.create(256)
 Queue.Reliable[39] = table.create(256)
 Queue.Reliable[41] = table.create(256)
+Queue.Reliable[46] = table.create(256)
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
 export type Indexers_TestFlags = {["a a"]: boolean,}
 export type Indexers_TestEnums = ("b b")
@@ -2738,6 +2739,14 @@ function SerdesFunctions.Issue33_WriteEVENT_Event(Value1: {[("One" | "Two")]: nu
 	else
 		error(`Unexpected enum: {Value3.field}, expected one of "One" or "Two".`)
 	end
+end
+
+function SerdesFunctions.ReadEVENT_UnknownInbound(): (any)
+	-- Value: UnknownInbound
+	RecieveInstanceCursor += 1
+	local Value = RecieveInstances[RecieveInstanceCursor]
+	if Value == nil then error(`Expected a value for "Value", the packet carried only {#RecieveInstances} of them.`) end
+	return Value
 end
 
 if not RunService:IsRunning() then
@@ -5431,6 +5440,10 @@ if not RunService:IsRunning() then
 			FireExcept = NOOP
 		},
 	},
+	UnknownInbound = {
+		On = NOOP_RETURNING,
+		Predict = NOOP
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -5731,6 +5744,17 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					warn("[Blink]: Event queue of \"TupleFunction\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[41], {Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier} :: {any})
+			end
+		elseif Index == 46 then
+			local Value: any = SerdesFunctions.ReadEVENT_UnknownInbound()
+			if Events.Reliable[46] ~= nil then
+				SerdesEvent = "UnknownInbound"
+				Events.Reliable[46](Player, Value)
+			else
+				if #Queue.Reliable[46] > 256 then
+					warn("[Blink]: Event queue of \"UnknownInbound\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[46], {Player, Value} :: {any})
 			end
 		else
 			error("[Blink]: Unknown event index.")
@@ -10608,6 +10632,28 @@ local Returns = table.freeze({
 				end
 			end,
 		},
+	},
+	UnknownInbound = {
+		On = function(Listener: (Player: Player, Value: any) -> ()): () -> ()
+			Events.Reliable[46] = Listener
+			for Index, Arguments in Queue.Reliable[46] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[46] = {}
+			return function (): ()
+				if Events.Reliable[46] == Listener then
+					Events.Reliable[46] = nil
+				end
+			end
+		end,
+		Predict = function(Player: Player, Value: any): ()
+			if Events.Reliable[46] ~= nil then
+				SerdesEvent = "UnknownInbound"
+				Events.Reliable[46](Player, Value)
+			else
+				table.insert(Queue.Reliable[46], {Player, Value} :: {any})
+			end
+		end
 	},
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)

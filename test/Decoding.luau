@@ -7,8 +7,12 @@
 --- paid for. Asserting on the message is what distinguishes the two.
 local Harness = require("./Harness")
 local Modules = require("./Modules")
+local ServerEnvironment = require("./Server")
+local Shared = require("./Shared")
+local task = require("@lune/task")
 
 local Client = Modules.Client
+local Server = Modules.Server
 local OkPrint = Harness.OkPrint
 local ErrorPrint = Harness.ErrorPrint
 local PrettyPrint = Harness.PrettyPrint
@@ -83,3 +87,55 @@ ExpectRejection(
 	UnboundedBuffer,
 	`bytes left in the packet`
 )
+
+--> The instance table travels beside the buffer as the remote's second argument, and a client
+--> chooses both. `unknown` reads from it without checking, so a buffer that claims values the table
+--> does not hold used to decode as nil -- and inside a loop, to decode as nil for as long as the
+--> count said. A real packet replayed with its instances removed is the cheapest way to show it.
+do
+	local Name = "A packet that under-supplies instances is dropped"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	local Remote = ServerEnvironment.Instances.BLINK_RELIABLE_REMOTE
+
+	--> Connected before anything is sent. A decoded event whose listener arrives later is held in
+	--> the queue and delivered on connect, so a counter attached afterwards would score the honest
+	--> packet and never look at the replay.
+	local Received = 0
+	local Disconnect = Server.UnknownInbound.On(function()
+		Received += 1
+	end)
+
+	local Captured: buffer?
+	local Spy = Remote.OnServerEvent:Connect(function(_Player, Buffer: buffer)
+		Captured = Buffer
+	end)
+
+	Client.UnknownInbound.Fire(newproxy())
+	task.wait(1 / 30)
+	Spy.Disconnect()
+
+	local Packet = Captured
+	if not Packet then
+		Disconnect()
+		ErrorPrint(`Failed "{Name}": the client sent no packet to replay.`)
+		return
+	end
+
+	--> The same packet, honestly delivered, has to arrive -- otherwise the replay proving nothing
+	--> would look like a pass.
+	if Received ~= 1 then
+		Disconnect()
+		ErrorPrint(`Failed "{Name}": the honest packet was not delivered ({Received} events).`)
+	end
+
+	Remote.OnServerEvent:Fire(Shared.Player, Packet, {})
+	task.wait(1 / 30)
+	Disconnect()
+
+	if Received ~= 1 then
+		ErrorPrint(`Failed "{Name}": the replay decoded despite carrying none of the instances it claims.`)
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end

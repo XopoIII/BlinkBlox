@@ -103,6 +103,7 @@ local Error = {
 	AnalyzeOversizeUnreliable = 3018,
 	AnalyzePotentiallyOversizeUnreliable = 3019,
 	AnalyzeMissingRateLimit = 3020,
+	AnalyzeCostlessRepetition = 3021,
 }
 
 Error.__index = Error

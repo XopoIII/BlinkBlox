@@ -1006,6 +1006,7 @@ function SerdesFunctions.ReadEVENT_Unknown(): (any)
 	-- Value: Unknown
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
+	if Value == nil then error(`Expected a value for "Value", the packet carried only {#RecieveInstances} of them.`) end
 	return Value
 end
 
