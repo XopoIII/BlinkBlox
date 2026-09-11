@@ -41,29 +41,32 @@ local function RateLimits(Source: string, File: string?, Declarations: { Declara
 			continue
 		end
 
-		local IsEvent = (Declaration.Type == "Event")
-		if not IsEvent and Declaration.Type ~= "Function" then
+		if Declaration.Type ~= "Event" and Declaration.Type ~= "Function" then
 			continue
 		end
 
 		local Value = Declaration.Value
 		local Identifier: Token = Declaration.Tokens.Identifier
 
-		--> Functions are always client to server; only an event can go the other way. Nothing limits
-		--> the server: it is the party being protected, and throttling its own replication would drop
-		--> traffic the game meant to send.
-		local Inbound = if IsEvent then Value.From == "Client" else true
+		--> Inbound means "sent to the server". Nothing limits the server itself: it is the party being
+		--> protected, and throttling its own traffic would drop what the game meant to send.
+		-->
+		--> This used to read `if IsEvent then ... else true`, because a function could only ever go
+		--> client to server. Now that one can go the other way, treating every function as inbound
+		--> would say nothing about a pointless Rate and -- worse -- demand one under RequireRates for
+		--> traffic the server itself sends.
+		local Inbound = Value.From == "Client"
 
 		if not Inbound then
 			if Value.Rate or Value.Burst then
 				Error.new(
 					Error.AnalyzeMissingRateLimit,
 					Source,
-					`Rate limiting a Server event has no effect`,
+					`Rate limiting a Server {string.lower(Declaration.Type)} has no effect`,
 					File,
 					"Warning"
 				)
-					:Primary(Identifier, "This event is sent BY the server, not to it")
+					:Primary(Identifier, `This {string.lower(Declaration.Type)} is sent BY the server, not to it`)
 					:Note("Rate limits apply to inbound traffic only. Remove the field.")
 					:Warn()
 			end

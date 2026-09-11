@@ -155,7 +155,12 @@ local function Collect(Declarations: { Node }, Channels: { Reliable: number, Unr
 			local Index = Channels.Reliable
 			Channels.Reliable = Index + 1
 
-			table.insert(Parts, `F|{Index}|{Declaration.Name}|{Serialise(Value.Data)}|{Serialise(Value.Return)}`)
+			--> From is signed for a function exactly as it is for an event: it decides which side
+			--> listens, so two builds that disagree about it have one side calling into silence.
+			table.insert(
+				Parts,
+				`F|{Index}|{Value.From}|{Declaration.Name}|{Serialise(Value.Data)}|{Serialise(Value.Return)}`
+			)
 		end
 	end
 end

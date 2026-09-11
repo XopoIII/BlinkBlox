@@ -2,7 +2,7 @@ import { Callout } from 'nextra/components'
 
 # Functions
 Functions are Blink's version of Roblox's `RemoteFunction`.<br/>
-They provide a way for the client to request information from the server.
+They provide a way for one side to ask the other a question and wait for the answer.
 
 ## Usage in Blink
 
@@ -15,6 +15,49 @@ function MyFunction {
 }
 ```
 
+#### `From`
+Default: `Client`
+
+Determines which side **invokes**. The other side listens.
+
+```blink copy
+-- The client asks the server. The default, and what every function did before this existed.
+function GetBalance {
+    Yield: Coroutine,
+    Data: u8,
+    Return: u32
+}
+
+-- The server asks a client, and names which one.
+function GetClientSetting {
+    From: Server,
+    Yield: Coroutine,
+    Data: u8,
+    Return: string
+}
+```
+
+```lua filename="server.luau" copy
+local Answer = Net.GetClientSetting.Invoke(Player, 1)
+```
+```lua filename="client.luau" copy
+Net.GetClientSetting.On(function(Which)
+    return Settings[Which]
+end)
+```
+
+<Callout type="warning">
+    Asking a client a question means trusting a client's answer, and waiting on one. A client may
+    reply with anything its schema allows, may take as long as it likes, and may never reply at all --
+    in which case the call fails after [`InvocationTimeout`](1-options#invocationtimeout).
+
+    Treat the return value as you would any other data from a client, and do not hold anything
+    important -- a lock, a queue slot, a request handler -- across the call.
+</Callout>
+
+`Rate` and `Burst` are ignored on a `From: Server` function, exactly as on a `From: Server` event:
+rate limiting applies to inbound traffic, and the server is the party being protected.
+
 #### `Yield`
 Determines the library used to handle yielding to the requester.<br/>
 * `Coroutine` - The builtin Luau coroutine library.
@@ -23,7 +66,7 @@ Determines the library used to handle yielding to the requester.<br/>
 
 #### `Rate`, `Burst`
 Limits how often one player may invoke this function, exactly as on
-[events](5-events#rate-burst). Functions are always client to server, so a rate here always applies.
+[events](5-events#rate-burst). Applies only to a `From: Client` function -- the default.
 
 A refused invocation is answered with a failure rather than dropped, so the caller raises promptly
 instead of waiting out the [timeout](1-options#invocationtimeout).

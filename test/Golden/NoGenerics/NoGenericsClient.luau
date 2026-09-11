@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "517edbcb6d70cc45"
+local SCHEMA_SIGNATURE = "9ff3c592694af7a0"
 --> Free-slot bitset for outstanding invocations: a set bit is a free slot.
 -->
 --> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
@@ -2733,8 +2733,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
 				local Thread = Calls[InvocationIdentifier]
-				Calls[InvocationIdentifier] = nil
-				ReleaseInvocation(InvocationIdentifier)
+Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				if coroutine.status(Thread) == "suspended" then
 					task.spawn(Thread, Success, ReturnValue)
 				end
@@ -2992,8 +2991,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
 				local Thread = Calls[InvocationIdentifier]
-				Calls[InvocationIdentifier] = nil
-				ReleaseInvocation(InvocationIdentifier)
+Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				if coroutine.status(Thread) == "suspended" then
 					task.spawn(Thread, Success, ReturnValue)
 				end
@@ -3018,8 +3016,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
 				local Thread = Calls[InvocationIdentifier]
-				Calls[InvocationIdentifier] = nil
-				ReleaseInvocation(InvocationIdentifier)
+Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				if coroutine.status(Thread) == "suspended" then
 					task.spawn(Thread, Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5)
 				end

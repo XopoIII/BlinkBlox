@@ -200,15 +200,22 @@ export type Event = Node<
 	}
 >
 
-export type Function = Node<"Function", {
-	Yield: "Future" | "Promise" | "Coroutine",
-	Data: (TypeNode | Tuple)?,
-	Return: (TypeNode | Tuple)?,
-	Rate: number?,
-	Burst: number?,
-}, {
-	Identifier: Token,
-}>
+export type Function = Node<
+	"Function",
+	{
+		--> Which side INVOKES. The other side listens, exactly as with an event's From -- except that a
+		--> function's default is Client, since that was the only direction the language used to have.
+		From: "Client" | "Server",
+		Yield: "Future" | "Promise" | "Coroutine",
+		Data: (TypeNode | Tuple)?,
+		Return: (TypeNode | Tuple)?,
+		Rate: number?,
+		Burst: number?,
+	},
+	{
+		Identifier: Token,
+	}
+>
 
 export type ScopeNode = Node<
 	"Scope",
@@ -1217,6 +1224,7 @@ function Parser.Function(self: Parser, Name: Token): Function
 		Type = "Function",
 		Name = Name.Value,
 		Value = {
+			From = Structure.From or "Client",
 			Yield = Structure.Yield,
 			Data = Structure.Data,
 			Return = Structure.Return,

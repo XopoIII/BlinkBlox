@@ -245,6 +245,48 @@ event Alpha {
 ]]
 )
 
+--> A function's direction decides which side listens, so two builds that disagree about it have one
+--> of them calling into silence.
+ExpectDifferent(
+	"A function changing direction",
+	[[
+function Ask {
+    Yield: Coroutine,
+    Data: u8,
+    Return: u8
+}
+]],
+	[[
+function Ask {
+    From: Server,
+    Yield: Coroutine,
+    Data: u8,
+    Return: u8
+}
+]]
+)
+
+--> And the default has to keep meaning what it always did, or every schema written before `From`
+--> existed would sign differently from itself.
+ExpectSame(
+	"An omitted function direction is Client",
+	[[
+function Ask {
+    Yield: Coroutine,
+    Data: u8,
+    Return: u8
+}
+]],
+	[[
+function Ask {
+    From: Client,
+    Yield: Coroutine,
+    Data: u8,
+    Return: u8
+}
+]]
+)
+
 --> A rename reaches no byte either, but it renames the API the other side calls, and a schema that
 --> differs by a name is a schema somebody edited without recompiling both sides.
 ExpectDifferent(

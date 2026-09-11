@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "a982babb8c768943"
+local SCHEMA_SIGNATURE = "87fd47b7986fffb7"
 --> Free-slot bitset for outstanding invocations: a set bit is a free slot.
 -->
 --> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
@@ -302,6 +302,7 @@ Queue.Reliable[41] = table.create(256)
 Queue.Reliable[46] = table.create(256)
 Queue.Reliable[48] = table.create(256)
 Queue.Reliable[50] = table.create(256)
+Queue.Reliable[51] = table.create(256)
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
 export type Indexers_TestFlags = {["a a"]: boolean,}
 export type Indexers_TestEnums = ("b b")
@@ -2898,6 +2899,31 @@ function SerdesFunctions.WriteFUNCTION_RETURN_NeverAnswered(Value: number, Invoc
 		error(`Expected Value to be of type number, got {type(Value)} instead.`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value)
+end
+
+function SerdesFunctions.WriteFUNCTION_DATA_AskClient(Value: number, InvocationIdentifier: number): ()
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
+	-- FUNCTION_DATA_AskClient (51)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 51)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
+	-- Value: AskClient
+	if typeof(Value) ~= "number" then
+		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, Value)
+end
+
+function SerdesFunctions.ReadFUNCTION_RETURN_AskClient(): (number)
+	-- Read BLOCK: 2 bytes
+	local BLOCK_START = Read(2)
+	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if Success ~= 1 then
+		error("Server encountered an error.")
+	end
+	-- Value: AskClient
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	return Value
 end
 
 if not RunService:IsRunning() then
@@ -5596,6 +5622,9 @@ if not RunService:IsRunning() then
 	NeverAnswered = {
 		On = NOOP_RETURNING
 	},
+	AskClient = {
+		Invoke = NOOP
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -5644,9 +5673,102 @@ local PlayersMap: {[Player]: BufferSave} = {}
 local RateBuckets: {[Player]: {number}} = {}
 local RateHandler: ((Player: Player, Event: string) -> ())? = nil
 
+--> INVOCATION STATE FOR FUNCTIONS THE SERVER CALLS, kept per player rather than in the single bitset
+--> Base.luau gives a client. Three separate reasons, and the second is the one that matters.
+-->
+--> Capacity: that bitset holds thirty-two outstanding calls in total. A server asking every client a
+--> question would exhaust it on the thirty-third player and stay exhausted.
+-->
+--> Identity: the invocation id is a u8, and the reply carries it back. With one id space shared
+--> across players, a reply from player A tagged with an id belonging to a call made to player B would
+--> resume B's caller with A's data -- a client choosing which of the server's suspended threads to
+--> answer, and what to tell it. Keying by player makes that impossible rather than merely checked:
+--> an id from A can only ever be looked up in A's own table.
+-->
+--> Lifetime: a player who leaves owes an answer to every call outstanding to them, and those callers
+--> have to be failed rather than left to sit out the timeout.
+local PlayerSlots: {[Player]: number} = {}
+local PlayerCalls: {[Player]: {thread}} = {}
+
+local function InvokePlayer(Player: Player): number
+    local Slots = PlayerSlots[Player] or 0xFFFFFFFF
+    local Slot = bit32.countrz(Slots)
+    if Slot == 32 then
+        error("[Blink]: 32 calls to this player are already awaiting a response, this call has been dropped.")
+    end
+
+    PlayerSlots[Player] = bit32.bxor(Slots, bit32.lshift(1, Slot))
+    return Slot
+end
+
+local function ReleasePlayerInvocation(Player: Player, Identifier: number)
+    local Slots = PlayerSlots[Player]
+    if Slots then
+        PlayerSlots[Player] = bit32.bor(Slots, bit32.lshift(1, Identifier))
+    end
+
+    local Calls = PlayerCalls[Player]
+    if Calls then
+        Calls[Identifier] = nil
+    end
+end
+
+local function ParkInvocation(Player: Player, Identifier: number, Thread: thread)
+    local Calls = PlayerCalls[Player]
+    if not Calls then
+        Calls = {}
+        PlayerCalls[Player] = Calls
+    end
+
+    Calls[Identifier] = Thread
+end
+
+local function TakeInvocation(Player: Player, Identifier: number): thread?
+    local Calls = PlayerCalls[Player]
+    return Calls and Calls[Identifier]
+end
+
+--> The per-player half of TimeoutInvocation. Same identity check, for the same reason: by the time a
+--> late reply turns up the slot may belong to an unrelated call to the same player.
+local function TimeoutPlayerInvocation(Player: Player, Identifier: number, Seconds: number, Name: string)
+    local Calls = PlayerCalls[Player]
+    local Thread = Calls and Calls[Identifier]
+    if not Thread then
+        return
+    end
+
+    task.delay(Seconds, function()
+        local Current = PlayerCalls[Player]
+        if not Current or Current[Identifier] ~= Thread then
+            return
+        end
+
+        ReleasePlayerInvocation(Player, Identifier)
+        if coroutine.status(Thread) == "suspended" then
+            warn(`[Blink]: "{Name}" was never answered by {Player.Name} and has been failed after {Seconds} seconds.`)
+            task.spawn(Thread, false)
+        end
+    end)
+end
+
 Players.PlayerRemoving:Connect(function(Player)
     PlayersMap[Player] = nil
     RateBuckets[Player] = nil
+
+    --> Every call outstanding to this player is now unanswerable. Failing them here rather than
+    --> leaving them to time out matters because the thread on the other end is game code holding a
+    --> lock, a queue slot or a yielded request handler.
+    local Calls = PlayerCalls[Player]
+    PlayerCalls[Player] = nil
+    PlayerSlots[Player] = nil
+
+    if Calls then
+        for _, Thread in Calls do
+            if coroutine.status(Thread) == "suspended" then
+                task.spawn(Thread, false)
+            end
+        end
+    end
 end)
 
 --> Installs the callback invoked whenever an event is refused. Nothing is kicked automatically: a
@@ -5942,6 +6064,20 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					warn("[Blink]: Event queue of \"NeverAnswered\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[50], {Player, Value, InvocationIdentifier} :: {any})
+			end
+		elseif Index == 51 then
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Success, ReturnValue = pcall(function ()
+					return SerdesFunctions.ReadFUNCTION_RETURN_AskClient()
+				end)
+			if TakeInvocation(Player, InvocationIdentifier) ~= nil then
+				local Thread = TakeInvocation(Player, InvocationIdentifier)
+				ReleasePlayerInvocation(Player, InvocationIdentifier)
+				if coroutine.status(Thread) == "suspended" then
+					task.spawn(Thread, Success, ReturnValue)
+				end
 			end
 		else
 			error("[Blink]: Unknown event index.")
@@ -10998,6 +11134,21 @@ local Returns = table.freeze({
 					Events.Reliable[50](table.unpack(Arguments))
 				end
 			end)
+		end
+	},
+	AskClient = {
+		Invoke = function(Player: Player, Value: number): (number)
+			local InvocationIdentifier = InvokePlayer(Player)
+			Load(PlayersMap[Player])
+			SerdesFunctions.WriteFUNCTION_DATA_AskClient(Value, InvocationIdentifier)
+			SavePlayerBuffer(Player)
+			ParkInvocation(Player, InvocationIdentifier, coroutine.running())
+			TimeoutPlayerInvocation(Player, InvocationIdentifier, 3, "AskClient")
+			local Success, ReturnValue: number = coroutine.yield()
+			if Success ~= true then
+				error("There was an exception while processing \"AskClient\".")
+			end
+			return ReturnValue
 		end
 	},
 })

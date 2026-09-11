@@ -758,3 +758,12 @@ function NeverAnswered {
     Data: u8,
     Return: u8
 }
+
+--> A function the SERVER invokes: the client listens, and the server names which client it is asking.
+--> Declared last so the indices above keep their numbers.
+function AskClient {
+    From: Server,
+    Yield: Coroutine,
+    Data: u8,
+    Return: u8
+}

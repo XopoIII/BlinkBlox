@@ -209,18 +209,21 @@ function Generators.Function(State: State, Function: Parser.Function)
 
 	StringBuilder.Push(`export {GetPrefix(Indent)}const {Name}: \{`, 0, Indent)
 
-	if State.Context == "Server" then
-		StringBuilder.Push(
-			`{Casing.On}: (Listener: (Player: Player, {Values}) => {ReturnTypes}) => void`,
-			0,
-			Indent + 1
-		)
+	--> By DIRECTION. `From` names the side that invokes; the other side listens. Reading
+	--> `State.Context == "Server"` was right only while the client was always the caller, and once a
+	--> function could go the other way it produced the definitions exactly backwards -- `Invoke` on
+	--> the side that listens.
+	local IsCaller = (Value.From == State.Context)
+	local Player = if State.Context == "Server" then "Player: Player, " else ""
+
+	if not IsCaller then
+		StringBuilder.Push(`{Casing.On}: (Listener: ({Player}{Values}) => {ReturnTypes}) => void`, 0, Indent + 1)
 	else
 		if Value.Yield == "Promise" then
 			ReturnTypes = `Promise<{ReturnTypes}>`
 		end
 
-		StringBuilder.Push(`{Casing.Invoke}: ({Values}) => {ReturnTypes}`, 0, Indent + 1)
+		StringBuilder.Push(`{Casing.Invoke}: ({Player}{Values}) => {ReturnTypes}`, 0, Indent + 1)
 	end
 
 	StringBuilder.Push(`\}`, 0, Indent)

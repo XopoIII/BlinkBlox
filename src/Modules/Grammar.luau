@@ -82,6 +82,9 @@ Grammar.EVENT = {
 } :: { EventOption }
 
 Grammar.FUNCTION = {
+	--- Optional, and defaulting to Client, because every schema written before this existed means
+	--- "the client asks the server" -- which was the only direction Blink had.
+	{ Key = "From", Type = "Identifier", Values = { "Client", "Server" }, Optional = true },
 	{ Key = "Yield", Type = "Identifier", Values = { "Future", "Promise", "Coroutine" } },
 	{ Key = "Rate", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Burst", Type = "Number", Values = {}, Optional = true, Numeric = true },

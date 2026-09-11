@@ -563,9 +563,102 @@ local PlayersMap: {[Player]: BufferSave} = {}
 local RateBuckets: {[Player]: {number}} = {}
 local RateHandler: ((Player: Player, Event: string) -> ())? = nil
 
+--> INVOCATION STATE FOR FUNCTIONS THE SERVER CALLS, kept per player rather than in the single bitset
+--> Base.luau gives a client. Three separate reasons, and the second is the one that matters.
+-->
+--> Capacity: that bitset holds thirty-two outstanding calls in total. A server asking every client a
+--> question would exhaust it on the thirty-third player and stay exhausted.
+-->
+--> Identity: the invocation id is a u8, and the reply carries it back. With one id space shared
+--> across players, a reply from player A tagged with an id belonging to a call made to player B would
+--> resume B's caller with A's data -- a client choosing which of the server's suspended threads to
+--> answer, and what to tell it. Keying by player makes that impossible rather than merely checked:
+--> an id from A can only ever be looked up in A's own table.
+-->
+--> Lifetime: a player who leaves owes an answer to every call outstanding to them, and those callers
+--> have to be failed rather than left to sit out the timeout.
+local PlayerSlots: {[Player]: number} = {}
+local PlayerCalls: {[Player]: {thread}} = {}
+
+local function InvokePlayer(Player: Player): number
+    local Slots = PlayerSlots[Player] or 0xFFFFFFFF
+    local Slot = bit32.countrz(Slots)
+    if Slot == 32 then
+        error("[Blink]: 32 calls to this player are already awaiting a response, this call has been dropped.")
+    end
+
+    PlayerSlots[Player] = bit32.bxor(Slots, bit32.lshift(1, Slot))
+    return Slot
+end
+
+local function ReleasePlayerInvocation(Player: Player, Identifier: number)
+    local Slots = PlayerSlots[Player]
+    if Slots then
+        PlayerSlots[Player] = bit32.bor(Slots, bit32.lshift(1, Identifier))
+    end
+
+    local Calls = PlayerCalls[Player]
+    if Calls then
+        Calls[Identifier] = nil
+    end
+end
+
+local function ParkInvocation(Player: Player, Identifier: number, Thread: thread)
+    local Calls = PlayerCalls[Player]
+    if not Calls then
+        Calls = {}
+        PlayerCalls[Player] = Calls
+    end
+
+    Calls[Identifier] = Thread
+end
+
+local function TakeInvocation(Player: Player, Identifier: number): thread?
+    local Calls = PlayerCalls[Player]
+    return Calls and Calls[Identifier]
+end
+
+--> The per-player half of TimeoutInvocation. Same identity check, for the same reason: by the time a
+--> late reply turns up the slot may belong to an unrelated call to the same player.
+local function TimeoutPlayerInvocation(Player: Player, Identifier: number, Seconds: number, Name: string)
+    local Calls = PlayerCalls[Player]
+    local Thread = Calls and Calls[Identifier]
+    if not Thread then
+        return
+    end
+
+    task.delay(Seconds, function()
+        local Current = PlayerCalls[Player]
+        if not Current or Current[Identifier] ~= Thread then
+            return
+        end
+
+        ReleasePlayerInvocation(Player, Identifier)
+        if coroutine.status(Thread) == "suspended" then
+            warn(`[Blink]: "{Name}" was never answered by {Player.Name} and has been failed after {Seconds} seconds.`)
+            task.spawn(Thread, false)
+        end
+    end)
+end
+
 Players.PlayerRemoving:Connect(function(Player)
     PlayersMap[Player] = nil
     RateBuckets[Player] = nil
+
+    --> Every call outstanding to this player is now unanswerable. Failing them here rather than
+    --> leaving them to time out matters because the thread on the other end is game code holding a
+    --> lock, a queue slot or a yielded request handler.
+    local Calls = PlayerCalls[Player]
+    PlayerCalls[Player] = nil
+    PlayerSlots[Player] = nil
+
+    if Calls then
+        for _, Thread in Calls do
+            if coroutine.status(Thread) == "suspended" then
+                task.spawn(Thread, false)
+            end
+        end
+    end
 end)
 
 --> Installs the callback invoked whenever an event is refused. Nothing is kicked automatically: a

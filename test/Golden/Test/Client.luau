@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "a982babb8c768943"
+local SCHEMA_SIGNATURE = "87fd47b7986fffb7"
 --> Free-slot bitset for outstanding invocations: a set bit is a free slot.
 -->
 --> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
@@ -330,6 +330,7 @@ Queue.Reliable[47] = table.create(256)
 Queue.Reliable[48] = table.create(256)
 Queue.Reliable[49] = table.create(256)
 Queue.Reliable[50] = table.create(256)
+Queue.Reliable[51] = table.create(256)
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
 export type Indexers_TestFlags = {["a a"]: boolean,}
 export type Indexers_TestEnums = ("b b")
@@ -2776,6 +2777,28 @@ function SerdesFunctions.ReadFUNCTION_RETURN_NeverAnswered(): (number)
 	-- Value: NeverAnswered
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 	return Value
+end
+
+function SerdesFunctions.ReadFUNCTION_DATA_AskClient(): (number)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	-- Value: AskClient
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	return Value
+end
+
+function SerdesFunctions.WriteFUNCTION_RETURN_AskClient(Value: number, InvocationIdentifier: number): ()
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
+	-- FUNCTION_RETURN_AskClient (51)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 51)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
+	-- Value: AskClient
+	if typeof(Value) ~= "number" then
+		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value)
 end
 
 if not RunService:IsRunning() then
@@ -5366,6 +5389,9 @@ if not RunService:IsRunning() then
 	NeverAnswered = {
 		Invoke = NOOP
 	},
+	AskClient = {
+		On = NOOP_RETURNING
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -5456,8 +5482,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
 				local Thread = Calls[InvocationIdentifier]
-				Calls[InvocationIdentifier] = nil
-				ReleaseInvocation(InvocationIdentifier)
+Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				if coroutine.status(Thread) == "suspended" then
 					task.spawn(Thread, Success, ReturnValue)
 				end
@@ -5497,8 +5522,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
 				local Thread = Calls[InvocationIdentifier]
-				Calls[InvocationIdentifier] = nil
-				ReleaseInvocation(InvocationIdentifier)
+Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				if coroutine.status(Thread) == "suspended" then
 					task.spawn(Thread, Success, ReturnValue)
 				end
@@ -5512,8 +5536,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
 				local Thread = Calls[InvocationIdentifier]
-				Calls[InvocationIdentifier] = nil
-				ReleaseInvocation(InvocationIdentifier)
+Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				if coroutine.status(Thread) == "suspended" then
 					task.spawn(Thread, Success, Value)
 				end
@@ -5804,8 +5827,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
 				local Thread = Calls[InvocationIdentifier]
-				Calls[InvocationIdentifier] = nil
-				ReleaseInvocation(InvocationIdentifier)
+Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				if coroutine.status(Thread) == "suspended" then
 					task.spawn(Thread, Success, ReturnValue)
 				end
@@ -5830,8 +5852,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
 				local Thread = Calls[InvocationIdentifier]
-				Calls[InvocationIdentifier] = nil
-				ReleaseInvocation(InvocationIdentifier)
+Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				if coroutine.status(Thread) == "suspended" then
 					task.spawn(Thread, Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5)
 				end
@@ -5900,8 +5921,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
 				local Thread = Calls[InvocationIdentifier]
-				Calls[InvocationIdentifier] = nil
-				ReleaseInvocation(InvocationIdentifier)
+Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				if coroutine.status(Thread) == "suspended" then
 					task.spawn(Thread, Success, Returnid, Returnlabel)
 				end
@@ -5926,11 +5946,23 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
 				local Thread = Calls[InvocationIdentifier]
-				Calls[InvocationIdentifier] = nil
-				ReleaseInvocation(InvocationIdentifier)
+Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				if coroutine.status(Thread) == "suspended" then
 					task.spawn(Thread, Success, ReturnValue)
 				end
+			end
+		elseif Index == 51 then
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Value: number = SerdesFunctions.ReadFUNCTION_DATA_AskClient()
+			if Events.Reliable[51] ~= nil then
+				Spawn(Events.Reliable[51], Value, InvocationIdentifier)
+			else
+				if #Queue.Reliable[51] > 256 then
+					warn("[Blink]: Event queue of \"AskClient\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[51], {Value, InvocationIdentifier} :: {any})
 			end
 		else
 			error("[Blink]: Unknown event index.")
@@ -9682,6 +9714,32 @@ local Returns = table.freeze({
 				error("There was an exception while processing \"NeverAnswered\".")
 			end
 			return ReturnValue
+		end
+	},
+	AskClient = {
+		On = function(Listener: (number) -> (number)): ()
+			Events.Reliable[51] = function(Value: number, InvocationIdentifier: number): ()
+				local ReturnValue: number;
+				local Success, Error = pcall(function ()
+					ReturnValue = Listener(Value)
+				end)
+				if Success ~= true then
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 51)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					warn(`"AskClient" encountered an error, {Error}`)
+				else
+					SerdesFunctions.WriteFUNCTION_RETURN_AskClient(ReturnValue, InvocationIdentifier)
+				end
+			end
+			Spawn(function (): ()
+				local EventQueue = Queue.Reliable[51] or {}
+				Queue.Reliable[51] = nil
+				for Index, Arguments in EventQueue do
+					Events.Reliable[51](table.unpack(Arguments))
+				end
+			end)
 		end
 	},
 })
