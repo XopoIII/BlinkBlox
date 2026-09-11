@@ -294,11 +294,31 @@ local function UpdateCompletion()
 	})
 end
 
-local function UpdateHighlightedLine()
-	local Line = Utility.GetCurrentLine(Input.Text, Input.CursorPosition)
-	Line = math.clamp(Line, 1, PRE_ALLOCATED_LINES)
+--- The gutter label for a line, created if the pre-allocated run does not reach that far.
+---
+--- PRE_ALLOCATED_LINES labels are built at startup, and this used to index them directly. A document
+--- longer than that found no child and threw -- "2001 is not a valid member of Frame" -- which took
+--- the whole editor down rather than degrading. UpdateHighlightedLine already clamped; the line
+--- counter and SetSource did not, so it was reachable just by typing or by opening a long file.
+local function GetLine(Index: number): TextLabel
+	local Existing = LinesContainer:FindFirstChild(tostring(Index))
+	if Existing then
+		return Existing :: TextLabel
+	end
 
-	local Label: TextLabel = LinesContainer[tostring(Line)]
+	local Line = LineTemplate:Clone()
+	Line.Name = tostring(Index)
+	Line.Text = tostring(Index)
+	Line.TextColor3 = THEME.Line.Inactive
+	Line.TextTransparency = 1
+	Line.Position = UDim2.fromOffset(0, TextHeight * (Index - 1))
+	Line.Parent = LinesContainer
+	return Line
+end
+
+local function UpdateHighlightedLine()
+	local Line = math.max(Utility.GetCurrentLine(Input.Text, Input.CursorPosition), 1)
+	local Label = GetLine(Line)
 	if PreviousLine then
 		PreviousLine.TextColor3 = THEME.Line.Inactive
 	end
@@ -358,15 +378,11 @@ local function OnLinesChanged(Value: number)
 
 	if Difference > 0 then
 		for Index = (Lines + 1), Value do
-			local Name = tostring(Index)
-			local Line = LinesContainer[Name]
-			Line.TextTransparency = 0
+			GetLine(Index).TextTransparency = 0
 		end
 	elseif Difference < 0 then
 		for Index = Lines, (Value + 1), -1 do
-			local Name = tostring(Index)
-			local Line = LinesContainer[Name]
-			Line.TextTransparency = 1
+			GetLine(Index).TextTransparency = 1
 		end
 	end
 
@@ -767,13 +783,7 @@ local function GenerateLinesAsync()
 			Tick = os.clock()
 		end
 
-		local Line = LineTemplate:Clone()
-		Line.Name = tostring(Index)
-		Line.Text = tostring(Index)
-		Line.TextColor3 = THEME.Line.Inactive
-		Line.TextTransparency = 1
-		Line.Position = UDim2.fromOffset(0, TextHeight * (Index - 1))
-		Line.Parent = LinesContainer
+		GetLine(Index)
 	end
 end
 
