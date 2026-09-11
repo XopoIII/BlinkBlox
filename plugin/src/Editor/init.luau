@@ -515,17 +515,20 @@ local function OnAnalysisErrorChanged()
 		local First = Offset
 		Offset += (#Slice + 1)
 
+		--> Every line above the span used to get a zero-width frame of its own, for no reason except
+		--> that a UIListLayout was doing the vertical positioning and needed something to stack. An
+		--> error on line 800 therefore cost 800 clones per keystroke: 39ms, measured in Studio, and
+		--> linear in the line number. Positioning by line makes it one frame wherever the error is.
+		if Offset < Start then
+			continue
+		end
+
 		local Line = ErrorTemplate:Clone()
 		Line.Size = UDim2.new(1, 0, 0, TextHeight)
+		Line.Position = UDim2.fromOffset(0, TextHeight * (Index - 1))
 		local Fill = Line.Fill
 		if IsWarning then
 			Fill.TextColor3 = THEME.Warning
-		end
-
-		if Offset < Start then
-			Line.Fill.MaxVisibleGraphemes = 0
-			Line.Parent = ErrorSelection
-			continue
 		end
 
 		--> Calculate selection bounds
@@ -658,15 +661,15 @@ local function OnSelectionChanged()
 		local First = Offset
 		Offset += (#Slice + 1)
 
-		local Line = SelectionTemplate:Clone()
-		Line.Size = UDim2.new(1, 0, 0, TextHeight)
-		local Fill = Line.Fill
-
+		--> Same as the diagnostics above: only the selected lines need a frame now.
 		if Offset < Start then
-			Fill.BackgroundTransparency = 1
-			Line.Parent = Selection
 			continue
 		end
+
+		local Line = SelectionTemplate:Clone()
+		Line.Size = UDim2.new(1, 0, 0, TextHeight)
+		Line.Position = UDim2.fromOffset(0, TextHeight * (Index - 1))
+		local Fill = Line.Fill
 
 		--> Calculate selection bounds
 		local Substring = Slice
@@ -858,6 +861,19 @@ function Editor.Initialize(Widget: DockWidgetPluginGui)
 	ErrorSelection.Line:Destroy()
 	LinesContainer.Line:Destroy()
 	CompletionContainer.Option:Destroy()
+
+	--> The overlays position their frames by line number now, which a UIListLayout would override.
+	-->
+	--> Destroyed here rather than deleted from Widget.rbxmx so that re-exporting the widget from
+	--> Studio, which is how it is maintained, cannot quietly bring the old behaviour back. What it
+	--> cost while it was in charge: the only way to place a frame on line N was to stack N frames, so
+	--> a diagnostic on line 800 rebuilt 800 instances on every keystroke -- 39ms, measured.
+	for _, Overlay in { Selection, ErrorSelection } do
+		local Layout = Overlay:FindFirstChildOfClass("UIListLayout")
+		if Layout then
+			Layout:Destroy()
+		end
+	end
 
 	--> Sort auto complete symbols
 	for _, Symbols in SYMBOLS do
