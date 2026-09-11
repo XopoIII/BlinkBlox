@@ -1,0 +1,18 @@
+option ClientOutput = "../../Network/DriftClient.luau"
+option ServerOutput = "../../Network/DriftServer.luau"
+
+-- Half of a pair. DriftStale.blink is this file with the first event removed, which renumbers
+-- everything after it -- the ordinary result of editing a schema and recompiling only one side.
+event Inserted {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}
+
+event Alpha {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

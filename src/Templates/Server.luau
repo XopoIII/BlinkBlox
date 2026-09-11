@@ -12,8 +12,17 @@ local Reliable: RemoteEvent = ReplicatedStorage:FindFirstChild(BASE_EVENT_NAME .
 if not Reliable then
     local RemoteEvent = Instance.new("RemoteEvent")
     RemoteEvent.Name = BASE_EVENT_NAME .. "_RELIABLE_REMOTE"
+    --> Set BEFORE parenting, and that ordering is the whole trick. An attribute written on an
+    --> unparented instance replicates atomically with the instance itself; one written afterwards is
+    --> a separate replication event with no ordering guarantee against the client's WaitForChild
+    --> returning. Doing it here removes the race rather than papering over it with a wait.
+    RemoteEvent:SetAttribute("SchemaSignature", SCHEMA_SIGNATURE)
     RemoteEvent.Parent = ReplicatedStorage
     Reliable = RemoteEvent
+else
+    --> The remote already existed -- planted by Rojo, or left by an earlier build. Here the attribute
+    --> IS a separate replication event, so the client tolerates arriving before it.
+    Reliable:SetAttribute("SchemaSignature", SCHEMA_SIGNATURE)
 end
 
 local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:FindFirstChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent

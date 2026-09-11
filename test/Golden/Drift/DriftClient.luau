@@ -9,16 +9,16 @@
 -- This file is not meant to be edited
 
 _G._BLINK = _G._BLINK or {}
-if _G._BLINK["Package"] then
-	error("[Blink]: An instance of blink is already running with the remote scope \"Package\". Change the remote scope of either instance to avoid conflicts.")
+if _G._BLINK["BLINK"] then
+	error("[Blink]: An instance of blink is already running with the remote scope \"BLINK\". Change the remote scope of either instance to avoid conflicts.")
 end
-_G._BLINK["Package"] = true
+_G._BLINK["BLINK"] = true
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
-local BASE_EVENT_NAME = "Package_BLINK"
-local SCHEMA_SIGNATURE = "8ff84fa500597403"
+local BASE_EVENT_NAME = "BLINK"
+local SCHEMA_SIGNATURE = "0f01b12e3754f240"
 --> Free-slot bitset for outstanding invocations: a set bit is a free slot.
 -->
 --> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
@@ -211,12 +211,36 @@ local Queue: any = {
 
 local SerdesEvent = "?"
 local SerdesThread: thread?
+Queue.Reliable[0] = table.create(256)
+Queue.Reliable[1] = table.create(256)
+function SerdesFunctions.ReadEVENT_Inserted(): (number)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	-- Value: Inserted
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	return Value
+end
+
+function SerdesFunctions.ReadEVENT_Alpha(): (number)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	-- Value: Alpha
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	return Value
+end
+
 if not RunService:IsRunning() then
 	local NOOP = function() end
 	local NOOP_RETURNING = function() return NOOP end
 	local Returns = table.freeze({
 		StepReplication = NOOP,
 		SetRateLimitHandler = NOOP,
+	Inserted = {
+		On = NOOP_RETURNING
+	},
+	Alpha = {
+		On = NOOP_RETURNING
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -298,6 +322,31 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		local BLOCK_START = Read(1)
 		local Parsed = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		if Index == 0 then
+			local Value: number = SerdesFunctions.ReadEVENT_Inserted()
+			if Events.Reliable[0] ~= nil then
+				SerdesEvent = "Inserted"
+				Events.Reliable[0](Value)
+			else
+				if #Queue.Reliable[0] > 256 then
+					warn("[Blink]: Event queue of \"Inserted\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[0], {Value} :: {any})
+			end
+		elseif Index == 1 then
+			local Value: number = SerdesFunctions.ReadEVENT_Alpha()
+			if Events.Reliable[1] ~= nil then
+				SerdesEvent = "Alpha"
+				Events.Reliable[1](Value)
+			else
+				if #Queue.Reliable[1] > 256 then
+					warn("[Blink]: Event queue of \"Alpha\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[1], {Value} :: {any})
+			end
+		else
+			error("[Blink]: Unknown event index.")
+		end
 		end)
 		if not Parsed then
 			warn("[Blink]: Dropped a packet that could not be decoded.")
@@ -335,6 +384,40 @@ local Returns = table.freeze({
 
 	SetRateLimitHandler = SetRateLimitHandler,
 
+	Inserted = {
+		On = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Reliable[0] ~= nil then
+				warn("[Blink]: \"Inserted\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Reliable[0] = Listener
+			for Index, Arguments in Queue.Reliable[0] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[0] = {}
+			return function (): ()
+				if Events.Reliable[0] == Listener then
+					Events.Reliable[0] = nil
+				end
+			end
+		end
+	},
+	Alpha = {
+		On = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Reliable[1] ~= nil then
+				warn("[Blink]: \"Alpha\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Reliable[1] = Listener
+			for Index, Arguments in Queue.Reliable[1] do
+				Listener(table.unpack(Arguments))
+			end
+			Queue.Reliable[1] = {}
+			return function (): ()
+				if Events.Reliable[1] == Listener then
+					Events.Reliable[1] = nil
+				end
+			end
+		end
+	},
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

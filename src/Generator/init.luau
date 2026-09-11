@@ -1412,7 +1412,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		string.split(Source[1], "\r"),
 		Imports.DumpLines(),
 		{ "local SerdesFunctions = {}\n" },
-		{ `local BASE_EVENT_NAME = "{Options.RemoteScope and Options.RemoteScope .. "_" or ""}BLINK"\n` },
+		Util.Constants(Options.RemoteScope, AbstractSyntaxTree),
 		string.split(Sources.Base, "\r"),
 		RateTemplateBody,
 		OrderingBody,

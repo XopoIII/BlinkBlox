@@ -50,18 +50,22 @@ local function MockRequire(Path: string, Environment)
 	return Execute()
 end
 
-local Client: typeof(require("../Network/Client")) = MockRequire("../Network/Client.luau", {
-	game = ClientEnvironment.game,
-	Color3 = ClientEnvironment.Color3,
-	DateTime = ClientEnvironment.DateTime,
-	BrickColor = ClientEnvironment.BrickColor,
-})
-
+--> The SERVER first, and the order matters now that the client checks the schema signature the
+--> server publishes on the remote. In a game that ordering is not a choice: the server creates the
+--> remotes and the client's WaitForChild does not return until it has. Here the mock remotes are
+--> plain tables that exist from the start, so the order has to be stated.
 local Server: typeof(require("../Network/Server")) = MockRequire("../Network/Server.luau", {
 	game = ServerEnvironment.game,
 	Color3 = ServerEnvironment.Color3,
 	DateTime = ServerEnvironment.DateTime,
 	BrickColor = ServerEnvironment.BrickColor,
+})
+
+local Client: typeof(require("../Network/Client")) = MockRequire("../Network/Client.luau", {
+	game = ClientEnvironment.game,
+	Color3 = ClientEnvironment.Color3,
+	DateTime = ClientEnvironment.DateTime,
+	BrickColor = ClientEnvironment.BrickColor,
 })
 
 return {

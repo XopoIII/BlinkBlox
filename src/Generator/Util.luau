@@ -1,5 +1,6 @@
 --!strict
 local Parser = require("../Parser")
+local Signature = require("../Modules/Signature")
 
 type Scope = Parser.Scope
 
@@ -59,12 +60,26 @@ local function BitIndexToHex(Index: number): string
 	return `0x{string.format("%x", 2 ^ Index)}`
 end
 
+--- The two constants the generated module opens with: the remote's name, and the signature of the
+--- schema it was built from.
+---
+--- Routed through here rather than written inline because Generator/init.luau is on the size ratchet
+--- in scripts/check-file-size.sh and this file is not. Nothing else about it wants to be separate.
+local function Constants(RemoteScope: string?, Tree: any): { string }
+	local Scope = if RemoteScope then RemoteScope .. "_" else ""
+	return {
+		`local BASE_EVENT_NAME = "{Scope}BLINK"\n`,
+		`local SCHEMA_SIGNATURE = "{Signature.Of(Tree)}"\n`,
+	}
+end
+
 return {
 	GetPath = GetTypesPath,
 	GetExportName = GetExportName,
 	GetScopePrefix = GetScopePrefix,
 	GetScopeIndent = GetScopeIndent,
 	GenerateEnumLiterals = GenerateEnumLiterals,
+	Constants = Constants,
 
 	FormatKey = FormatKey,
 	FormatIndex = FormatIndex,

@@ -1,0 +1,12 @@
+option ClientOutput = "../../Network/DriftStaleClient.luau"
+option ServerOutput = "../../Network/DriftStaleServer.luau"
+
+-- The other half of the pair. Drift.blink declares an `Inserted` event ahead of this one, so `Alpha`
+-- is index 1 there and index 0 here. Both compile; both are perfectly valid; a client built from one
+-- and a server from the other agree on the remote's name and on nothing else.
+event Alpha {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

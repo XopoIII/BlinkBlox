@@ -30,7 +30,10 @@ local function IsA(ClassName: string)
 	end
 end
 
+local SetBLINK_RELIABLE_REMOTE, GetBLINK_RELIABLE_REMOTE = Shared.AttributeMethods("BLINK_RELIABLE_REMOTE")
 ServerEnviornment.Instances.BLINK_RELIABLE_REMOTE = {
+	SetAttribute = SetBLINK_RELIABLE_REMOTE,
+	GetAttribute = GetBLINK_RELIABLE_REMOTE,
 	FireClient = function(_self, _Player, ...)
 		Fire(true, ...)
 	end,
@@ -41,7 +44,10 @@ ServerEnviornment.Instances.BLINK_RELIABLE_REMOTE = {
 	IsA = IsA("RemoteEvent"),
 }
 
+local SetBLINK_UNRELIABLE_REMOTE, GetBLINK_UNRELIABLE_REMOTE = Shared.AttributeMethods("BLINK_UNRELIABLE_REMOTE")
 ServerEnviornment.Instances.BLINK_UNRELIABLE_REMOTE = {
+	SetAttribute = SetBLINK_UNRELIABLE_REMOTE,
+	GetAttribute = GetBLINK_UNRELIABLE_REMOTE,
 	FireClient = function(_self, _Player, ...)
 		Fire(false, ...)
 	end,

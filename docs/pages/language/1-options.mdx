@@ -191,6 +191,40 @@ run in edit mode, where no remotes exist — can exercise UI that reacts to even
     Enable it where you want it and leave it off in builds where you do not.
 </Callout>
 
+## Schema signatures
+
+Not an option -- it is always on, and there is nothing to configure. It is documented here because
+you will meet its error message.
+
+Every generated pair carries a short signature of the schema it was built from. The server publishes
+it on the reliable remote; the client checks it before anything else and **errors on require** if
+they disagree:
+
+```
+[Blink]: This client was built from a different schema than the server
+(client 18198d53…, server 64b832be…). Recompile both sides from the same .blink file.
+```
+
+This exists because the alternative failure is silent. Event ids are positional -- the first event
+declared is `0`, the next is `1` -- so inserting an event renumbers every event after it. A client
+one build behind then reads index `7` as whatever index `7` means now and dispatches one event's
+payload to another's listener. Nothing errors. The usual symptoms are
+`invalid argument #3 to 'writeu8'` or a listener that receives data it cannot make sense of.
+
+<Callout type="info">
+    The signature covers what reaches the wire: event and function order, ids, direction,
+    reliability, names and field types. It deliberately **ignores** everything that only affects how
+    the module is generated -- `Casing`, `Typescript`, the output paths, `SyncValidation`, `Predict`,
+    the packet caps, and `Rate`/`Burst`. Two builds differing only in those can still talk, and a
+    check that cried wolf over them would soon be removed.
+</Callout>
+
+If you see the "did not publish a schema signature" variant, the server is running a build of Blink
+from before this check existed, or something other than Blink created a remote with the same name.
+
+It is a safety check, not a security one: the client owns its copy of the module and can edit the
+constant out. It catches drift between two builds, which is a mistake, not an attack.
+
 ## `RemoteScope`
 Default: `""`
 

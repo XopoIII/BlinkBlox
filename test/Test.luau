@@ -375,10 +375,6 @@ local Element = { Static = 0, Dynamic = buffer.create(64) }
 FireAndExpect("Dynamic Array Data Integrity", Server.DynamicArray, Client.DynamicArray, table.create(12, Element))
 FireAndExpect("Dynamic Map Data Integrity", Server.DynamicMap, Client.DynamicMap, table.create(64, Element))
 
---> Required here rather than at the end: these delete and regenerate ../Network, so they have to run
---> where they always have relative to the specs around them.
-require("./CommandLine")
-
 local MergeStruct: Server.MergeStruct = {
 	Data = 1,
 	Field = 0,
@@ -771,12 +767,19 @@ end)
 --> These live apart, but they run as part of the same suite. New specs go in files like these rather
 --> than on the end of this one.
 require("./Guards")
+require("./Signature")
+require("./SchemaDrift")
 require("./TypePacks")
 require("./ClientDecoding")
 require("./SyncValidation")
 require("./Highlighting")
 require("./WireFormat")
 require("./Decoding")
+
+--> LAST, and deliberately so: the CLI specs delete ../Network to prove the compiler recreates a
+--> missing output directory, and then recompile only Test.blink. Everything generated from the other
+--> schemas is gone afterwards, so any spec that reads a generated FILE has to have run already.
+require("./CommandLine")
 
 PrettyPrint("green", `All tests passed successfully!`)
 

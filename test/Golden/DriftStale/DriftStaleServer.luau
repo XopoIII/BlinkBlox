@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "30bac59f98b8bb6d"
+local SCHEMA_SIGNATURE = "13cb582c39e3152a"
 --> Free-slot bitset for outstanding invocations: a set bit is a free slot.
 -->
 --> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
@@ -213,34 +213,26 @@ local Queue: any = {
 local RATE_TEMPLATE = table.freeze({})
 local SerdesEvent = "?"
 local SerdesThread: thread?
-Queue.Reliable[0] = CreateQueue()
-Queue.Reliable[1] = CreateQueue()
-export type number = number
-export type a = { foo: number }
-export type b = { bar: number }
-export type c<A,B,C> = { a: A, B: { bar: number }, C: C }
-export type d = { foo: number, bar: number, a: number, B: { bar: number }, C: number }
-function SerdesFunctions.ReadEVENT_PollingEvent(): (nil)
-	return nil
-end
-
-function SerdesFunctions.ReadEVENT_ImplicitPollingEvent(): (nil)
-	return nil
+function SerdesFunctions.WriteEVENT_Alpha(Value: number): ()
+	-- Allocate BLOCK: 2 bytes
+	local BLOCK_START = Allocate(2)
+	-- EVENT_Alpha (0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+	-- Value: Alpha
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
 
 if not RunService:IsRunning() then
 	local NOOP = function() end
 	local NOOP_RETURNING = function() return NOOP end
 	local Returns = table.freeze({
-		step_replication = NOOP,
-		set_rate_limit_handler = NOOP,
-	PollingEvent = {
-		iter = NOOP_RETURNING,
-		next = NOOP_RETURNING
-	},
-	ImplicitPollingEvent = {
-		iter = NOOP_RETURNING,
-		next = NOOP_RETURNING
+		StepReplication = NOOP,
+		SetRateLimitHandler = NOOP,
+	Alpha = {
+		Fire = NOOP,
+		FireAll = NOOP,
+		FireList = NOOP,
+		FireExcept = NOOP
 	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
@@ -424,13 +416,6 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		end
 		local Parsed = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		if Index == 0 then
-			Push(Queue.Reliable[0], table.pack(Player, SerdesFunctions.ReadEVENT_PollingEvent()))
-		elseif Index == 1 then
-			Push(Queue.Reliable[1], table.pack(Player, SerdesFunctions.ReadEVENT_ImplicitPollingEvent()))
-		else
-			error("[Blink]: Unknown event index.")
-		end
 		end)
 		if not Parsed then break end
 	end
@@ -476,63 +461,55 @@ end)
 
 
 local Returns = table.freeze({
-	step_replication = StepReplication,
+	StepReplication = StepReplication,
 
-	set_rate_limit_handler = SetRateLimitHandler,
+	SetRateLimitHandler = SetRateLimitHandler,
 
-	PollingEvent = {
-		iter = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[0]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return 
+	Alpha = {
+		Fire = function(Player: Player, Value: number): ()
+			Load(PlayersMap[Player])
+			SerdesFunctions.WriteEVENT_Alpha(Value)
+			SavePlayerBuffer(Player)
+		end,
+		FireAll = function(Value: number): ()
+			Load()
+			SerdesFunctions.WriteEVENT_Alpha(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in Players:GetPlayers() do
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
 			end
 		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		next = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[0]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return 
-			end
-		end
-	},
-	ImplicitPollingEvent = {
-		iter = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[1]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return 
+		FireList = function(List: {Player}, Value: number): ()
+			Load()
+			SerdesFunctions.WriteEVENT_Alpha(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in List do
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
 			end
 		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		next = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[1]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
+		FireExcept = function(Except: Player, Value: number): ()
+			Load()
+			SerdesFunctions.WriteEVENT_Alpha(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
 				end
-				return 
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
 			end
-		end
+		end,
 	},
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)

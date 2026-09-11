@@ -19,6 +19,25 @@ local Clock = 0
 --> Collected by the `warn` injected into each generated module's environment; see Modules.luau.
 local Warnings: { string } = {}
 
+--> Attributes on the mock remotes, keyed by remote name then attribute name.
+-->
+--> Shared rather than per-environment on purpose: the client and server mocks call GetEnvironment
+--> separately, so their Instances tables are different objects, and the schema signature is written
+--> by one side and read by the other. This is the bridge for that, the way Shared.Bridge is the
+--> bridge for packets.
+local Attributes: { [string]: { [string]: any } } = {}
+
+--> Handed to each remote mock, so `SetAttribute`/`GetAttribute` behave like Roblox's from either
+--> side.
+local function AttributeMethods(Remote: string)
+	Attributes[Remote] = Attributes[Remote] or {}
+	return function(_self, Name: string, Value: any)
+		Attributes[Remote][Name] = Value
+	end, function(_self, Name: string): any
+		return Attributes[Remote][Name]
+	end
+end
+
 --> Whether the mock player is still in the game. Generated server code asks before writing a
 --> player's buffer back into PlayersMap, so a test can drive that path by flipping this.
 local PlayerInGame = true
@@ -197,6 +216,8 @@ return {
 	--> limit, an oversized unreliable payload, a packet it could not decode. None of that was
 	--> assertable before, so a guard could stop warning and the suite would still be green.
 	Warnings = Warnings,
+	Attributes = Attributes,
+	AttributeMethods = AttributeMethods,
 	DrainWarnings = function(): { string }
 		local Drained = table.clone(Warnings)
 		table.clear(Warnings)
