@@ -5,7 +5,6 @@
 local Format = require("../src/Modules/Format")
 local Harness = require("./Harness")
 local fs = require("@lune/fs")
-local luau = require("@lune/luau")
 local process = require("@lune/process")
 local task = require("@lune/task")
 
@@ -23,51 +22,10 @@ local BaseEnvironment = Shared.GetEnvironment()
 local ClientEnvironment = require("./Client")
 local ServerEnvironment = require("./Server")
 
-local function MockTypeof(a: any)
-	local TypeofA = typeof(a)
-	if TypeofA == "table" and a.__typeof then
-		return a.__typeof
-	end
-
-	return TypeofA
-end
-
-local function MockRequire(Path: string, Environment)
-	local Source = fs.readFile(Path)
-	local Bytecode = luau.compile(Source, {
-		optimizationLevel = 1,
-		debugLevel = 2,
-	})
-
-	Environment._G = {}
-	Environment.os = Shared.Os
-	Environment.task = task
-	Environment.typeof = MockTypeof
-	Environment.require = function()
-		error("require is not supported")
-	end
-
-	local Execute = luau.load(Bytecode, {
-		debugName = Path,
-		environment = Environment,
-	})
-
-	return Execute()
-end
-
-local Client: typeof(require("../Network/Client")) = MockRequire("../Network/Client.luau", {
-	game = ClientEnvironment.game,
-	Color3 = ClientEnvironment.Color3,
-	DateTime = ClientEnvironment.DateTime,
-	BrickColor = ClientEnvironment.BrickColor,
-})
-
-local Server: typeof(require("../Network/Server")) = MockRequire("../Network/Server.luau", {
-	game = ServerEnvironment.game,
-	Color3 = ServerEnvironment.Color3,
-	DateTime = ServerEnvironment.DateTime,
-	BrickColor = ServerEnvironment.BrickColor,
-})
+local Modules = require("./Modules")
+local Client = Modules.Client
+local Server = Modules.Server
+local MockRequire = Modules.MockRequire
 
 --> Helper functions
 local function GetFlags(Amount: number): { [string]: boolean }
@@ -1894,6 +1852,9 @@ RunClosure("Bit packing", function()
 		ErrorPrint(`Failed "Bit packing": absent optionals did not survive the round trip.`)
 	end
 end)
+
+--> Hostile-length specs live apart, but they run as part of the same suite.
+require("./Decoding")
 
 PrettyPrint("green", `All tests passed successfully!`)
 
