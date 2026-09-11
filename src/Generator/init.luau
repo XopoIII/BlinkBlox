@@ -29,6 +29,7 @@ local DEFAULT_MAX_PACKET_SIZE = Fragments.DEFAULT_MAX_PACKET_SIZE
 local DEFAULT_MAX_EVENTS_PER_PACKET = Fragments.DEFAULT_MAX_EVENTS_PER_PACKET
 local DEFAULT_MAX_INSTANCES_PER_PACKET = Fragments.DEFAULT_MAX_INSTANCES_PER_PACKET
 local DEFAULT_MAX_UNRELIABLE_SIZE = Fragments.DEFAULT_MAX_UNRELIABLE_SIZE
+local DEFAULT_INVOCATION_TIMEOUT = Fragments.DEFAULT_INVOCATION_TIMEOUT
 
 local Sources = {
 	Base = require("./Templates/Base"),
@@ -577,6 +578,7 @@ function Declarations.Function(Declaration: Parser.Function)
 	--> Main
 	local Body = Builder.new()
 	local Indent = Util.GetScopeIndent(Scope)
+	local Timeout = Options.InvocationTimeout or DEFAULT_INVOCATION_TIMEOUT
 
 	Noop.Push(`{Name} = \{`, 0, Indent)
 	Body.Push(`{Name} = \{`, 0, Indent)
@@ -691,6 +693,7 @@ function Declarations.Function(Declaration: Parser.Function)
 			:Line("local InvocationIdentifier = Invoke()")
 			:Line(`{Util.GetPath(DataIdentifier, true, Scope)}({DataArguments}, InvocationIdentifier)`)
 			:Line("Calls[InvocationIdentifier] = coroutine.running()")
+			:Line(`TimeoutInvocation(InvocationIdentifier, {Timeout}, "{Name}")`)
 			:Line(`local Success, {ReturnValues} = coroutine.yield()`)
 			:Compare("Success", "true", "Not")
 			:Line(`error({Error})`)

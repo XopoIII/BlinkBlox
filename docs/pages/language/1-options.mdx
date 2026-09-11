@@ -191,6 +191,29 @@ run in edit mode, where no remotes exist — can exercise UI that reacts to even
     Enable it where you want it and leave it off in builds where you do not.
 </Callout>
 
+## `InvocationTimeout`
+Default: `10` seconds
+
+How long an [`Invoke`](6-functions.mdx) waits for its answer before failing.
+
+A call that is never answered used to wait forever, and it cost more than the one hung thread: each
+outstanding invocation holds one of thirty-two slots, and a call that never returns never gives its
+slot back. Thirty-two of those and every later `Invoke` in that session is refused outright.
+
+When the timeout fires, the caller is failed the same way an errored handler fails it -- so a `pcall`
+around `Invoke`, or a rejected promise, catches it -- the slot is returned, and Blink warns naming
+the function.
+
+```blink copy
+option InvocationTimeout = 30
+```
+
+<Callout type="info">
+    Ten seconds sits above anything a legitimate handler is likely to do -- a datastore round trip, a
+    marketplace prompt -- and below the point where the caller has given up anyway. Raise it if your
+    handlers genuinely take longer.
+</Callout>
+
 ## Schema signatures
 
 Not an option -- it is always on, and there is nothing to configure. It is documented here because

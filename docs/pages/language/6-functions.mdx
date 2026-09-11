@@ -25,9 +25,8 @@ Determines the library used to handle yielding to the requester.<br/>
 Limits how often one player may invoke this function, exactly as on
 [events](5-events#rate-burst). Functions are always client to server, so a rate here always applies.
 
-A refused invocation is answered with a failure rather than dropped: the caller is suspended with no
-timeout, so a silently discarded call would hang that thread until its slot was reused by an
-unrelated call.
+A refused invocation is answered with a failure rather than dropped, so the caller raises promptly
+instead of waiting out the [timeout](1-options#invocationtimeout).
 
 #### `Data`
 The data sent to the server by the client.<br/>

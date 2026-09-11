@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "18198d5394a38f5d"
+local SCHEMA_SIGNATURE = "a982babb8c768943"
 --> Free-slot bitset for outstanding invocations: a set bit is a free slot.
 -->
 --> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
@@ -200,6 +200,38 @@ end
 
 local Calls = table.create(256)
 
+--> Fails an invocation nobody answered.
+-->
+--> Until now there was no timeout at all, and the consequence was quiet: a call that never came back
+--> left its entry in `Calls` and its bit claimed in `InvocationSlots` forever, so the caller hung and
+--> the slot was gone. Thirty-two of those and `Invoke` refuses every further call for the lifetime of
+--> the session.
+-->
+--> That was survivable while the callee was always the SERVER, which always answers -- every refusal
+--> path writes a three-byte failure reply precisely so the caller does not hang. It stops being
+--> survivable the moment a client can be the callee, because a client that never replies is ordinary
+--> rather than a fault: it left, it crashed, it was exploited.
+-->
+--> The identity check is what makes this safe against a reply that arrives late. By then the slot may
+--> belong to an unrelated call, and resuming that caller with this one's failure would be worse than
+--> the hang.
+local function TimeoutInvocation(Identifier: number, Seconds: number, Name: string)
+    local Thread = Calls[Identifier]
+    task.delay(Seconds, function()
+        if Calls[Identifier] ~= Thread then
+            return
+        end
+
+        Calls[Identifier] = nil
+        ReleaseInvocation(Identifier)
+
+        if coroutine.status(Thread) == "suspended" then
+            warn(`[Blink]: "{Name}" was never answered and has been failed after {Seconds} seconds.`)
+            task.spawn(Thread, false)
+        end
+    end)
+end
+
 local Events: any = {
     Reliable = table.create(256),
     Unreliable = table.create(256)
@@ -269,6 +301,7 @@ Queue.Reliable[39] = table.create(256)
 Queue.Reliable[41] = table.create(256)
 Queue.Reliable[46] = table.create(256)
 Queue.Reliable[48] = table.create(256)
+Queue.Reliable[50] = table.create(256)
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
 export type Indexers_TestFlags = {["a a"]: boolean,}
 export type Indexers_TestEnums = ("b b")
@@ -2843,6 +2876,28 @@ function SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1: number, named: s
 		error(`Expected Value3 to be of type number, got {type(Value3)} instead.`)
 	end
 	buffer.writeu16(SendBuffer, BLOCK_START + 4, Value3)
+end
+
+function SerdesFunctions.ReadFUNCTION_DATA_NeverAnswered(): (number)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	-- Value: NeverAnswered
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	return Value
+end
+
+function SerdesFunctions.WriteFUNCTION_RETURN_NeverAnswered(Value: number, InvocationIdentifier: number): ()
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
+	-- FUNCTION_RETURN_NeverAnswered (50)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 50)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
+	-- Value: NeverAnswered
+	if typeof(Value) ~= "number" then
+		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value)
 end
 
 if not RunService:IsRunning() then
@@ -5538,6 +5593,9 @@ if not RunService:IsRunning() then
 		FireList = NOOP,
 		FireExcept = NOOP
 	},
+	NeverAnswered = {
+		On = NOOP_RETURNING
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -5871,6 +5929,19 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					warn("[Blink]: Event queue of \"NamedTupleFunction\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[48], {Player, id, label, InvocationIdentifier} :: {any})
+			end
+		elseif Index == 50 then
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Value: number = SerdesFunctions.ReadFUNCTION_DATA_NeverAnswered()
+			if Events.Reliable[50] ~= nil then
+				Spawn(Events.Reliable[50], Player, Value, InvocationIdentifier)
+			else
+				if #Queue.Reliable[50] > 256 then
+					warn("[Blink]: Event queue of \"NeverAnswered\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[50], {Player, Value, InvocationIdentifier} :: {any})
 			end
 		else
 			error("[Blink]: Unknown event index.")
@@ -10900,6 +10971,34 @@ local Returns = table.freeze({
 				SavePlayerBuffer(Player)
 			end
 		end,
+	},
+	NeverAnswered = {
+		On = function(Listener: (Player, number) -> (number)): ()
+			Events.Reliable[50] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
+				local ReturnValue: number;
+				local Success, Error = pcall(function ()
+					ReturnValue = Listener(Player, Value)
+				end)
+				Load(PlayersMap[Player])
+				if Success ~= true then
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 50)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					warn(`"NeverAnswered" encountered an error, {Error}`)
+				else
+					SerdesFunctions.WriteFUNCTION_RETURN_NeverAnswered(ReturnValue, InvocationIdentifier)
+				end
+				SavePlayerBuffer(Player)
+			end
+			Spawn(function (): ()
+				local EventQueue = Queue.Reliable[50] or {}
+				Queue.Reliable[50] = nil
+				for Index, Arguments in EventQueue do
+					Events.Reliable[50](table.unpack(Arguments))
+				end
+			end)
+		end
 	},
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)

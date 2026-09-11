@@ -68,6 +68,7 @@ Grammar.OPTIONS = {
 	DefaultRate = "Number",
 	RequireRates = "Boolean",
 	Predict = "Boolean",
+	InvocationTimeout = "Number",
 } :: { [string]: Lexer.Types }
 
 Grammar.EVENT = {

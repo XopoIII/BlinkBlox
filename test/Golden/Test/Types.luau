@@ -188,6 +188,38 @@ end
 
 local Calls = table.create(256)
 
+--> Fails an invocation nobody answered.
+-->
+--> Until now there was no timeout at all, and the consequence was quiet: a call that never came back
+--> left its entry in `Calls` and its bit claimed in `InvocationSlots` forever, so the caller hung and
+--> the slot was gone. Thirty-two of those and `Invoke` refuses every further call for the lifetime of
+--> the session.
+-->
+--> That was survivable while the callee was always the SERVER, which always answers -- every refusal
+--> path writes a three-byte failure reply precisely so the caller does not hang. It stops being
+--> survivable the moment a client can be the callee, because a client that never replies is ordinary
+--> rather than a fault: it left, it crashed, it was exploited.
+-->
+--> The identity check is what makes this safe against a reply that arrives late. By then the slot may
+--> belong to an unrelated call, and resuming that caller with this one's failure would be worse than
+--> the hang.
+local function TimeoutInvocation(Identifier: number, Seconds: number, Name: string)
+    local Thread = Calls[Identifier]
+    task.delay(Seconds, function()
+        if Calls[Identifier] ~= Thread then
+            return
+        end
+
+        Calls[Identifier] = nil
+        ReleaseInvocation(Identifier)
+
+        if coroutine.status(Thread) == "suspended" then
+            warn(`[Blink]: "{Name}" was never answered and has been failed after {Seconds} seconds.`)
+            task.spawn(Thread, false)
+        end
+    end)
+end
+
 local Events: any = {
     Reliable = table.create(256),
     Unreliable = table.create(256)

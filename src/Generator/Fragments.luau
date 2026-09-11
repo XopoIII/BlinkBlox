@@ -52,6 +52,13 @@ local DEFAULT_MAX_INSTANCES_PER_PACKET = 256
 --> is told about is the worst possible failure mode. This is the runtime half of that check.
 local DEFAULT_MAX_UNRELIABLE_SIZE = 900
 
+--- Seconds before an unanswered invocation fails its caller and returns its slot.
+---
+--- Ten because it has to sit above anything a legitimate handler might do -- a datastore round trip,
+--- a marketplace prompt -- and below the point where the caller has given up anyway. Configurable
+--- with `option InvocationTimeout` for the handlers that genuinely take longer.
+local DEFAULT_INVOCATION_TIMEOUT = 10
+
 local SYNC_VALIDATION_BODY = {
 	`local SerdesEvent = "?"\n`,
 	"local SerdesThread: thread?\n",
@@ -107,6 +114,7 @@ return {
 	DEFAULT_MAX_EVENTS_PER_PACKET = DEFAULT_MAX_EVENTS_PER_PACKET,
 	DEFAULT_MAX_INSTANCES_PER_PACKET = DEFAULT_MAX_INSTANCES_PER_PACKET,
 	DEFAULT_MAX_UNRELIABLE_SIZE = DEFAULT_MAX_UNRELIABLE_SIZE,
+	DEFAULT_INVOCATION_TIMEOUT = DEFAULT_INVOCATION_TIMEOUT,
 	SYNC_VALIDATION_BODY = SYNC_VALIDATION_BODY,
 	EVENT_SYNC_VALIDATION = EVENT_SYNC_VALIDATION,
 	RELIABLE_BODY = RELIABLE_BODY,

@@ -7,6 +7,9 @@ option SyncValidation = true
 option WriteValidations = true
 option ManualReplication = false
 option Predict = true
+--> Above the one-second yield the RemoteFunction specs use, and low enough that the timeout spec
+--> does not add ten seconds to every run.
+option InvocationTimeout = 3
 
 import "./Indexers"
 import "./Sub-Sources/Source"
@@ -746,4 +749,12 @@ event PartiallyNamedTuple {
     Type: Reliable,
     Call: SingleSync,
     Data: (u8, named: string, u16)
+}
+
+--> Nothing ever listens to this one, which is the point: it is how the suite exercises an invocation
+--> that is never answered. Declared last so the indices above keep their numbers.
+function NeverAnswered {
+    Yield: Coroutine,
+    Data: u8,
+    Return: u8
 }

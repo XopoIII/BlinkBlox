@@ -107,6 +107,9 @@ export type Options = {
 	--> Generates a Predict entry point on each event, which dispatches to local listeners without
 	--> touching remotes. See the generator.
 	Predict: boolean?,
+
+	--> Seconds before an unanswered invocation fails its caller and gives its slot back.
+	InvocationTimeout: number?,
 }
 
 export type Body = Node<"Body", {
