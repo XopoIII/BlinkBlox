@@ -8,9 +8,6 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local task = require("@lune/task")
 
-local Compiler = Harness.Compiler
-local COMPILE_TEST_FILE = Harness.TestSchema
-
 local ErrorPrint = Harness.ErrorPrint
 local PrettyPrint = Harness.PrettyPrint
 
@@ -375,27 +372,9 @@ local Element = { Static = 0, Dynamic = buffer.create(64) }
 FireAndExpect("Dynamic Array Data Integrity", Server.DynamicArray, Client.DynamicArray, table.create(12, Element))
 FireAndExpect("Dynamic Map Data Integrity", Server.DynamicMap, Client.DynamicMap, table.create(64, Element))
 
-RunClosure("CLI compile prompt", function()
-	pcall(function()
-		fs.removeDir("../Network")
-	end)
-
-	local Result: process.ExecResult
-	local Thread = task.spawn(function()
-		Result = process.exec("lune", { "run", Compiler, COMPILE_TEST_FILE }, { cwd = "../src/CLI" })
-	end)
-
-	if coroutine.status(Thread) ~= "suspended" then
-		error(Result and Result.stderr or "CLI didn't prompt")
-	end
-
-	task.cancel(Thread)
-end)
-
-RunClosure("CLI compile --yes", function()
-	local Result = process.exec("lune", { "run", Compiler, COMPILE_TEST_FILE, "--", "--yes" }, { cwd = "../src/CLI" })
-	assert(Result.ok, Result.stderr)
-end)
+--> Required here rather than at the end: these delete and regenerate ../Network, so they have to run
+--> where they always have relative to the specs around them.
+require("./CommandLine")
 
 local MergeStruct: Server.MergeStruct = {
 	Data = 1,
@@ -1159,6 +1138,7 @@ end)
 --> These live apart, but they run as part of the same suite. New specs go in files like these rather
 --> than on the end of this one, which is on the size ratchet in scripts/check-file-size.sh.
 require("./TypePacks")
+require("./Highlighting")
 require("./WireFormat")
 require("./Decoding")
 

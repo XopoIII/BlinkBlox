@@ -12,6 +12,7 @@ local TextService = game:GetService("TextService")
 
 ---- Imports ----
 
+local Highlight = require("@self/Highlight")
 local State = require("./State")
 local Utility = require("@self/Utility")
 
@@ -63,6 +64,22 @@ local THEME = {
 		Inactive = Color3.fromHex("787878"),
 	},
 }
+
+--> The same colours as hex, which is what rich-text markup takes. Built once: ToHex allocates, and
+--> the highlighter asks for a colour per token.
+local PALETTE: Highlight.Palette = {
+	Text = THEME.Text:ToHex(),
+	Keyword = THEME.Keyword:ToHex(),
+	Primitive = THEME.Primitive:ToHex(),
+	Identifier = THEME.Identifier:ToHex(),
+	Class = THEME.Class:ToHex(),
+	Number = THEME.Number:ToHex(),
+	String = THEME.String:ToHex(),
+	Bracket = THEME.Bracket:ToHex(),
+	Boolean = THEME.Boolean:ToHex(),
+	Comment = THEME.Comment:ToHex(),
+	Error = THEME.Error:ToHex(),
+}
 -- This is a comment
 local PRIMITIVES = {}
 for Primitive in Settings.Primtives do
@@ -87,23 +104,6 @@ local SYMBOLS: { [string]: { { Label: string, Insert: string } } } = {
 	},
 	Variable = {},
 	Primitive = PRIMITIVES,
-}
-
-local BRACKETS = {
-	OpenParentheses = true,
-	CloseParentheses = true,
-	OpenBraces = true,
-	CloseBraces = true,
-	OpenBrackets = true,
-	CloseBrackets = true,
-}
-
-local RICH_TEXT_ESCAPES: { [string]: string } = {
-	--["&"] = "&amp;",
-	["<"] = "&lt;",
-	[">"] = "&gt;",
-	--["\""] = "&quot;",
-	--["\'"] = "&apos;",
 }
 
 local SCROLL_LINES = 2
@@ -176,18 +176,6 @@ local function ScrollTowards(Direction: number)
 	Scroll:Set(math.clamp(Value + (Direction * SCROLL_LINES), 0, Maximum))
 end
 
-local function Color(Text: string, ColorValue: Color3): string
-	return `<font color="#{ColorValue:ToHex()}">{Text}</font>`
-end
-
-local function Escape(Text: string)
-	for Symbol, Replacement in RICH_TEXT_ESCAPES do
-		Text = string.gsub(Text, Symbol, Replacement)
-	end
-
-	return Text
-end
-
 local function ClearChildrenWhichAre(Parent: Instance, Class: string)
 	for _, Child in Parent:GetChildren() do
 		if Child:IsA(Class) then
@@ -211,77 +199,12 @@ local function GetPrediction(): CompletionItem?
 	return Item
 end
 
-local DOTS = "%.%."
-local NUMBER = "%-?%d*%.?%d+"
-
 local function UpdateColors()
-	local Source = Input.Text
-	local RichText = {}
-
-	--> Render text immediately
-	Display.Text = Source
+	--> One assignment, not two. This used to write the plain source first "to render text
+	--> immediately" and then overwrite it with the highlighted version in the same frame, so the
+	--> engine laid out and rich-text-parsed the whole document twice and drew the first pass never.
 	Display.TextColor3 = THEME.Text
-
-	--> Initiialize lexer
-	SourceLexer:Initialize(Source)
-
-	--> Highlight state
-	local Keyword = "none"
-	local Token = SourceLexer:GetNextToken()
-
-	while Token and (Token.Type ~= "EndOfFile") do
-		local Type: Lexer.Types = Token.Type
-		local Value = Token.Value
-
-		local String = Escape(Value)
-		if Type == "Keyword" or Type == "Import" or Type == "As" then
-			Keyword = Value
-			String = Color(Value, THEME.Keyword)
-		elseif Type == "Primitive" then
-			String = Color(Value, THEME.Primitive)
-		elseif Type == "Identifier" then
-			local LookAhead = SourceLexer:GetNextToken(true)
-			local IsField = (LookAhead and LookAhead.Type == "FieldAssign" and Keyword ~= "map")
-			String = Color(Value, IsField and THEME.Text or THEME.Identifier)
-		elseif Type == "Array" or Type == "Range" then
-			--> Exact size array/range
-			local Single = string.match(Value, `%[({NUMBER})%]`) or string.match(Value, `%(({NUMBER})%)`)
-			local Lower = string.match(Value, `%[({NUMBER}){DOTS}`) or string.match(Value, `%(({NUMBER}){DOTS}`)
-			local Upper = string.match(Value, `{DOTS}({NUMBER})%]`) or string.match(Value, `{DOTS}({NUMBER})%)`)
-
-			if Single then
-				String = string.gsub(Value, Single, Color(Single, THEME.Number))
-			elseif Lower and Upper then
-				String =
-					`{string.sub(Value, 1, 1)}{Color(Lower, THEME.Number)}..{Color(Upper, THEME.Number)}{string.sub(
-						Value,
-						#Value,
-						#Value
-					)}`
-			end
-		elseif Type == "Component" then
-			local Primitive = string.match(Value, "(%w+)") or ""
-			String = `{Color("<", THEME.Bracket)}{Color(Primitive, THEME.Primitive)}{Color(">", THEME.Bracket)}`
-		elseif BRACKETS[Type] then
-			String = Color(Value, THEME.Bracket)
-		elseif Type == "Class" then
-			String = `({Color(string.sub(Value, 2, #Value - 1), THEME.Class)})`
-		elseif Type == "String" then
-			String = Color(Value, THEME.String)
-		elseif Type == "Boolean" then
-			String = Color(Value, THEME.Boolean)
-		elseif Type == "Comment" then
-			String = Color(Value, THEME.Comment)
-		elseif Type == "Unknown" then
-			String = Color(Value, THEME.Error)
-		end
-
-		table.insert(RichText, String)
-		Token = SourceLexer:GetNextToken()
-	end
-
-	--> Render highlighted text
-	Display.Text = table.concat(RichText)
+	Display.Text = Highlight.Render(Input.Text, SourceLexer, PALETTE)
 end
 
 local function UpdateAnalysis()
