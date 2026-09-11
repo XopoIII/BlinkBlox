@@ -362,7 +362,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	RecieveInstanceCursor = 0
 	local Size = buffer.len(RecieveBuffer)
 	if SerdesThread and coroutine.status(SerdesThread) == "suspended" then
-		warn(`[Blink]: Yielded in a Sync call. Event "{SerdesEvent}" uses a Sync call, consider using an Async call instead.`)
+		warn(`[Blink]: Event "{SerdesEvent}" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.`)
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
@@ -407,7 +407,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	RecieveInstanceCursor = 0
 	local Size = buffer.len(RecieveBuffer)
 	if SerdesThread and coroutine.status(SerdesThread) == "suspended" then
-		warn(`[Blink]: Yielded in a Sync call. Event "{SerdesEvent}" uses a Sync call, consider using an Async call instead.`)
+		warn(`[Blink]: Event "{SerdesEvent}" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.`)
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()

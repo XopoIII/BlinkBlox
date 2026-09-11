@@ -57,9 +57,21 @@ local SYNC_VALIDATION_BODY = {
 	"local SerdesThread: thread?\n",
 }
 
+--- Detects a Sync listener that yielded, by noticing on the NEXT packet that the previous decode
+--- thread is still suspended inside one.
+---
+--- Two things the old wording left out, both of which cost people time on the devforum thread.
+---
+--- It fires when the next packet arrives, not when the yield happens -- so a listener that yields
+--- with no further traffic behind it is never reported, which is why "I added yielding callbacks and
+--- got no error" is a correct observation rather than a broken check.
+---
+--- And `coroutine.close` does not merely end the warning: it destroys the suspended decode, so every
+--- event still unread in that earlier packet is thrown away. The warning now says so. Silently
+--- losing events while reporting only a style preference is the wrong way round.
 local EVENT_SYNC_VALIDATION = {
 	`if SerdesThread and coroutine.status(SerdesThread) == "suspended" then\n`,
-	'\twarn(`[Blink]: Yielded in a Sync call. Event "{SerdesEvent}" uses a Sync call, consider using an Async call instead.`)\n',
+	'\twarn(`[Blink]: Event "{SerdesEvent}" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.`)\n',
 	"\tcoroutine.close(SerdesThread)\n",
 	"end\n",
 	"SerdesThread = coroutine.running()\n",

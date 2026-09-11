@@ -50,7 +50,24 @@ option PromiseLibrary = "ReplicatedStorage.Packages.Promise"
 ## `SyncValidation`
 Default: `true`
 
-Controls if Blink will check whether a sync call yielded.
+Reports a `Sync` listener that yielded.
+
+It is worth knowing exactly when it fires, because the obvious guess is wrong. Blink does **not**
+notice at the moment your listener yields. It notices when the **next packet arrives** and finds the
+previous decode still suspended inside one. So a listener that yields with no further traffic behind
+it is never reported -- which is why adding a yield to a `SingleSync` callback and seeing no error is
+a correct observation rather than a broken check.
+
+<Callout type="warning">
+    When it does fire, the suspended decode is **closed**, and every event still unread in that
+    earlier packet is discarded. Your listener is not resumed and those events never arrive.
+
+    This is not a style warning. A `Sync` listener runs on the decode thread, so yielding in one
+    stops the packet where it stands. If a listener needs to yield, it needs an
+    [Async call](5-events#call).
+</Callout>
+
+The check costs one `coroutine.status` per packet, which is why it is on by default.
 
 ## `WriteValidations`
 Default: `false`

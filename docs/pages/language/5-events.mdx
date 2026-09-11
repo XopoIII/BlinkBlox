@@ -46,8 +46,13 @@ Determines the listening API exposed on the receiving side.
 * `Polling` - Events are iterated through `Event.Iter()`.
 
 <Callout type="error">
-    Sync events should be avoided unless performance is critical.<br/>
-    Yielding or erroring in sync event can cause <b>undefined and sometimes game-breaking behaviour</b>.
+    A `Sync` listener runs **on the decode thread**. Yielding in one therefore stops decoding the
+    packet it arrived in, and the events behind it in that packet are lost -- see
+    [`SyncValidation`](1-options#syncvalidation), which reports this but only once another packet
+    turns up. Erroring in one is caught, but costs the rest of that packet just the same.
+
+    Prefer `SingleAsync` or `ManyAsync` unless the per-event cost of a spawned thread genuinely
+    matters to you.
 </Callout>
 
 #### `Rate`, `Burst`
