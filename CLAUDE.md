@@ -54,9 +54,15 @@ What that means concretely, as of 0.20.0: per-player per-event token buckets (`R
 `option DefaultRate`, `option RequireRates`), compile-time size analysis that refuses unreliable
 events which cannot fit and warns about the ones that might not, argument-type checks before a
 client's remote arguments are read, a decode loop that stops when the player leaves, class checks on
-both remotes, and a bitset that recycles invocation slots. Bandwidth work — the shared bitfield,
-offset-encoded lengths, `OrderedUnreliable` — is deliberately deferred: it changes the wire format
-and belongs in one release, not three.
+both remotes, and a bitset that recycles invocation slots. 0.21.0 added the wire-format work that had
+been held back — the shared bitfield, offset-encoded lengths, `OrderedUnreliable` — released
+together, as one format change rather than three. 0.22.0 checks a decoded length before the read it
+authorises, so a hostile length prefix buys neither a read nor an allocation.
+
+Still deferred, and deliberately: delta compression. It would require blink to hold per-player state
+on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
+stale takes its delta with it and the two caches diverge for good. That is a change of
+responsibility, not an optimisation.
 
 ## Commands
 

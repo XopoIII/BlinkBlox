@@ -1,0 +1,13 @@
+-- expect E3021
+-- An element that reads no bytes and takes no instance slot gives the decode loop nothing to run
+-- out of. The count is two bytes on the wire and buys 65535 iterations, so this is an error rather
+-- than a warning: unlike an unbounded string, there is no packet size that makes it fine.
+option ClientOutput = "../../Network/CostlessClient.luau"
+option ServerOutput = "../../Network/CostlessServer.luau"
+
+event Flood {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: struct {}[],
+}

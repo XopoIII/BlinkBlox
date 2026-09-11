@@ -714,3 +714,11 @@ scope Issue33 {
         Data: (Map<u8>, Enum<u8>, Struct<u8>)
     }
 }
+--> An inbound `unknown`, so the suite can replay a packet whose instance table is short of what the
+--> buffer claims. Declared last so the event indices above keep their numbers.
+event UnknownInbound {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: unknown,
+}

@@ -895,6 +895,7 @@ function SerdesFunctions.ReadEVENT_DynamicMap(): ({[number]: { Static: number, D
 		-- Element_1.Dynamic: Dynamic
 		local OFFSET_2 = Read(2)
 		local Length = buffer.readu16(RecieveBuffer, OFFSET_2)
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1.Dynamic" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		Element_1.Dynamic = buffer.create(Length)
 		buffer.copy(Element_1.Dynamic, 0, RecieveBuffer, Read(Length), Length)
 		Value[Key_1] = Element_1
@@ -922,6 +923,7 @@ function SerdesFunctions.ReadEVENT_DynamicArray(): ({ { Static: number, Dynamic:
 		local OPERATION_OFFSET_1 = ARRAY_START_1
 		ARRAY_START_1 += 2
 		local Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_1)
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1.Dynamic" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		Item_1.Dynamic = buffer.create(Length)
 		buffer.copy(Item_1.Dynamic, 0, RecieveBuffer, Read(Length), Length)
 		table.insert(Value, Item_1)
@@ -943,6 +945,7 @@ function SerdesFunctions.ReadEVENT_PlayerEvent(): ({ Type: "Join", Name: string,
 		Value = {} :: any
 		-- Value.Name: Name
 		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		Value.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
 		-- Value.UserId: UserId
 		Value.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
@@ -956,6 +959,7 @@ function SerdesFunctions.ReadEVENT_PlayerEvent(): ({ Type: "Join", Name: string,
 		Value.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 		-- Value.Message: Message
 		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		Value.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
 		Value.Type = "Chat"
 	elseif Tag == 2 then
@@ -1002,6 +1006,7 @@ function SerdesFunctions.ReadEVENT_Unknown(): (any)
 	-- Value: Unknown
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
+	if Value == nil then error(`Expected a value for "Value", the packet carried only {#RecieveInstances} of them.`) end
 	return Value
 end
 
@@ -1015,6 +1020,7 @@ function SerdesFunctions.ReadEVENT_MapEvent(): ({[string]: number})
 		-- Key_1: MapSimple
 		local OFFSET_0 = Read(2)
 		local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 		-- Element_1: MapSimple
 		local OFFSET_1 = Read(1)
@@ -1036,6 +1042,7 @@ function SerdesFunctions.ReadEVENT_MapStructEvent(): ({ Map: {[string]: number} 
 		-- Key_1: Map
 		local OFFSET_0 = Read(2)
 		local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 		-- Element_1: Map
 		local OFFSET_1 = Read(1)
@@ -1055,9 +1062,10 @@ function SerdesFunctions.ReadEVENT_MapComplexEvent(): ({[string]: { number }})
 		-- Key_1: MapComplex
 		local OFFSET_0 = Read(1)
 		local Length = buffer.readu8(RecieveBuffer, OFFSET_0)
+		if Length < 0 then error(`Expected length of "Key_1" to be larger than 0, got {Length} instead.`) end
+		if Length > 20 then error(`Expected length of "Key_1" to be smaller than 20, got {Length} instead.`) end
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-		if #Key_1 < 0 then error(`Expected length of "Key_1" to be larger than 0, got {#Key_1} instead.`) end
-		if #Key_1 > 20 then error(`Expected length of "Key_1" to be smaller than 20, got {#Key_1} instead.`) end
 		-- Element_1: MapComplex
 		-- START ARRAY
 		local Length = 8
@@ -2146,6 +2154,7 @@ if not RunService:IsRunning() then
 					-- Key_2: MapSimple
 					local OFFSET_0 = Read(2)
 					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_2: MapSimple
 					local OFFSET_1 = Read(1)
@@ -2160,6 +2169,7 @@ if not RunService:IsRunning() then
 					-- Key_2: MapSimple
 					local OFFSET_0 = Read(2)
 					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_2: MapSimple
 					local OFFSET_1 = Read(1)
@@ -2267,6 +2277,7 @@ if not RunService:IsRunning() then
 				Value.Event = {} :: any
 				-- Value.Event.Name: Name
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				-- Value.Event.UserId: UserId
 				Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
@@ -2280,6 +2291,7 @@ if not RunService:IsRunning() then
 				Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 				-- Value.Event.Message: Message
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				Value.Event.Type = "Chat"
 			elseif Tag == 2 then
@@ -2297,9 +2309,11 @@ if not RunService:IsRunning() then
 			Value.Nested = {} :: any
 			-- Value.Nested.Four: Four
 			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
 			-- Value.Nested.Five: Five
 			Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
@@ -3325,6 +3339,7 @@ local Returns = table.freeze({
 					-- Key_2: MapSimple
 					local OFFSET_0 = Read(2)
 					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_2: MapSimple
 					local OFFSET_1 = Read(1)
@@ -3339,6 +3354,7 @@ local Returns = table.freeze({
 					-- Key_2: MapSimple
 					local OFFSET_0 = Read(2)
 					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_2: MapSimple
 					local OFFSET_1 = Read(1)
@@ -3446,6 +3462,7 @@ local Returns = table.freeze({
 				Value.Event = {} :: any
 				-- Value.Event.Name: Name
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				-- Value.Event.UserId: UserId
 				Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
@@ -3459,6 +3476,7 @@ local Returns = table.freeze({
 				Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 				-- Value.Event.Message: Message
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				Value.Event.Type = "Chat"
 			elseif Tag == 2 then
@@ -3476,9 +3494,11 @@ local Returns = table.freeze({
 			Value.Nested = {} :: any
 			-- Value.Nested.Four: Four
 			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
 			-- Value.Nested.Five: Five
 			Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
 			-- Buffer restore
 			RecieveCursor = PreviousCursor

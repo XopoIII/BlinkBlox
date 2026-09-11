@@ -4,6 +4,7 @@
 
 local Blocks = require("./Blocks")
 local Parser = require("../Parser")
+local Size = require("../Modules/Size")
 
 type Block = Blocks.Block
 --> The compiler's range table, not Roblox's NumberRange userdata (which does not exist on Lune).
@@ -21,6 +22,9 @@ type Generate = (
 type TypePrefab = {
 	Read: Reader,
 	Write: Writer,
+	--> Set when the reader checks the decoded length itself, before the read. The generic post-read
+	--> assert in `GenerateValidation` would then be a second copy of a check that has already passed.
+	ValidatesOnRead: boolean?,
 }
 
 type AssertPrefab = {
@@ -33,6 +37,7 @@ type AssertGenerator = (Variable: string, ...any) -> AssertPrefab
 
 local SEND_BUFFER = "SendBuffer"
 local RECIEVE_BUFFER = "RecieveBuffer"
+local RECIEVE_CURSOR = "RecieveCursor"
 local SEND_POSITION = "SendOffset"
 
 local BYTE = 1
@@ -52,11 +57,14 @@ local Asserts = {
 		}
 	end,
 
-	string = function(Variable: string, Min: number, Max: number): AssertPrefab
+	string = function(Variable: string, Min: number, Max: number, Measure: string?): AssertPrefab
+		--> `Measure` names the expression to compare. The read path passes the decoded length so the
+		--> bound is checked before the string is read; the write path omits it and measures the value.
+		local Length = Measure or `#{Variable}`
 		return {
-			Lower = `if #{Variable} < {Min} then error(\`Expected length of "{Variable}" to be larger than {Min}, got \{#{Variable}} instead.\`) end`,
-			Upper = `if #{Variable} > {Max} then error(\`Expected length of "{Variable}" to be smaller than {Max}, got \{#{Variable}} instead.\`) end`,
-			Exact = `if #{Variable} ~= {Max} then error(\`Expected length of "{Variable}" to equal to {Max}, got \{#{Variable}} instead.\`) end`,
+			Lower = `if {Length} < {Min} then error(\`Expected length of "{Variable}" to be larger than {Min}, got \{{Length}} instead.\`) end`,
+			Upper = `if {Length} > {Max} then error(\`Expected length of "{Variable}" to be smaller than {Max}, got \{{Length}} instead.\`) end`,
+			Exact = `if {Length} ~= {Max} then error(\`Expected length of "{Variable}" to equal to {Max}, got \{{Length}} instead.\`) end`,
 		}
 	end,
 
@@ -68,11 +76,13 @@ local Asserts = {
 		}
 	end,
 
-	buffer = function(Variable: string, Min: number, Max: number): AssertPrefab
+	buffer = function(Variable: string, Min: number, Max: number, Measure: string?): AssertPrefab
+		--> See the note on `Asserts.string` for what `Measure` is for.
+		local Length = Measure or `buffer.len({Variable})`
 		return {
-			Lower = `if buffer.len({Variable}) < {Min} then error(\`Expected size of "{Variable}" to be larger than {Min}, got \{buffer.len({Variable})} instead.\`) end`,
-			Upper = `if buffer.len({Variable}) > {Max} then error(\`Expected size of "{Variable}" to be smaller than {Max}, got \{buffer.len({Variable})} instead.\`) end`,
-			Exact = `if buffer.len({Variable}) ~= {Max} then error(\`Expected size of "{Variable}" to equal to {Max}, got \{buffer.len({Variable})} instead.\`) end`,
+			Lower = `if {Length} < {Min} then error(\`Expected size of "{Variable}" to be larger than {Min}, got \{{Length}} instead.\`) end`,
+			Upper = `if {Length} > {Max} then error(\`Expected size of "{Variable}" to be smaller than {Max}, got \{{Length}} instead.\`) end`,
+			Exact = `if {Length} ~= {Max} then error(\`Expected size of "{Variable}" to equal to {Max}, got \{{Length}} instead.\`) end`,
 		}
 	end,
 
@@ -112,6 +122,45 @@ local function GetTypeToUse(UpperSize: number): TypePrefab
 	error("Value is too large to be written to a buffer.")
 end
 
+--> A length read out of a hostile packet may name more bytes than the packet still holds. Reading
+--> that far throws inside `buffer.read*` and the decode loop's pcall turns it into a dropped packet,
+--> but `buffer` would have allocated the whole span first. Checking the remaining space keeps a
+--> length prefix from buying an allocation, and it is exact rather than conservative: block reads
+--> reserve their fixed bytes up front, so at this point the cursor sits where the payload begins.
+local function GenerateSpaceGuard(Length: string, Variable: string): string
+	return `if {Length} > buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR} then error(\`Expected "{Variable}" to fit in the \{buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR}} bytes left in the packet, got a length of \{{Length}} instead.\`) end`
+end
+
+--- Emits a guard on a decoded element count, before the array behind it is allocated.
+---
+--- `table.create(Length)` reserves every slot up front, so a count the packet cannot possibly back
+--- still buys that allocation even though the loop fails on its first iteration: two bytes reserve
+--- 65535 slots, and `u8[]` is enough to ask for them. Comparing the count against what is left of
+--- whatever its elements read closes that.
+---
+--- The comparison uses the MINIMUM an element costs, which is the most that can be assumed about
+--- it, so the guard errs towards letting a packet through rather than refusing an honest one. An
+--- element that costs nothing either way is refused at compile time instead -- there is no resource
+--- left to measure it against.
+local function EmitCapacityGuard(Block: Block, Length: string, Variable: string, Of: Parser.TypeNode)
+	local Element = Size.Sealed(Of :: any)
+
+	if Element.Min > 0 then
+		local Needed = if Element.Min == 1 then Length else `{Length} * {Element.Min}`
+		Block:Line(
+			`if {Needed} > buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR} then error(\`Expected "{Variable}" to fit in the \{buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR}} bytes left in the packet, got a length of \{{Length}} instead.\`) end`
+		)
+		return
+	end
+
+	if Element.Refs > 0 then
+		local Needed = if Element.Refs == 1 then Length else `{Length} * {Element.Refs}`
+		Block:Line(
+			`if {Needed} > #RecieveInstances - RecieveInstanceCursor then error(\`Expected "{Variable}" to fit in the \{#RecieveInstances - RecieveInstanceCursor} values left beside the packet, got a length of \{{Length}} instead.\`) end`
+		)
+	end
+end
+
 local function GetTypeToUseByBits(UpperBits: number): TypePrefab
 	for _, NumberType in NumberTypeBounds do
 		if NumberType.Bits >= UpperBits then
@@ -142,6 +191,12 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 
 		local function GenerateValidation(Block: Block, TargetVariable: string)
 			if Block == Write and WriteValidations ~= true then
+				return
+			end
+
+			--> The reader has already asserted the decoded length, and a read of `Length` bytes
+			--> yields exactly `Length` bytes, so measuring the value again tests an identity.
+			if Block == Read and Prefab.ValidatesOnRead and Range and IsVariableSize then
 				return
 			end
 
@@ -187,13 +242,13 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 	end
 end
 
-local function GenerateNumberGenerator(Type: string, Size: number): (TypePrefab, { Type: string, Generate: Generate })
+local function GenerateNumberGenerator(Type: string, Bytes: number): (TypePrefab, { Type: string, Generate: Generate })
 	local Prefab = {
 		Read = function(Variable: string, Block: Block)
-			Block:Line(`{Block:Declare(Variable)} = buffer.read{Type}({RECIEVE_BUFFER}, {Block:Read(Size)})`)
+			Block:Line(`{Block:Declare(Variable)} = buffer.read{Type}({RECIEVE_BUFFER}, {Block:Read(Bytes)})`)
 		end,
 		Write = function(Value: string, Block: Block)
-			Block:Line(`buffer.write{Type}({SEND_BUFFER}, {Block:Allocate(Size)}, {Value})`)
+			Block:Line(`buffer.write{Type}({SEND_BUFFER}, {Block:Allocate(Bytes)}, {Value})`)
 		end,
 	}
 
@@ -328,6 +383,17 @@ do
 				LengthType.Read("Length", Block)
 			end
 
+			--> Checked before the read, and against the reconstructed length rather than the raw
+			--> numeral: the prefix is sized from the span, so `string(300..400)` fits a u8 whose 255
+			--> decodes to 555. The bound named here is the one the schema author actually wrote.
+			if Range then
+				local Assert = Asserts.string(Variable, Lower, Upper, "Length")
+				Block:Line(Assert.Lower)
+				Block:Line(Assert.Upper)
+			end
+
+			Block:Line(GenerateSpaceGuard("Length", Variable))
+
 			Block:Line(`{Block:Declare(Variable)} = buffer.readstring({RECIEVE_BUFFER}, Read(Length), Length)`)
 		end,
 		Write = function(Value: string, Block: Block, Range: NumberRange?)
@@ -358,6 +424,8 @@ do
 			Block:Line(`Allocate(Length)`)
 			Block:Line(`buffer.writestring({SEND_BUFFER}, {SEND_POSITION}, {Value}, Length)`)
 		end,
+
+		ValidatesOnRead = true,
 	}
 
 	Primitives.string = {
@@ -421,6 +489,17 @@ do
 				LengthType.Read("Length", Block)
 			end
 
+			--> Checked before the read, and against the reconstructed length rather than the raw
+			--> numeral: the prefix is sized from the span, so `string(300..400)` fits a u8 whose 255
+			--> decodes to 555. The bound named here is the one the schema author actually wrote.
+			if Range then
+				local Assert = Asserts.buffer(Variable, Lower, Upper, "Length")
+				Block:Line(Assert.Lower)
+				Block:Line(Assert.Upper)
+			end
+
+			Block:Line(GenerateSpaceGuard("Length", Variable))
+
 			Block:Line(`{Block:Declare(Variable)} = buffer.create(Length)`)
 			Block:Line(`buffer.copy({Variable}, 0, {RECIEVE_BUFFER}, Read(Length), Length)`)
 		end,
@@ -449,6 +528,8 @@ do
 			Block:Line(`Allocate(Length)`)
 			Block:Line(`buffer.copy({SEND_BUFFER}, {SEND_POSITION}, {Value}, 0, Length)`)
 		end,
+
+		ValidatesOnRead = true,
 	}
 
 	Primitives.buffer = {
@@ -606,6 +687,13 @@ do
 		Read = function(Variable: string, Block: Block)
 			Block:Line("RecieveInstanceCursor += 1")
 			Block:Line(`{Block:Declare(Variable)} = RecieveInstances[RecieveInstanceCursor]`)
+			--> The sender substitutes `Null` for a nil, so a nil here is never a value the client
+			--> meant to send -- it means the packet claimed more of them than it carried. Unlike an
+			--> `Instance`, whose class check fails on the same condition, `unknown` accepts anything
+			--> and would otherwise let a decode loop run on a table that ran out long ago.
+			Block:Line(
+				`if {Variable} == nil then error(\`Expected a value for "{Variable}", the packet carried only \{#RecieveInstances} of them.\`) end`
+			)
 		end,
 		Write = function(Value: string, Block: Block)
 			Block:Line(`table.insert(SendInstances, if {Value} == nil then Null else {Value})`)
@@ -621,6 +709,7 @@ end
 return {
 	Types = Types,
 	Asserts = Asserts,
+	EmitCapacityGuard = EmitCapacityGuard,
 	Primitives = Primitives,
 	Structures = Structures,
 	GetTypeToUse = GetTypeToUse,

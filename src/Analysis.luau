@@ -170,7 +170,132 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 	end
 end
 
+--- Best token to underline for a repetition: the brackets say more than the type name does.
+local function TokenOf(Node: Declaration): Token?
+	local Tokens = Node.Tokens
+	if not Tokens then
+		return nil
+	end
+
+	return Tokens.Range or Tokens.Primitive
+end
+
+--- Whether one element of a repetition costs nothing to decode -- no buffer bytes, no bits, and no
+--- slot in the instance table.
+local function Costless(Node: Declaration): boolean
+	local Measured = Size.Sealed(Node :: any)
+	return Measured.Max == 0 and Measured.Refs == 0
+end
+
+--- Refuses a repetition whose element count is read off the wire but whose elements cost nothing to
+--- decode.
+---
+--- A decode loop is bounded by what its body consumes. An element that reads buffer bytes can only
+--- repeat until the packet runs out, and MaxPacketSize caps that. An element that takes a slot in
+--- the instance table runs out of instances, which the reader checks. An element that does NEITHER
+--- gives the loop nothing to exhaust: `struct {}[]` turns a two-byte count into 65535 iterations and
+--- 65535 table allocations, and 64 such events fit in a couple of hundred bytes.
+---
+--- A bound the author writes settles it: twenty costless elements are twenty iterations, and the
+--- ceiling is visible in the schema. What is refused is the ceiling nobody chose -- a bare `[]`,
+--- which inherits what its u16 prefix holds, and a map, which takes no range in the language at all.
+---
+--- Same file-scoping rule as the checks above: imported declarations are diagnosed by the parse of
+--- the file they came from.
+local function CostlessRepetitions(Source: string, File: string?, Declarations: { Declaration })
+	local function Report(Node: Declaration, What: string)
+		local Diagnostic =
+			Error.new(Error.AnalyzeCostlessRepetition, Source, `{What} of a type that costs nothing to decode`, File)
+
+		local Culprit = TokenOf(Node)
+		if Culprit then
+			Diagnostic:Primary(Culprit, "The element count is read from the packet")
+		end
+
+		Diagnostic:Note(
+			"Each element reads no bytes and takes no instance slot, so nothing stops the decode "
+				.. "loop: a two-byte count is worth 65535 iterations to a hostile client."
+		)
+			:Note("Bound it -- `[..16]` -- or give the element a field that is actually sent.")
+			:Emit()
+	end
+
+	local function Inspect(Node: Declaration)
+		if type(Node) ~= "table" or not Node.Type then
+			return
+		end
+
+		local Kind = Node.Type
+		local Value = Node.Value
+
+		if Kind == "Array" then
+			local Range = Value.Range
+			local RangeToken: Token? = Node.Tokens.Range
+			local Written = if RangeToken then RangeToken.Value ~= "[]" else false
+
+			--> A fixed-length array is unrolled against a count the schema wrote, and a bounded one
+			--> states its own ceiling -- twenty costless elements are twenty iterations. A bare `[]`
+			--> inherits whatever its u16 prefix can hold, which nobody chose.
+			if Range and Range.Min ~= Range.Max and not Written and Costless(Value.Of) then
+				Report(Node, "Array")
+			end
+
+			Inspect(Value.Of)
+		elseif Kind == "Map" then
+			local Values = Value.Values
+			if Costless(Values[1]) and Costless(Values[2]) then
+				Report(Node, "Map")
+			end
+
+			Inspect(Values[1])
+			Inspect(Values[2])
+		elseif Kind == "Optional" then
+			Inspect(Value.Of)
+		elseif Kind == "Struct" or Kind == "Tuple" then
+			for _, Field in Value.Values do
+				Inspect(Field)
+			end
+		elseif Kind == "TagEnum" then
+			for _, Variant in Value.Values do
+				for _, Field in (Variant :: Declaration).Value.Values do
+					Inspect(Field)
+				end
+			end
+		end
+	end
+
+	for _, Declaration in Declarations do
+		if Declaration.Type == "Scope" then
+			local Scope = Declaration :: ScopeNode
+			if not Scope.Value.Imported then
+				CostlessRepetitions(Source, File, Scope.Value.Values)
+			end
+
+			continue
+		end
+
+		--> A generic template is not a payload. Its parameters are unresolved here, so every one of
+		--> them would measure as costing nothing; it is the substituted copies that reach the wire,
+		--> and those are ordinary declarations by the time this runs.
+		if Declaration.Value and Declaration.Value.Generics then
+			continue
+		end
+
+		if Declaration.Type == "Event" then
+			Inspect(Declaration.Value.Data)
+		elseif Declaration.Type == "Function" then
+			Inspect(Declaration.Value.Data)
+			Inspect(Declaration.Value.Return)
+		else
+			--> A standalone `type` declaration carries its node kind directly, and it is exported
+			--> with a public reader of its own, so it is reachable whether an event names it or not.
+			Inspect(Declaration)
+		end
+	end
+end
+
 return {
 	RateLimits = RateLimits,
 	UnreliableSizes = UnreliableSizes,
+	CostlessRepetitions = CostlessRepetitions,
 }

@@ -902,6 +902,7 @@ function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
 
 	Analysis.UnreliableSizes(self.Source, self.File, Declarations, Options)
 	Analysis.RateLimits(self.Source, self.File, Declarations, Options)
+	Analysis.CostlessRepetitions(self.Source, self.File, Declarations)
 
 	return {
 		Type = "Body",
