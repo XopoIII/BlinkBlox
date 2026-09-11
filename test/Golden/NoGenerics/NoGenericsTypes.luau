@@ -190,7 +190,7 @@ export type StructOfFlags = { A: {Flag: boolean,Flag1: boolean,}, B: {Flag: bool
 export type MapSimple = {[string]: number}
 export type MapComplex = {[string]: { number }}
 export type MapReference = {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?
-export type MapNested = {[{[string]: number}]: {[string]: number}}
+export type MapNested = {[string]: {[string]: number}}
 export type ArrayMap = { {[number]: number} }
 export type ArrayEnum = { ("A" | "B" | "C") }
 export type ArrayStruct = { {  } }
@@ -485,28 +485,18 @@ return {
 			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			for _ = 1, Elements_1 do
 				-- Key_1: MapNested
-				local Key_1 = {}
 				local OFFSET_0 = Read(2)
-				local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
-				for _ = 1, Elements_2 do
-					-- Key_2: MapSimple
-					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Element_2: MapSimple
-					local OFFSET_1 = Read(1)
-					local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_1)
-					Key_1[Key_2] = Element_2
-				end
+				local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				-- Element_1: MapNested
 				local Element_1 = {}
 				local OFFSET_1 = Read(2)
-				Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
+				local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
 				for _ = 1, Elements_2 do
 					-- Key_2: MapSimple
 					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					Length = buffer.readu16(RecieveBuffer, OFFSET_0)
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_2: MapSimple
@@ -534,27 +524,14 @@ return {
 			for Key_1, Element_1 in Value do
 				Elements_1 += 1
 				-- Key_1: MapNested
-				local OFFSET_0 = Allocate(2)
-				local Elements_2 = 0
-				for Key_2, Element_2 in Key_1 do
-					Elements_2 += 1
-					-- Key_2: MapSimple
-					if typeof(Key_2) ~= "string" then
-						error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.`)
-					end
-					local Length = #Key_2
-					local OFFSET_0 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_0, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
-					-- Element_2: MapSimple
-					if typeof(Element_2) ~= "number" then
-						error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
-					end
-					local OFFSET_1 = Allocate(1)
-					buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
+				if typeof(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
 				end
-				buffer.writeu16(SendBuffer, OFFSET_0, Elements_2)
+				local Length = #Key_1
+				local OFFSET_0 = Allocate(2)
+				buffer.writeu16(SendBuffer, OFFSET_0, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 				-- Element_1: MapNested
 				local OFFSET_1 = Allocate(2)
 				local Elements_2 = 0

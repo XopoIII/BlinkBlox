@@ -1,0 +1,10 @@
+-- expect E3001
+-- niceshark11 on the devforum thread keyed a map by a tagged enum and got back `[Table(...)] = value`
+-- for every entry. Every byte round-trips; the result is simply unusable, because each decoded key is
+-- a fresh table and nothing the receiving side builds will ever match one.
+struct Position {
+    X: u8,
+    Y: u8
+}
+
+map Grid = {[Position]: u8}

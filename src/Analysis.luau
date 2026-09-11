@@ -294,8 +294,104 @@ local function CostlessRepetitions(Source: string, File: string?, Declarations: 
 	end
 end
 
+--- Which decoded types can serve as a map key, and which produce a value the receiver can never
+--- look anything up by.
+---
+--- A key has to survive the round trip AS A KEY. A string, a number, a boolean and a plain `enum`
+--- all decode to the same value the sender had, so they do. Everything else decodes to a FRESH
+--- TABLE per entry, and in Luau a table is its own identity: the receiver ends up with
+--- `[Table(0x...)] = value`, which nothing it constructs will ever match. The map is not corrupt --
+--- every byte round-trips -- it is simply unusable, which is worse, because it looks like it worked.
+local UNUSABLE_KEYS: { [string]: string } = {
+	Struct = "a struct",
+	TagEnum = "a tagged enum",
+	Map = "a map",
+	Set = "a set",
+	Array = "an array",
+	Tuple = "a type pack",
+}
+
+--- Refuses map keys of a type that cannot be looked up.
+---
+--- Runs here rather than in the parser because generics are already substituted by the time this
+--- walks: `GenericMap<u8[], f64>` is an ordinary map with an array key at this point, and checking
+--- where the map is written would not see it.
+local function MapKeys(Source: string, File: string?, Declarations: { Declaration })
+	local function Inspect(Node: Declaration)
+		if type(Node) ~= "table" or not Node.Type then
+			return
+		end
+
+		local Kind = Node.Type
+		local Value = Node.Value
+
+		if Kind == "Map" then
+			local Key = Value.Values[1]
+			local Unusable = Key and UNUSABLE_KEYS[Key.Type]
+			if Unusable then
+				local Diagnostic =
+					Error.new(Error.AnalyzeReferenceInvalidType, Source, `A map cannot be keyed by {Unusable}`, File)
+
+				local Culprit = (Node.Tokens and Node.Tokens.Key) or TokenOf(Key) or TokenOf(Node)
+				if Culprit then
+					Diagnostic:Primary(Culprit, "This key decodes to a new table for every entry")
+				end
+
+				Diagnostic:Note(
+					"Each decoded key is a table with its own identity, so nothing the receiving side "
+						.. "builds will ever index the map -- every entry is reachable only by iterating it."
+				)
+					:Note("Key it by a string, a number, a boolean or an enum, and move the rest into the value.")
+					:Emit()
+			end
+
+			Inspect(Value.Values[1])
+			Inspect(Value.Values[2])
+		elseif Kind == "Array" or Kind == "Optional" then
+			Inspect(Value.Of)
+		elseif Kind == "Struct" or Kind == "Tuple" then
+			for _, Field in Value.Values do
+				Inspect(Field)
+			end
+		elseif Kind == "TagEnum" then
+			for _, Variant in Value.Values do
+				for _, Field in (Variant :: Declaration).Value.Values do
+					Inspect(Field)
+				end
+			end
+		end
+	end
+
+	for _, Declaration in Declarations do
+		if Declaration.Type == "Scope" then
+			local Scope = Declaration :: ScopeNode
+			if not Scope.Value.Imported then
+				MapKeys(Source, File, Scope.Value.Values)
+			end
+
+			continue
+		end
+
+		--> An uninstantiated generic is not a concrete type yet; its instantiations are walked where
+		--> they are used, with the substitution already made.
+		if Declaration.Value and Declaration.Value.Generics then
+			continue
+		end
+
+		if Declaration.Type == "Event" then
+			Inspect(Declaration.Value.Data)
+		elseif Declaration.Type == "Function" then
+			Inspect(Declaration.Value.Data)
+			Inspect(Declaration.Value.Return)
+		else
+			Inspect(Declaration)
+		end
+	end
+end
+
 return {
 	RateLimits = RateLimits,
 	UnreliableSizes = UnreliableSizes,
 	CostlessRepetitions = CostlessRepetitions,
+	MapKeys = MapKeys,
 }

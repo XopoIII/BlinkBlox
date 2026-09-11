@@ -203,7 +203,7 @@ struct StructOfFlags {
 map MapSimple = {[string]: u8}
 map MapComplex = {[string(0..20)]: u8(0..100)[8]}
 map MapReference = {[States]: States}?
-export map MapNested = {[MapSimple]: MapSimple}
+export map MapNested = {[string]: MapSimple}
 
 map ArrayMap = {[u8]: u8}[0..20]
 enum ArrayEnum = {A, B, C}[0..20]
@@ -283,7 +283,7 @@ struct PrimitiveField {
 map GenericMap<K, V> = {[K]: V}
 
 struct GenericMerge<A, B> {
-    Map: GenericMap<A[], B>,
+    Map: GenericMap<string, B>,
     Data: A,
     Struct: Generic<u8, string, B[]>,
     AnotherNested: struct {

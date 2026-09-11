@@ -321,7 +321,7 @@ export type StructOfFlags = { A: {Flag: boolean,Flag1: boolean,}, B: {Flag: bool
 export type MapSimple = {[string]: number}
 export type MapComplex = {[string]: { number }}
 export type MapReference = {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?
-export type MapNested = {[{[string]: number}]: {[string]: number}}
+export type MapNested = {[string]: {[string]: number}}
 export type ArrayMap = { {[number]: number} }
 export type ArrayEnum = { ("A" | "B" | "C") }
 export type ArrayStruct = { {  } }
@@ -338,8 +338,8 @@ export type PrimitiveEnum = ("CFrame")
 export type PrimitiveTagEnum = { Type: "CFrame",  }
 export type PrimitiveField = { CFrame: number }
 export type GenericMap<K,V> = {[K]: V}
-export type GenericMerge<A,B> = { Map: {[{ A }]: B}, Data: A, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: B } }
-export type MergeStruct = { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }
+export type GenericMerge<A,B> = { Map: {[string]: B}, Data: A, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: B } }
+export type MergeStruct = { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }
 export type MapStruct = { Map: {[string]: number} }
 export type Vector3ValueRef = Vector3Value
 export type AnotherScope_ScopeWithinAnotherScope_ExampleType = number
@@ -480,7 +480,7 @@ function SerdesFunctions.ReadEVENT_SendOccupiedCell(): (Vector3)
 	return Value
 end
 
-function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 	-- Allocate BLOCK: 20 bytes
 	local BLOCK_START = Allocate(20)
 	-- EVENT_ClientPollEvent (4)
@@ -590,23 +590,14 @@ function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Flo
 	for Key_1, Element_1 in Value.Map do
 		Elements_1 += 1
 		-- Key_1: GenericMap
-		-- START ARRAY
-		local OFFSET_0 = Allocate(2)
-		buffer.writeu16(SendBuffer, OFFSET_0, #Key_1)
-			-- Allocate BLOCK: 1 bytes
-		local ARRAY_START_2 = Allocate(1 * #Key_1)
-		for Index = 1, #Key_1 do
-			local Item_2 = Key_1[Index]
-			-- Item_2: A
-			if typeof(Item_2) ~= "number" then
-				error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.`)
-			end
-			-- Allocate 1
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+		if typeof(Key_1) ~= "string" then
+			error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
 		end
-		-- END ARRAY
+		local Length = #Key_1
+		local OFFSET_0 = Allocate(2)
+		buffer.writeu16(SendBuffer, OFFSET_0, Length)
+		Allocate(Length)
+		buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 		-- Element_1: GenericMap
 		if typeof(Element_1) ~= "number" then
 			error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
@@ -687,7 +678,7 @@ function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Flo
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
 end
 
-function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 	-- Allocate BLOCK: 20 bytes
 	local BLOCK_START = Allocate(20)
 	-- EVENT_ClientUnreliablePollEvent (3)
@@ -797,23 +788,14 @@ function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: nu
 	for Key_1, Element_1 in Value.Map do
 		Elements_1 += 1
 		-- Key_1: GenericMap
-		-- START ARRAY
-		local OFFSET_0 = Allocate(2)
-		buffer.writeu16(SendBuffer, OFFSET_0, #Key_1)
-			-- Allocate BLOCK: 1 bytes
-		local ARRAY_START_2 = Allocate(1 * #Key_1)
-		for Index = 1, #Key_1 do
-			local Item_2 = Key_1[Index]
-			-- Item_2: A
-			if typeof(Item_2) ~= "number" then
-				error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.`)
-			end
-			-- Allocate 1
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+		if typeof(Key_1) ~= "string" then
+			error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
 		end
-		-- END ARRAY
+		local Length = #Key_1
+		local OFFSET_0 = Allocate(2)
+		buffer.writeu16(SendBuffer, OFFSET_0, Length)
+		Allocate(Length)
+		buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 		-- Element_1: GenericMap
 		if typeof(Element_1) ~= "number" then
 			error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
@@ -908,7 +890,7 @@ function SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent(Value: nil): 
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 4)
 end
 
-function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 	-- Read BLOCK: 19 bytes
 	local BLOCK_START = Read(19)
 	-- Value: ServerPollEvent
@@ -1007,24 +989,10 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
 	for _ = 1, Elements_1 do
 		-- Key_1: GenericMap
-		-- START ARRAY
 		local OFFSET_0 = Read(2)
 		local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
-		if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
-		if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		local Key_1 = table.create(Length)
-			-- Read BLOCK: 1 bytes
-		local ARRAY_START_2 = Read(1 * Length)
-		for Index = 1, Length do
-			-- Item_2: A
-			-- Read 1
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			table.insert(Key_1, Item_2)
-		end
-		-- END ARRAY
+		local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 		-- Element_1: GenericMap
 		local OFFSET_1 = Read(8)
 		local Element_1 = buffer.readf64(RecieveBuffer, OFFSET_1)
@@ -1092,7 +1060,7 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 	return Value
 end
 
-function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 	-- Read BLOCK: 19 bytes
 	local BLOCK_START = Read(19)
 	-- Value: ServerUnreliablePollEvent
@@ -1191,24 +1159,10 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
 	for _ = 1, Elements_1 do
 		-- Key_1: GenericMap
-		-- START ARRAY
 		local OFFSET_0 = Read(2)
 		local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
-		if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
-		if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		local Key_1 = table.create(Length)
-			-- Read BLOCK: 1 bytes
-		local ARRAY_START_2 = Read(1 * Length)
-		for Index = 1, Length do
-			-- Item_2: A
-			-- Read 1
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			table.insert(Key_1, Item_2)
-		end
-		-- END ARRAY
+		local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 		-- Element_1: GenericMap
 		local OFFSET_1 = Read(8)
 		local Element_1 = buffer.readf64(RecieveBuffer, OFFSET_1)
@@ -4828,28 +4782,18 @@ if not RunService:IsRunning() then
 			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			for _ = 1, Elements_1 do
 				-- Key_1: MapNested
-				local Key_1 = {}
 				local OFFSET_0 = Read(2)
-				local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
-				for _ = 1, Elements_2 do
-					-- Key_2: MapSimple
-					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Element_2: MapSimple
-					local OFFSET_1 = Read(1)
-					local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_1)
-					Key_1[Key_2] = Element_2
-				end
+				local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				-- Element_1: MapNested
 				local Element_1 = {}
 				local OFFSET_1 = Read(2)
-				Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
+				local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
 				for _ = 1, Elements_2 do
 					-- Key_2: MapSimple
 					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					Length = buffer.readu16(RecieveBuffer, OFFSET_0)
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_2: MapSimple
@@ -4877,27 +4821,14 @@ if not RunService:IsRunning() then
 			for Key_1, Element_1 in Value do
 				Elements_1 += 1
 				-- Key_1: MapNested
-				local OFFSET_0 = Allocate(2)
-				local Elements_2 = 0
-				for Key_2, Element_2 in Key_1 do
-					Elements_2 += 1
-					-- Key_2: MapSimple
-					if typeof(Key_2) ~= "string" then
-						error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.`)
-					end
-					local Length = #Key_2
-					local OFFSET_0 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_0, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
-					-- Element_2: MapSimple
-					if typeof(Element_2) ~= "number" then
-						error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
-					end
-					local OFFSET_1 = Allocate(1)
-					buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
+				if typeof(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
 				end
-				buffer.writeu16(SendBuffer, OFFSET_0, Elements_2)
+				local Length = #Key_1
+				local OFFSET_0 = Allocate(2)
+				buffer.writeu16(SendBuffer, OFFSET_0, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 				-- Element_1: MapNested
 				local OFFSET_1 = Allocate(2)
 				local Elements_2 = 0
@@ -8100,28 +8031,18 @@ local Returns = table.freeze({
 			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			for _ = 1, Elements_1 do
 				-- Key_1: MapNested
-				local Key_1 = {}
 				local OFFSET_0 = Read(2)
-				local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
-				for _ = 1, Elements_2 do
-					-- Key_2: MapSimple
-					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Element_2: MapSimple
-					local OFFSET_1 = Read(1)
-					local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_1)
-					Key_1[Key_2] = Element_2
-				end
+				local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				-- Element_1: MapNested
 				local Element_1 = {}
 				local OFFSET_1 = Read(2)
-				Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
+				local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
 				for _ = 1, Elements_2 do
 					-- Key_2: MapSimple
 					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					Length = buffer.readu16(RecieveBuffer, OFFSET_0)
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_2: MapSimple
@@ -8149,27 +8070,14 @@ local Returns = table.freeze({
 			for Key_1, Element_1 in Value do
 				Elements_1 += 1
 				-- Key_1: MapNested
-				local OFFSET_0 = Allocate(2)
-				local Elements_2 = 0
-				for Key_2, Element_2 in Key_1 do
-					Elements_2 += 1
-					-- Key_2: MapSimple
-					if typeof(Key_2) ~= "string" then
-						error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.`)
-					end
-					local Length = #Key_2
-					local OFFSET_0 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_0, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
-					-- Element_2: MapSimple
-					if typeof(Element_2) ~= "number" then
-						error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
-					end
-					local OFFSET_1 = Allocate(1)
-					buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
+				if typeof(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
 				end
-				buffer.writeu16(SendBuffer, OFFSET_0, Elements_2)
+				local Length = #Key_1
+				local OFFSET_0 = Allocate(2)
+				buffer.writeu16(SendBuffer, OFFSET_0, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 				-- Element_1: MapNested
 				local OFFSET_1 = Allocate(2)
 				local Elements_2 = 0
@@ -8397,12 +8305,12 @@ local Returns = table.freeze({
 		end
 	},
 	ClientPollEvent = {
-		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 			SerdesFunctions.WriteEVENT_ClientPollEvent(Value)
 		end
 	},
 	ClientUnreliablePollEvent = {
-		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 			local Previous = Save()
 			Load()
 			SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value)
@@ -8433,10 +8341,10 @@ local Returns = table.freeze({
 		end
 	},
 	ServerPollEvent = {
-		Iter = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+		Iter = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
 			local queue = Queue.Reliable[6]
-			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
 				if arguments ~= nil then
@@ -8446,10 +8354,10 @@ local Returns = table.freeze({
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		Next = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+		Next = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
 			local queue = Queue.Reliable[6]
-			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
 				if arguments ~= nil then
@@ -8460,10 +8368,10 @@ local Returns = table.freeze({
 		end
 	},
 	ServerUnreliablePollEvent = {
-		Iter = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+		Iter = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
 			local queue = Queue.Unreliable[5]
-			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
 				if arguments ~= nil then
@@ -8473,10 +8381,10 @@ local Returns = table.freeze({
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		Next = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+		Next = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
 			local queue = Queue.Unreliable[5]
-			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[{ number }]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
 				if arguments ~= nil then

@@ -780,6 +780,7 @@ function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
 	Analysis.UnreliableSizes(self.Source, self.File, Declarations, Options)
 	Analysis.RateLimits(self.Source, self.File, Declarations, Options)
 	Analysis.CostlessRepetitions(self.Source, self.File, Declarations)
+	Analysis.MapKeys(self.Source, self.File, Declarations)
 
 	return {
 		Type = "Body",
@@ -1458,7 +1459,7 @@ function Parser.Map(self: Parser, Name: Token): Map
 	self:ConsumeAll("OpenBraces", "OpenBrackets")
 
 	--> Errors
-	local function ParseElement(): TypeNode
+	local function ParseElement(): (TypeNode, Token)
 		local Token = self:Peek()
 		local Declaration = self:Type(Name)
 		if Declaration.Type == "Optional" then
@@ -1467,11 +1468,11 @@ function Parser.Map(self: Parser, Name: Token): Map
 				:Emit()
 		end
 
-		return Declaration
+		return Declaration, Token
 	end
 
 	--> Parse key and value
-	local Key = ParseElement()
+	local Key, KeyToken = ParseElement()
 	self:Consume("CloseBrackets")
 	self:Consume("FieldAssign")
 
@@ -1484,7 +1485,10 @@ function Parser.Map(self: Parser, Name: Token): Map
 		Value = {
 			Values = { Key, Value },
 		},
-		Tokens = {},
+		--> Kept so a diagnostic about the key can underline the key rather than the declaration. A
+		--> composite key is a node with no token of its own, and Analysis runs after generics are
+		--> substituted, by which point there is nothing left to point at without this.
+		Tokens = { Key = KeyToken },
 	}
 end
 

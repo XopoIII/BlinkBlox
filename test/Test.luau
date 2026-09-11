@@ -287,23 +287,28 @@ RunClosure("BrickColor", function()
 	)
 end)
 
+--> A map as a VALUE. This used to key the outer map by the inner one, which round-tripped every byte
+--> and still produced something unusable -- each decoded key was a fresh table, so the receiver
+--> could only ever reach an entry by iterating. The compiler now refuses that shape; nesting on the
+--> value side, which is what people actually mean by a nested map, is unaffected.
 RunClosure("Nested Map", function()
-	local Map = { string = 1 }
-	local Serialized = Server.MapNested.Write({ [Map] = Map })
+	local Inner = { string = 1 }
+	local Serialized = Server.MapNested.Write({ Outer = Inner })
 	local Deserialized = Server.MapNested.Read(Serialized)
 
 	local Elements = 0
-	for KeyMap, ValueMap in Deserialized do
+	for Key, ValueMap in Deserialized do
 		if Elements >= 1 then
 			error("Deserialized doesn't match original")
 		end
 
 		Elements += 1
-		assert(type(KeyMap) == "table", "Deserialized doesn't match original")
+		assert(Key == "Outer", "Deserialized doesn't match original")
 		assert(type(ValueMap) == "table", "Deserialized doesn't match original")
-		assert(type(KeyMap.string) == "number", "Deserialized doesn't match original")
 		assert(type(ValueMap.string) == "number", "Deserialized doesn't match original")
 	end
+
+	assert(Elements == 1, "Deserialized doesn't match original")
 end)
 
 RunClosure("Standalone", function()
@@ -386,8 +391,10 @@ local MergeStruct: Server.MergeStruct = {
 	AnotherNested = {
 		Value = 1,
 	},
+	--> Keyed by a string since GenericMerge stopped instantiating its map with an array key -- a
+	--> decoded array key is a fresh table and can never be looked up.
 	Map = {
-		[{ 0 }] = 0,
+		Key = 0,
 	},
 	Struct = {
 		Data = 0,

@@ -194,6 +194,30 @@ They can be defined using the `map` type. For example, a map of `string` keys an
 map StringToNumber = { [string]: f64 }
 ```
 
+### What can be a key
+A key has to survive the round trip **as a key**. `string`, the number types, `boolean` and a plain
+`enum` all decode to the same value the sender had, so any of them works.
+
+A struct, a tagged enum, another map, a set, an array or a type pack does not. Each decodes to a
+**fresh table** for every entry, and in Luau a table is its own identity, so the receiving side ends
+up holding `[Table(0x...)] = value` -- entries it can reach only by iterating, never by looking
+anything up. Every byte round-trips correctly, which is what makes it so easy to miss.
+
+Blink refuses those keys at compile time. If you need a composite key, put the parts in the value and
+key the map by something simple:
+```blink copy
+-- Refused: each decoded key is a table nothing can match
+map Grid = { [struct { X: u8, Y: u8 }]: u8 }
+
+-- Instead
+map Grid = { [u16]: struct { X: u8, Y: u8, Tile: u8 } }
+```
+
+<Callout type="info">
+    This applies after generics are substituted, so `Map<u8[], f64>` is refused for the same reason
+    even though `Map<K, V>` itself is fine.
+</Callout>
+
 ### Maps cannot be bounded
 Unlike [arrays](#bounding-arrays), a map takes no range. Its element count is written as an
 unconditional `u16`, so every map is unbounded by construction and a decoder will loop over whatever
