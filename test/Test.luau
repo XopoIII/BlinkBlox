@@ -685,6 +685,39 @@ RunClosure("Buffer (Default, Fixed, Bounded)", function()
 	end
 end)
 
+--> Async dispatch runs on a pooled thread rather than a fresh one. The pool has exactly one thread,
+--> so what has to hold is that a listener which YIELDS keeps the one it was given and the next
+--> dispatch gets another -- otherwise a single slow listener would serialise every Async event in
+--> the game behind it.
+RunClosure("A yielding Async listener does not hold up the next dispatch", function()
+	local Order: { number } = {}
+
+	local Disconnect = Client.ReliableServerAsync.On(function(Value: number)
+		table.insert(Order, Value)
+		if Value == 1 then
+			task.wait(0.2)
+		end
+		table.insert(Order, Value * 10)
+	end)
+
+	task.wait(1 / 30)
+	table.clear(Order)
+
+	Server.ReliableServerAsync.FireAll(1)
+	Server.ReliableServerAsync.FireAll(2)
+	task.wait(1 / 30)
+
+	assert(table.find(Order, 2), "the second listener never ran while the first was yielding")
+	assert(table.find(Order, 20), "the second listener did not finish while the first was yielding")
+	assert(not table.find(Order, 10), "the yielding listener finished early, so it never yielded")
+
+	--> And the thread it kept still comes back.
+	task.wait(0.4)
+	Disconnect()
+
+	assert(table.find(Order, 10), "the yielding listener never resumed")
+end)
+
 --> Upstream #167. A Single event keeps one listener and a second `.On()` replaces it. That is the
 --> intended behaviour and is not changing; what is new is that it says so, because the silence hid
 --> something worse than the replacement itself.

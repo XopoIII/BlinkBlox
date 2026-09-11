@@ -227,8 +227,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			end
 
 			local PathExpr = IsSingle and Connection or "Listener"
-			local CallExpr = IsSync and `{PathExpr}({ListenerArguments})`
-				or `task.spawn({PathExpr}, {ListenerArguments})`
+			local CallExpr = IsSync and `{PathExpr}({ListenerArguments})` or `Spawn({PathExpr}, {ListenerArguments})`
 			CallListener = CallListener:Line(CallExpr)
 		end
 
@@ -286,7 +285,7 @@ function Declarations.Event(Declaration: Parser.Event)
 
 			Listener = BindListener(Blocks.Function(Casing.On, ContextArguments, `() -> ()`, true))
 				:Iterator("Index", "Arguments", Queue)
-				:Line(IsSync and `Listener(table.unpack(Arguments))` or `task.spawn(Listener, table.unpack(Arguments))`)
+				:Line(IsSync and `Listener(table.unpack(Arguments))` or `Spawn(Listener, table.unpack(Arguments))`)
 				:End()
 				:Line(`{Queue} = \{}`)
 				:Lines(Disconnect.Content, 1)
@@ -616,7 +615,7 @@ function Declarations.Function(Declaration: Parser.Function)
 		end
 
 		Block:Compare(Connection, "nil", "Not")
-			:Line(`task.spawn({Connection}, Player, {DataArguments}, InvocationIdentifier)`)
+			:Line(`Spawn({Connection}, Player, {DataArguments}, InvocationIdentifier)`)
 			:Branch("Default")
 			:Compare(`#{Queue}`, "256", "Greater")
 			:Line(`warn("[Blink]: Event queue of \\"{Name}\\" exceeded 256, did you forget to implement a listener?")`)
@@ -632,7 +631,7 @@ function Declarations.Function(Declaration: Parser.Function)
 			:Line(`{Connection}(table.unpack(Arguments))`)
 			:End()
 			:End()
-			:Wrap("task.spawn(", ")")
+			:Wrap("Spawn(", ")")
 
 		local Serialize = Blocks.Function("", "")
 			:Line(`{ReturnArguments} = Listener(Player, {DataArguments})`)

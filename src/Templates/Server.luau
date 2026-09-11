@@ -90,7 +90,7 @@ local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: num
             --> Spawned, not called. This runs inside the per-event pcall that contains a truncated
             --> packet, so a throwing handler would abort the rest of the packet; and a handler that
             --> yields -- an analytics write, a datastore call -- would stall decoding.
-            task.spawn(Handler, Player, Name)
+            Spawn(Handler, Player, Name)
         end
 
         return false
