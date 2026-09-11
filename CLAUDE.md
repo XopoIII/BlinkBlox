@@ -59,6 +59,21 @@ been held back — the shared bitfield, offset-encoded lengths, `OrderedUnreliab
 together, as one format change rather than three. 0.22.0 checks a decoded length before the read it
 authorises, so a hostile length prefix buys neither a read nor an allocation.
 
+0.23.0 is the devforum release: it works through the announcement thread, where several years of
+reports had accumulated without answers. A schema signature on both modules, so a client and server
+built from different schemas refuse each other instead of decoding one event as another. The client's
+decode loop guarded the way the server's already was. `SyncValidation` saying that it discards the
+rest of the packet, which it always did silently. A warning when a second `.On` displaces the first
+on a `Single` event, and with it the fact that the displaced listener's disconnect stops working.
+Map keys that can never be looked up refused at compile time. A timeout on invocations, which had
+none and leaked a slot per lost call. `From` on functions, so the server can invoke a client. Named
+type-pack elements. A thread pool for Async dispatch, kept only because it measured.
+
+And the Studio plugin, which no release had touched: an editor that no longer rebuilds one frame per
+line on every keystroke (39ms at line 800, measured, now constant), no longer paints the document
+twice, no longer crashes past 2000 lines, and no longer deletes whatever else you kept in the output
+folder.
+
 Still deferred, and deliberately: delta compression. It would require blink to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of
