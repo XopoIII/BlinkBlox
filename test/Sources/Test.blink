@@ -767,3 +767,49 @@ function AskClient {
     Data: u8,
     Return: u8
 }
+
+--> Ranges on data a CLIENT chooses. Every other ranged declaration in this schema is either an
+--> exported type -- whose Read and Write are a standalone pair with no direction -- or attached to a
+--> server-to-client event, so the one direction the fork exists to defend was the one direction with
+--> no fixture: a bound checked against bytes an attacker picked. Declared last so the indices above
+--> keep their numbers.
+event RangedFromClient {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8(10..20)
+}
+
+event RangedUnreliableFromClient {
+    From: Client,
+    Type: Unreliable,
+    Call: SingleSync,
+    Data: u8(10..20)
+}
+
+--> No fixture anywhere used a ranged vector, so the magnitude assert was emitted and never run.
+event RangedVectorFromClient {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: vector(0..1)
+}
+
+--> For the reply that cannot be serialised: the suite installs a listener returning the wrong type,
+--> which throws inside the return serialiser rather than inside the listener.
+function BadlyAnswered {
+    Yield: Coroutine,
+    Data: u8,
+    Return: u8
+}
+
+--> An UNRANGED payload, which is what makes the corruption visible. The event id is written before
+--> the field is validated, so a rejected write leaves a phantom event in the batch carrying whatever
+--> the payload byte happened to hold. On a ranged field the receiver's own bound rejects that
+--> phantom and hides the bug; on this one it is delivered as an ordinary value nobody sent.
+event PlainFromClient {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

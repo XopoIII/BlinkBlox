@@ -90,6 +90,30 @@ local function Load(Save: BufferSave?)
     SendInstances = {}
 end
 
+--> Undoes a write that threw part way through.
+-->
+--> Every serialiser writes straight into SendBuffer through Allocate, and an assert can fire in the
+--> MIDDLE of one -- after the event id, after two fields of three. Without this the bytes already
+--> written stay and SendCursor stays advanced over them, so the next flush ships a truncated event
+--> and the receiver decodes everything after it as garbage. One rejected Fire corrupts the whole
+--> batch it happened to share.
+-->
+--> Only the cursor and the instance count are restored. A buffer that Allocate grew on the way is
+--> kept deliberately: growing copied the earlier bytes across, so the larger buffer is just as
+--> valid, and discarding it would only make the next write grow it again.
+local function Mark(): (number, number)
+    return SendCursor, #SendInstances
+end
+
+local function Rollback(Cursor: number, Instances: number)
+    SendCursor = Cursor
+    SendOffset = Cursor
+
+    for Index = #SendInstances, Instances + 1, -1 do
+        SendInstances[Index] = nil
+    end
+end
+
 local function Invoke(): number
     local Slot = bit32.countrz(InvocationSlots)
 
@@ -3670,38 +3694,54 @@ local Returns = table.freeze({
 	},
 	ClientPollEvent = {
 		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
-			SerdesFunctions.WriteEVENT_ClientPollEvent(Value)
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientPollEvent, Value)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
 		end
 	},
 	ClientUnreliablePollEvent = {
 		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 			local Previous = Save()
 			Load()
-			SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value)
-			if CheckUnreliableSize("ClientUnreliablePollEvent") then
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent, Value)
+			if Sent and CheckUnreliableSize("ClientUnreliablePollEvent") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
 			Load(Previous)
+			if Sent ~= true then
+				error(Failure, 0)
+			end
 		end
 	},
 	ClientEmptyPollEvent = {
 		Fire = function(Value: nil): ()
-			SerdesFunctions.WriteEVENT_ClientEmptyPollEvent(Value)
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientEmptyPollEvent, Value)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
 		end
 	},
 	ClientEmptyUnreliablePollEvent = {
 		Fire = function(Value: nil): ()
 			local Previous = Save()
 			Load()
-			SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent(Value)
-			if CheckUnreliableSize("ClientEmptyUnreliablePollEvent") then
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent, Value)
+			if Sent and CheckUnreliableSize("ClientEmptyUnreliablePollEvent") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
 			Load(Previous)
+			if Sent ~= true then
+				error(Failure, 0)
+			end
 		end
 	},
 	ServerPollEvent = {
@@ -3814,20 +3854,28 @@ local Returns = table.freeze({
 	},
 	ClientEmptyEvent = {
 		Fire = function(Value: nil): ()
-			SerdesFunctions.WriteEVENT_ClientEmptyEvent(Value)
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientEmptyEvent, Value)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
 		end
 	},
 	ClientEmptyUnreliableEvent = {
 		Fire = function(Value: nil): ()
 			local Previous = Save()
 			Load()
-			SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent(Value)
-			if CheckUnreliableSize("ClientEmptyUnreliableEvent") then
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent, Value)
+			if Sent and CheckUnreliableSize("ClientEmptyUnreliableEvent") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
 			Load(Previous)
+			if Sent ~= true then
+				error(Failure, 0)
+			end
 		end
 	},
 	EmptyEvent = {
@@ -3863,7 +3911,13 @@ local Returns = table.freeze({
 	EmptyFunction = {
 		Invoke = function(Value: nil): (nil)
 			local InvocationIdentifier = Invoke()
-			SerdesFunctions.WriteFUNCTION_DATA_EmptyFunction(Value, InvocationIdentifier)
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteFUNCTION_DATA_EmptyFunction, Value, InvocationIdentifier)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				ReleaseInvocation(InvocationIdentifier)
+				error(Failure, 0)
+			end
 			Calls[InvocationIdentifier] = coroutine.running()
 			TimeoutInvocation(InvocationIdentifier, 10, "EmptyFunction")
 			local Success, ReturnValue: nil = coroutine.yield()
@@ -3994,7 +4048,12 @@ local Returns = table.freeze({
 	},
 	Booleans = {
 		Fire = function(Value: { boolean }): ()
-			SerdesFunctions.WriteEVENT_Booleans(Value)
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Booleans, Value)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
 		end
 	},
 	Unknown = {
@@ -4196,7 +4255,12 @@ local Returns = table.freeze({
 	},
 	ReliableClient = {
 		Fire = function(Value: number): ()
-			SerdesFunctions.WriteEVENT_ReliableClient(Value)
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ReliableClient, Value)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
 		end
 	},
 	UnreliableServer = {
@@ -4229,13 +4293,16 @@ local Returns = table.freeze({
 		Fire = function(Value: number): ()
 			local Previous = Save()
 			Load()
-			SerdesFunctions.WriteEVENT_UnreliableClient(Value)
-			if CheckUnreliableSize("UnreliableClient") then
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_UnreliableClient, Value)
+			if Sent and CheckUnreliableSize("UnreliableClient") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
 			Load(Previous)
+			if Sent ~= true then
+				error(Failure, 0)
+			end
 		end
 	},
 	InstanceAny = {
@@ -4343,7 +4410,13 @@ local Returns = table.freeze({
 	RemoteFunction = {
 		Invoke = function(Value: number): (number)
 			local InvocationIdentifier = Invoke()
-			SerdesFunctions.WriteFUNCTION_DATA_RemoteFunction(Value, InvocationIdentifier)
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteFUNCTION_DATA_RemoteFunction, Value, InvocationIdentifier)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				ReleaseInvocation(InvocationIdentifier)
+				error(Failure, 0)
+			end
 			Calls[InvocationIdentifier] = coroutine.running()
 			TimeoutInvocation(InvocationIdentifier, 10, "RemoteFunction")
 			local Success, ReturnValue: number = coroutine.yield()
@@ -4386,7 +4459,13 @@ local Returns = table.freeze({
 	TupleFunction = {
 		Invoke = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): (Instance?, Instance, number?, ("A" | "B" | "C" | "D"), number)
 			local InvocationIdentifier = Invoke()
-			SerdesFunctions.WriteFUNCTION_DATA_TupleFunction(Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteFUNCTION_DATA_TupleFunction, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				ReleaseInvocation(InvocationIdentifier)
+				error(Failure, 0)
+			end
 			Calls[InvocationIdentifier] = coroutine.running()
 			TimeoutInvocation(InvocationIdentifier, 10, "TupleFunction")
 			local Success, ReturnValue1: Instance?, ReturnValue2: Instance, ReturnValue3: number?, ReturnValue4: ("A" | "B" | "C" | "D"), ReturnValue5: number = coroutine.yield()

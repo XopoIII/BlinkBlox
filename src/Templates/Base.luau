@@ -70,6 +70,30 @@ local function Load(Save: BufferSave?)
     SendInstances = {}
 end
 
+--> Undoes a write that threw part way through.
+-->
+--> Every serialiser writes straight into SendBuffer through Allocate, and an assert can fire in the
+--> MIDDLE of one -- after the event id, after two fields of three. Without this the bytes already
+--> written stay and SendCursor stays advanced over them, so the next flush ships a truncated event
+--> and the receiver decodes everything after it as garbage. One rejected Fire corrupts the whole
+--> batch it happened to share.
+-->
+--> Only the cursor and the instance count are restored. A buffer that Allocate grew on the way is
+--> kept deliberately: growing copied the earlier bytes across, so the larger buffer is just as
+--> valid, and discarding it would only make the next write grow it again.
+local function Mark(): (number, number)
+    return SendCursor, #SendInstances
+end
+
+local function Rollback(Cursor: number, Instances: number)
+    SendCursor = Cursor
+    SendOffset = Cursor
+
+    for Index = #SendInstances, Instances + 1, -1 do
+        SendInstances[Index] = nil
+    end
+end
+
 local function Invoke(): number
     local Slot = bit32.countrz(InvocationSlots)
 

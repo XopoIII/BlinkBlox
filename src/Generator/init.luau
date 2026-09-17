@@ -170,6 +170,10 @@ function Declarations.Event(Declaration: Parser.Event)
 	local Body = Builder.new()
 	local Indent = Util.GetScopeIndent(Scope)
 	local WriteEvent = `{Util.GetPath(Identifier, true, Scope)}({Arguments})`
+	--> The same call, protected. Only the CLIENT needs it: every server fire begins with its own
+	--> `Load`, so a write that throws is confined to scratch state the next `Load` replaces, while
+	--> the client writes straight into the batch it is still accumulating.
+	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, Scope)}, {Arguments})`
 
 	Body.Push(`{Declaration.Name} = \{`, 0, Indent)
 	Noop.Push(`{Declaration.Name} = \{`, 0, Indent)
@@ -416,19 +420,29 @@ function Declarations.Event(Declaration: Parser.Event)
 	elseif Context == "Client" then
 		local Fire = Blocks.Function(Casing.Fire, Values, "()", true)
 		if IsReliable then
-			Fire:Line(WriteEvent)
+			--> Rolled back rather than left, because this write lands in the batch every other event
+			--> is queued in. Half an event in there is not one bad send: the receiver reads the
+			--> truncated event and then decodes the REST of the batch from the wrong offset.
+			Fire:Line("local Cursor, Instances = Mark()")
+			Fire:Line(`local Sent, Failure = {TryWriteEvent}`)
+			Fire:Compare("Sent", "true", "Not"):Line("Rollback(Cursor, Instances)"):Line("error(Failure, 0)"):End()
 		else
 			Fire:Line(`local Previous = Save()`)
 			Fire:Line(`Load()`)
-			Fire:Line(WriteEvent)
+			Fire:Line(`local Sent, Failure = {TryWriteEvent}`)
 			--> Wrapped rather than returned out of: the saved buffer has to be restored either way,
 			--> and an early return here would leave the caller's outgoing state swapped out.
-			Fire:Line(`if CheckUnreliableSize("{Declaration.Name}") then`)
+			-->
+			--> Which is exactly why the write is protected. A throw used to skip `Load(Previous)`
+			--> entirely, leaving this temporary buffer installed as the outgoing one -- so the next
+			--> RELIABLE flush sent the scratch buffer and dropped everything already batched.
+			Fire:Line(`if Sent and CheckUnreliableSize("{Declaration.Name}") then`)
 			Fire:Line("\tlocal Buffer = buffer.create(SendCursor)")
 			Fire:Line("\tbuffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)")
 			Fire:Line("\tUnreliable:FireServer(Buffer, SendInstances)")
 			Fire:Line("end")
 			Fire:Line("Load(Previous)")
+			Fire:Compare("Sent", "true", "Not"):Line("error(Failure, 0)"):End()
 		end
 		Fire:End()
 
@@ -685,14 +699,32 @@ function Declarations.Function(Declaration: Parser.Function)
 			TrueListener:Line("Load(PlayersMap[Player])")
 		end
 
+		--> Serialising the reply is protected for the same reason calling the listener is.
+		-->
+		--> It was not, and the gap was the worst shape a gap can take: the return serialiser carries
+		--> the same hard type asserts every write does, so a listener returning the wrong type threw
+		--> from OUTSIDE the pcall above. That skipped the reply and the save both, and the caller --
+		--> who is owed exactly one answer -- got none, waiting out the full invocation timeout for
+		--> what is really an immediate, local, reportable mistake.
+		-->
+		--> Failing the write folds into the failure reply below instead of adding a second path,
+		--> which is also what keeps "exactly one reply, always" true by construction.
+		TrueListener:Compare("Success", "true", "Equals")
+			:Line("local Cursor, Instances = Mark()")
+			:Line(
+				`Success, Error = pcall({Util.GetPath(ReturnIdentifier, true, Scope)}, {ReturnArguments}, InvocationIdentifier)`
+			)
+			:Compare("Success", "true", "Not")
+			:Line("Rollback(Cursor, Instances)")
+			:End()
+			:End()
+
 		TrueListener:Compare("Success", "true", "Not")
 			:Line("local Position = Allocate(3)")
 			:Line(`buffer.writeu8(SendBuffer, Position, {Index})`)
 			:Line(`buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)`)
 			:Line(`buffer.writeu8(SendBuffer, Position + 2, 0)`)
 			:Line(`warn(\`"{Name}" encountered an error, \{Error\}\`)`)
-			:Branch("Default")
-			:Line(`{Util.GetPath(ReturnIdentifier, true, Scope)}({ReturnArguments}, InvocationIdentifier)`)
 			:End()
 
 		if OnServer then
@@ -745,7 +777,23 @@ function Declarations.Function(Declaration: Parser.Function)
 			Send:Line("Load(PlayersMap[Player])")
 		end
 
-		Send:Line(`{Util.GetPath(DataIdentifier, true, Scope)}({DataArguments}, InvocationIdentifier)`)
+		--> Releasing the slot when the ARGUMENTS fail to serialise.
+		-->
+		--> The slot is claimed before the write and the caller is parked after it, so a throw in
+		--> between used to strand the slot with nothing outstanding: no entry in `Calls`, so nothing
+		--> for the timeout to find and reclaim. Thirty-two rejected calls -- the same wrong argument
+		--> thirty-two times -- and every later invocation fails for the lifetime of the session.
+		--> This is the one leak the timeout cannot cover, because the timeout is armed after it.
+		Send:Line("local Cursor, Instances = Mark()")
+		Send:Line(
+			`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, Scope)}, {DataArguments}, InvocationIdentifier)`
+		)
+		Send:Compare("Sent", "true", "Not")
+			:Line("Rollback(Cursor, Instances)")
+			:Line(ReleaseSlot)
+			:Line("error(Failure, 0)")
+			:End()
+
 		if ServerCalls then
 			Send:Line("SavePlayerBuffer(Player)")
 		end
@@ -780,7 +828,16 @@ function Declarations.Function(Declaration: Parser.Function)
 				Promise:Line("Load(PlayersMap[Player])")
 			end
 
-			Promise:Line(`{Util.GetPath(DataIdentifier, true, Scope)}({DataArguments}, InvocationIdentifier)`)
+			Promise:Line("local Cursor, Instances = Mark()")
+			Promise:Line(
+				`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, Scope)}, {DataArguments}, InvocationIdentifier)`
+			)
+			Promise:Compare("Sent", "true", "Not")
+				:Line("Rollback(Cursor, Instances)")
+				:Line(ReleaseSlot)
+				:Line("error(Failure, 0)")
+				:End()
+
 			if ServerCalls then
 				Promise:Line("SavePlayerBuffer(Player)")
 			end

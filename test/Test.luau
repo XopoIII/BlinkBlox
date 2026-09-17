@@ -776,6 +776,7 @@ require("./SyncValidation")
 require("./Highlighting")
 require("./WireFormat")
 require("./Decoding")
+require("./BufferIntegrity")
 
 --> LAST, and deliberately so: the CLI specs delete ../Network to prove the compiler recreates a
 --> missing output directory, and then recompile only Test.blink. Everything generated from the other
