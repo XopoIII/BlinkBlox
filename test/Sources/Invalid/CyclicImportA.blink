@@ -1,0 +1,11 @@
+-- expect E3015
+-- Two files that import each other. There is no memoisation in the import path, so before the guard
+-- this recursed until the Luau stack gave out -- reporting a stack overflow from inside the lexer,
+-- naming neither file. Both halves live directly in Invalid/ because the harness compiles every
+-- file here top-level, and the cycle has to be reported whichever end it is entered from.
+option ClientOutput = "../../Network/CyclicAClient.luau"
+option ServerOutput = "../../Network/CyclicAServer.luau"
+
+import "./CyclicImportB.blink"
+
+type a = u8

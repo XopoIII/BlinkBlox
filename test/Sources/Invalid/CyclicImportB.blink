@@ -1,0 +1,8 @@
+-- expect E3015
+-- The other half of the cycle in CyclicImportA.blink.
+option ClientOutput = "../../Network/CyclicBClient.luau"
+option ServerOutput = "../../Network/CyclicBServer.luau"
+
+import "./CyclicImportA.blink"
+
+type b = u8

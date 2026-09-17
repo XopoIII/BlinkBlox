@@ -19,8 +19,8 @@ cd "$ROOT"
 LIMIT=900
 
 # path:maximum-lines
-GRANDFATHERED="src/Parser.luau:1890
-src/Generator/init.luau:1735
+GRANDFATHERED="src/Parser.luau:1864
+src/Generator/init.luau:1602
 plugin/src/Editor/init.luau:935"
 
 if [ "$#" -eq 0 ]; then

@@ -1,0 +1,14 @@
+-- expect E3022
+-- A struct that contains another of itself. This used to report "Unknown reference", which is true
+-- -- a declaration is registered only once it closes -- and useless, since the reader is then left
+-- checking their spelling of a word already on the screen in front of them.
+--
+-- Optional or not makes no difference here: references are resolved and inlined where they appear
+-- rather than held as a link, so there is no point at which the parser could tie the knot.
+option ClientOutput = "../../Network/RecursiveClient.luau"
+option ServerOutput = "../../Network/RecursiveServer.luau"
+
+struct Node {
+    Value: u8,
+    Tail: Node?,
+}

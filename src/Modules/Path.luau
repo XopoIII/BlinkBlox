@@ -68,6 +68,37 @@ function Utility.NameWithExtension(Path: string): string?
 	return
 end
 
+--- Collapses "." and ".." so that two spellings of one file compare equal.
+---
+--- An import path is resolved by concatenating it onto the importing file's directory, and that
+--- directory is itself a resolved path, so a chain of imports produces ever longer spellings of the
+--- same place: "Sources/Invalid/./A.blink", then "Sources/Invalid/.././B.blink", and so on. Left
+--- uncollapsed those never compare equal, which defeats anything keyed on a file -- and the
+--- concatenation grows without bound, so a cyclic import ends with the operating system refusing a
+--- path that has outgrown its limit rather than with the cycle being reported.
+---
+--- A leading ".." is kept: there is nothing above the start of a relative path to cancel it with.
+function Utility.Normalise(Path: string): string
+	local Absolute = (string.sub(Path, 1, 1) == "/")
+	local Segments: { string } = {}
+
+	for Segment in string.gmatch(Path, "[^/]+") do
+		if Segment == "." then
+			continue
+		end
+
+		if Segment == ".." and #Segments > 0 and Segments[#Segments] ~= ".." then
+			Segments[#Segments] = nil
+			continue
+		end
+
+		table.insert(Segments, Segment)
+	end
+
+	local Joined = table.concat(Segments, "/")
+	return if Absolute then `/{Joined}` else Joined
+end
+
 ---- Initialization ----
 
 ---- Connections ----

@@ -97,13 +97,14 @@ local Error = {
 	AnalyzeInvalidGenerics = 3012,
 	AnalyzeInvalidExport = 3013,
 	AnalyzeUnknownImport = 3014,
-	AnalyzeErrorWhileImporting = 3015,
+	AnalyzeCyclicImport = 3015,
 	AnalyzeOptionAfterStart = 3016,
 	AnalyzeDeprecatedOption = 3017,
 	AnalyzeOversizeUnreliable = 3018,
 	AnalyzePotentiallyOversizeUnreliable = 3019,
 	AnalyzeMissingRateLimit = 3020,
 	AnalyzeCostlessRepetition = 3021,
+	AnalyzeRecursiveType = 3022,
 }
 
 Error.__index = Error

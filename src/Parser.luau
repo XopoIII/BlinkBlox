@@ -8,6 +8,7 @@ local Grammar = require("./Modules/Grammar")
 local Lexer = require("./Lexer")
 local PathParser = require("./Modules/Path")
 local Size = require("./Modules/Size")
+local SourceReader = require("./Modules/Source")
 local Table = require("./Modules/Table")
 
 local Settings = require("./Settings")
@@ -267,11 +268,19 @@ export type Parser = typeof(setmetatable(
 		Scope: Scope,
 		Symbols: { [string]: true },
 		Generics: Generics?,
+
+		--> Files whose parse has STARTED and not yet finished, shared by every parser in one
+		--> compilation. See Parser.Import.
+		Importing: { [string]: true },
+
+		--> The name being declared right now, so a reference to it from inside its own body can be
+		--> told apart from a reference to something that does not exist. See Parser.Declaration.
+		Declaring: string?,
 	},
 	Parser
 ))
 
-function Parser.new(Directory: string?, File: string?): Parser
+function Parser.new(Directory: string?, File: string?, Importing: { [string]: true }?): Parser
 	return setmetatable({
 		Source = "",
 		File = File,
@@ -280,6 +289,9 @@ function Parser.new(Directory: string?, File: string?): Parser
 		Lexer = Lexer.new("Parsing"),
 		Symbols = {},
 		Scope = nil :: any,
+
+		--> Inherited when one parser spawns another for an import, fresh for a top-level parse.
+		Importing = Importing or {},
 	}, Parser)
 end
 
@@ -287,40 +299,6 @@ end
 
 local function IsInteger(Number: number): boolean
 	return (Number // 1) == Number
-end
-
-local function GetFileSource(Path: string, Directory: string): (string?, string?)
-	local IsROBLOX = (task ~= nil)
-	if IsROBLOX then
-		--> `FindFirstChild` rather than an index: the loop below already treats a missing level as
-		--> "give up and return nil", and indexing would raise instead of producing that nil.
-		local Parent: Instance? = game:GetService("ServerStorage"):FindFirstChild("BLINK_CONFIGURATION_FILES")
-		local Indices = string.split(Path, ".")
-		for _, Index in Indices do
-			if not Parent then
-				break
-			end
-
-			Parent = Parent:FindFirstChild(Index)
-		end
-
-		return (Parent ~= nil and Parent:IsA("StringValue")) and Parent.Value or nil, ""
-	end
-
-	local fs = require("@lune/fs")
-	local GetDefinitionFilePath = require("./CLI/Utility/GetDefinitionFilePath")
-
-	if PathParser.PathType(Path) == "relative" then
-		Path = `{Directory}{Path}`
-	end
-	Path = GetDefinitionFilePath(Path)
-
-	if not fs.isFile(Path) then
-		return
-	end
-
-	local FileDirectory = PathParser.Directory(Path) or "./"
-	return fs.readFile(Path), FileDirectory
 end
 
 local function IsDeclarationTypeSimiliar(A: Declarations, B: Declarations): boolean
@@ -809,7 +787,7 @@ function Parser.Import(self: Parser): ScopeNode
 
 	local Path = self:Consume("String")
 	local ImportPath = Path.Value
-	local ImportSource, ImportDirectory = GetFileSource(ImportPath, self.Directory)
+	local ImportSource, ImportDirectory, Resolved = SourceReader.Read(ImportPath, self.Directory)
 
 	if not ImportSource then
 		error(
@@ -862,16 +840,38 @@ function Parser.Import(self: Parser): ScopeNode
 		},
 	}
 
-	local AST: Body
-	local ImportParser = Parser.new(ImportDirectory, ImportPath)
+	--> Two files that import each other used to recurse until the Luau stack gave out, which
+	--> reports a stack overflow from somewhere deep in the lexer and names neither file. There is no
+	--> memoisation here -- an import is re-parsed every time it is reached -- so the only thing that
+	--> ends the recursion is noticing it.
+	-->
+	--> Keyed on the file, and cleared once the parse RETURNS rather than left set, because a diamond
+	--> (two files importing a third) reaches the same file twice by two routes and is perfectly
+	--> legal. Only a file reached while it is still being parsed is a cycle.
+	local Key = PathParser.Normalise(Resolved or ImportPath)
+	if self.Importing[Key] then
+		error(
+			Error.new(Error.AnalyzeCyclicImport, self.Source, `Cyclic import`, self.File)
+				:Primary(Path, `"{ImportPath}" is already being imported, so this would never finish`)
+				:Emit()
+		)
+	end
 
+	local AST: Body
+	local ImportParser = Parser.new(ImportDirectory, ImportPath, self.Importing)
+
+	self.Importing[Key] = true
 	local Success, ErrorText = pcall(function()
 		--> Parse declarations into import scope
 		AST = ImportParser:Parse(ImportSource, Scope)
 	end)
+	self.Importing[Key] = nil
 
+	--> Level 0: the text is already a rendered diagnostic, and re-raising it at the default level
+	--> prepends this file and line every time it passes through an import. A cycle three files deep
+	--> arrived with three "Parser:905:" prefixes in front of the frame the reader actually wants.
 	if not Success then
-		error(ErrorText)
+		error(ErrorText, 0)
 	end
 
 	Scope.Parent = Parent
@@ -1015,6 +1015,12 @@ function Parser.Declarations(self: Parser): { Declaration }
 		end
 
 		--> Parse declaration
+		-->
+		--> Saved and restored rather than cleared: a namespace parses its members while its own
+		--> declaration is still open, and clearing would lose the outer name on the way back out.
+		local Enclosing = self.Declaring
+		self.Declaring = Name.Value
+
 		if Type == "Type" then
 			local Node = self:Type(Name, Keyword)
 			local Value: Attributes = Node.Value
@@ -1027,6 +1033,8 @@ function Parser.Declarations(self: Parser): { Declaration }
 		elseif Type == "Scope" then
 			Declaration = self:Namespace(Name)
 		end
+
+		self.Declaring = Enclosing
 
 		--> Update declarations
 		table.insert(Declarations, Declaration :: any)
@@ -1811,6 +1819,24 @@ function Parser.Declaration(self: Parser, Name: Token): TypeNode
 	--> Normal reference resolution
 	local Reference = self:Reference("Types", Token.Value) :: Reference
 	if not Reference then
+		--> A type that names itself reported "Unknown reference", which is true and useless: the
+		--> name is missing only because a declaration is registered after it closes, and the reader
+		--> is left checking their spelling of a word that is on the screen in front of them.
+		-->
+		--> Recursive types are not supported at all here, optional field or not. References are
+		--> resolved and inlined at parse time rather than held as a link, so there is no point at
+		--> which the parser could tie the knot.
+		if self.Declaring ~= nil and Token.Value == self.Declaring then
+			error(
+				Error.new(Error.AnalyzeRecursiveType, self.Source, `Recursive type`, self.File)
+					:Primary(Token, `"{Token.Value}" refers to itself`)
+					:Note(
+						"A declaration is only in scope once it closes, and references are inlined where they appear, so a type cannot contain another of itself."
+					)
+					:Emit()
+			)
+		end
+
 		error(
 			Error.new(Error.AnalyzeUnknownReference, self.Source, `Unknown reference`, self.File)
 				:Primary(Token, "Unknown reference")
