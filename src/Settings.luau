@@ -252,10 +252,19 @@ return {
 	},
 
 	Primtives = Primitives,
+
+	--> Exported so the parser can reject a bad `option Casing` against the same table this reads,
+	--> rather than keeping a second list that drifts from it.
+	Casings = Indexes,
+
 	GetCasing = function(Case: Case): Cases
 		local Index = Indexes[Case]
 		if not Index then
-			error(`Unknown casing "{Case}", expectd one of "Pascal" or "Camel" or "Snake"`)
+			--> Unreachable from a schema: Parser.Options rejects an unknown casing where the token
+			--> still exists, so it can point at the word. This stays as a guard for a caller inside
+			--> the compiler, which is why it is a plain error and not a diagnostic -- there is no
+			--> source span to render by the time the generator asks.
+			error(`Unknown casing "{Case}", expected one of "Pascal", "Camel" or "Snake"`)
 		end
 
 		local Casing: any = {}

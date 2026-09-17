@@ -45,6 +45,16 @@ Determines the listening API exposed on the receiving side.
 * `ManyAsync` - Events can have many listeners, and those listeners may yield.
 * `Polling` - Events are iterated through `Event.Iter()`.
 
+#### `Poll`
+Deprecated, and worth reading even if you have never typed it -- it may be in a schema you inherited.
+
+`Poll: true` is the 0.x way of asking for polling. `Call` is still required beside it, and its value
+is then **discarded**: an event declared `Call: SingleSync, Poll: true` compiles to `Polling`, not to
+`SingleSync`. It went undocumented and unwarned for long enough that a schema using it had no way of
+learning there was a current spelling.
+
+It still works and now warns (`W3017`). Replace it with `Call: Polling` and delete the `Poll` line.
+
 <Callout type="warning">
     A `Single` event keeps exactly one listener. Calling `.On()` a second time **replaces** the first
     and warns, rather than erroring -- but the displaced listener's disconnect function stops working

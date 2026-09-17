@@ -1,0 +1,8 @@
+-- expect E2003
+-- An unknown casing used to reach the GENERATOR, which raised a plain Lua error in the middle of
+-- emitting: no code, no source span, and a stack trace through the compiler where a line number
+-- belongs. Every other bad option value was already a diagnostic, and this is the only place that
+-- still has the token to point at.
+option Casing = Nonsense
+option ClientOutput = "../../Network/CasingClient.luau"
+option ServerOutput = "../../Network/CasingServer.luau"

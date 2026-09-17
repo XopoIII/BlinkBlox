@@ -90,13 +90,12 @@ end
 
 ---- Main ----
 
-print(`{Color("Blink", "green")} {_G.VERSION or "DEBUG"}`)
+--> `DEBUG` outside a release bundle is deliberate, not a placeholder: darklua replaces `_G.VERSION`
+--> with a literal when it bundles, so reading it through `_G` is what lets an unbundled run tell you
+--> it is unbundled.
+local Version = _G.VERSION or "DEBUG"
 
 local RawArguments = process.args
-if #RawArguments < 1 then
-	PrintHelpMessage()
-	return nil
-end
 
 --> Parse optional arguments
 local Arguments = {}
@@ -126,12 +125,25 @@ for _, Argument in RawArguments do
 	end
 end
 
-if Arguments.Help then
+--> The banner is decoration, and it used to be the FIRST statement in this file -- printed before
+--> the flags that should have governed it were even looked at, so `--quiet` never suppressed it.
+if not Arguments.Silent then
+	print(`{Color("Blink", "green")} {Version}`)
+end
+
+if Arguments.Help or #RawArguments < 1 then
 	PrintHelpMessage()
 	return nil
 end
 
+--> Printed even under `--quiet`, because withholding the one thing the caller asked for is not what
+--> quiet means. `--version` had no implementation at all before this: it returned, and the only
+--> reason a version ever appeared was the unconditional banner it happened to fall through.
 if Arguments.Version then
+	if Arguments.Silent then
+		print(`{Color("Blink", "green")} {Version}`)
+	end
+
 	return nil
 end
 

@@ -40,6 +40,11 @@ jobs:
       - name: File sizes
         run: sh scripts/check-file-size.sh
 
+      # The plugin's injected version sat five minor releases behind the compiler's without anything
+      # noticing, so every file it generated went out mis-stamped. Cheap to check, invisible to miss.
+      - name: Versions
+        run: sh scripts/check-versions.sh
+
       - name: Types
         run: sh scripts/type-check.sh
 

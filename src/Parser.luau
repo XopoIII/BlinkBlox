@@ -6,6 +6,7 @@ local Analysis = require("./Analysis")
 local Error = require("./Modules/Error")
 local Grammar = require("./Modules/Grammar")
 local Lexer = require("./Lexer")
+local OptionsParser = require("./Modules/Options")
 local PathParser = require("./Modules/Path")
 local Size = require("./Modules/Size")
 local SourceReader = require("./Modules/Source")
@@ -73,45 +74,7 @@ type AttributesTokens = {
 	Range: Token?,
 }
 
-export type Options = {
-	Casing: string?,
-	UseColon: boolean?,
-	UsePolling: boolean?,
-	Typescript: boolean?,
-	TypesOutput: string?,
-	ClientOutput: string?,
-	ServerOutput: string?,
-	FutureLibrary: string?,
-	PromiseLibrary: string?,
-	SyncValidation: boolean?,
-	WriteValidations: boolean?,
-	ManualReplication: boolean?,
-	RemoteScope: string?,
-
-	--> Inbound limits. These bound what a hostile client can make the server do inside a single
-	--> packet; see the generator's INBOUND_GUARD.
-	MaxPacketSize: number?,
-	MaxEventsPerPacket: number?,
-	MaxInstancesPerPacket: number?,
-
-	--> Largest payload an unreliable event may carry. Roblox drops an UnreliableRemoteEvent past
-	--> roughly 900 bytes, so this is a property of the platform rather than a preference -- it is
-	--> configurable only because that ceiling has moved before.
-	MaxUnreliableSize: number?,
-
-	--> Rate limiting. `DefaultRate` applies to every inbound event and function that does not set its
-	--> own `Rate`; `RequireRates` turns a missing rate into a compile error, which is how a project
-	--> stops one from being forgotten.
-	DefaultRate: number?,
-	RequireRates: boolean?,
-
-	--> Generates a Predict entry point on each event, which dispatches to local listeners without
-	--> touching remotes. See the generator.
-	Predict: boolean?,
-
-	--> Seconds before an unanswered invocation fails its caller and gives its slot back.
-	InvocationTimeout: number?,
-}
+export type Options = Grammar.Options
 
 export type Body = Node<"Body", {
 	Options: Options,
@@ -237,7 +200,6 @@ export type ScopeNode = Node<
 --> The language's shape lives in Modules/Grammar; only its use lives here.
 type Bucket = Grammar.Bucket
 
-local OPTIONS = Grammar.OPTIONS
 local EVENT = Grammar.EVENT
 local FUNCTION = Grammar.FUNCTION
 local BUCKETS = Grammar.BUCKETS
@@ -618,7 +580,7 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 
 	if Primitive.AllowedComponents == 0 then
 		error(
-			Error.new(Error.AnalyzeInvalidRange, self.Source, `Type doesn't accept components`, self.File)
+			Error.new(Error.AnalyzeInvalidComponents, self.Source, `Type doesn't accept components`, self.File)
 				:Primary(OpenChevrons, `Remove component here`)
 				:Emit()
 		)
@@ -641,7 +603,7 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 	if not Closed then
 		local Extra = self:Peek()
 		error(
-			Error.new(Error.AnalyzeInvalidRange, self.Source, `Too many components`, self.File)
+			Error.new(Error.AnalyzeInvalidComponents, self.Source, `Too many components`, self.File)
 				:Primary(Extra, `Expected at most {Primitive.AllowedComponents} component(s)`)
 				:Emit()
 		)
@@ -653,7 +615,7 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 
 		if not ComponentPrimitive then
 			error(
-				Error.new(Error.AnalyzeInvalidRange, self.Source, `Unknown primitive used as component`, self.File)
+				Error.new(Error.AnalyzeInvalidComponents, self.Source, `Unknown primitive used as component`, self.File)
 					:Primary(Token, `"{Component}" is invalid`)
 					:Emit()
 			)
@@ -661,7 +623,7 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 
 		if not ComponentPrimitive.Component then
 			error(
-				Error.new(Error.AnalyzeInvalidRange, self.Source, `Invalid primitive used as component`, self.File)
+				Error.new(Error.AnalyzeInvalidComponents, self.Source, `Invalid primitive used as component`, self.File)
 					:Primary(Token, `"{Component}" cannot be used as a component`)
 					:Emit()
 			)
@@ -760,7 +722,10 @@ function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
 	self.LookAhead = self.Lexer:GetNextToken()
 
 	--> Parse
-	local Options = self:Options()
+	--> Cast because Luau will not match a metatable-backed type against a structural one, however
+	--> exactly it fits. Modules/Options wants four members this has; naming them in a Reader type
+	--> there rather than requiring Parser back is what keeps the two out of a require cycle.
+	local Options = OptionsParser.Parse(self :: any)
 	local Declarations = self:Declarations()
 
 	Options.SyncValidation = if Options.SyncValidation ~= nil then Options.SyncValidation else true
@@ -888,76 +853,6 @@ function Parser.Import(self: Parser): ScopeNode
 		},
 		Tokens = {},
 	}
-end
-
-function Parser.Options(self: Parser): Options
-	local Options: Options = {}
-
-	--> Read options until something that is not one. Bounding this loop by the number of KNOWN
-	--> options -- as it used to be -- silently stopped parsing once that many `option` statements
-	--> had been seen, duplicates included, and every option past the cut was reported as
-	--> "Option set after start of file" instead of being applied.
-	local Declared: { [string]: Token } = {}
-
-	while self:Peek().Value == "option" do
-		self:Consume("Keyword")
-		local Key = self:ConsumeAll("Identifier", "Assign")
-		local Name = Key.Value
-
-		local Type: Lexer.Types = OPTIONS[Name]
-		if not Type then
-			local Examples = ""
-			for Option in OPTIONS do
-				Examples ..= `{Examples ~= "" and " or " or ""}"{Option}"`
-			end
-
-			Error.new(Error.ParserUnknownOption, self.Source, `Unknown option "{Name}"`, self.File)
-				:Primary(Key, `Expected one of {Examples}`)
-				:Emit()
-		end
-
-		local Previous = Declared[Name]
-		if Previous then
-			Error.new(Error.AnalyzeDuplicateDeclaration, self.Source, `Duplicate option "{Name}"`, self.File)
-				:Primary(Key, "Option set twice")
-				:Secondary(Previous, "Already set here")
-				:Emit()
-		end
-
-		Declared[Name] = Key
-
-		--> Parsed since 0.14 and read by nothing since: no generator has ever looked at it. Warning
-		--> rather than erroring keeps existing schemas compiling while they migrate.
-		if Name == "UseColon" then
-			Error.new(
-				Error.AnalyzeDeprecatedOption,
-				self.Source,
-				`Option "UseColon" is deprecated`,
-				self.File,
-				"Warning"
-			)
-				:Primary(Key, "This option has no effect")
-				:Note("No generator reads it. It will be removed in 1.0 -- delete the line.")
-				:Warn()
-		end
-
-		local Value = self:Consume(Type)
-		if Type == "Number" then
-			--> Number tokens carry their text; every consumer of a numeric option wants the number.
-			local Numeric = tonumber(Value.Value)
-			if not Numeric or Numeric < 1 or not IsInteger(Numeric) then
-				Error.new(Error.ParserUnknownOption, self.Source, `Invalid value for option "{Name}"`, self.File)
-					:Primary(Value, "Expected a positive whole number")
-					:Emit()
-			end
-
-			Options[Name] = Numeric
-		else
-			Options[Name] = Value.Value
-		end
-	end
-
-	return Options
 end
 
 function Parser.Declarations(self: Parser): { Declaration }
@@ -1140,6 +1035,18 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 			Error.new(Error.AnalyzeDuplicateField, self.Source, `Field "{Option.Key}" was already specified`, self.File)
 				:Primary(Field, `Already specified earlier in the structure`)
 				:Emit()
+		end
+
+		--> `Poll: true` is the 0.x spelling of `Call: Polling`. Both still work and compile to exactly
+		--> the same thing -- Parser.Event folds one into the other -- but only `Call` appears in the
+		--> documentation, so a schema written with `Poll` is using a spelling nothing tells you about
+		--> and nothing warns you off. `UseColon` has warned for the same reason since it stopped
+		--> doing anything; this one still works, which is why it warns rather than errors.
+		if Option.Key == "Poll" then
+			Error.new(Error.AnalyzeDeprecatedOption, self.Source, `Field "Poll" is deprecated`, self.File, "Warning")
+				:Primary(Field, "Use `Call: Polling` instead")
+				:Note("The two compile to the same thing, but only `Call` is documented.")
+				:Warn()
 		end
 
 		--> Parse non data/return field

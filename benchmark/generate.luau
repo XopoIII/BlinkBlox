@@ -1,5 +1,4 @@
 local DateTime = require("@lune/datetime")
-local DateTime = require("@lune/datetime")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local serde = require("@lune/serde")

@@ -5,7 +5,7 @@ local Generator = require("../src/Generator")
 local Lexer = require("../src/Lexer")
 local Parser = require("../src/Parser")
 
-local Source = fs.readFile("../test/Sources/Test.txt")
+local Source = fs.readFile("../test/Sources/Test.blink")
 local SourceLexer = Lexer.new()
 local SourceParser = Parser.new("../test/Sources/")
 local AbstractSyntaxTree = SourceParser:Parse(Source)

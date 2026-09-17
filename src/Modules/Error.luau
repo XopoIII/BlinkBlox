@@ -73,6 +73,10 @@ local Colors = {
 
 local Compact = false
 
+--- Diagnostic codes, banded by the stage that raises them: 1xxx lexing, 2xxx parsing, 3xxx
+--- analysis. Assigned by hand and never renumbered -- the Invalid fixtures match on them and the
+--- Studio plugin looks them up by number -- so the gaps below are deletions, not mistakes. A code
+--- nothing raises is worse than no code: it reads as a condition the compiler checks for.
 local Error = {
 
 	LexerUnexpectedToken = 1001,
@@ -80,20 +84,16 @@ local Error = {
 	ParserUnexpectedEndOfFile = 2001,
 	ParserUnexpectedToken = 2002,
 	ParserUnknownOption = 2003,
-	ParserUnexpectedSymbol = 2004,
 	ParserExpectedExtraToken = 2005,
 
 	AnalyzeReferenceInvalidType = 3001,
 	AnalyzeInvalidOptionalType = 3002,
-	AnalyzeNestedMap = 3003,
 	AnalyzeDuplicateField = 3004,
 	AnalyzeReservedIdentifier = 3005,
-	AnalyzeNestedScope = 3006,
 	AnalyzeUnknownReference = 3007,
 	AnalyzeInvalidRangeType = 3008,
 	AnalyzeInvalidRange = 3009,
 	AnalyzeDuplicateDeclaration = 3010,
-	AnalyzeDuplicateTypeGeneric = 3011,
 	AnalyzeInvalidGenerics = 3012,
 	AnalyzeInvalidExport = 3013,
 	AnalyzeUnknownImport = 3014,
@@ -105,6 +105,8 @@ local Error = {
 	AnalyzeMissingRateLimit = 3020,
 	AnalyzeCostlessRepetition = 3021,
 	AnalyzeRecursiveType = 3022,
+	AnalyzeInvalidComponents = 3023,
+	AnalyzeDuplicateOption = 3024,
 }
 
 Error.__index = Error

@@ -40,4 +40,34 @@ RunClosure("CLI compile --yes", function()
 	assert(Result.ok, Result.stderr)
 end)
 
+--> `--version` returned without printing anything of its own; a version only ever appeared because
+--> an unconditional banner was the first statement in the file. So the flag looked implemented from
+--> the outside while having no implementation, and `--quiet` could not suppress a banner printed
+--> before the flags were parsed. Both halves are asserted, because either one alone still passes if
+--> the other regresses.
+RunClosure("CLI --version prints a version", function()
+	local Result = process.exec("lune", { "run", Compiler, "--", "--version" }, { cwd = "../src/CLI" })
+	assert(Result.ok, Result.stderr)
+	assert(string.find(Result.stdout, "Blink", 1, true), `--version printed no version: {Result.stdout}`)
+end)
+
+RunClosure("CLI --version answers even when quiet", function()
+	local Result = process.exec("lune", { "run", Compiler, "--", "--version", "--quiet" }, { cwd = "../src/CLI" })
+	assert(Result.ok, Result.stderr)
+	assert(
+		string.find(Result.stdout, "Blink", 1, true),
+		`--version was silenced by --quiet, which is the one thing it was asked for: {Result.stdout}`
+	)
+end)
+
+RunClosure("CLI --quiet prints no banner", function()
+	local Result = process.exec(
+		"lune",
+		{ "run", Compiler, COMPILE_TEST_FILE, "--", "--yes", "--quiet" },
+		{ cwd = "../src/CLI" }
+	)
+	assert(Result.ok, Result.stderr)
+	assert(not string.find(Result.stdout, "Blink", 1, true), `--quiet still printed the banner: {Result.stdout}`)
+end)
+
 return {}

@@ -190,4 +190,46 @@ Grammar.LUAU_KEYWORDS = {
 	["while"] = true,
 }
 
+--- The option block's shape. Moved here from Parser.luau so that the code which PARSES it can
+--- live outside the parser without requiring it back.
+export type Options = {
+	Casing: string?,
+	UseColon: boolean?,
+	UsePolling: boolean?,
+	Typescript: boolean?,
+	TypesOutput: string?,
+	ClientOutput: string?,
+	ServerOutput: string?,
+	FutureLibrary: string?,
+	PromiseLibrary: string?,
+	SyncValidation: boolean?,
+	WriteValidations: boolean?,
+	ManualReplication: boolean?,
+	RemoteScope: string?,
+
+	--> Inbound limits. These bound what a hostile client can make the server do inside a single
+	--> packet; see the generator's INBOUND_GUARD.
+	MaxPacketSize: number?,
+	MaxEventsPerPacket: number?,
+	MaxInstancesPerPacket: number?,
+
+	--> Largest payload an unreliable event may carry. Roblox drops an UnreliableRemoteEvent past
+	--> roughly 900 bytes, so this is a property of the platform rather than a preference -- it is
+	--> configurable only because that ceiling has moved before.
+	MaxUnreliableSize: number?,
+
+	--> Rate limiting. `DefaultRate` applies to every inbound event and function that does not set its
+	--> own `Rate`; `RequireRates` turns a missing rate into a compile error, which is how a project
+	--> stops one from being forgotten.
+	DefaultRate: number?,
+	RequireRates: boolean?,
+
+	--> Generates a Predict entry point on each event, which dispatches to local listeners without
+	--> touching remotes. See the generator.
+	Predict: boolean?,
+
+	--> Seconds before an unanswered invocation fails its caller and gives its slot back.
+	InvocationTimeout: number?,
+}
+
 return Grammar

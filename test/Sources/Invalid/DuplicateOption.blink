@@ -1,4 +1,4 @@
--- expect E3010
+-- expect E3024
 option ClientOutput = "../../Network/InvalidClient.luau"
 option ClientOutput = "../../Network/InvalidClient.luau"
 option ServerOutput = "../../Network/InvalidServer.luau"

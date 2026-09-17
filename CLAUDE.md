@@ -90,6 +90,7 @@ responsibility, not an optimisation.
 | Lint | `selene src test plugin/src .lune` |
 | Check type-checking modes | `sh scripts/check-strict.sh` |
 | Check file sizes | `sh scripts/check-file-size.sh` |
+| Check recorded versions agree | `sh scripts/check-versions.sh` |
 | Check formatting | `stylua --check src test plugin .lune` |
 | Format | `stylua src test plugin .lune` |
 | Install git hooks | `lefthook install` |
@@ -101,6 +102,12 @@ The same gates run in CI (`.github/workflows/checks.yaml`) and before each commi
 
 **The tree is at zero.** No lint warnings, no type errors, no formatting drift. Keep it there — a
 warning that is tolerated once stops being read.
+
+The version is recorded in three files -- `build/.darklua.json`, `plugin/.darklua.json` and
+`pesde.toml` -- and `lune run bump <version>` writes all three. `scripts/check-versions.sh` fails the
+build if they disagree, which they did: the plugin's copy sat five minor releases behind the
+compiler's, so everything the Studio plugin generated went out stamped with a version Blink had not
+been for a year. Never edit the three by hand.
 
 Luau files are capped at 900 lines by `scripts/check-file-size.sh`. Four files are already past that
 and are recorded at their current size: they may shrink, never grow. A recorded number makes every

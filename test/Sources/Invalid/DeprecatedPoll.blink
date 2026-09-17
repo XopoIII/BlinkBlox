@@ -1,0 +1,15 @@
+-- expect W3017
+-- `Poll: true` is the 0.x way of asking for polling. `Call` is still required alongside it and its
+-- value is then thrown away -- the event below is declared SingleSync and compiles to Polling --
+-- which is exactly the sort of thing that should say something. It still works, so this warns
+-- rather than errors.
+option ClientOutput = "../../Network/PollClient.luau"
+option ServerOutput = "../../Network/PollServer.luau"
+
+event Legacy {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Poll: true,
+    Data: u8
+}
