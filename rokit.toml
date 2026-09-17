@@ -10,6 +10,6 @@ lune = "lune-org/lune@0.10.5"               # Luau runtime: runs the compiler CL
 stylua = "JohnnyMorganz/StyLua@2.5.2"       # formatter
 selene = "Kampfkarren/selene@0.31.0"        # linter
 luau-lsp = "JohnnyMorganz/luau-lsp@1.69.0"  # editor LSP, and `luau-lsp analyze` for the type gate
-lefthook = "evilmartians/lefthook@2.1.12"   # git hooks
+lefthook = "evilmartians/lefthook@2.1.14"   # git hooks
 darklua = "seaofvoices/darklua@0.19.0"      # bundler for release builds and the Studio plugin
 run-in-roblox = "rojo-rbx/run-in-roblox@0.3.0"
