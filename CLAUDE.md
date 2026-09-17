@@ -74,6 +74,28 @@ line on every keystroke (39ms at line 800, measured, now constant), no longer pa
 twice, no longer crashes past 2000 lines, and no longer deletes whatever else you kept in the output
 folder.
 
+0.24.0 came out of reviewing upstream's `v1.0.0-pre.8` and concluding there was nothing in it to
+take — every one of its eight items is internal to `rewrite` or describes a bug this fork does not
+have, usually because 0.18.x already did the right thing and `rewrite` had regressed away from it.
+Auditing our own tree against those reports is what found the release.
+
+All of it is one fault: every serialiser allocates its bytes up front and writes the event id before
+it validates a field, and nothing undid that when validation threw. A reliable fire left a phantom
+event in the batch, delivered to the listener as a value nobody sent. An unreliable fire never
+reached its `Load(Previous)`, so the scratch buffer stayed installed and the next reliable flush sent
+that instead of everything already queued. An invocation had already claimed its slot, and the caller
+is parked — and the timeout armed — only after the write, so a throw in between stranded a slot with
+nothing outstanding and nothing for the timeout to reclaim; thirty-two of those and every later
+invocation fails for the session. And the return serialiser ran outside the pcall guarding the
+listener, so a listener returning the wrong type answered nobody and the caller waited out the full
+timeout. Upstream has the first of these open as #91 and the invocation half as #107, both unfixed
+there.
+
+Then the things that only turned up because we went looking: two files importing each other recursed
+until the path outgrew the filesystem, a type naming itself reported "Unknown reference", and the
+plugin's version had sat five minor releases behind the compiler's with nothing to notice, so
+everything it generated went out mis-stamped.
+
 Still deferred, and deliberately: delta compression. It would require blink to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of
