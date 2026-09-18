@@ -266,6 +266,13 @@ local Queue: any = {
     Unreliable = table.create(256)
 }
 
+--> The name of every event this side receives, by channel and index, so a packet that fails to
+--> decode can be reported as the event it claimed to be. Filled by the declarations below.
+local EventNames: any = {
+    Reliable = {},
+    Unreliable = {}
+}
+
 local RATE_TEMPLATE = table.freeze({})
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
@@ -283,17 +290,29 @@ end
 local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Reliable[0] = CreateQueue()
+EventNames.Reliable[0] = "ClientPollEvent"
 Queue.Unreliable[0] = CreateQueue()
+EventNames.Unreliable[0] = "ClientUnreliablePollEvent"
 Queue.Reliable[1] = CreateQueue()
+EventNames.Reliable[1] = "ClientEmptyPollEvent"
 Queue.Unreliable[1] = CreateQueue()
+EventNames.Unreliable[1] = "ClientEmptyUnreliablePollEvent"
 Queue.Reliable[4] = table.create(256)
+EventNames.Reliable[4] = "ClientEmptyEvent"
 Queue.Unreliable[4] = table.create(256)
+EventNames.Unreliable[4] = "ClientEmptyUnreliableEvent"
 Queue.Reliable[6] = table.create(256)
+EventNames.Reliable[6] = "EmptyFunction"
 Queue.Reliable[14] = table.create(256)
+EventNames.Reliable[14] = "Booleans"
 Queue.Reliable[24] = table.create(256)
+EventNames.Reliable[24] = "ReliableClient"
 Queue.Unreliable[12] = table.create(256)
+EventNames.Unreliable[12] = "UnreliableClient"
 Queue.Reliable[31] = table.create(256)
+EventNames.Reliable[31] = "RemoteFunction"
 Queue.Reliable[33] = table.create(256)
+EventNames.Reliable[33] = "TupleFunction"
 export type Source_Source2_a = number
 export type Source_a = number
 export type ImportA_Source2_a = number
@@ -1072,8 +1091,8 @@ function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
 	-- Value: Booleans
 	-- START ARRAY
 	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-	if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
-	if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
+	if not (Length >= 0) then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
+	if not (Length <= 65535) then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
 	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 	local Value = table.create(Length)
 		-- Read BLOCK: 1 bytes
@@ -1187,8 +1206,8 @@ function SerdesFunctions.WriteEVENT_MapComplexEvent(Value: {[string]: { number }
 			if typeof(Item_2) ~= "number" then
 				error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.`)
 			end
-			if Item_2 < 0 then error(`Expected "Item_2" to be larger than 0, got {Item_2} instead.`) end
-			if Item_2 > 100 then error(`Expected "Item_2" to be smaller than 100, got {Item_2} instead.`) end
+			if not (Item_2 >= 0) then error(`Expected "Item_2" to be larger than 0, got {Item_2} instead.`) end
+			if not (Item_2 <= 100) then error(`Expected "Item_2" to be smaller than 100, got {Item_2} instead.`) end
 			-- Allocate 1
 			local OPERATION_OFFSET_0 = ARRAY_START_2
 			ARRAY_START_2 += 1
@@ -2071,6 +2090,7 @@ if not RunService:IsRunning() then
 	local Returns = table.freeze({
 		StepReplication = NOOP,
 		SetRateLimitHandler = NOOP,
+		SetDecodeErrorHandler = NOOP,
 	Source = {
 		Source2 = {
 		},
@@ -2173,8 +2193,8 @@ if not RunService:IsRunning() then
 			-- Buffer read
 			-- Value: DecimalRange
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if Value < -5.5 then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
-			if Value > 10.5 then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -2192,8 +2212,8 @@ if not RunService:IsRunning() then
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -5.5 then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
-			if Value > 10.5 then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -2215,8 +2235,8 @@ if not RunService:IsRunning() then
 			-- Buffer read
 			-- Value: NegativeRange
 			local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
-			if Value < -5 then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
-			if Value > 10 then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -2234,8 +2254,8 @@ if not RunService:IsRunning() then
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -5 then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
-			if Value > 10 then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
 			buffer.writei8(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -2257,8 +2277,8 @@ if not RunService:IsRunning() then
 			-- Buffer read
 			-- Value: UnboundUpper
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if Value < -0 then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
-			if Value > 16777216 then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
+			if not (Value <= 16777216) then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -2276,8 +2296,8 @@ if not RunService:IsRunning() then
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -0 then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
-			if Value > 16777216 then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
+			if not (Value <= 16777216) then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -2299,8 +2319,8 @@ if not RunService:IsRunning() then
 			-- Buffer read
 			-- Value: UnboundLower
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if Value < -16777216 then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
-			if Value > -0 then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
+			if not (Value >= -16777216) then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -2318,8 +2338,8 @@ if not RunService:IsRunning() then
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -16777216 then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
-			if Value > -0 then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
+			if not (Value >= -16777216) then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -2938,6 +2958,13 @@ local PlayerSlots: {[Player]: number} = {}
 local PlayerCalls: {[Player]: {thread}} = {}
 
 local function InvokePlayer(Player: Player): number
+    --> Checked before a slot is claimed. A player who already left gets no answer from anyone, and
+    --> PlayerRemoving has cleared their tables, so claiming here would put back entries nothing
+    --> removes again and park the caller for the whole timeout to learn what is already known.
+    if not Player:IsDescendantOf(Players) then
+        error(`[Blink]: Cannot invoke {Player.Name}, they are no longer in the game.`)
+    end
+
     local Slots = PlayerSlots[Player] or 0xFFFFFFFF
     local Slot = bit32.countrz(Slots)
     if Slot == 32 then
@@ -3023,6 +3050,26 @@ end)
 --> response is a decision only the game can make.
 local function SetRateLimitHandler(Handler: ((Player: Player, Event: string) -> ())?)
     RateHandler = Handler
+end
+
+--> DECODE FAILURES (upstream issue #102). A packet that cannot be decoded is abandoned where it
+--> failed, since the cursor is left mid-event and nothing after it can be trusted. That stays silent
+--> by default -- a client sending garbage every frame must not be able to fill the output -- but the
+--> game is entitled to know who sent it and what it claimed to be, to log it, flag the account or
+--> kick. `Event` is nil when the index named no event at all.
+local DecodeHandler: ((Player: Player, Event: string?, Failure: string) -> ())? = nil
+
+local function SetDecodeErrorHandler(Handler: ((Player: Player, Event: string?, Failure: string) -> ())?)
+    DecodeHandler = Handler
+end
+
+local function ReportDecodeFailure(Player: Player, Event: string?, Failure: unknown)
+    local Handler = DecodeHandler
+    if Handler then
+        --> Spawned for the same reason RateAccept spawns its handler: one that throws or yields must
+        --> not reach back into the receive loop that called it.
+        Spawn(Handler, Player, Event, tostring(Failure))
+    end
 end
 
 --> Refills lazily and spends one token, or reports and refuses.
@@ -3145,8 +3192,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			warn(`[Blink]: Dropped the rest of a packet from {Player.Name}, too many events.`)
 			break
 		end
-		local Parsed = pcall(function()
+		local Decoding = -1
+		local Parsed, Failure = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
 		if Index == 0 then
 			Push(Queue.Reliable[0], table.pack(Player, SerdesFunctions.ReadEVENT_ClientPollEvent()))
 		elseif Index == 1 then
@@ -3157,10 +3206,9 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				SerdesEvent = "ClientEmptyEvent"
 				Events.Reliable[4](Player, Value)
 			else
-				if #Queue.Reliable[4] > 256 then
-					warn("[Blink]: Event queue of \"ClientEmptyEvent\" exceeded 256, did you forget to implement a listener?")
+				if #Queue.Reliable[4] < 256 then
+					table.insert(Queue.Reliable[4], {Player, Value} :: {any})
 				end
-				table.insert(Queue.Reliable[4], {Player, Value} :: {any})
 			end
 		elseif Index == 6 then
 			-- Read BLOCK: 1 bytes
@@ -3170,8 +3218,14 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			if Events.Reliable[6] ~= nil then
 				Spawn(Events.Reliable[6], Player, Value, InvocationIdentifier)
 			else
-				if #Queue.Reliable[6] > 256 then
-					warn("[Blink]: Event queue of \"EmptyFunction\" exceeded 256, did you forget to implement a listener?")
+				if #Queue.Reliable[6] >= 256 then
+					Load(PlayersMap[Player])
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 6)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					SavePlayerBuffer(Player)
+					return
 				end
 				table.insert(Queue.Reliable[6], {Player, Value, InvocationIdentifier} :: {any})
 			end
@@ -3180,10 +3234,9 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			if Events.Reliable[14] ~= nil then
 				Spawn(Events.Reliable[14], Player, Value)
 			else
-				if #Queue.Reliable[14] > 256 then
-					warn("[Blink]: Event queue of \"Booleans\" exceeded 256, did you forget to implement a listener?")
+				if #Queue.Reliable[14] < 256 then
+					table.insert(Queue.Reliable[14], {Player, Value} :: {any})
 				end
-				table.insert(Queue.Reliable[14], {Player, Value} :: {any})
 			end
 		elseif Index == 24 then
 			local Value: number = SerdesFunctions.ReadEVENT_ReliableClient()
@@ -3191,10 +3244,9 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				SerdesEvent = "ReliableClient"
 				Events.Reliable[24](Player, Value)
 			else
-				if #Queue.Reliable[24] > 256 then
-					warn("[Blink]: Event queue of \"ReliableClient\" exceeded 256, did you forget to implement a listener?")
+				if #Queue.Reliable[24] < 256 then
+					table.insert(Queue.Reliable[24], {Player, Value} :: {any})
 				end
-				table.insert(Queue.Reliable[24], {Player, Value} :: {any})
 			end
 		elseif Index == 31 then
 			-- Read BLOCK: 1 bytes
@@ -3204,8 +3256,14 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			if Events.Reliable[31] ~= nil then
 				Spawn(Events.Reliable[31], Player, Value, InvocationIdentifier)
 			else
-				if #Queue.Reliable[31] > 256 then
-					warn("[Blink]: Event queue of \"RemoteFunction\" exceeded 256, did you forget to implement a listener?")
+				if #Queue.Reliable[31] >= 256 then
+					Load(PlayersMap[Player])
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 31)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					SavePlayerBuffer(Player)
+					return
 				end
 				table.insert(Queue.Reliable[31], {Player, Value, InvocationIdentifier} :: {any})
 			end
@@ -3217,8 +3275,14 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			if Events.Reliable[33] ~= nil then
 				Spawn(Events.Reliable[33], Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
 			else
-				if #Queue.Reliable[33] > 256 then
-					warn("[Blink]: Event queue of \"TupleFunction\" exceeded 256, did you forget to implement a listener?")
+				if #Queue.Reliable[33] >= 256 then
+					Load(PlayersMap[Player])
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 33)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					SavePlayerBuffer(Player)
+					return
 				end
 				table.insert(Queue.Reliable[33], {Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier} :: {any})
 			end
@@ -3226,7 +3290,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			error("[Blink]: Unknown event index.")
 		end
 		end)
-		if not Parsed then break end
+		if not Parsed then
+			ReportDecodeFailure(Player, EventNames.Reliable[Decoding], Failure)
+			break
+		end
 	end
 end)
 Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -3261,8 +3328,10 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			warn(`[Blink]: Dropped the rest of a packet from {Player.Name}, too many events.`)
 			break
 		end
-		local Parsed = pcall(function()
+		local Decoding = -1
+		local Parsed, Failure = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
 		if Index == 0 then
 			Push(Queue.Unreliable[0], table.pack(Player, SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent()))
 		elseif Index == 1 then
@@ -3283,7 +3352,10 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			error("[Blink]: Unknown event index.")
 		end
 		end)
-		if not Parsed then break end
+		if not Parsed then
+			ReportDecodeFailure(Player, EventNames.Unreliable[Decoding], Failure)
+			break
+		end
 	end
 end)
 
@@ -3292,6 +3364,8 @@ local Returns = table.freeze({
 	StepReplication = StepReplication,
 
 	SetRateLimitHandler = SetRateLimitHandler,
+
+	SetDecodeErrorHandler = SetDecodeErrorHandler,
 
 	Source = {
 		Source2 = {
@@ -3395,8 +3469,8 @@ local Returns = table.freeze({
 			-- Buffer read
 			-- Value: DecimalRange
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if Value < -5.5 then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
-			if Value > 10.5 then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -3414,8 +3488,8 @@ local Returns = table.freeze({
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -5.5 then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
-			if Value > 10.5 then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -3437,8 +3511,8 @@ local Returns = table.freeze({
 			-- Buffer read
 			-- Value: NegativeRange
 			local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
-			if Value < -5 then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
-			if Value > 10 then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -3456,8 +3530,8 @@ local Returns = table.freeze({
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -5 then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
-			if Value > 10 then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
 			buffer.writei8(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -3479,8 +3553,8 @@ local Returns = table.freeze({
 			-- Buffer read
 			-- Value: UnboundUpper
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if Value < -0 then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
-			if Value > 16777216 then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
+			if not (Value <= 16777216) then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -3498,8 +3572,8 @@ local Returns = table.freeze({
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -0 then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
-			if Value > 16777216 then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
+			if not (Value <= 16777216) then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -3521,8 +3595,8 @@ local Returns = table.freeze({
 			-- Buffer read
 			-- Value: UnboundLower
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if Value < -16777216 then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
-			if Value > -0 then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
+			if not (Value >= -16777216) then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -3540,8 +3614,8 @@ local Returns = table.freeze({
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -16777216 then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
-			if Value > -0 then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
+			if not (Value >= -16777216) then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)

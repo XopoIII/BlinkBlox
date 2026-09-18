@@ -15,6 +15,7 @@ local Shared = require("./Shared")
 local fs = require("@lune/fs")
 local task = require("@lune/task")
 
+local ClientEnvironment = require("./Client")
 local ServerEnvironment = require("./Server")
 
 local Assertions = require("./Assertions")
@@ -141,8 +142,8 @@ RunClosure("Inbound packets are bounded", function()
 			["oversized packet check"] = "if buffer.len(Buffer) >",
 			["instance count check"] = "if #Instances >",
 			["decoded event counter"] = "DecodedEvents += 1",
-			["decode pcall"] = "local Parsed = pcall(function()",
-			["decode failure stops the packet"] = "if not Parsed then break end",
+			["decode pcall"] = "local Parsed, Failure = pcall(function()",
+			["decode failure is reported"] = "ReportDecodeFailure(Player, EventNames.Reliable[Decoding], Failure)",
 			["unknown event id stops the packet"] = `error("[Blink]: Unknown event index.")`,
 		}
 
@@ -479,6 +480,145 @@ RunClosure("Decoding stops when the player leaves", function()
 
 	if Received ~= 1 then
 		ErrorPrint(`Failed "Decoding stops when the player leaves": a present player received {Received}, expected 1.`)
+	end
+end)
+
+--> The index the generated server gave a declaration, read out of the module rather than hard-coded,
+--> so a declaration added above it cannot quietly retarget a spec.
+local function ReliableIndex(Name: string): number
+	local Source = fs.readFile("../Network/Server.luau")
+	local Index = string.match(Source, `EventNames%.Reliable%[(%d+)%] = "{Name}"`)
+	assert(Index, `The server module has no reliable index for "{Name}".`)
+	return tonumber(Index) :: number
+end
+
+--> Sends `Count` copies of one raw event, in packets small enough for the inbound caps to accept.
+local function Flood(Event: { number }, Count: number)
+	local Remote = ServerEnvironment.Instances.BLINK_RELIABLE_REMOTE
+	local Sent = 0
+	while Sent < Count do
+		local Batch = math.min(60, Count - Sent)
+		local Packet = buffer.create(Batch * #Event)
+		for Copy = 0, Batch - 1 do
+			for Offset, Byte in Event do
+				buffer.writeu8(Packet, Copy * #Event + Offset - 1, Byte)
+			end
+		end
+
+		Remote.OnServerEvent:Fire(Shared.Player, Packet, {})
+		Sent += Batch
+	end
+
+	task.wait(0.3)
+end
+
+RunClosure("A client cannot grow the queue of an event nobody listens to", function()
+	--> Upstream issue #93. Events that arrive with no listener bound are queued for the listener
+	--> that has not connected yet -- and on the server, a client decides how many arrive. Uncapped,
+	--> an event the game never handles grew server memory for as long as a client kept sending,
+	--> with a warning per event past 256.
+	Shared.DrainWarnings()
+	Flood({ ReliableIndex("Unlistened") }, 300)
+	local Warned = #Shared.DrainWarnings()
+
+	local Replayed = 0
+	local Disconnect = Server.Unlistened.On(function()
+		Replayed += 1
+	end)
+
+	task.wait(0.3)
+	Disconnect()
+
+	if Replayed ~= 256 then
+		ErrorPrint(`Failed "Unlistened queue": {Replayed} queued events were replayed, expected the cap of 256.`)
+	end
+
+	if Warned ~= 0 then
+		ErrorPrint(`Failed "Unlistened queue": the server printed {Warned} warning(s) about a client's traffic.`)
+	end
+
+	--> Invocations the same way, except that a caller past the cap is answered with a failure rather
+	--> than dropped. Those answers are counted on their way to the client: three bytes each, the
+	--> function's index, the invocation id and a zero for "failed".
+	local Index = ReliableIndex("Unanswered")
+	local Refused = 0
+	local Spy = ClientEnvironment.Instances.BLINK_RELIABLE_REMOTE.OnClientEvent:Connect(function(Packet: buffer)
+		for Offset = 0, buffer.len(Packet) - 3, 3 do
+			if buffer.readu8(Packet, Offset) == Index and buffer.readu8(Packet, Offset + 2) == 0 then
+				Refused += 1
+			end
+		end
+	end)
+
+	Flood({ Index, 0 }, 300)
+	Spy:Disconnect()
+
+	if Refused ~= 300 - 256 then
+		ErrorPrint(`Failed "Unlistened queue": {Refused} invocations past the cap were refused, expected {300 - 256}.`)
+	end
+
+	local Answered = 0
+	Server.Unanswered.On(function()
+		Answered += 1
+	end)
+
+	task.wait(0.3)
+
+	if Answered ~= 256 then
+		ErrorPrint(`Failed "Unlistened queue": {Answered} queued invocations were run, expected the cap of 256.`)
+	end
+end)
+
+RunClosure("A packet the server cannot decode is reported to the game", function()
+	--> Upstream issue #102. The server abandons such a packet silently, which is right for its
+	--> output and wrong for the game: it could not tell who sent it or what it claimed to be.
+	local Reports: { { Player: any, Event: string?, Failure: string } } = {}
+	Server.SetDecodeErrorHandler(function(Player, Event, Failure)
+		table.insert(Reports, { Player = Player, Event = Event, Failure = Failure })
+	end)
+
+	local Remote = ServerEnvironment.Instances.BLINK_RELIABLE_REMOTE
+
+	--> Truncated: the index of an event with a one-byte payload, and no payload.
+	Remote.OnServerEvent:Fire(Shared.Player, buffer.fromstring(string.char(ReliableIndex("PlainFromClient"))), {})
+	task.wait(0.2)
+
+	--> Nonsense: an index that names no event.
+	Remote.OnServerEvent:Fire(Shared.Player, buffer.fromstring("\255"), {})
+	task.wait(0.2)
+
+	Server.SetDecodeErrorHandler(nil)
+
+	local Truncated, Unknown = Reports[1], Reports[2]
+	if #Reports ~= 2 or not Truncated or not Unknown then
+		ErrorPrint(`Failed "Decode reports": {#Reports} report(s), expected 2.`)
+		return
+	end
+
+	if Truncated.Player ~= Shared.Player or Truncated.Event ~= "PlainFromClient" then
+		ErrorPrint(`Failed "Decode reports": a truncated packet was reported as "{Truncated.Event}".`)
+	end
+
+	if Unknown.Event ~= nil or not string.find(Unknown.Failure, "Unknown event index", 1, true) then
+		ErrorPrint(`Failed "Decode reports": an unknown index was reported as "{Unknown.Event}": {Unknown.Failure}`)
+	end
+end)
+
+RunClosure("Invoking a player who has left fails at once", function()
+	--> Claiming a slot for a departed player put back the tables PlayerRemoving had just cleared,
+	--> where nothing removed them again, and parked the caller for the whole timeout.
+	Shared.SetPlayerInGame(false)
+	local Started = os.clock()
+	local Ok, Failure = pcall(Server.AskClient.Invoke, Shared.Player, 1)
+	local Elapsed = os.clock() - Started
+	Shared.SetPlayerInGame(true)
+
+	if Ok or not string.find(tostring(Failure), "no longer in the game", 1, true) then
+		ErrorPrint(`Failed "Invoking a departed player": {if Ok then "it succeeded" else tostring(Failure)}.`)
+	end
+
+	if Elapsed > 1 then
+		ErrorPrint(`Failed "Invoking a departed player": it took {Elapsed} seconds to fail.`)
 	end
 end)
 

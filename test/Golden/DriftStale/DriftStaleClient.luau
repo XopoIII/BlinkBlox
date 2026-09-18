@@ -265,9 +265,17 @@ local Queue: any = {
     Unreliable = table.create(256)
 }
 
+--> The name of every event this side receives, by channel and index, so a packet that fails to
+--> decode can be reported as the event it claimed to be. Filled by the declarations below.
+local EventNames: any = {
+    Reliable = {},
+    Unreliable = {}
+}
+
 local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Reliable[0] = table.create(256)
+EventNames.Reliable[0] = "Alpha"
 function SerdesFunctions.ReadEVENT_Alpha(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
@@ -282,6 +290,7 @@ if not RunService:IsRunning() then
 	local Returns = table.freeze({
 		StepReplication = NOOP,
 		SetRateLimitHandler = NOOP,
+		SetDecodeErrorHandler = NOOP,
 	Alpha = {
 		On = NOOP_RETURNING
 	},
@@ -334,6 +343,26 @@ end
 --> it got. The client never rate limits: it is talking to the server, which is trusted.
 local function SetRateLimitHandler(_Handler: ((Player: Player, Event: string) -> ())?) end
 
+--> A packet from the server that cannot be decoded is a bug in the game rather than an attack --
+--> usually a Sync listener that yielded, or a client built from a different schema. It is said out
+--> loud unless a handler takes it over, and either way it names the event and the error, because
+--> "a packet could not be decoded" alone is what made the original report so hard to diagnose.
+local DecodeHandler: ((Event: string?, Failure: string) -> ())? = nil
+
+local function SetDecodeErrorHandler(Handler: ((Event: string?, Failure: string) -> ())?)
+    DecodeHandler = Handler
+end
+
+local function ReportDecodeFailure(Event: string?, Failure: unknown)
+    local Handler = DecodeHandler
+    if Handler then
+        Spawn(Handler, Event, tostring(Failure))
+        return
+    end
+
+    warn(`[Blink]: Dropped a packet that could not be decoded, at event "{Event or "unknown"}": {Failure}`)
+end
+
 local function StepReplication()
     if SendCursor <= 0 then
         return
@@ -364,8 +393,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	while (RecieveCursor < Size) do
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		local Parsed = pcall(function()
+		local Decoding = -1
+		local Parsed, Failure = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
 		if Index == 0 then
 			local Value: number = SerdesFunctions.ReadEVENT_Alpha()
 			if Events.Reliable[0] ~= nil then
@@ -382,7 +413,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		end
 		end)
 		if not Parsed then
-			warn("[Blink]: Dropped a packet that could not be decoded.")
+			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
 			break
 		end
 	end
@@ -401,11 +432,13 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	while (RecieveCursor < Size) do
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		local Parsed = pcall(function()
+		local Decoding = -1
+		local Parsed, Failure = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
 		end)
 		if not Parsed then
-			warn("[Blink]: Dropped a packet that could not be decoded.")
+			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
 			break
 		end
 	end
@@ -416,6 +449,8 @@ local Returns = table.freeze({
 	StepReplication = StepReplication,
 
 	SetRateLimitHandler = SetRateLimitHandler,
+
+	SetDecodeErrorHandler = SetDecodeErrorHandler,
 
 	Alpha = {
 		On = function(Listener: (Value: number) -> ()): () -> ()

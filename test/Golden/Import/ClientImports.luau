@@ -265,6 +265,13 @@ local Queue: any = {
     Unreliable = table.create(256)
 }
 
+--> The name of every event this side receives, by channel and index, so a packet that fails to
+--> decode can be reported as the event it claimed to be. Filled by the declarations below.
+local EventNames: any = {
+    Reliable = {},
+    Unreliable = {}
+}
+
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
@@ -403,6 +410,7 @@ if not RunService:IsRunning() then
 	local Returns = table.freeze({
 		StepReplication = NOOP,
 		SetRateLimitHandler = NOOP,
+		SetDecodeErrorHandler = NOOP,
 	Generics = {
 		Entity = {
 			Read = function(Buffer: buffer): (Generics_Entity)
@@ -572,6 +580,26 @@ end
 --> it got. The client never rate limits: it is talking to the server, which is trusted.
 local function SetRateLimitHandler(_Handler: ((Player: Player, Event: string) -> ())?) end
 
+--> A packet from the server that cannot be decoded is a bug in the game rather than an attack --
+--> usually a Sync listener that yielded, or a client built from a different schema. It is said out
+--> loud unless a handler takes it over, and either way it names the event and the error, because
+--> "a packet could not be decoded" alone is what made the original report so hard to diagnose.
+local DecodeHandler: ((Event: string?, Failure: string) -> ())? = nil
+
+local function SetDecodeErrorHandler(Handler: ((Event: string?, Failure: string) -> ())?)
+    DecodeHandler = Handler
+end
+
+local function ReportDecodeFailure(Event: string?, Failure: unknown)
+    local Handler = DecodeHandler
+    if Handler then
+        Spawn(Handler, Event, tostring(Failure))
+        return
+    end
+
+    warn(`[Blink]: Dropped a packet that could not be decoded, at event "{Event or "unknown"}": {Failure}`)
+end
+
 local function StepReplication()
     if SendCursor <= 0 then
         return
@@ -602,11 +630,13 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	while (RecieveCursor < Size) do
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		local Parsed = pcall(function()
+		local Decoding = -1
+		local Parsed, Failure = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
 		end)
 		if not Parsed then
-			warn("[Blink]: Dropped a packet that could not be decoded.")
+			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
 			break
 		end
 	end
@@ -625,11 +655,13 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	while (RecieveCursor < Size) do
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		local Parsed = pcall(function()
+		local Decoding = -1
+		local Parsed, Failure = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
 		end)
 		if not Parsed then
-			warn("[Blink]: Dropped a packet that could not be decoded.")
+			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
 			break
 		end
 	end
@@ -640,6 +672,8 @@ local Returns = table.freeze({
 	StepReplication = StepReplication,
 
 	SetRateLimitHandler = SetRateLimitHandler,
+
+	SetDecodeErrorHandler = SetDecodeErrorHandler,
 
 	Generics = {
 		Entity = {

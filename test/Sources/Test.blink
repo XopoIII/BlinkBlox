@@ -813,3 +813,16 @@ event PlainFromClient {
     Call: SingleSync,
     Data: u8
 }
+
+--> Never listened to by any spec: the server's queue for it is what a client fills when a game
+--> declares an event it does not handle, and it has to stop growing at the cap.
+event Unlistened {
+    From: Client,
+    Type: Reliable,
+    Call: SingleAsync
+}
+
+--> The same for an invocation, whose caller has to be answered once the queue is full.
+function Unanswered {
+    Yield: Coroutine
+}

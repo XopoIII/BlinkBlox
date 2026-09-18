@@ -99,9 +99,16 @@ local Promise = blink.MyFunction.Invoke(5)
 local Value = Promise:await()
 ```
 
+A server invoking a player who has already left fails at once, rather than waiting out the
+`InvocationTimeout` for an answer nobody will send.
+
 ### Listening to a Function
 ```lua filename="server.luau" copy
 blink.MyFunction.On(function(Player, Value)
     return Value * 2
 end)
 ```
+
+Calls that arrive before a listener connects are queued, up to 256, and run when it does. Past that
+the server answers each further call with a failure, so the caller's `Invoke` raises promptly
+instead of hanging.

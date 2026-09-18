@@ -49,10 +49,13 @@ local DOUBLE = 8
 
 local Types = {}
 local Asserts = {
+	--> Written as `not (x >= Min)` rather than `x < Min`, here and for vectors: NaN compares false
+	--> against everything, so `x < Min` and `x > Max` both let it through, and a client could hand a
+	--> ranged float listener a NaN that every check downstream had been told was impossible.
 	number = function(Variable: string, Min: number, Max: number): AssertPrefab
 		return {
-			Lower = `if {Variable} < {Min} then error(\`Expected "{Variable}" to be larger than {Min}, got \{{Variable}} instead.\`) end`,
-			Upper = `if {Variable} > {Max} then error(\`Expected "{Variable}" to be smaller than {Max}, got \{{Variable}} instead.\`) end`,
+			Lower = `if not ({Variable} >= {Min}) then error(\`Expected "{Variable}" to be larger than {Min}, got \{{Variable}} instead.\`) end`,
+			Upper = `if not ({Variable} <= {Max}) then error(\`Expected "{Variable}" to be smaller than {Max}, got \{{Variable}} instead.\`) end`,
 			Exact = `if {Variable} ~= {Max} then error(\`Expected "{Variable}" to be equal to {Max}, got \{{Variable}\} instead.\`) end`,
 		}
 	end,
@@ -70,8 +73,8 @@ local Asserts = {
 
 	vector = function(Variable: string, Min: number, Max: number): AssertPrefab
 		return {
-			Lower = `if {Variable}.Magnitude < {Min} then error(\`Expected magnitude of "{Variable}" to be larger than {Min}, got \{{Variable}.Magnitude} instead.\`) end`,
-			Upper = `if {Variable}.Magnitude > {Max} then error(\`Expected magnitude of "{Variable}" to be smaller than {Max}, got \{{Variable}.Magnitude} instead.\`) end`,
+			Lower = `if not ({Variable}.Magnitude >= {Min}) then error(\`Expected magnitude of "{Variable}" to be larger than {Min}, got \{{Variable}.Magnitude} instead.\`) end`,
+			Upper = `if not ({Variable}.Magnitude <= {Max}) then error(\`Expected magnitude of "{Variable}" to be smaller than {Max}, got \{{Variable}.Magnitude} instead.\`) end`,
 			Exact = `if {Variable}.Magnitude ~= {Max} then error(\`Expected magnitude of "{Variable}" to equal to {Max}, got \{{Variable}.Magnitude} instead.\`) end`,
 		}
 	end,

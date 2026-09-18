@@ -200,6 +200,28 @@ local Disconnect = blink.MyEvent.On(...)
 Disconnect()
 ```
 
+A reliable event that arrives while nothing is listening is queued, and the queue is handed to the
+listener the moment one connects -- so a listener connected a frame late still sees what was sent
+before it. The queue holds 256 events. On the server it is filled by clients, so once it is full
+further events are dropped without a word: an event the game declares but never listens to cannot
+be used to grow server memory or fill the output. On the client a full queue warns instead, because
+there it usually means a listener somebody forgot.
+
+### Packets that cannot be decoded
+A packet that fails to decode -- truncated, carrying an index no event has, or failing a range --
+is abandoned at the event that failed, since nothing after that point can be trusted. The server
+says nothing about it by default, so that a client sending garbage every frame cannot flood the
+output. To log it, flag the account or kick, install a handler:
+
+```lua filename="server.luau" copy
+blink.SetDecodeErrorHandler(function(Player: Player, Event: string?, Failure: string)
+    Analytics:Record(Player, Event, Failure)
+end)
+```
+
+`Event` is the event the packet claimed to carry, or `nil` if its index named no event at all. On the
+client the handler takes `(Event, Failure)`, and without one the client warns, naming both.
+
 ### Iterating an Event (Polling)
 ```lua filename="client.luau" copy
 for Index, Value in MyEvent.Iter() do

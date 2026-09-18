@@ -48,6 +48,26 @@ end
 --> it got. The client never rate limits: it is talking to the server, which is trusted.
 local function SetRateLimitHandler(_Handler: ((Player: Player, Event: string) -> ())?) end
 
+--> A packet from the server that cannot be decoded is a bug in the game rather than an attack --
+--> usually a Sync listener that yielded, or a client built from a different schema. It is said out
+--> loud unless a handler takes it over, and either way it names the event and the error, because
+--> "a packet could not be decoded" alone is what made the original report so hard to diagnose.
+local DecodeHandler: ((Event: string?, Failure: string) -> ())? = nil
+
+local function SetDecodeErrorHandler(Handler: ((Event: string?, Failure: string) -> ())?)
+    DecodeHandler = Handler
+end
+
+local function ReportDecodeFailure(Event: string?, Failure: unknown)
+    local Handler = DecodeHandler
+    if Handler then
+        Spawn(Handler, Event, tostring(Failure))
+        return
+    end
+
+    warn(`[Blink]: Dropped a packet that could not be decoded, at event "{Event or "unknown"}": {Failure}`)
+end
+
 local function StepReplication()
     if SendCursor <= 0 then
         return

@@ -268,6 +268,13 @@ local Queue: any = {
     Unreliable = table.create(256)
 }
 
+--> The name of every event this side receives, by channel and index, so a packet that fails to
+--> decode can be reported as the event it claimed to be. Filled by the declarations below.
+local EventNames: any = {
+    Reliable = {},
+    Unreliable = {}
+}
+
 local RATE_TEMPLATE = table.freeze({})
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
@@ -285,6 +292,7 @@ end
 local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Unreliable[0] = table.create(256)
+EventNames.Unreliable[0] = "Snapshot"
 export type a = { Type: "Header", Sequence: number, Fragments: number } | { Type: "Fragment", Fragment: number, Fragments: number }
 export type GenericMap<Key,Value> = {[Key]: Value}
 export type GenericEnum<T,G> = { Type: "A", Data: T } | { Type: "B", Data: G }
@@ -354,6 +362,7 @@ if not RunService:IsRunning() then
 	local Returns = table.freeze({
 		StepReplication = NOOP,
 		SetRateLimitHandler = NOOP,
+		SetDecodeErrorHandler = NOOP,
 	Entity = {
 		Read = function(Buffer: buffer): (Entity)
 			-- Buffer overwrite
@@ -475,6 +484,13 @@ local PlayerSlots: {[Player]: number} = {}
 local PlayerCalls: {[Player]: {thread}} = {}
 
 local function InvokePlayer(Player: Player): number
+    --> Checked before a slot is claimed. A player who already left gets no answer from anyone, and
+    --> PlayerRemoving has cleared their tables, so claiming here would put back entries nothing
+    --> removes again and park the caller for the whole timeout to learn what is already known.
+    if not Player:IsDescendantOf(Players) then
+        error(`[Blink]: Cannot invoke {Player.Name}, they are no longer in the game.`)
+    end
+
     local Slots = PlayerSlots[Player] or 0xFFFFFFFF
     local Slot = bit32.countrz(Slots)
     if Slot == 32 then
@@ -560,6 +576,26 @@ end)
 --> response is a decision only the game can make.
 local function SetRateLimitHandler(Handler: ((Player: Player, Event: string) -> ())?)
     RateHandler = Handler
+end
+
+--> DECODE FAILURES (upstream issue #102). A packet that cannot be decoded is abandoned where it
+--> failed, since the cursor is left mid-event and nothing after it can be trusted. That stays silent
+--> by default -- a client sending garbage every frame must not be able to fill the output -- but the
+--> game is entitled to know who sent it and what it claimed to be, to log it, flag the account or
+--> kick. `Event` is nil when the index named no event at all.
+local DecodeHandler: ((Player: Player, Event: string?, Failure: string) -> ())? = nil
+
+local function SetDecodeErrorHandler(Handler: ((Player: Player, Event: string?, Failure: string) -> ())?)
+    DecodeHandler = Handler
+end
+
+local function ReportDecodeFailure(Player: Player, Event: string?, Failure: unknown)
+    local Handler = DecodeHandler
+    if Handler then
+        --> Spawned for the same reason RateAccept spawns its handler: one that throws or yields must
+        --> not reach back into the receive loop that called it.
+        Spawn(Handler, Player, Event, tostring(Failure))
+    end
 end
 
 --> Refills lazily and spends one token, or reports and refuses.
@@ -682,10 +718,15 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			warn(`[Blink]: Dropped the rest of a packet from {Player.Name}, too many events.`)
 			break
 		end
-		local Parsed = pcall(function()
+		local Decoding = -1
+		local Parsed, Failure = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
 		end)
-		if not Parsed then break end
+		if not Parsed then
+			ReportDecodeFailure(Player, EventNames.Reliable[Decoding], Failure)
+			break
+		end
 	end
 end)
 Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -720,8 +761,10 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			warn(`[Blink]: Dropped the rest of a packet from {Player.Name}, too many events.`)
 			break
 		end
-		local Parsed = pcall(function()
+		local Decoding = -1
+		local Parsed, Failure = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
 		if Index == 0 then
 			local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.ReadEVENT_Snapshot()
 			if Events.Unreliable[0] ~= nil then
@@ -732,7 +775,10 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			error("[Blink]: Unknown event index.")
 		end
 		end)
-		if not Parsed then break end
+		if not Parsed then
+			ReportDecodeFailure(Player, EventNames.Unreliable[Decoding], Failure)
+			break
+		end
 	end
 end)
 
@@ -741,6 +787,8 @@ local Returns = table.freeze({
 	StepReplication = StepReplication,
 
 	SetRateLimitHandler = SetRateLimitHandler,
+
+	SetDecodeErrorHandler = SetDecodeErrorHandler,
 
 	Entity = {
 		Read = function(Buffer: buffer): (Entity)

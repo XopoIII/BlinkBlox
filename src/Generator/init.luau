@@ -12,6 +12,7 @@ local Blocks = require("@self/Blocks")
 local Fragments = require("@self/Fragments")
 local GenerateTypescript = require("@self/Typescript")
 local Prefabs = require("@self/Prefabs")
+local Queues = require("@self/Queue")
 local Serde = require("@self/Serde")
 local Util = require("@self/Util")
 
@@ -207,6 +208,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		end
 
 		Events.Push(`{Queue} = table.create(256)`)
+		Events.Push(`EventNames.{ChannelName}[{Index}] = "{Declaration.Name}"`)
 		Block = (Channel.Listening == false) and Block:Compare("Index", Index, "Equals")
 			or Block:Branch("Conditional", "Index", Index, "Equals")
 
@@ -279,14 +281,7 @@ function Declarations.Event(Declaration: Parser.Event)
 					:End()
 			end
 
-			ListenerBound:Branch("Default")
-				:Compare(`#{Queue}`, "256", "Greater")
-				:Line(
-					`warn("[Blink]: Event queue of \\"{Declaration.Name}\\" exceeded 256, did you forget to implement a listener?")`
-				)
-				:End()
-				:Line(`table.insert({Queue}, \{{ListenerArguments}\} :: \{any\})`)
-				:End()
+			Queues.Enqueue(ListenerBound:Branch("Default"), Context, Queue, ListenerArguments, Declaration.Name):End()
 
 			Listener = BindListener(Blocks.Function(Casing.On, ContextArguments, `() -> ()`, true))
 				:Iterator("Index", "Arguments", Queue)
@@ -348,6 +343,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		end
 	elseif Value.From ~= Context and IsPolling then
 		Events.Push(`{Queue} = CreateQueue()`)
+		Events.Push(`EventNames.{ChannelName}[{Index}] = "{Declaration.Name}"`)
 		Block = (Channel.Listening == false) and Block:Compare("Index", Index, "Equals")
 			or Block:Branch("Conditional", "Index", Index, "Equals")
 
@@ -626,6 +622,7 @@ function Declarations.Function(Declaration: Parser.Function)
 
 	--> Create queue and event branch
 	Events.Push(`{Queue} = table.create(256)`)
+	Events.Push(`EventNames.Reliable[{Index}] = "{Name}"`)
 	Block = (Channel.Listening == false) and Block:Compare("Index", Index, "Equals")
 		or Block:Branch("Conditional", "Index", Index, "Equals")
 
@@ -637,37 +634,19 @@ function Declarations.Function(Declaration: Parser.Function)
 		Types.u8.Read("InvocationIdentifier", Block)
 		Block:Line(`local {DataValues} = {Util.GetPath(DataIdentifier, false, Scope)}()`)
 
-		--> A refused invocation still has to be ANSWERED. The caller is suspended on `Calls[id]` with
-		--> no timeout, so dropping the call silently leaks that entry and hangs the coroutine until
-		--> the slot is reused by an unrelated call -- which then resumes the wrong thread. This is
-		--> the same three-byte failure reply the error path writes, so the caller rejects promptly.
-		-->
-		--> `return` rather than `continue`: this sits inside the per-event `pcall(function()`, and
-		--> returning from it lands back in the decode loop exactly as continuing would.
+		--> A refused invocation still has to be ANSWERED; see Queue.Refuse.
 		local RateGuard = RateGuardExpression(Value, Name)
 		if RateGuard then
-			Block:Line(`if not {RateGuard} then`)
-			Block:Line("\tLoad(PlayersMap[Player])")
-			Block:Line("\tlocal Position = Allocate(3)")
-			Block:Line(`\tbuffer.writeu8(SendBuffer, Position, {Index})`)
-			Block:Line("\tbuffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)")
-			Block:Line("\tbuffer.writeu8(SendBuffer, Position + 2, 0)")
-			Block:Line("\tSavePlayerBuffer(Player)")
-			Block:Line("\treturn")
-			Block:Line("end")
+			Queues.Refuse(Block:Line(`if not {RateGuard} then`), Index, Block.Indent + 1):Line("end")
 		end
 
 		--> The listening side passes a Player only when it IS the server. A client listening to a
 		--> function the server invokes has no player to name: the caller is the server.
 		local Caller = if OnServer then "Player, " else ""
-		Block:Compare(Connection, "nil", "Not")
+		local Queued = Block:Compare(Connection, "nil", "Not")
 			:Line(`Spawn({Connection}, {Caller}{DataArguments}, InvocationIdentifier)`)
 			:Branch("Default")
-			:Compare(`#{Queue}`, "256", "Greater")
-			:Line(`warn("[Blink]: Event queue of \\"{Name}\\" exceeded 256, did you forget to implement a listener?")`)
-			:End()
-			:Line(`table.insert({Queue}, \{{Caller}{DataArguments}, InvocationIdentifier\} :: \{any\})`)
-			:End()
+		Queues.Enqueue(Queued, Context, Queue, `{Caller}{DataArguments}, InvocationIdentifier`, Name, Index):End()
 
 		--> Data listener body
 		local FlushQueue = Blocks.Function("", "", "()")
@@ -1347,11 +1326,17 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> inside OnClientEvent, which is what upstream issue #26 and the devforum report were.
 	--> Measured at +109ns per decoded event, against ~20ns for the buffer read it guards -- real, and
 	--> irrelevant next to the listener dispatch that follows it.
-	Reliables:Line("local Parsed = pcall(function()")
-	Unreliables:Line("local Parsed = pcall(function()")
+	-->
+	--> `Decoding` carries the index out of the pcall, so a failure can name the event it happened in.
+	local function OpenDecode(Channel: Blocks.Block)
+		Channel:Line("local Decoding = -1")
+		Channel:Line("local Parsed, Failure = pcall(function()")
+		Types.u8.Read("Index", Channel)
+		Channel:Line("Decoding = Index")
+	end
 
-	Types.u8.Read("Index", Reliables)
-	Types.u8.Read("Index", Unreliables)
+	OpenDecode(Reliables)
+	OpenDecode(Unreliables)
 
 	--> Import async libraries
 	if Options.FutureLibrary then
@@ -1371,6 +1356,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 
 	Return.Push(`{Casing.SetRateLimitHandler} = SetRateLimitHandler,`, 1, 1)
 	Noop.Push(`{Casing.SetRateLimitHandler} = NOOP,`, 0, 2)
+	Return.Push(`{Casing.SetDecodeErrorHandler} = SetDecodeErrorHandler,`, 1, 1)
+	Noop.Push(`{Casing.SetDecodeErrorHandler} = NOOP,`, 0, 2)
 
 	if not Options.ManualReplication then
 		Replication.Push("RunService.Heartbeat:Connect(StepReplication)")
@@ -1399,26 +1386,20 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Unreliables = Unreliables:Branch("Default"):Line(UNKNOWN_EVENT):End()
 	end
 
-	--> Close the decode function opened above and act on its result.
-	-->
-	--> The server says nothing: the packet came from a client, and letting one fill a server's output
-	--> window is its own denial of service. The client says so once, because a packet it cannot parse
-	--> is a bug in the game rather than an attack, and silence there is what made the original report
-	--> so hard to diagnose -- events simply stopped arriving.
-	local function EmitDecodeResult(Channel: Blocks.Block)
+	--> Close the decode function opened above and act on its result. What is said about it, and to
+	--> whom, is ReportDecodeFailure's business: the server is silent unless the game installed a
+	--> handler, the client warns. See the two templates.
+	local Sender = if Context == "Server" then "Player, " else ""
+	local function CloseDecode(Channel: Blocks.Block, Name: string)
 		Channel:Line("end)")
-		if Context == "Client" then
-			Channel:Line("if not Parsed then")
-			Channel:Line(`\twarn("[Blink]: Dropped a packet that could not be decoded.")`)
-			Channel:Line("\tbreak")
-			Channel:Line("end")
-		else
-			Channel:Line("if not Parsed then break end")
-		end
+		Channel:Line("if not Parsed then")
+		Channel:Line(`\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], Failure)`)
+		Channel:Line("\tbreak")
+		Channel:Line("end")
 	end
 
-	EmitDecodeResult(Reliables)
-	EmitDecodeResult(Unreliables)
+	CloseDecode(Reliables, "Reliable")
+	CloseDecode(Unreliables, "Unreliable")
 
 	Reliables = Reliables:End():End()
 	Unreliables = Unreliables:End():End()

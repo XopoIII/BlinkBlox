@@ -526,6 +526,24 @@ RunClosure("Ranges should be enforced", function()
 		end
 	end
 
+	--> NaN compares false against everything, so a check written as `x < Min` or `x > Max` let it
+	--> through on both sides -- including from a client, into a listener told the value was ranged.
+	do
+		local WriteSuccess = pcall(function()
+			Client.DecimalRange.Write(0 / 0)
+		end)
+
+		local NaN = buffer.create(4)
+		buffer.writef32(NaN, 0, 0 / 0)
+		local ReadSuccess = pcall(function()
+			Server.DecimalRange.Read(NaN)
+		end)
+
+		if WriteSuccess or ReadSuccess then
+			ErrorPrint("Expected a range to refuse NaN.")
+		end
+	end
+
 	Client.ExactRange.Write(0)
 
 	Client.DecimalRange.Write(-5.5)

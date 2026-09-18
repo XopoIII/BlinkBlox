@@ -161,6 +161,7 @@ Grammar.GENERICS_TYPES = {
 Grammar.RESERVED = {
 	StepReplication = true,
 	SetRateLimitHandler = true,
+	SetDecodeErrorHandler = true,
 }
 
 --- Luau's reserved words. A named type-pack element becomes a LOCAL VARIABLE in the generated

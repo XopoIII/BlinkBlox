@@ -96,6 +96,18 @@ until the path outgrew the filesystem, a type naming itself reported "Unknown re
 plugin's version had sat five minor releases behind the compiler's with nothing to notice, so
 everything it generated went out mis-stamped.
 
+0.24.2 came out of the next week of upstream's tracker, a batch of reports against `rewrite` pre.7.
+Most described bugs this fork does not have; one did not, and it was the thesis again. An event
+arriving with no listener bound is queued for the listener to come, and on the server a client
+decided how long that queue got -- an event the game declared and never handled grew server memory
+for as long as the client kept sending, with a warning per event past 256. The server's queue now
+stops at 256 and says nothing, and an invocation past it is answered with a failure. Found while
+checking: a range check written `x < Min` passes NaN, since NaN compares false both ways, so ranged
+floats accepted NaN from clients. Upstream #102 is taken as well: `SetDecodeErrorHandler` tells the
+game which player sent a packet that failed to decode and what event it claimed to be, and the
+server stays silent without one. And invoking a player who had already left no longer waits out the
+timeout.
+
 Still deferred, and deliberately: delta compression. It would require blink to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of

@@ -254,6 +254,13 @@ local Queue: any = {
     Unreliable = table.create(256)
 }
 
+--> The name of every event this side receives, by channel and index, so a packet that fails to
+--> decode can be reported as the event it claimed to be. Filled by the declarations below.
+local EventNames: any = {
+    Reliable = {},
+    Unreliable = {}
+}
+
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
 export type Indexers_TestFlags = {["a a"]: boolean,}
 export type Indexers_TestEnums = ("b b")
@@ -449,8 +456,8 @@ return {
 			-- Value: ColorArray
 			-- START ARRAY
 			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-			if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
-			if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
+			if not (Length >= 0) then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
 			if Length * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Value = table.create(Length)
 				-- Read BLOCK: 3 bytes
@@ -686,8 +693,8 @@ return {
 			-- Buffer read
 			-- Value: DecimalRange
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if Value < -5.5 then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
-			if Value > 10.5 then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -705,8 +712,8 @@ return {
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -5.5 then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
-			if Value > 10.5 then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -728,8 +735,8 @@ return {
 			-- Buffer read
 			-- Value: NegativeRange
 			local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
-			if Value < -5 then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
-			if Value > 10 then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -747,8 +754,8 @@ return {
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -5 then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
-			if Value > 10 then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
 			buffer.writei8(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -770,8 +777,8 @@ return {
 			-- Buffer read
 			-- Value: UnboundUpper
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if Value < -0 then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
-			if Value > 16777216 then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
+			if not (Value <= 16777216) then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -789,8 +796,8 @@ return {
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -0 then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
-			if Value > 16777216 then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
+			if not (Value <= 16777216) then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -812,8 +819,8 @@ return {
 			-- Buffer read
 			-- Value: UnboundLower
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if Value < -16777216 then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
-			if Value > -0 then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
+			if not (Value >= -16777216) then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -831,8 +838,8 @@ return {
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if Value < -16777216 then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
-			if Value > -0 then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
+			if not (Value >= -16777216) then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -988,8 +995,8 @@ return {
 			-- Value: MultiDimensionalArray
 			-- START ARRAY
 			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-			if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
-			if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
+			if not (Length >= 0) then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
 			if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Value = table.create(Length)
 				-- Read BLOCK: 2 bytes
@@ -1001,8 +1008,8 @@ return {
 				local OPERATION_OFFSET_0 = ARRAY_START_1
 				ARRAY_START_1 += 2
 				Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
-				if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
-				if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
+				if not (Length >= 0) then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
 				if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Item_1 = table.create(Length)
 					-- Read BLOCK: 2 bytes
@@ -1014,8 +1021,8 @@ return {
 					local OPERATION_OFFSET_0 = ARRAY_START_2
 					ARRAY_START_2 += 2
 					Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
-					if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
-					if Length > 65535 then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
+					if not (Length >= 0) then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than 65535, got {Length} instead.`) end
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Item_2 = table.create(Length)
 						-- Read BLOCK: 1 bytes
@@ -1293,8 +1300,8 @@ return {
 			-- Value: SizeBoundedArray
 			-- START ARRAY
 			local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			if Length < 0 then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
-			if Length > 10 then error(`Expected "Length" to be smaller than 10, got {Length} instead.`) end
+			if not (Length >= 0) then error(`Expected "Length" to be larger than 0, got {Length} instead.`) end
+			if not (Length <= 10) then error(`Expected "Length" to be smaller than 10, got {Length} instead.`) end
 			if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Value = table.create(Length)
 				-- Read BLOCK: 2 bytes
@@ -1672,8 +1679,8 @@ return {
 			-- START ARRAY
 			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 			local Length = LengthOffset + 300
-			if Length < 300 then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
-			if Length > 400 then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
+			if not (Length >= 300) then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
+			if not (Length <= 400) then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
 			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Value = table.create(Length)
 				-- Read BLOCK: 1 bytes
@@ -1702,8 +1709,8 @@ return {
 			-- Buffer write
 			-- Value: OffsetArray
 			-- START ARRAY
-			if #Value < 300 then error(`Expected "#Value" to be larger than 300, got {#Value} instead.`) end
-			if #Value > 400 then error(`Expected "#Value" to be smaller than 400, got {#Value} instead.`) end
+			if not (#Value >= 300) then error(`Expected "#Value" to be larger than 300, got {#Value} instead.`) end
+			if not (#Value <= 400) then error(`Expected "#Value" to be smaller than 400, got {#Value} instead.`) end
 			local LengthOffset = #Value - 300
 			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
 				-- Allocate BLOCK: 1 bytes
@@ -1765,8 +1772,8 @@ return {
 			if #Value < 300 then error(`Expected length of "Value" to be larger than 300, got {#Value} instead.`) end
 			if #Value > 400 then error(`Expected length of "Value" to be smaller than 400, got {#Value} instead.`) end
 			local Length = #Value
-			if Length < 300 then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
-			if Length > 400 then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
+			if not (Length >= 300) then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
+			if not (Length <= 400) then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
 			local LengthOffset = Length - 300
 			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
 			Allocate(Length)
@@ -1817,8 +1824,8 @@ return {
 			if buffer.len(Value) < 300 then error(`Expected size of "Value" to be larger than 300, got {buffer.len(Value)} instead.`) end
 			if buffer.len(Value) > 400 then error(`Expected size of "Value" to be smaller than 400, got {buffer.len(Value)} instead.`) end
 			local Length = buffer.len(Value)
-			if Length < 300 then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
-			if Length > 400 then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
+			if not (Length >= 300) then error(`Expected "Length" to be larger than 300, got {Length} instead.`) end
+			if not (Length <= 400) then error(`Expected "Length" to be smaller than 400, got {Length} instead.`) end
 			local LengthOffset = Length - 300
 			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
 			Allocate(Length)
