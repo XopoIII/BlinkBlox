@@ -107,6 +107,10 @@ local Error = {
 	AnalyzeRecursiveType = 3022,
 	AnalyzeInvalidComponents = 3023,
 	AnalyzeDuplicateOption = 3024,
+	AnalyzeUnknownAttribute = 3025,
+	AnalyzeUnknownProfile = 3026,
+	AnalyzeExcludedReference = 3027,
+	AnalyzeMisplacedAttribute = 3028,
 }
 
 Error.__index = Error

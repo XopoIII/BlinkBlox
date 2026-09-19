@@ -72,6 +72,8 @@ function Highlight.Token(
 
 	if Type == "Keyword" or Type == "Import" or Type == "As" then
 		return Color(Value, Palette.Keyword), Value
+	elseif Type == "Attribute" then
+		String = Color(Value, Palette.Keyword)
 	elseif Type == "Primitive" then
 		String = Color(Value, Palette.Primitive)
 	elseif Type == "Identifier" then

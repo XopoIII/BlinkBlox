@@ -23,6 +23,7 @@ local Editor = require("@self/Editor")
 local Profiler = require("@self/Profiler")
 local State = require("@self/State")
 
+local Attributes = require("@compiler/Modules/Attributes")
 local Generator = require("@compiler/Generator")
 local Parser = require("@compiler/Parser")
 
@@ -270,7 +271,17 @@ end
 
 local function GenerateFile(File: StringValue, Directory: Instance)
 	local Source = File.Value
-	local SourceParser = Parser.new()
+
+	--> What `@profile` compiles under is read from a `Profile` attribute on the schema itself, which
+	--> the Properties panel can set -- a plugin setting would need a picker nothing has built. Absent,
+	--> it is release, as on the command line.
+	local Profile = File:GetAttribute("Profile")
+	if Profile ~= nil and (type(Profile) ~= "string" or not Attributes.IsProfile(Profile)) then
+		ShowError(`Unknown profile "{Profile}" on {File.Name}: expected dev, debug, test or release.`)
+		return
+	end
+
+	local SourceParser = Parser.new(nil, nil, nil, Attributes.new(Profile :: string?))
 	local Success, Error, AbstractSyntaxTree = pcall(function()
 		return nil, SourceParser:Parse(Source)
 	end)

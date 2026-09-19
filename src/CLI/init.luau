@@ -7,6 +7,7 @@
 local process = require("@lune/process")
 local stdio = require("@lune/stdio")
 
+local Attributes = require("./Modules/Attributes")
 local Compile = require("@self/Utility/Compile")
 local Watch = require("@self/Utility/Watch")
 
@@ -42,6 +43,10 @@ local ARGUMENTS: { [string]: Argument } = {
 	YesToAll = {
 		Aliases = { "-y", "--yes" },
 		Description = "Accept all prompts",
+	},
+	Profile = {
+		Aliases = { "-p", "--profile" },
+		Description = "Compile under a profile: dev, debug, test or release (the default). Takes a value.",
 	},
 	OutputAst = {
 		Hidden = true,
@@ -117,9 +122,25 @@ end
 --> Taking position 1 blindly meant `blink --yes input.blink` read a file literally named "--yes",
 --> so flag order was load-bearing in a way nothing announced -- and the failure surfaced as a
 --> missing-file error naming the flag, which reads like a bug in the caller.
+-->
+--> `--profile` is the one flag that takes a value, and that value is skipped here so that
+--> `blink --profile dev input.blink` does not read a file named "dev".
+--> `--` too: `lune run init -- ...` hands it through as an argument, and it named no file either.
+IsFlag["--"] = true
+
+local Profile: string?
+local ProfileAt = table.find(RawArguments, "--profile") or table.find(RawArguments, "-p")
+if ProfileAt then
+	Profile = RawArguments[ProfileAt + 1]
+	if Profile == nil or not Attributes.IsProfile(Profile) then
+		print(Color(`Expected a profile after "{RawArguments[ProfileAt]}": dev, debug, test or release`, "red"))
+		process.exit(1)
+	end
+end
+
 local Path: string?
-for _, Argument in RawArguments do
-	if not IsFlag[Argument] then
+for Index, Argument in RawArguments do
+	if not IsFlag[Argument] and Index ~= (ProfileAt and ProfileAt + 1) then
 		Path = Argument
 		break
 	end
@@ -160,11 +181,12 @@ if not Arguments.Watch then
 		Compact = Arguments.Compact,
 		YesToEverything = Arguments.YesToAll,
 		OutputAbstractSyntaxTree = Arguments.OutputAst,
+		Profile = Profile,
 	}
 
 	Compile.Compile(Path, CompileOptions)
 else
-	Watch.Watch(Path)
+	Watch.Watch(Path, Profile)
 end
 
 return nil

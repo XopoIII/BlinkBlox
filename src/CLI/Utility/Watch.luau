@@ -70,7 +70,7 @@ end
 
 ---- Public Functions ----
 
-function Utility.Watch(Path: string)
+function Utility.Watch(Path: string, Profile: string?)
 	local FilePath = GetDefinitionFilePath(Path)
 	local Imports: { string }
 
@@ -95,7 +95,9 @@ function Utility.Watch(Path: string)
 
 	local function Recompile()
 		Traverse()
-		Compile.Compile(Path, WATCH_OPTIONS)
+		local Options = table.clone(WATCH_OPTIONS)
+		Options.Profile = Profile
+		Compile.Compile(Path, Options)
 	end
 
 	--> Initial traversal

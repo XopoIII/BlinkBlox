@@ -83,6 +83,16 @@ ExpectNot("A component does not emit a raw bracket", "type V = vector<i16>", "><
 Expect("A bounded range paints both ends", "type A = u8(0..10)", `<font color="#666666">0</font>`)
 Expect("An exact array size is painted", "type A = u8[8]", `<font color="#666666">8</font>`)
 
+--> An attribute reads as a keyword, and its profile as a string -- not as an error, which is what
+--> an `@` the lexer had no rule for used to paint.
+Expect("An attribute is painted as a keyword", '@profile("dev")\nevent A {}', `<font color="#222222">@profile</font>`)
+Expect(
+	"An attribute's profile is painted as a string",
+	'@profile("dev")\nevent A {}',
+	`<font color="#777777">"dev"</font>`
+)
+ExpectNot("An attribute is not painted as an error", '@profile("dev")\nevent A {}', "#bbbbbb")
+
 --> An empty document is the state the editor starts in, and the state it returns to when the user
 --> selects all and deletes.
 if Render("") ~= "" then

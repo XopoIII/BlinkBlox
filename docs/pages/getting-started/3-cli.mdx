@@ -14,3 +14,9 @@ recompiling automatically when one occurs.
 ```sh copy
 blink file-name --watch
 ```
+
+### Profiles
+A description can mark statements with [`@profile`](/language/7-profiles) so that only some builds compile them. Choose the profile with `--profile` (or `-p`); without it, a build is `release`.
+```sh copy
+blink file-name --profile dev
+```

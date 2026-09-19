@@ -11,6 +11,7 @@
 
 ---- Imports ----
 
+local Attributes = require("./Attributes")
 local Error = require("./Error")
 local Grammar = require("./Grammar")
 local Lexer = require("../Lexer")
@@ -20,12 +21,15 @@ local Settings = require("../Settings")
 
 type Token = Lexer.Token
 type Options = Grammar.Options
+--- An option as given, with the profile it was given under, if any.
+type Given = { Key: Token, Profile: Token? }
 
 --- The slice of the parser this needs: where it is reading, and enough of the source to render a
 --- diagnostic against.
 export type Reader = {
 	Source: string,
 	File: string?,
+	Attributes: Attributes.State,
 
 	Peek: (self: any) -> Token,
 	Consume: (self: any, Type: Lexer.Types) -> Token,
@@ -66,9 +70,23 @@ function Utility.Parse(Reader: Reader): Options
 	--> options -- as it used to be -- silently stopped parsing once that many `option` statements
 	--> had been seen, duplicates included, and every option past the cut was reported as
 	--> "Option set after start of file" instead of being applied.
-	local Declared: { [string]: Token } = {}
+	-->
+	--> Each option with the profile it was given under, if any. See the duplicate check below.
+	local Declared: { [string]: { Given } } = {}
 
-	while Reader:Peek().Value == "option" do
+	while true do
+		--> An attribute in front of something that is not an option stays pending for the
+		--> declaration it belongs to. See Modules/Attributes.
+		Attributes.Read(Reader)
+		if Reader:Peek().Value ~= "option" then
+			break
+		end
+
+		local Profile = Reader.Attributes.Pending
+		local Previous = Attributes.Open(Reader)
+		local Excluded = Reader.Attributes.Excluding ~= nil
+		Reader.Attributes.Excluding = Previous
+
 		Reader:Consume("Keyword")
 		local Key = Reader:ConsumeAll("Identifier", "Assign")
 		local Name = Key.Value
@@ -80,15 +98,21 @@ function Utility.Parse(Reader: Reader): Options
 				:Emit()
 		end
 
-		local Previous = Declared[Name]
-		if Previous then
-			Error.new(Error.AnalyzeDuplicateOption, Reader.Source, `Duplicate option "{Name}"`, Reader.File)
-				:Primary(Key, "Option set twice")
-				:Secondary(Previous, "Already set here")
-				:Emit()
+		--> One option may be set once per profile, and once without one. Two settings clash when
+		--> some build would apply both -- either has no profile, or both have the same one -- and the
+		--> clash is reported whichever profile this build uses, so a schema is valid in all or none.
+		local Given: { Given } = Declared[Name] or {}
+		for _, Earlier in Given do
+			if Earlier.Profile == nil or Profile == nil or Earlier.Profile.Value == Profile.Value then
+				Error.new(Error.AnalyzeDuplicateOption, Reader.Source, `Duplicate option "{Name}"`, Reader.File)
+					:Primary(Key, "Option set twice")
+					:Secondary(Earlier.Key, "Already set here")
+					:Emit()
+			end
 		end
 
-		Declared[Name] = Key
+		table.insert(Given, { Key = Key, Profile = Profile })
+		Declared[Name] = Given
 
 		--> Parsed since 0.14 and read by nothing since: no generator has ever looked at it. Warning
 		--> rather than erroring keeps existing schemas compiling while they migrate.
@@ -115,7 +139,9 @@ function Utility.Parse(Reader: Reader): Options
 					:Emit()
 			end
 
-			Options[Name] = Numeric
+			if not Excluded then
+				Options[Name] = Numeric
+			end
 		else
 			--> An unknown casing used to get all the way to the GENERATOR, which raised a plain Lua
 			--> error mid-emit: no code, no source span, and a stack trace through the compiler in
@@ -127,7 +153,9 @@ function Utility.Parse(Reader: Reader): Options
 					:Emit()
 			end
 
-			Options[Name] = Value.Value
+			if not Excluded then
+				Options[Name] = Value.Value
+			end
 		end
 	end
 

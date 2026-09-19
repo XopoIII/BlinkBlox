@@ -3,6 +3,7 @@
 --!optimize 2
 
 local Analysis = require("./Analysis")
+local AttributeParser = require("./Modules/Attributes")
 local Error = require("./Modules/Error")
 local Grammar = require("./Modules/Grammar")
 local Lexer = require("./Lexer")
@@ -238,11 +239,17 @@ export type Parser = typeof(setmetatable(
 		--> The name being declared right now, so a reference to it from inside its own body can be
 		--> told apart from a reference to something that does not exist. See Parser.Declaration.
 		Declaring: string?,
+		Attributes: AttributeParser.State, --> The profile, and what it excludes. See Modules/Attributes.
 	},
 	Parser
 ))
 
-function Parser.new(Directory: string?, File: string?, Importing: { [string]: true }?): Parser
+function Parser.new(
+	Directory: string?,
+	File: string?,
+	Importing: { [string]: true }?,
+	Attributes: AttributeParser.State?
+): Parser
 	return setmetatable({
 		Source = "",
 		File = File,
@@ -254,6 +261,7 @@ function Parser.new(Directory: string?, File: string?, Importing: { [string]: tr
 
 		--> Inherited when one parser spawns another for an import, fresh for a top-level parse.
 		Importing = Importing or {},
+		Attributes = Attributes or AttributeParser.new(),
 	}, Parser)
 end
 
@@ -307,7 +315,6 @@ function Parser.Consume(self: Parser, Type: Lexer.Types): Token
 			:Emit()
 	end
 
-	--> Advance tokenizer
 	self.LookAhead = self.Lexer:GetNextToken()
 
 	return Token
@@ -323,7 +330,6 @@ function Parser.TryConsume(self: Parser, Type: Lexer.Types): Token?
 		return
 	end
 
-	--> Advance lexer
 	self.LookAhead = self.Lexer:GetNextToken()
 
 	return Token
@@ -721,10 +727,9 @@ function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
 	self.Lexer:Initialize(Source)
 	self.LookAhead = self.Lexer:GetNextToken()
 
-	--> Parse
 	--> Cast because Luau will not match a metatable-backed type against a structural one, however
-	--> exactly it fits. Modules/Options wants four members this has; naming them in a Reader type
-	--> there rather than requiring Parser back is what keeps the two out of a require cycle.
+	--> exactly it fits. Modules/Options and Modules/Attributes want members this has; naming them in
+	--> Reader types there rather than requiring Parser back is what keeps them out of a require cycle.
 	local Options = OptionsParser.Parse(self :: any)
 	local Declarations = self:Declarations()
 
@@ -762,7 +767,6 @@ function Parser.Import(self: Parser): ScopeNode
 		)
 	end
 
-	--> Import namespace
 	local Name: string
 	local Token = Path
 
@@ -795,7 +799,6 @@ function Parser.Import(self: Parser): ScopeNode
 			:Emit()
 	end
 
-	--> Import
 	local Parent = self.Scope
 	local Scope: Scope = {
 		Name = Token,
@@ -823,11 +826,10 @@ function Parser.Import(self: Parser): ScopeNode
 	end
 
 	local AST: Body
-	local ImportParser = Parser.new(ImportDirectory, ImportPath, self.Importing)
+	local ImportParser = Parser.new(ImportDirectory, ImportPath, self.Importing, self.Attributes)
 
 	self.Importing[Key] = true
 	local Success, ErrorText = pcall(function()
-		--> Parse declarations into import scope
 		AST = ImportParser:Parse(ImportSource, Scope)
 	end)
 	self.Importing[Key] = nil
@@ -866,10 +868,10 @@ function Parser.Declarations(self: Parser): { Declaration }
 			break
 		end
 
-		--> Is an import?
+		local Previous = AttributeParser.Open(self :: any)
 		local LookAhead = self:Peek()
 		if LookAhead.Type == "Import" then
-			table.insert(Declarations, self:Import())
+			AttributeParser.Close(self :: any, Previous, self:Import(), Declarations)
 			continue
 		end
 
@@ -931,8 +933,7 @@ function Parser.Declarations(self: Parser): { Declaration }
 
 		self.Declaring = Enclosing
 
-		--> Update declarations
-		table.insert(Declarations, Declaration :: any)
+		AttributeParser.Close(self :: any, Previous, Declaration, Declarations)
 
 		if Export then
 			--> Prevent non exportable types from being exported
@@ -1170,10 +1171,8 @@ function Parser.Namespace(self: Parser, Name: Token): ScopeNode
 	self.Symbols[Name.Value] = true
 	Parent.Symbols.Scopes[Name.Value] = Scope
 
-	--> Gather declarations
 	local Declarations = self:Declarations()
 
-	--> Close scope
 	self.Scope = Parent
 
 	return {
@@ -1752,6 +1751,7 @@ function Parser.Declaration(self: Parser, Name: Token): TypeNode
 	end
 
 	local To = Reference.To
+	AttributeParser.Refer(self :: any, Token, To)
 
 	--> Need to use the new node name.
 	--> `TypeNode` is a union of node shapes, and Luau permits neither `table.clone` nor a field write

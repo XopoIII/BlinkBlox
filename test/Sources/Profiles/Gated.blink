@@ -1,0 +1,19 @@
+--> Compiled by test/CommandLine.luau under different profiles. Kept out of test/Sources itself so the
+--> golden run does not pick it up.
+option ClientOutput = "../../Network/ProfileClient.luau"
+option ServerOutput = "../../Network/ProfileServer.luau"
+
+@profile("dev")
+event DevOnlyGiveMoney {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u32
+}
+
+event Ping {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

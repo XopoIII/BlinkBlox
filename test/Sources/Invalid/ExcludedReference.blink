@@ -1,0 +1,15 @@
+-- expect E3027
+option ClientOutput = "../../Network/InvalidClient.luau"
+option ServerOutput = "../../Network/InvalidServer.luau"
+
+@profile("dev")
+struct Grant {
+    Amount: u32
+}
+
+event Ping {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: Grant
+}

@@ -24,6 +24,7 @@ export type Types =
 	| "Component"
 	| "OpenChevrons"
 	| "CloseChevrons" --> Attributes
+	| "Attribute" --> `@profile`
 	| "Assign"
 	| "FieldAssign"
 	| "Keyword"
@@ -80,6 +81,7 @@ local TOKENS: { TokenRule } = {
 	{ "^>", "CloseChevrons" },
 	{ "^,", "Comma" },
 	{ "^%.%.", "Merge" },
+	{ "^@[%a_][%w_]*", "Attribute" },
 
 	--> Comments
 	{ "^%-%-%[(=*)%[.-%]%1%]", "Comment" },

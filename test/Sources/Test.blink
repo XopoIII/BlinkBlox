@@ -10,6 +10,10 @@ option Predict = true
 --> Above the one-second yield the RemoteFunction specs use, and low enough that the timeout spec
 --> does not add ten seconds to every run.
 option InvocationTimeout = 3
+--> Compiled as release, so this never applies -- and if it did, a one-byte packet cap would break
+--> every spec in the suite, which is how the goldens and the run both notice a profile leaking.
+@profile("dev")
+option MaxPacketSize = 1
 
 import "./Indexers"
 import "./Sub-Sources/Source"
@@ -826,4 +830,27 @@ event Unlistened {
 --> The same for an invocation, whose caller has to be answered once the queue is full.
 function Unanswered {
     Yield: Coroutine
+}
+
+--> None of these may reach the goldens: the suite compiles without `--profile`, which is release.
+@profile("dev")
+struct DevOnlyGrant {
+    Amount: u32
+}
+
+@profile("dev")
+event DevOnlyGiveMoney {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: DevOnlyGrant
+}
+
+@profile("dev")
+scope DevOnlyDebug {
+    event Pause {
+        From: Client,
+        Type: Reliable,
+        Call: SingleSync
+    }
 }

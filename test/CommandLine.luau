@@ -70,4 +70,42 @@ RunClosure("CLI --quiet prints no banner", function()
 	assert(not string.find(Result.stdout, "Blink", 1, true), `--quiet still printed the banner: {Result.stdout}`)
 end)
 
+--> `--profile` is the one flag with a value, so both orders are tried: the value must never be taken
+--> for the config path. A build without the flag is release, and leaves the dev event out.
+local GATED = "../../test/Sources/Profiles/Gated"
+local GATED_OUTPUT = "Network/ProfileServer.luau"
+
+local function CompileGated(...: string): (boolean, string)
+	local Result = process.exec("lune", { "run", Compiler, ... }, { cwd = "../src/CLI" })
+	if not Result.ok then
+		return false, Result.stdout .. Result.stderr
+	end
+
+	return true, fs.readFile(GATED_OUTPUT)
+end
+
+RunClosure("CLI builds release without --profile", function()
+	local Ok, Output = CompileGated(GATED, "--", "--yes")
+	assert(Ok, Output)
+	assert(not string.find(Output, "DevOnlyGiveMoney", 1, true), "a build without --profile kept a dev event")
+	assert(string.find(Output, "Ping", 1, true), "a build without --profile lost an unmarked event")
+end)
+
+RunClosure("CLI --profile dev after the path", function()
+	local Ok, Output = CompileGated(GATED, "--", "--yes", "--profile", "dev")
+	assert(Ok, Output)
+	assert(string.find(Output, "DevOnlyGiveMoney", 1, true), "--profile dev left the dev event out")
+end)
+
+RunClosure("CLI -p dev before the path", function()
+	local Ok, Output = CompileGated("--", "-p", "dev", GATED, "--yes")
+	assert(Ok, Output)
+	assert(string.find(Output, "DevOnlyGiveMoney", 1, true), "-p dev before the path left the dev event out")
+end)
+
+RunClosure("CLI refuses an unknown profile", function()
+	local Ok = CompileGated(GATED, "--", "--yes", "--profile", "prod")
+	assert(not Ok, "an unknown profile compiled")
+end)
+
 return {}

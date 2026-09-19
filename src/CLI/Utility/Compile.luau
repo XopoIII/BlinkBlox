@@ -5,6 +5,7 @@
 local fs = require("@lune/fs")
 local stdio = require("@lune/stdio")
 
+local Attributes = require("../../Modules/Attributes")
 local Error = require("../../Modules/Error")
 local Generator = require("../../Generator")
 local GetDefinitionFilePath = require("./GetDefinitionFilePath")
@@ -19,6 +20,8 @@ export type CompileOptions = {
 	Compact: boolean,
 	YesToEverything: boolean,
 	OutputAbstractSyntaxTree: boolean,
+	--> What `@profile` compiles under; nil means the default. See Modules/Attributes.
+	Profile: string?,
 }
 
 ---- Constants ----
@@ -43,7 +46,7 @@ local function FormatTime(Time: number): string
 	if Time < 1E-6 then
 		return `{Time * 1E+9} ns`
 	elseif Time < 0.001 then
-		return `{Time * 1E+6} μs`
+		return `{Time * 1E+6} us`
 	elseif Time < 1 then
 		return `{Time * 1000} ms`
 	else
@@ -88,7 +91,8 @@ function Utility.Compile(Path: string, Options: CompileOptions)
 
 	Message("blue", Options, "Parsing source into AST...")
 	local FileDirectory = PathParser.Directory(FilePath) or "./"
-	local SourceParser = Parser.new(FileDirectory, PathParser.NameWithExtension(FilePath))
+	local SourceParser =
+		Parser.new(FileDirectory, PathParser.NameWithExtension(FilePath), nil, Attributes.new(Options.Profile))
 
 	local ParseStart = os.clock()
 	local AbstractSyntaxTree = SourceParser:Parse(Source)

@@ -108,6 +108,16 @@ game which player sent a packet that failed to decode and what event it claimed 
 server stays silent without one. And invoking a player who had already left no longer waits out the
 timeout.
 
+0.25.0 came out of upstream's v0.18.9 and v1.0.0-pre.10. Their headline fix, NaN passing a float
+range, this fork had shipped in 0.24.2. Next to it was one we had not: an open side of a float range
+was filled with the exact-integer limit, 2^24 for `f32`, so `f32(0..)` refused 2e7 at runtime. The
+vector magnitude check had never been run by any test, because Lune has no global `Vector3`. And
+`@profile`, from upstream issue #110, taken because it serves the thesis: a debug remote marked
+`@profile("dev")` is left out of every build that did not ask for it. Upstream defaults to `dev`; this
+fork defaults to `release`, so forgetting the flag leaves the remote out rather than shipping it. An
+excluded declaration is still parsed and registered, and a compiled one naming it is refused -- the
+logic lives in `src/Modules/Attributes.luau`, since `src/Parser.luau` is at its size cap.
+
 Still deferred, and deliberately: delta compression. It would require blink to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of
