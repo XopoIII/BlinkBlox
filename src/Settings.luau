@@ -135,8 +135,10 @@ local Primitives: { [string]: Primitive } = {
 		AllowedComponents = 0,
 		Bytes = 2,
 	},
+	--> Floats are bounded by infinity, not by the range of exact integers: an open side of `f32(0..)`
+	--> used to be filled with 2^24, which emitted a check refusing every value above it at runtime.
 	f32 = {
-		Bounds = NumberRange.new(-16777216, 16777216),
+		Bounds = NumberRange.new(-math.huge, math.huge),
 		Component = true,
 		AllowsRange = true,
 		AllowsOptional = true,
@@ -144,7 +146,7 @@ local Primitives: { [string]: Primitive } = {
 		Bytes = 4,
 	},
 	f64 = {
-		Bounds = NumberRange.new(-2 ^ 53, 2 ^ 53),
+		Bounds = NumberRange.new(-math.huge, math.huge),
 		Component = true,
 		AllowsRange = true,
 		AllowsOptional = true,
@@ -170,6 +172,8 @@ local Primitives: { [string]: Primitive } = {
 		Bytes = 0,
 	},
 	vector = {
+		--> A vector's range bounds its magnitude, which is never negative.
+		Bounds = NumberRange.new(0, math.huge),
 		Component = false,
 		AllowsRange = true,
 		AllowsOptional = true,

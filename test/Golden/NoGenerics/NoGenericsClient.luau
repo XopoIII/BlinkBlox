@@ -1205,8 +1205,8 @@ function SerdesFunctions.ReadEVENT_MapComplexEvent(): ({[string]: { number }})
 		-- Key_1: MapComplex
 		local OFFSET_0 = Read(1)
 		local Length = buffer.readu8(RecieveBuffer, OFFSET_0)
-		if Length < 0 then error(`Expected length of "Key_1" to be larger than 0, got {Length} instead.`) end
-		if Length > 20 then error(`Expected length of "Key_1" to be smaller than 20, got {Length} instead.`) end
+		if Length < 0 then error(`Expected length of "Key_1" to be larger than or equal to 0, got {Length} instead.`) end
+		if Length > 20 then error(`Expected length of "Key_1" to be smaller than or equal to 20, got {Length} instead.`) end
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 		-- Element_1: MapComplex
@@ -1221,8 +1221,8 @@ function SerdesFunctions.ReadEVENT_MapComplexEvent(): ({[string]: { number }})
 			local OPERATION_OFFSET_0 = ARRAY_START_2
 			ARRAY_START_2 += 1
 			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			if not (Item_2 >= 0) then error(`Expected "Item_2" to be larger than 0, got {Item_2} instead.`) end
-			if not (Item_2 <= 100) then error(`Expected "Item_2" to be smaller than 100, got {Item_2} instead.`) end
+			if not (Item_2 >= 0) then error(`Expected "Item_2" to be larger than or equal to 0, got {Item_2} instead.`) end
+			if not (Item_2 <= 100) then error(`Expected "Item_2" to be smaller than or equal to 100, got {Item_2} instead.`) end
 			table.insert(Element_1, Item_2)
 		end
 		-- END ARRAY
@@ -2120,8 +2120,8 @@ if not RunService:IsRunning() then
 			-- Buffer read
 			-- Value: DecimalRange
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if not (Value >= -5.5) then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
-			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -2139,8 +2139,8 @@ if not RunService:IsRunning() then
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if not (Value >= -5.5) then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
-			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -2162,8 +2162,8 @@ if not RunService:IsRunning() then
 			-- Buffer read
 			-- Value: NegativeRange
 			local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
-			if not (Value >= -5) then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
-			if not (Value <= 10) then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -2181,8 +2181,8 @@ if not RunService:IsRunning() then
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if not (Value >= -5) then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
-			if not (Value <= 10) then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
 			buffer.writei8(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -2204,8 +2204,7 @@ if not RunService:IsRunning() then
 			-- Buffer read
 			-- Value: UnboundUpper
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if not (Value >= -0) then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
-			if not (Value <= 16777216) then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -2223,8 +2222,7 @@ if not RunService:IsRunning() then
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if not (Value >= -0) then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
-			if not (Value <= 16777216) then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -2246,8 +2244,7 @@ if not RunService:IsRunning() then
 			-- Buffer read
 			-- Value: UnboundLower
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if not (Value >= -16777216) then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
-			if not (Value <= -0) then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -2265,8 +2262,7 @@ if not RunService:IsRunning() then
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if not (Value >= -16777216) then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
-			if not (Value <= -0) then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -3349,8 +3345,8 @@ local Returns = table.freeze({
 			-- Buffer read
 			-- Value: DecimalRange
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if not (Value >= -5.5) then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
-			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -3368,8 +3364,8 @@ local Returns = table.freeze({
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if not (Value >= -5.5) then error(`Expected "Value" to be larger than -5.5, got {Value} instead.`) end
-			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than 10.5, got {Value} instead.`) end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -3391,8 +3387,8 @@ local Returns = table.freeze({
 			-- Buffer read
 			-- Value: NegativeRange
 			local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
-			if not (Value >= -5) then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
-			if not (Value <= 10) then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -3410,8 +3406,8 @@ local Returns = table.freeze({
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if not (Value >= -5) then error(`Expected "Value" to be larger than -5, got {Value} instead.`) end
-			if not (Value <= 10) then error(`Expected "Value" to be smaller than 10, got {Value} instead.`) end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
 			buffer.writei8(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -3433,8 +3429,7 @@ local Returns = table.freeze({
 			-- Buffer read
 			-- Value: UnboundUpper
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if not (Value >= -0) then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
-			if not (Value <= 16777216) then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -3452,8 +3447,7 @@ local Returns = table.freeze({
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if not (Value >= -0) then error(`Expected "Value" to be larger than -0, got {Value} instead.`) end
-			if not (Value <= 16777216) then error(`Expected "Value" to be smaller than 16777216, got {Value} instead.`) end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -3475,8 +3469,7 @@ local Returns = table.freeze({
 			-- Buffer read
 			-- Value: UnboundLower
 			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if not (Value >= -16777216) then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
-			if not (Value <= -0) then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -3494,8 +3487,7 @@ local Returns = table.freeze({
 			if typeof(Value) ~= "number" then
 				error(`Expected Value to be of type number, got {type(Value)} instead.`)
 			end
-			if not (Value >= -16777216) then error(`Expected "Value" to be larger than -16777216, got {Value} instead.`) end
-			if not (Value <= -0) then error(`Expected "Value" to be smaller than -0, got {Value} instead.`) end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
 			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)

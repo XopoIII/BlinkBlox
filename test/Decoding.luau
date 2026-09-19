@@ -41,7 +41,7 @@ ExpectRejection(
 	"A string longer than its bound is rejected",
 	Client.SizeBoundedString.Read,
 	OversizeString,
-	`to be smaller than 64`
+	`to be smaller than or equal to 64`
 )
 
 --> The same prefix over a packet that does not carry those bytes. This is the spec that tells the
@@ -53,7 +53,7 @@ ExpectRejection(
 	"A string length is checked before the read, not after",
 	Client.SizeBoundedString.Read,
 	TruncatedString,
-	`to be smaller than 64`
+	`to be smaller than or equal to 64`
 )
 
 --> `string(300..400)` encodes relative to its minimum, so the bound has to be checked against the
@@ -64,7 +64,7 @@ ExpectRejection(
 	"An offset-encoded length is bounded after reconstruction",
 	Client.OffsetString.Read,
 	OversizeOffsetString,
-	`to be smaller than 400`
+	`to be smaller than or equal to 400`
 )
 
 --> A bounded buffer names a size the decoder would otherwise allocate before checking it.
@@ -74,8 +74,16 @@ ExpectRejection(
 	"A buffer larger than its bound is rejected before it is allocated",
 	Client.BoundedBuffer.Read,
 	OversizeBuffer,
-	`to be smaller than 1000`
+	`to be smaller than or equal to 1000`
 )
+
+--> NaN has no magnitude that compares within a range, so a vector carrying one must fail the check
+--> written `not (Magnitude >= Min)` rather than slip past one written `Magnitude < Min`.
+local NanVector = buffer.create(12)
+for Offset = 0, 8, 4 do
+	buffer.writef32(NanVector, Offset, 0 / 0)
+end
+ExpectRejection("A vector with a NaN component fails its range", Client.RangedVector.Read, NanVector, `magnitude`)
 
 --> An unbounded buffer has no declared size to check, so the space left in the packet is the only
 --> thing standing between a two-byte payload and a 64 KB allocation.

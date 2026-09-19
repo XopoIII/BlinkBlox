@@ -6,6 +6,7 @@ local Format = require("../src/Modules/Format")
 local Harness = require("./Harness")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local roblox = require("@lune/roblox")
 local task = require("@lune/task")
 
 local ErrorPrint = Harness.ErrorPrint
@@ -498,31 +499,44 @@ RunClosure("Ranges should be enforced", function()
 		end
 	end
 
+	--> An open side is unbounded, not bounded by the range of exact integers: it used to be filled
+	--> with 2^24 for `f32`, so `f32(0..)` refused 2e7 at runtime. The closed side still holds, and
+	--> NaN is still refused, by the side that remains.
 	do
-		local UpperSuccess = pcall(function()
+		local OpenSuccess = pcall(function()
 			Client.UnboundUpper.Write(2 ^ 53 + 1)
+			Client.UnboundUpper.Write(math.huge)
 		end)
 
-		local LowerSuccess = pcall(function()
+		local ClosedSuccess = pcall(function()
 			Client.UnboundUpper.Write(-1)
 		end)
 
-		if UpperSuccess or LowerSuccess then
-			ErrorPrint("Expected unbound upper range to be enforced.")
+		local NanSuccess = pcall(function()
+			Client.UnboundUpper.Write(0 / 0)
+		end)
+
+		if not OpenSuccess or ClosedSuccess or NanSuccess then
+			ErrorPrint("Expected unbound upper range to be enforced on its closed side only.")
 		end
 	end
 
 	do
-		local UpperSuccess = pcall(function()
+		local OpenSuccess = pcall(function()
+			Client.UnboundLower.Write(-(2 ^ 53 + 1))
+			Client.UnboundLower.Write(-math.huge)
+		end)
+
+		local ClosedSuccess = pcall(function()
 			Client.UnboundLower.Write(1)
 		end)
 
-		local LowerSuccess = pcall(function()
-			Client.UnboundLower.Write(-(2 ^ 53 + 1))
+		local NanSuccess = pcall(function()
+			Client.UnboundLower.Write(0 / 0)
 		end)
 
-		if UpperSuccess or LowerSuccess then
-			ErrorPrint("Expected unbound upper range to be enforced.")
+		if not OpenSuccess or ClosedSuccess or NanSuccess then
+			ErrorPrint("Expected unbound lower range to be enforced on its closed side only.")
 		end
 	end
 
@@ -541,6 +555,17 @@ RunClosure("Ranges should be enforced", function()
 
 		if WriteSuccess or ReadSuccess then
 			ErrorPrint("Expected a range to refuse NaN.")
+		end
+	end
+
+	--> The same for a vector's magnitude: a NaN component makes the magnitude NaN.
+	do
+		local WriteSuccess = pcall(function()
+			Client.RangedVectorFromClient.Fire(roblox.Vector3.new(0 / 0, 0, 0))
+		end)
+
+		if WriteSuccess then
+			ErrorPrint("Expected a vector range to refuse NaN on write.")
 		end
 	end
 

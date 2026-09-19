@@ -54,8 +54,8 @@ local Asserts = {
 	--> ranged float listener a NaN that every check downstream had been told was impossible.
 	number = function(Variable: string, Min: number, Max: number): AssertPrefab
 		return {
-			Lower = `if not ({Variable} >= {Min}) then error(\`Expected "{Variable}" to be larger than {Min}, got \{{Variable}} instead.\`) end`,
-			Upper = `if not ({Variable} <= {Max}) then error(\`Expected "{Variable}" to be smaller than {Max}, got \{{Variable}} instead.\`) end`,
+			Lower = `if not ({Variable} >= {Min}) then error(\`Expected "{Variable}" to be larger than or equal to {Min}, got \{{Variable}} instead.\`) end`,
+			Upper = `if not ({Variable} <= {Max}) then error(\`Expected "{Variable}" to be smaller than or equal to {Max}, got \{{Variable}} instead.\`) end`,
 			Exact = `if {Variable} ~= {Max} then error(\`Expected "{Variable}" to be equal to {Max}, got \{{Variable}\} instead.\`) end`,
 		}
 	end,
@@ -65,16 +65,16 @@ local Asserts = {
 		--> bound is checked before the string is read; the write path omits it and measures the value.
 		local Length = Measure or `#{Variable}`
 		return {
-			Lower = `if {Length} < {Min} then error(\`Expected length of "{Variable}" to be larger than {Min}, got \{{Length}} instead.\`) end`,
-			Upper = `if {Length} > {Max} then error(\`Expected length of "{Variable}" to be smaller than {Max}, got \{{Length}} instead.\`) end`,
+			Lower = `if {Length} < {Min} then error(\`Expected length of "{Variable}" to be larger than or equal to {Min}, got \{{Length}} instead.\`) end`,
+			Upper = `if {Length} > {Max} then error(\`Expected length of "{Variable}" to be smaller than or equal to {Max}, got \{{Length}} instead.\`) end`,
 			Exact = `if {Length} ~= {Max} then error(\`Expected length of "{Variable}" to equal to {Max}, got \{{Length}} instead.\`) end`,
 		}
 	end,
 
 	vector = function(Variable: string, Min: number, Max: number): AssertPrefab
 		return {
-			Lower = `if not ({Variable}.Magnitude >= {Min}) then error(\`Expected magnitude of "{Variable}" to be larger than {Min}, got \{{Variable}.Magnitude} instead.\`) end`,
-			Upper = `if not ({Variable}.Magnitude <= {Max}) then error(\`Expected magnitude of "{Variable}" to be smaller than {Max}, got \{{Variable}.Magnitude} instead.\`) end`,
+			Lower = `if not ({Variable}.Magnitude >= {Min}) then error(\`Expected magnitude of "{Variable}" to be larger than or equal to {Min}, got \{{Variable}.Magnitude} instead.\`) end`,
+			Upper = `if not ({Variable}.Magnitude <= {Max}) then error(\`Expected magnitude of "{Variable}" to be smaller than or equal to {Max}, got \{{Variable}.Magnitude} instead.\`) end`,
 			Exact = `if {Variable}.Magnitude ~= {Max} then error(\`Expected magnitude of "{Variable}" to equal to {Max}, got \{{Variable}.Magnitude} instead.\`) end`,
 		}
 	end,
@@ -83,8 +83,8 @@ local Asserts = {
 		--> See the note on `Asserts.string` for what `Measure` is for.
 		local Length = Measure or `buffer.len({Variable})`
 		return {
-			Lower = `if {Length} < {Min} then error(\`Expected size of "{Variable}" to be larger than {Min}, got \{{Length}} instead.\`) end`,
-			Upper = `if {Length} > {Max} then error(\`Expected size of "{Variable}" to be smaller than {Max}, got \{{Length}} instead.\`) end`,
+			Lower = `if {Length} < {Min} then error(\`Expected size of "{Variable}" to be larger than or equal to {Min}, got \{{Length}} instead.\`) end`,
+			Upper = `if {Length} > {Max} then error(\`Expected size of "{Variable}" to be smaller than or equal to {Max}, got \{{Length}} instead.\`) end`,
 			Exact = `if {Length} ~= {Max} then error(\`Expected size of "{Variable}" to equal to {Max}, got \{{Length}} instead.\`) end`,
 		}
 	end,
@@ -220,8 +220,15 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 				if not IsVariableSize and Assert.Exact then
 					Block:Line(Assert.Exact)
 				else
-					Block:Line(Assert.Lower)
-					Block:Line(Assert.Upper)
+					--> An open side of a float range is infinite, and every value passes it. Its line is
+					--> left out rather than emitted, since `inf` would read as a nil global. NaN is still
+					--> refused, because the side that remains is written `not (x >= Min)`.
+					if Range.Min ~= -math.huge then
+						Block:Line(Assert.Lower)
+					end
+					if Range.Max ~= math.huge then
+						Block:Line(Assert.Upper)
+					end
 				end
 			elseif Primitive == "Instance" and Class then
 				local Assert = AssertGenerator(TargetVariable, Class)
