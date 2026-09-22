@@ -96,11 +96,12 @@ event Purchase {
 
 Refused events are dropped before they reach your listener, and reported at most once per player per
 event per second. To do something else about them -- log to your analytics, flag the account -- pass
-a handler to `SetRateLimitHandler`:
+a handler to `SetRateLimitHandler`. It is called on the same schedule as the warning, and `Refused`
+is how many refusals that call stands for: the one that made it, and those counted since the last:
 
 ```lua copy
-Net.SetRateLimitHandler(function(Player: Player, Event: string)
-    Analytics:Record(Player, Event)
+Net.SetRateLimitHandler(function(Player: Player, Event: string, Refused: number)
+    Analytics:Record(Player, Event, Refused)
 end)
 ```
 

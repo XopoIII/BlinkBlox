@@ -102,7 +102,7 @@ local function RateGuardExpression(Value: { Rate: number?, Burst: number? }, Nam
 	local Burst = Value.Burst or math.max(math.ceil(Rate), 1)
 
 	table.insert(RateSlots, { Rate = Rate, Burst = Burst })
-	local Slot = ((#RateSlots - 1) * 3) + 1
+	local Slot = ((#RateSlots - 1) * 4) + 1
 
 	return `RateAccept(Player, {Slot}, {Rate}, {Burst}, "{Name}")`
 end
@@ -1378,13 +1378,19 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> which turns into the `break` below — the same stop, expressed where it is legal.
 	local UNKNOWN_EVENT = `error("[Blink]: Unknown event index.")`
 
-	if Channels.Reliable.Listening then
-		Reliables = Reliables:Branch("Default"):Line(UNKNOWN_EVENT):End()
+	--> A channel this side receives nothing on has no branch to hang that on, and its index read
+	--> alone never failed: junk was consumed byte by byte up to MaxEventsPerPacket, unreported. The
+	--> connection itself stays, since a remote nobody connects to queues whatever is sent to it.
+	local function CloseIndex(Channel: Blocks.Block, Listening: boolean): Blocks.Block
+		if not Listening then
+			return Channel:Line(`error("[Blink]: This channel receives no events.")`)
+		end
+
+		return Channel:Branch("Default"):Line(UNKNOWN_EVENT):End()
 	end
 
-	if Channels.Unreliable.Listening then
-		Unreliables = Unreliables:Branch("Default"):Line(UNKNOWN_EVENT):End()
-	end
+	Reliables = CloseIndex(Reliables, Channels.Reliable.Listening)
+	Unreliables = CloseIndex(Unreliables, Channels.Unreliable.Listening)
 
 	--> Close the decode function opened above and act on its result. What is said about it, and to
 	--> whom, is ReportDecodeFailure's business: the server is silent unless the game installed a
@@ -1501,14 +1507,14 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		}
 	end
 
-	--> Initial contents of a player's rate bucket: tokens, refill clock, report clock, per limited
-	--> declaration. Cloned per player on first use, so one allocation per player per session rather
+	--> Initial contents of a player's rate bucket: tokens, refill clock, report clock, refusals since
+	--> that report, per limited declaration. Cloned per player on first use, so one allocation per player per session rather
 	--> than a table per event.
 	local RateTemplateBody = {}
 	if Context == "Server" then
 		local Entries = {}
 		for _, Slot in RateSlots do
-			table.insert(Entries, `{Slot.Burst}, 0, 0`)
+			table.insert(Entries, `{Slot.Burst}, 0, 0, 0`)
 		end
 
 		RateTemplateBody = { `local RATE_TEMPLATE = table.freeze(\{{table.concat(Entries, ", ")}\})\n` }

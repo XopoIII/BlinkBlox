@@ -385,12 +385,13 @@ assert(Unreliable:IsA("UnreliableRemoteEvent"), "[Blink]: The unreliable remote 
 
 local PlayersMap: {[Player]: BufferSave} = {}
 
---> RATE LIMITING. One table per player, three numbers per limited event: tokens left, the clock
---> reading those tokens were last refilled at, and the clock reading the last report was made at.
+--> RATE LIMITING. One table per player, four numbers per limited event: tokens left, the clock
+--> reading those tokens were last refilled at, the clock reading the last report was made at, and
+--> the refusals made since that report, which the next one carries.
 --> A flat array rather than a table per event because a player who fires nothing still pays for the
 --> allocation, and this is on the path of every inbound packet.
 local RateBuckets: {[Player]: {number}} = {}
-local RateHandler: ((Player: Player, Event: string) -> ())? = nil
+local RateHandler: ((Player: Player, Event: string, Refused: number) -> ())? = nil
 
 --> INVOCATION STATE FOR FUNCTIONS THE SERVER CALLS, kept per player rather than in the single bitset
 --> Base.luau gives a client. Three separate reasons, and the second is the one that matters.
@@ -497,10 +498,11 @@ Players.PlayerRemoving:Connect(function(Player)
     end
 end)
 
---> Installs the callback invoked whenever an event is refused. Nothing is kicked automatically: a
+--> Installs the callback told about refused events: at most once per player per event per second,
+--> with `Refused` the number of refusals that report stands for. Nothing is kicked automatically: a
 --> false positive under server lag would eject a legitimate player, and whether that is the right
 --> response is a decision only the game can make.
-local function SetRateLimitHandler(Handler: ((Player: Player, Event: string) -> ())?)
+local function SetRateLimitHandler(Handler: ((Player: Player, Event: string, Refused: number) -> ())?)
     RateHandler = Handler
 end
 
@@ -551,19 +553,25 @@ local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: num
     if Tokens < 1 then
         Bucket[Slot] = Tokens
 
-        --> One report per player per event per second. An exploit client sends hundreds a frame, and
-        --> a warning per drop would bury the console it is trying to inform.
-        if (Now - Bucket[Slot + 2]) >= 1 then
-            Bucket[Slot + 2] = Now
-            warn(`[Blink]: Rate limited event "{Name}" from {Player.Name}.`)
+        --> One report per player per event per second, the warning and the handler alike. An exploit
+        --> client sends hundreds a frame; a report per drop would bury the console it is trying to
+        --> inform, and spawn the game's handler as often. Refusals in between are counted instead.
+        local Refused = Bucket[Slot + 3] + 1
+        if (Now - Bucket[Slot + 2]) < 1 then
+            Bucket[Slot + 3] = Refused
+            return false
         end
+
+        Bucket[Slot + 2] = Now
+        Bucket[Slot + 3] = 0
+        warn(`[Blink]: Rate limited event "{Name}" from {Player.Name}, {Refused} refused.`)
 
         local Handler = RateHandler
         if Handler then
             --> Spawned, not called. This runs inside the per-event pcall that contains a truncated
             --> packet, so a throwing handler would abort the rest of the packet; and a handler that
             --> yields -- an analytics write, a datastore call -- would stall decoding.
-            Spawn(Handler, Player, Name)
+            Spawn(Handler, Player, Name, Refused)
         end
 
         return false
@@ -648,6 +656,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		local Parsed, Failure = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
+		error("[Blink]: This channel receives no events.")
 		end)
 		if not Parsed then
 			ReportDecodeFailure(Player, EventNames.Reliable[Decoding], Failure)
@@ -691,6 +700,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		local Parsed, Failure = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
+		error("[Blink]: This channel receives no events.")
 		end)
 		if not Parsed then
 			ReportDecodeFailure(Player, EventNames.Unreliable[Decoding], Failure)

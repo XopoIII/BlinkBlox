@@ -622,4 +622,100 @@ RunClosure("Invoking a player who has left fails at once", function()
 	end
 end)
 
+RunClosure("A packet on a channel with no events is reported once and read no further", function()
+	--> Drift's server receives nothing: every event in it is From: Server, so neither of its channels
+	--> has an index to branch on. Its decode loop used to read the index byte and succeed, so a
+	--> packet of junk was consumed byte after byte up to MaxEventsPerPacket and never reported.
+	-->
+	--> Its own copy, loaded here, because it has a decode handler of its own. It shares the mock
+	--> remotes with Test's server, which is why the bytes are 255 -- an index Test's server knows
+	--> nothing about either -- and why the signature it writes is put back afterwards.
+	local Signatures = table.clone(Shared.Attributes.BLINK_RELIABLE_REMOTE or {})
+	local Empty = MockRequire("../Network/DriftServer.luau", {
+		game = ServerEnvironment.game,
+		Color3 = ServerEnvironment.Color3,
+		DateTime = ServerEnvironment.DateTime,
+		BrickColor = ServerEnvironment.BrickColor,
+	})
+	Shared.Attributes.BLINK_RELIABLE_REMOTE = Signatures
+
+	local Reports: { { Event: string?, Failure: string } } = {}
+	Empty.SetDecodeErrorHandler(function(_Player, Event, Failure)
+		table.insert(Reports, { Event = Event, Failure = Failure })
+	end)
+
+	Shared.DrainWarnings()
+	local Junk = buffer.fromstring(string.rep("\255", 100))
+	ServerEnvironment.Instances.BLINK_RELIABLE_REMOTE.OnServerEvent:Fire(Shared.Player, Junk, {})
+	ServerEnvironment.Instances.BLINK_UNRELIABLE_REMOTE.OnServerEvent:Fire(Shared.Player, Junk, {})
+	task.wait(0.3)
+	Empty.SetDecodeErrorHandler(nil)
+
+	for _, Warning in Shared.DrainWarnings() do
+		if string.find(Warning, "too many events", 1, true) then
+			ErrorPrint(`Failed "Empty channel": the packet was read up to the event cap: {Warning}`)
+		end
+	end
+
+	if #Reports ~= 2 then
+		ErrorPrint(`Failed "Empty channel": {#Reports} report(s) for two junk packets, expected one each.`)
+		return
+	end
+
+	for _, Report in Reports do
+		if Report.Event ~= nil or not string.find(Report.Failure, "receives no events", 1, true) then
+			ErrorPrint(`Failed "Empty channel": reported as "{Report.Event}": {Report.Failure}`)
+		end
+	end
+end)
+
+RunClosure("A burst of refused events is reported once a second, with its count", function()
+	--> The warning was limited to once a second and the handler was not: a client sending hundreds
+	--> of refused events a frame spawned hundreds of handler threads a frame, which is the flood the
+	--> limit exists to absorb, moved into the game's own analytics.
+	ServerEnvironment.Services.Players.PlayerRemoving:Fire(Shared.Player)
+	local Disconnect = Server.RateLimited.On(function() end)
+	task.wait(0.2)
+	Shared.AdvanceClock(10)
+
+	local Reports: { { Event: string, Refused: number? } } = {}
+	Server.SetRateLimitHandler(function(_Player, Event, Refused)
+		table.insert(Reports, { Event = Event, Refused = Refused })
+	end)
+
+	--> Rate 5, Burst 10: fifteen at once is ten accepted and five refused. The first refusal is
+	--> reported at once and the other four are held for the next report.
+	for _ = 1, 15 do
+		Client.RateLimited.Fire(1)
+	end
+	task.wait(0.4)
+
+	local First = #Reports
+	local FirstCount = Reports[1] and Reports[1].Refused
+
+	--> A second later: five refilled tokens, ten refusals, one report standing for the four held
+	--> back and the one that made it.
+	Shared.AdvanceClock(1)
+	for _ = 1, 15 do
+		Client.RateLimited.Fire(1)
+	end
+	task.wait(0.4)
+
+	Disconnect()
+	Server.SetRateLimitHandler(nil)
+
+	if First ~= 1 or FirstCount ~= 1 then
+		ErrorPrint(
+			`Failed "Rate reports": five refusals made {First} report(s) counting {FirstCount}, expected 1 of 1.`
+		)
+	end
+
+	local Second = Reports[2]
+	if #Reports ~= 2 or not Second or Second.Refused ~= 5 or Second.Event ~= "RateLimited" then
+		ErrorPrint(
+			`Failed "Rate reports": {#Reports} report(s) after a second, the last counting {Second and Second.Refused}, expected 2 and 5.`
+		)
+	end
+end)
+
 return {}

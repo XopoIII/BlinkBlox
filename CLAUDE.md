@@ -118,6 +118,17 @@ fork defaults to `release`, so forgetting the flag leaves the remote out rather 
 excluded declaration is still parsed and registered, and a compiled one naming it is refused -- the
 logic lives in `src/Modules/Attributes.luau`, since `src/Parser.luau` is at its size cap.
 
+0.26.0 came out of a downstream game, and both halves are the thesis again. A channel the server
+receives nothing on -- every event `From: Server`, or none unreliable -- has no index to branch on,
+so the unknown-index guard was never emitted there and the loop read one byte at a time up to
+`MaxEventsPerPacket` without ever failing or reporting. It now fails at the index read, once, through
+`SetDecodeErrorHandler` with the event `nil`. The connection itself is kept: a remote with nothing
+connected queues what is sent to it. And the rate-limit handler was spawned on every refusal while
+the warning beside it was limited to once a second, so a flood of refused events became a flood of
+handler threads. Both now share the once-a-second schedule, and the handler takes
+`(Player, Event, Refused)`, with `Refused` the refusals that call stands for -- a fourth number per
+rate-bucket entry.
+
 Still deferred, and deliberately: delta compression. It would require blink to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of

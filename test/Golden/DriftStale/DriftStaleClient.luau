@@ -341,7 +341,7 @@ end
 
 --> Present so code shared between contexts can install a handler without branching on which module
 --> it got. The client never rate limits: it is talking to the server, which is trusted.
-local function SetRateLimitHandler(_Handler: ((Player: Player, Event: string) -> ())?) end
+local function SetRateLimitHandler(_Handler: ((Player: Player, Event: string, Refused: number) -> ())?) end
 
 --> A packet from the server that cannot be decoded is a bug in the game rather than an attack --
 --> usually a Sync listener that yielded, or a client built from a different schema. It is said out
@@ -436,6 +436,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		local Parsed, Failure = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
+		error("[Blink]: This channel receives no events.")
 		end)
 		if not Parsed then
 			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
