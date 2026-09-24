@@ -181,10 +181,11 @@ build if they disagree, which they did: the plugin's copy sat five minor release
 compiler's, so everything the Studio plugin generated went out stamped with a version Blink had not
 been for a year. Never edit the three by hand.
 
-Luau files are capped at 900 lines by `scripts/check-file-size.sh`. Three files are already past that
-and are recorded at their current size: they may shrink, never grow. A recorded number makes every
-addition to a long file a deliberate decision, where a plain exclusion list would just become
-permission.
+Luau files are capped at 500 lines by `scripts/check-file-size.sh`. The files already past that are
+recorded at their current size: they may shrink, never grow. A recorded number makes every addition to
+a long file a deliberate decision, where a plain exclusion list would just become permission. The cap
+was 900 until the long files turned out to hold the same logic in several copies; every recorded file
+is scheduled to be split, and its entry goes in the commit that splits it.
 
 Every `.luau` file declares its type-checking mode on line 1, and `scripts/check-strict.sh` enforces
 it. This is not cosmetic: Luau defaults to `nonstrict`, so a file without a directive is *unchecked*
