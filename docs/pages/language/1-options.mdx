@@ -1,7 +1,7 @@
 import { Callout } from 'nextra/components'
 
 # Options
-Options go at the top of a source file, and allow you to configure the output of Blink.
+Options go at the top of a source file, and allow you to configure the output of BlinkBlox.
 ```blink copy
 option [OPTION] = [VALUE]
 ```
@@ -16,7 +16,7 @@ option Casing = Camel
 ```
 
 ## `ServerOutput`, `ClientOutput`, `TypesOutput`
-These options allow you to specify where Blink will generate the respective output files.
+These options allow you to specify where BlinkBlox will generate the respective output files.
 ```blink copy
 option TypesOutput = "../Network/Types.luau"
 option ServerOutput = "../Network/Server.luau"
@@ -26,7 +26,7 @@ option ClientOutput = "../Network/Client.luau"
 ## `Typescript`
 Default: `false`  
 
-Tells Blink whether to generate TypeScript definition files alongside Luau files.  
+Tells BlinkBlox whether to generate TypeScript definition files alongside Luau files.  
 The generated `d.ts` files are placed in the same path as your output files.
 ```blink copy
 option Typescript = true
@@ -52,7 +52,7 @@ Default: `true`
 
 Reports a `Sync` listener that yielded.
 
-It is worth knowing exactly when it fires, because the obvious guess is wrong. Blink does **not**
+It is worth knowing exactly when it fires, because the obvious guess is wrong. BlinkBlox does **not**
 notice at the moment your listener yields. It notices when the **next packet arrives** and finds the
 previous decode still suspended inside one. So a listener that yields with no further traffic behind
 it is never reported -- which is why adding a yield to a `SingleSync` callback and seeing no error is
@@ -72,15 +72,15 @@ The check costs one `coroutine.status` per packet, which is why it is on by defa
 ## `WriteValidations`
 Default: `false`
 
-Controls if Blink will check types when writing them (firing an event/invoking a function). Helpful for debugging and during development, but it might result in degraded performance. It is encouraged you disable this option in production.
+Controls if BlinkBlox will check types when writing them (firing an event/invoking a function). Helpful for debugging and during development, but it might result in degraded performance. It is encouraged you disable this option in production.
 <Callout>
-    Blink only checks for builtin primitives. For example if a number was passed. More complicated types like structs, maps and enums cannot be validated.
+    BlinkBlox only checks for builtin primitives. For example if a number was passed. More complicated types like structs, maps and enums cannot be validated.
 </Callout>
 
 ## `ManualReplication`
 Default: `false`
 
-Controls if Blink will replicate events and functions automatically at the end of every frame.  
+Controls if BlinkBlox will replicate events and functions automatically at the end of every frame.  
 When set to `true` automatic replication will be disabled and a `StepReplication` function will be exposed instead.
 
 ## `MaxPacketSize`, `MaxEventsPerPacket`, `MaxInstancesPerPacket`
@@ -151,7 +151,7 @@ Roblox drops an `UnreliableRemoteEvent` payload past roughly this size. It does 
 only under the conditions that produce a large packet, so the failure shows up in production for
 some players and never in testing.
 
-Blink checks this twice. At compile time it measures every unreliable event: one that can **never**
+BlinkBlox checks this twice. At compile time it measures every unreliable event: one that can **never**
 fit is a hard error, and one that merely **might not** is a warning naming the field that has no
 upper bound. At runtime the send path checks the finished buffer and warns with the event's name
 rather than letting the packet vanish.
@@ -232,7 +232,7 @@ outstanding invocation holds one of thirty-two slots, and a call that never retu
 slot back. Thirty-two of those and every later `Invoke` in that session is refused outright.
 
 When the timeout fires, the caller is failed the same way an errored handler fails it -- so a `pcall`
-around `Invoke`, or a rejected promise, catches it -- the slot is returned, and Blink warns naming
+around `Invoke`, or a rejected promise, catches it -- the slot is returned, and BlinkBlox warns naming
 the function.
 
 ```blink copy
@@ -255,7 +255,7 @@ it on the reliable remote; the client checks it before anything else and **error
 they disagree:
 
 ```
-[Blink]: This client was built from a different schema than the server
+[BlinkBlox]: This client was built from a different schema than the server
 (client 18198d53…, server 64b832be…). Recompile both sides from the same .blink file.
 ```
 
@@ -273,8 +273,8 @@ payload to another's listener. Nothing errors. The usual symptoms are
     check that cried wolf over them would soon be removed.
 </Callout>
 
-If you see the "did not publish a schema signature" variant, the server is running a build of Blink
-from before this check existed, or something other than Blink created a remote with the same name.
+If you see the "did not publish a schema signature" variant, the server is running a build of BlinkBlox
+from before this check existed, or something other than BlinkBlox created a remote with the same name.
 
 It is a safety check, not a security one: the client owns its copy of the module and can edit the
 constant out. It catches drift between two builds, which is a mistake, not an attack.
@@ -282,6 +282,6 @@ constant out. It catches drift between two builds, which is a mistake, not an at
 ## `RemoteScope`
 Default: `""`
 
-Adds a prefix to the events generated by this Blink instance. For example a value of `"PACKAGE"` creates events `"PACKAGE_BLINK_RELIABLE_REMOTE"` and `"PACKAGE_BLINK_UNRELIABLE_REMOTE"`.
+Adds a prefix to the events generated by this BlinkBlox instance. For example a value of `"PACKAGE"` creates events `"PACKAGE_BLINK_RELIABLE_REMOTE"` and `"PACKAGE_BLINK_UNRELIABLE_REMOTE"`.
 If the option is not specified, they will just be `"BLINK_RELIABLE_REMOTE"` and `"BLINK_UNRELIABLE_REMOTE"`.<br/>
-This is particularly useful if you're using Blink inside of a package, and don't want to interfere with a game's own Blink setup.
+This is particularly useful if you're using BlinkBlox inside of a package, and don't want to interfere with a game's own BlinkBlox setup.

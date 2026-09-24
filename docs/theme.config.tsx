@@ -7,7 +7,7 @@ const config: DocsThemeConfig = {
 		const { asPath } = useRouter()
 		if (asPath !== "/") {
 			return {
-				titleTemplate: "%s – Blink",
+				titleTemplate: "%s – BlinkBlox",
 			}
 		}
 	},
@@ -25,7 +25,7 @@ const config: DocsThemeConfig = {
   },
   docsRepositoryBase: 'https://github.com/XopoIII/BlinkBlox',
   footer: {
-    text: 'Blink — MIT licensed. Originally by Axen, maintained fork by XopoIII.',
+    text: 'BlinkBlox — MIT licensed. Originally by Axen, maintained fork by XopoIII.',
   },
   head: (
     <>

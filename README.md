@@ -13,6 +13,12 @@ what leaves.
 
 # This fork
 
+BlinkBlox was called Blink until 0.28.0, and some things keep that name on purpose, because games and
+places depend on them: schemas are still `.blink` files, the remotes are still
+`BLINK_RELIABLE_REMOTE` and `BLINK_UNRELIABLE_REMOTE`, and the Studio plugin still generates into a
+`Blink` folder and keeps schemas in `ServerStorage.BLINK_CONFIGURATION_FILES`. A server and a client
+built before and after the rename still talk to each other.
+
 This is a maintained fork. Upstream stopped taking changes on this line of the compiler and moved to
 a rewrite, leaving reported defects — including an unbounded parse of hostile client input — closed
 as out of scope. This fork fixes them and continues from there.
@@ -55,7 +61,7 @@ aborted on an interactive prompt.
 
 # Performance
 
-Blink aims to generate the most performant and bandwidth-efficient code for your specific experience.
+BlinkBlox aims to generate the most performant and bandwidth-efficient code for your specific experience.
 Lower bandwidth usage translates directly into **lower ping\*** for players, and the generated
 serialisers cost **less CPU** than a generalised networking library.
 
@@ -75,7 +81,7 @@ Two things work against bad actors:
 # Getting started
 
 ```sh
-rokit add XopoIII/BlinkBlox
+rokit add XopoIII/BlinkBlox blinkblox
 ```
 
 Then head to the [documentation](https://xopoiii.github.io/BlinkBlox/getting-started/1-installation).

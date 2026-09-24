@@ -1,10 +1,10 @@
 import { Callout } from 'nextra/components'
 
 # Events
-Events are Blink's version of Roblox's `ReliableEvent` and `UnreliableEvent`.<br/>
+Events are BlinkBlox's version of Roblox's `ReliableEvent` and `UnreliableEvent`.<br/>
 They are the main way to communicate between client and server.
 
-## Usage in Blink
+## Usage in BlinkBlox
 
 Events can be defined using the `event` keyword.
 ```blink copy
@@ -18,12 +18,12 @@ event MyEvent {
 
 #### `From`
 Determines the side from which the event is fired. <br/>
-Currently Blink supports either `Server` or `Client`.
+Currently BlinkBlox supports either `Server` or `Client`.
 
 #### `Type`
 Determines the type (reliability) of the event.
 * `Reliable` - Events are guaranteed to arrive at their destination in the order they were sent in.
-* `Unreliable` - Events are not guaranteed to arrive at their destination or to arrive in the order they were sent in. They also have a maximum size of roughly 1000 bytes, which Blink enforces at compile time and again on send -- see [`MaxUnreliableSize`](1-options#maxunreliablesize).
+* `Unreliable` - Events are not guaranteed to arrive at their destination or to arrive in the order they were sent in. They also have a maximum size of roughly 1000 bytes, which BlinkBlox enforces at compile time and again on send -- see [`MaxUnreliableSize`](1-options#maxunreliablesize).
 * `OrderedUnreliable` - As `Unreliable`, plus a two-byte sequence number: a packet that arrives *after* a newer one is discarded rather than delivered late. Delivery is still not guaranteed and packets can still be lost — what is guaranteed is that your listener never sees an older state after a newer one.
 
 <Callout type="info">

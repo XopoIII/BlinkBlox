@@ -2,7 +2,7 @@ import { Callout } from 'nextra/components'
 
 # Types
 
-This section contains a deep dive explanation on all types supported by Blink.<br/>
+This section contains a deep dive explanation on all types supported by BlinkBlox.<br/>
 If anything is missing or wrong, consider [submitting an issue](https://github.com/XopoIII/BlinkBlox/issues) under the GitHub repo.
 
 ## Ranges
@@ -30,7 +30,7 @@ An exact range has only one value, such as `0` or `100`.
 |`100`|`100`|`100`|
 
 ## Numbers
-Blink has support for all buffer implemented number types, signed integers, unsigned integers, floating points, and more.
+BlinkBlox has support for all buffer implemented number types, signed integers, unsigned integers, floating points, and more.
 
 Number types start with a prefix like: `u`, `i` or `f`, and are followed by the number of bits used to represent the number.
 The number of bits also corresponds to the cost of sending a particular number type over the network.
@@ -91,7 +91,7 @@ type UserId = f64
 ```
 
 ## Strings
-Strings are Luau's text container, in blink a string can be defined using the `string` type.
+Strings are Luau's text container, in BlinkBlox a string can be defined using the `string` type.
 
 ### Bounding Strings
 The length of strings can be bounded by placing [a range](#ranges) within parenthesis after the type.<br/>
@@ -120,7 +120,7 @@ type Success = boolean
 
 ## Buffers
 Buffers can be defined using the `buffer` type.<br/>
-Buffers allow you to pass your own custom serialized data while still taking advantage of blink's batching.
+Buffers allow you to pass your own custom serialized data while still taking advantage of BlinkBlox's batching.
 
 ### Bounding Buffers
 The length of buffers can be bounded by placing [a range](#ranges) within parenthesis after the type.<br/>
@@ -210,7 +210,7 @@ A struct, a tagged enum, another map, a set, an array or a type pack does not. E
 up holding `[Table(0x...)] = value` -- entries it can reach only by iterating, never by looking
 anything up. Every byte round-trips correctly, which is what makes it so easy to miss.
 
-Blink refuses those keys at compile time. If you need a composite key, put the parts in the value and
+BlinkBlox refuses those keys at compile time. If you need a composite key, put the parts in the value and
 key the map by something simple:
 ```blink copy
 -- Refused: each decoded key is a table nothing can match
@@ -259,7 +259,7 @@ set Flags = {
 ```
 
 ## Enums
-Blink supports two types of enums, unit and tagged enums.
+BlinkBlox supports two types of enums, unit and tagged enums.
 
 ### Unit Enums
 Units enums represent a set of possible values.<br/>
@@ -292,7 +292,7 @@ enum MouseEvent = "Type" {
 ```
 
 Tagged enums are a very powerful way to represent many different types of data.<br/>
-While not supported by blink, a union type can be substituted using tagged enums:
+While not supported by BlinkBlox, a union type can be substituted using tagged enums:
 ``` ts copy
 enum Union = "Type" {
     Number {
@@ -382,11 +382,11 @@ type EntitiesFragment = Fragment<Entity[]>
 The `unknown` type represents values which cannot be known until runtime.<br/>
 For unions, use [tagged enums](#tagged-enums) instead.
 <Callout type="info">
-    Unknowns should be used sparingly as they utilize Roblox's serialization format thus negating most of the benefits of Blink.
+    Unknowns should be used sparingly as they utilize Roblox's serialization format thus negating most of the benefits of BlinkBlox.
 </Callout>
 
 ## Instances
-Blink supports Roblox instances. They can be defined using the `Instance` type.
+BlinkBlox supports Roblox instances. They can be defined using the `Instance` type.
 ```blink copy
 type AnInstance = Instance
 ```
@@ -441,15 +441,15 @@ exactly. That suits characters, projectiles and cameras. It does not suit anythi
 rotations for equality or snaps to a grid, which is why it is not the default.
 
 ## Other Roblox Types## Other Roblox Types
-Blink also supports a handful of other Roblox types like:
+BlinkBlox also supports a handful of other Roblox types like:
     * `BrickColor`
     * `Color3`
     * `DateTime`
     * `DateTimeMillis`
 
 ## Exports
-Blink supports exporting write and read functions for a specific type.<br/>
-Exports can be a powerful way to leverage your blink types in various use-cases like: automatic ECS replication.<br/>
+BlinkBlox supports exporting write and read functions for a specific type.<br/>
+Exports can be a powerful way to leverage your schema types in various use-cases like: automatic ECS replication.<br/>
 An export can be defined by prefixing the `export` keyword to a type's definition, for example:
 ```blink copy
 export struct MyInterface = {
