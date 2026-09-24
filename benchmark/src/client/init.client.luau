@@ -1,5 +1,5 @@
-local Benches = require("./shared/benches")
-local Modes = require("./shared/modes")
+local Benches = require("../shared/benches")
+local Modes = require("../shared/modes")
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
