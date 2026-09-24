@@ -165,9 +165,12 @@ left unnamed keep their positional `Value1`, `Value3`.
     pack does not change a single byte of what it sends, and the two sides stay compatible.
 </Callout>
 
-A name becomes a Luau variable, so it has to be usable as one: `end`, `local` and anything that is
-not an identifier are refused at compile time, as are two elements sharing a name. That is stricter
-than a [struct](./4-types.mdx) field, which becomes a table key and may be any string.
+A name becomes a parameter of the generated `Fire` and `Invoke`, so it has to be usable as one: `end`,
+`local` and anything that is not an identifier are refused at compile time, as are two elements
+sharing a name, and the few names those functions already use themselves -- `Player`, `Buffer`,
+`Instances`, `Load` and the like; the compiler says which. That is stricter than a
+[struct](./4-types.mdx) field, which becomes a table key and may be any string. Inside the module the
+elements travel under positional names, so a name can never collide with the serialisers' own.
 
 ## Usage in Luau
 

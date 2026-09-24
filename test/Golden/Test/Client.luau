@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "8d11ce1a5cb81d40"
+local SCHEMA_SIGNATURE = "7f274a681686d9da"
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -560,6 +560,10 @@ Queue.Reliable[58] = table.create(256)
 EventNames.Reliable[58] = "QueuedHoles"
 Queue.Unreliable[18] = table.create(256)
 EventNames.Unreliable[18] = "OrderedToClient"
+Queue.Reliable[61] = table.create(256)
+EventNames.Reliable[61] = "NamedLength"
+Queue.Reliable[62] = table.create(256)
+EventNames.Reliable[62] = "LengthFirst"
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
 export type Indexers_TestFlags = {["a a"]: boolean,}
 export type Indexers_TestEnums = ("b b")
@@ -2920,58 +2924,58 @@ function SerdesFunctions.ReadEVENT_NamedTuple(): (number, string, number?)
 	-- Read BLOCK: 11 bytes
 	local BLOCK_START = Read(11)
 	-- Value: NamedTuple
-	-- chefId: NamedTuple
-	local chefId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-	-- dish: NamedTuple
+	-- Value1: NamedTuple
+	local Value1 = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+	-- Value2: NamedTuple
 	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
-	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "dish" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	local dish = buffer.readstring(RecieveBuffer, Read(Length), Length)
-	-- portions: NamedTuple
-	local portions
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local Value2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	-- Value3: NamedTuple
+	local Value3
 	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 10)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		-- portions: NamedTuple
-		portions = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		-- Value3: NamedTuple
+		Value3 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	end
-	return chefId, dish, portions
+	return Value1, Value2, Value3
 end
 
-function SerdesFunctions.WriteFUNCTION_DATA_NamedTupleFunction(id: number, label: string, InvocationIdentifier: number): ()
+function SerdesFunctions.WriteFUNCTION_DATA_NamedTupleFunction(Value1: number, Value2: string, InvocationIdentifier: number): ()
 	-- Allocate BLOCK: 5 bytes
 	local BLOCK_START = Allocate(5)
 	-- FUNCTION_DATA_NamedTupleFunction (48)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 48)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
 	-- Value: NamedTupleFunction
-	-- id: NamedTupleFunction
-	if typeof(id) ~= "number" then
-		error(`Expected id to be of type number, got {type(id)} instead.`)
+	-- Value1: NamedTupleFunction
+	if typeof(Value1) ~= "number" then
+		error(`Expected Value1 to be of type number, got {type(Value1)} instead.`)
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 2, id)
-	-- label: NamedTupleFunction
-	if typeof(label) ~= "string" then
-		error(`Expected label to be of type string, got {type(label)} instead.`)
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, Value1)
+	-- Value2: NamedTupleFunction
+	if typeof(Value2) ~= "string" then
+		error(`Expected Value2 to be of type string, got {type(Value2)} instead.`)
 	end
-	local Length = #label
+	local Length = #Value2
 	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 	buffer.writeu16(SendBuffer, BLOCK_START + 3, Length)
 	Allocate(Length)
-	buffer.writestring(SendBuffer, SendOffset, label, Length)
+	buffer.writestring(SendBuffer, SendOffset, Value2, Length)
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_NamedTupleFunction(): (number, string)
 	-- Read BLOCK: 4 bytes
 	local BLOCK_START = Read(4)
 	-- Value: NamedTupleFunction
-	-- id: NamedTupleFunction
-	local id = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-	-- label: NamedTupleFunction
+	-- Value1: NamedTupleFunction
+	local Value1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	-- Value2: NamedTupleFunction
 	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
-	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "label" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	local label = buffer.readstring(RecieveBuffer, Read(Length), Length)
-	return id, label
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local Value2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	return Value1, Value2
 end
 
 function SerdesFunctions.ReadEVENT_PartiallyNamedTuple(): (number, string, number)
@@ -2980,13 +2984,13 @@ function SerdesFunctions.ReadEVENT_PartiallyNamedTuple(): (number, string, numbe
 	-- Value: PartiallyNamedTuple
 	-- Value1: PartiallyNamedTuple
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	-- named: PartiallyNamedTuple
+	-- Value2: PartiallyNamedTuple
 	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
-	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "named" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	local named = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local Value2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 	-- Value3: PartiallyNamedTuple
 	local Value3 = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
-	return Value1, named, Value3
+	return Value1, Value2, Value3
 end
 
 function SerdesFunctions.WriteFUNCTION_DATA_NeverAnswered(Value: number, InvocationIdentifier: number): ()
@@ -3220,6 +3224,32 @@ function SerdesFunctions.WriteEVENT_RangedFloat16(Value: number): ()
 			+ if float < 0 then 0x8000 else 0
 		buffer.writeu16(SendBuffer, BLOCK_START + 1, Result)
 	end
+end
+
+function SerdesFunctions.ReadEVENT_NamedLength(): (string, number)
+	-- Read BLOCK: 4 bytes
+	local BLOCK_START = Read(4)
+	-- Value: NamedLength
+	-- Value1: NamedLength
+	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local Value1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	-- Value2: NamedLength
+	local Value2 = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+	return Value1, Value2
+end
+
+function SerdesFunctions.ReadEVENT_LengthFirst(): (number, string)
+	-- Read BLOCK: 4 bytes
+	local BLOCK_START = Read(4)
+	-- Value: LengthFirst
+	-- Value1: LengthFirst
+	local Value1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	-- Value2: LengthFirst
+	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local Value2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	return Value1, Value2
 end
 
 if not RunService:IsRunning() then
@@ -7700,6 +7730,14 @@ if not RunService:IsRunning() then
 	RangedFloat16 = {
 		Fire = NOOP
 	},
+	NamedLength = {
+		On = NOOP_RETURNING,
+		Predict = NOOP
+	},
+	LengthFirst = {
+		On = NOOP_RETURNING,
+		Predict = NOOP
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -8285,23 +8323,23 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				table.insert(Queue.Reliable[45], table.pack(Value1, Value2, Value3))
 			end
 		elseif Index == 47 then
-			local chefId: number, dish: string, portions: number? = SerdesFunctions.ReadEVENT_NamedTuple()
+			local Value1: number, Value2: string, Value3: number? = SerdesFunctions.ReadEVENT_NamedTuple()
 			if Events.Reliable[47] ~= nil then
 				SerdesEvent = "NamedTuple"
-				local ListenerRan, ListenerFailure = pcall(Events.Reliable[47], chefId, dish, portions)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[47], Value1, Value2, Value3)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[47] > 256 then
 					warn("[BlinkBlox]: Event queue of \"NamedTuple\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[47], table.pack(chefId, dish, portions))
+				table.insert(Queue.Reliable[47], table.pack(Value1, Value2, Value3))
 			end
 		elseif Index == 48 then
 			-- Read BLOCK: 2 bytes
 			local BLOCK_START = Read(2)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				local Success, Returnid, Returnlabel = pcall(function ()
+				local Success, ReturnValue1, ReturnValue2 = pcall(function ()
 					if Answered ~= 1 then
 						error("The call failed on the side that answered it.")
 					end
@@ -8310,21 +8348,21 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			local Thread = TakeInvocation(Invocations, InvocationIdentifier, 48)
 			if Thread ~= nil then
 				if coroutine.status(Thread) == "suspended" then
-					task.spawn(Thread, Success, Returnid, Returnlabel)
+					task.spawn(Thread, Success, ReturnValue1, ReturnValue2)
 				end
 			end
-			if Answered == 1 and Success ~= true then error(Returnid, 0) end
+			if Answered == 1 and Success ~= true then error(ReturnValue1, 0) end
 		elseif Index == 49 then
-			local Value1: number, named: string, Value3: number = SerdesFunctions.ReadEVENT_PartiallyNamedTuple()
+			local Value1: number, Value2: string, Value3: number = SerdesFunctions.ReadEVENT_PartiallyNamedTuple()
 			if Events.Reliable[49] ~= nil then
 				SerdesEvent = "PartiallyNamedTuple"
-				local ListenerRan, ListenerFailure = pcall(Events.Reliable[49], Value1, named, Value3)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[49], Value1, Value2, Value3)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[49] > 256 then
 					warn("[BlinkBlox]: Event queue of \"PartiallyNamedTuple\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[49], table.pack(Value1, named, Value3))
+				table.insert(Queue.Reliable[49], table.pack(Value1, Value2, Value3))
 			end
 		elseif Index == 50 then
 			-- Read BLOCK: 2 bytes
@@ -8404,6 +8442,30 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 					warn("[BlinkBlox]: Event queue of \"QueuedHoles\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[58], table.pack(Value1, Value2, Value3, Value4, Value5))
+			end
+		elseif Index == 61 then
+			local Value1: string, Value2: number = SerdesFunctions.ReadEVENT_NamedLength()
+			if Events.Reliable[61] ~= nil then
+				SerdesEvent = "NamedLength"
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[61], Value1, Value2)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			else
+				if #Queue.Reliable[61] > 256 then
+					warn("[BlinkBlox]: Event queue of \"NamedLength\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[61], table.pack(Value1, Value2))
+			end
+		elseif Index == 62 then
+			local Value1: number, Value2: string = SerdesFunctions.ReadEVENT_LengthFirst()
+			if Events.Reliable[62] ~= nil then
+				SerdesEvent = "LengthFirst"
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[62], Value1, Value2)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			else
+				if #Queue.Reliable[62] > 256 then
+					warn("[BlinkBlox]: Event queue of \"LengthFirst\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[62], table.pack(Value1, Value2))
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -14073,11 +14135,11 @@ local Returns = table.freeze({
 			end
 			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
 			TimeoutInvocation(Invocations, InvocationIdentifier, 3, '"NamedTupleFunction" was never answered')
-			local Success, Returnid: number, Returnlabel: string = coroutine.yield()
+			local Success, ReturnValue1: number, ReturnValue2: string = coroutine.yield()
 			if Success ~= true then
 				error("There was an exception while processing \"NamedTupleFunction\".")
 			end
-			return Returnid, Returnlabel
+			return ReturnValue1, ReturnValue2
 		end
 	},
 	PartiallyNamedTuple = {
@@ -14487,6 +14549,64 @@ local Returns = table.freeze({
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
+			end
+		end
+	},
+	NamedLength = {
+		On = function(Listener: (s: string, Length: number) -> ()): () -> ()
+			if Events.Reliable[61] ~= nil then
+				warn("[BlinkBlox]: \"NamedLength\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Reliable[61] = Listener
+			for Index, Arguments in Queue.Reliable[61] do
+				Listener(table.unpack(Arguments, 1, Arguments.n))
+			end
+			Queue.Reliable[61] = {}
+			return function (): ()
+				if Events.Reliable[61] == Listener then
+					Events.Reliable[61] = nil
+				end
+			end
+		end,
+		Predict = function(s: string, Length: number): ()
+			if Events.Reliable[61] ~= nil then
+				SerdesEvent = "NamedLength"
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[61], s, Length)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			else
+				if #Queue.Reliable[61] > 256 then
+					warn("[BlinkBlox]: Event queue of \"NamedLength\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[61], table.pack(s, Length))
+			end
+		end
+	},
+	LengthFirst = {
+		On = function(Listener: (Length: number, s: string) -> ()): () -> ()
+			if Events.Reliable[62] ~= nil then
+				warn("[BlinkBlox]: \"LengthFirst\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Reliable[62] = Listener
+			for Index, Arguments in Queue.Reliable[62] do
+				Listener(table.unpack(Arguments, 1, Arguments.n))
+			end
+			Queue.Reliable[62] = {}
+			return function (): ()
+				if Events.Reliable[62] == Listener then
+					Events.Reliable[62] = nil
+				end
+			end
+		end,
+		Predict = function(Length: number, s: string): ()
+			if Events.Reliable[62] ~= nil then
+				SerdesEvent = "LengthFirst"
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[62], Length, s)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			else
+				if #Queue.Reliable[62] > 256 then
+					warn("[BlinkBlox]: Event queue of \"LengthFirst\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[62], table.pack(Length, s))
 			end
 		end
 	},

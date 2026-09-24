@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "8d11ce1a5cb81d40"
+local SCHEMA_SIGNATURE = "7f274a681686d9da"
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -3053,37 +3053,37 @@ function SerdesFunctions.ReadEVENT_UnknownInbound(): (any)
 	return Value
 end
 
-function SerdesFunctions.WriteEVENT_NamedTuple(chefId: number, dish: string, portions: number?): ()
+function SerdesFunctions.WriteEVENT_NamedTuple(Value1: number, Value2: string, Value3: number?): ()
 	-- Allocate BLOCK: 12 bytes
 	local BLOCK_START = Allocate(12)
 	-- EVENT_NamedTuple (47)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 47)
 	-- Value: NamedTuple
-	-- chefId: NamedTuple
-	if typeof(chefId) ~= "number" then
-		error(`Expected chefId to be of type number, got {type(chefId)} instead.`)
+	-- Value1: NamedTuple
+	if typeof(Value1) ~= "number" then
+		error(`Expected Value1 to be of type number, got {type(Value1)} instead.`)
 	end
-	buffer.writef64(SendBuffer, BLOCK_START + 1, chefId)
-	-- dish: NamedTuple
-	if typeof(dish) ~= "string" then
-		error(`Expected dish to be of type string, got {type(dish)} instead.`)
+	buffer.writef64(SendBuffer, BLOCK_START + 1, Value1)
+	-- Value2: NamedTuple
+	if typeof(Value2) ~= "string" then
+		error(`Expected Value2 to be of type string, got {type(Value2)} instead.`)
 	end
-	local Length = #dish
+	local Length = #Value2
 	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 	buffer.writeu16(SendBuffer, BLOCK_START + 9, Length)
 	Allocate(Length)
-	buffer.writestring(SendBuffer, SendOffset, dish, Length)
-	-- portions: NamedTuple
+	buffer.writestring(SendBuffer, SendOffset, Value2, Length)
+	-- Value3: NamedTuple
 	local BITFIELD_0 = 0
-	if portions ~= nil then BITFIELD_0 += 0x01 end
-	if portions ~= nil then
+	if Value3 ~= nil then BITFIELD_0 += 0x01 end
+	if Value3 ~= nil then
 		-- Allocate BLOCK: 1 bytes
 		local BLOCK_START = Allocate(1)
-		-- portions: NamedTuple
-		if typeof(portions) ~= "number" then
-			error(`Expected portions to be of type number, got {type(portions)} instead.`)
+		-- Value3: NamedTuple
+		if typeof(Value3) ~= "number" then
+			error(`Expected Value3 to be of type number, got {type(Value3)} instead.`)
 		end
-		buffer.writeu8(SendBuffer, BLOCK_START + 0, portions)
+		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value3)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 11, BITFIELD_0)
 end
@@ -3092,16 +3092,16 @@ function SerdesFunctions.ReadFUNCTION_DATA_NamedTupleFunction(): (number, string
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
 	-- Value: NamedTupleFunction
-	-- id: NamedTupleFunction
-	local id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	-- label: NamedTupleFunction
+	-- Value1: NamedTupleFunction
+	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	-- Value2: NamedTupleFunction
 	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
-	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "label" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	local label = buffer.readstring(RecieveBuffer, Read(Length), Length)
-	return id, label
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local Value2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	return Value1, Value2
 end
 
-function SerdesFunctions.WriteFUNCTION_RETURN_NamedTupleFunction(id: number, label: string, InvocationIdentifier: number): ()
+function SerdesFunctions.WriteFUNCTION_RETURN_NamedTupleFunction(Value1: number, Value2: string, InvocationIdentifier: number): ()
 	-- Allocate BLOCK: 7 bytes
 	local BLOCK_START = Allocate(7)
 	-- FUNCTION_RETURN_NamedTupleFunction (48)
@@ -3109,23 +3109,23 @@ function SerdesFunctions.WriteFUNCTION_RETURN_NamedTupleFunction(id: number, lab
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
 	buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
 	-- Value: NamedTupleFunction
-	-- id: NamedTupleFunction
-	if typeof(id) ~= "number" then
-		error(`Expected id to be of type number, got {type(id)} instead.`)
+	-- Value1: NamedTupleFunction
+	if typeof(Value1) ~= "number" then
+		error(`Expected Value1 to be of type number, got {type(Value1)} instead.`)
 	end
-	buffer.writeu16(SendBuffer, BLOCK_START + 3, id)
-	-- label: NamedTupleFunction
-	if typeof(label) ~= "string" then
-		error(`Expected label to be of type string, got {type(label)} instead.`)
+	buffer.writeu16(SendBuffer, BLOCK_START + 3, Value1)
+	-- Value2: NamedTupleFunction
+	if typeof(Value2) ~= "string" then
+		error(`Expected Value2 to be of type string, got {type(Value2)} instead.`)
 	end
-	local Length = #label
+	local Length = #Value2
 	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 	buffer.writeu16(SendBuffer, BLOCK_START + 5, Length)
 	Allocate(Length)
-	buffer.writestring(SendBuffer, SendOffset, label, Length)
+	buffer.writestring(SendBuffer, SendOffset, Value2, Length)
 end
 
-function SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1: number, named: string, Value3: number): ()
+function SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1: number, Value2: string, Value3: number): ()
 	-- Allocate BLOCK: 6 bytes
 	local BLOCK_START = Allocate(6)
 	-- EVENT_PartiallyNamedTuple (49)
@@ -3136,15 +3136,15 @@ function SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1: number, named: s
 		error(`Expected Value1 to be of type number, got {type(Value1)} instead.`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value1)
-	-- named: PartiallyNamedTuple
-	if typeof(named) ~= "string" then
-		error(`Expected named to be of type string, got {type(named)} instead.`)
+	-- Value2: PartiallyNamedTuple
+	if typeof(Value2) ~= "string" then
+		error(`Expected Value2 to be of type string, got {type(Value2)} instead.`)
 	end
-	local Length = #named
+	local Length = #Value2
 	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 	buffer.writeu16(SendBuffer, BLOCK_START + 2, Length)
 	Allocate(Length)
-	buffer.writestring(SendBuffer, SendOffset, named, Length)
+	buffer.writestring(SendBuffer, SendOffset, Value2, Length)
 	-- Value3: PartiallyNamedTuple
 	if typeof(Value3) ~= "number" then
 		error(`Expected Value3 to be of type number, got {type(Value3)} instead.`)
@@ -3383,6 +3383,50 @@ function SerdesFunctions.ReadEVENT_RangedFloat16(): (number)
 	if not (Value >= 0.0999755859375) then error(`Expected "Value" to be larger than or equal to 0.0999755859375, got {Value} instead.`) end
 	if not (Value <= 1) then error(`Expected "Value" to be smaller than or equal to 1, got {Value} instead.`) end
 	return Value
+end
+
+function SerdesFunctions.WriteEVENT_NamedLength(Value1: string, Value2: number): ()
+	-- Allocate BLOCK: 5 bytes
+	local BLOCK_START = Allocate(5)
+	-- EVENT_NamedLength (61)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 61)
+	-- Value: NamedLength
+	-- Value1: NamedLength
+	if typeof(Value1) ~= "string" then
+		error(`Expected Value1 to be of type string, got {type(Value1)} instead.`)
+	end
+	local Length = #Value1
+	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+	buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
+	Allocate(Length)
+	buffer.writestring(SendBuffer, SendOffset, Value1, Length)
+	-- Value2: NamedLength
+	if typeof(Value2) ~= "number" then
+		error(`Expected Value2 to be of type number, got {type(Value2)} instead.`)
+	end
+	buffer.writeu16(SendBuffer, BLOCK_START + 3, Value2)
+end
+
+function SerdesFunctions.WriteEVENT_LengthFirst(Value1: number, Value2: string): ()
+	-- Allocate BLOCK: 5 bytes
+	local BLOCK_START = Allocate(5)
+	-- EVENT_LengthFirst (62)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 62)
+	-- Value: LengthFirst
+	-- Value1: LengthFirst
+	if typeof(Value1) ~= "number" then
+		error(`Expected Value1 to be of type number, got {type(Value1)} instead.`)
+	end
+	buffer.writeu16(SendBuffer, BLOCK_START + 1, Value1)
+	-- Value2: LengthFirst
+	if typeof(Value2) ~= "string" then
+		error(`Expected Value2 to be of type string, got {type(Value2)} instead.`)
+	end
+	local Length = #Value2
+	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+	buffer.writeu16(SendBuffer, BLOCK_START + 3, Length)
+	Allocate(Length)
+	buffer.writestring(SendBuffer, SendOffset, Value2, Length)
 end
 
 if not RunService:IsRunning() then
@@ -7982,6 +8026,18 @@ if not RunService:IsRunning() then
 		On = NOOP_RETURNING,
 		Predict = NOOP
 	},
+	NamedLength = {
+		Fire = NOOP,
+		FireAll = NOOP,
+		FireList = NOOP,
+		FireExcept = NOOP
+	},
+	LengthFirst = {
+		Fire = NOOP,
+		FireAll = NOOP,
+		FireList = NOOP,
+		FireExcept = NOOP
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -8546,9 +8602,9 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			local id: number, label: string = SerdesFunctions.ReadFUNCTION_DATA_NamedTupleFunction()
+			local Value1: number, Value2: string = SerdesFunctions.ReadFUNCTION_DATA_NamedTupleFunction()
 			if Events.Reliable[48] ~= nil then
-				Spawn(Events.Reliable[48], Player, id, label, InvocationIdentifier)
+				Spawn(Events.Reliable[48], Player, Value1, Value2, InvocationIdentifier)
 			else
 				if #Queue.Reliable[48] >= 256 then
 					Load(PlayersMap[Player])
@@ -8559,7 +8615,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[48], table.pack(Player, id, label, InvocationIdentifier))
+				table.insert(Queue.Reliable[48], table.pack(Player, Value1, Value2, InvocationIdentifier))
 			end
 		elseif Index == 50 then
 			-- Read BLOCK: 1 bytes
@@ -15588,15 +15644,15 @@ local Returns = table.freeze({
 	},
 	NamedTupleFunction = {
 		On = function(Listener: (Player, number, string) -> (number, string)): ()
-			Events.Reliable[48] = function(Player: Player, id: number, label: string, InvocationIdentifier: number): ()
-				local Returnid: number, Returnlabel: string;
+			Events.Reliable[48] = function(Player: Player, Value1: number, Value2: string, InvocationIdentifier: number): ()
+				local ReturnValue1: number, ReturnValue2: string;
 				local Success, Error = pcall(function ()
-					Returnid, Returnlabel = Listener(Player, id, label)
+					ReturnValue1, ReturnValue2 = Listener(Player, Value1, Value2)
 				end)
 				Load(PlayersMap[Player])
 				if Success == true then
 					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_NamedTupleFunction, Returnid, Returnlabel, InvocationIdentifier)
+					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_NamedTupleFunction, ReturnValue1, ReturnValue2, InvocationIdentifier)
 					if Success ~= true then
 						Rollback(Cursor, Instances)
 					end
@@ -16241,6 +16297,108 @@ local Returns = table.freeze({
 				end
 			end
 		end
+	},
+	NamedLength = {
+		Fire = function(Player: Player, s: string, Length: number): ()
+			Load(PlayersMap[Player])
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_NamedLength, s, Length)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
+			SavePlayerBuffer(Player)
+		end,
+		FireAll = function(s: string, Length: number): ()
+			Load()
+			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in Players:GetPlayers() do
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
+		FireList = function(List: {Player}, s: string, Length: number): ()
+			Load()
+			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in List do
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
+		FireExcept = function(Except: Player, s: string, Length: number): ()
+			Load()
+			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
+				end
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
+	},
+	LengthFirst = {
+		Fire = function(Player: Player, Length: number, s: string): ()
+			Load(PlayersMap[Player])
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_LengthFirst, Length, s)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
+			SavePlayerBuffer(Player)
+		end,
+		FireAll = function(Length: number, s: string): ()
+			Load()
+			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in Players:GetPlayers() do
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
+		FireList = function(List: {Player}, Length: number, s: string): ()
+			Load()
+			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in List do
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
+		FireExcept = function(Except: Player, Length: number, s: string): ()
+			Load()
+			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
+				end
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
 	},
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)

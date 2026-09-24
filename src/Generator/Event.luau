@@ -108,11 +108,15 @@ function Declarations.Event(Declaration: Parser.Event)
 	local Connection = `Events.{ChannelName}[{Index}]`
 
 	--> Data body
+	--> Two spellings of the payload: with the schema's names, for what the game sees, and positional,
+	--> for the decode branch, where a name like `Player` or `Index` would shadow the loop's own.
 	local DataTypes, Values, Arguments, _ = "nil", "Value: nil", "Value", nil
+	local InnerValues, InnerArguments = "Value: nil", "Value"
 	local Read, Write = Generators.Event(Value.Data, Index, Identifier, nil, IsOrdered)
 
 	if Value.Data then
 		DataTypes, Values, _, Arguments = Generators.LuauType(Value.Data :: Type, true)
+		_, InnerValues, _, InnerArguments = Generators.LuauType(Value.Data :: Type, true, nil, true)
 	end
 
 	if IsSameContext then
@@ -184,12 +188,12 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> Event recieve body
 		local Listener: Blocks.Block
 		local ContextArguments = `Listener: ({State.Context == "Server" and "Player: Player, " or ""}{Values}) -> ()`
-		local ListenerArguments = `{State.Context == "Server" and "Player, " or ""}{Arguments}`
+		local Sender = if State.Context == "Server" then "Player, " else ""
 
-		local CallListener = Blocks.Block()
-		do
+		local function CallListener(ListenerArguments: string): Blocks.Block
+			local Call = Blocks.Block()
 			if IsSync and State.Options.SyncValidation then
-				CallListener = CallListener:Line(`SerdesEvent = "{Declaration.Name}"`)
+				Call = Call:Line(`SerdesEvent = "{Declaration.Name}"`)
 			end
 
 			--> A Sync listener runs inside the decode loop's pcall, so an error in game code used to be
@@ -200,12 +204,13 @@ function Declarations.Event(Declaration: Parser.Event)
 			--> error has always surfaced.
 			local PathExpr = IsSingle and Connection or "Listener"
 			if IsSync then
-				CallListener = CallListener
-					:Line(`local ListenerRan, ListenerFailure = pcall({PathExpr}, {ListenerArguments})`)
+				Call = Call:Line(`local ListenerRan, ListenerFailure = pcall({PathExpr}, {ListenerArguments})`)
 					:Line("if not ListenerRan then task.spawn(error, ListenerFailure, 0) end")
 			else
-				CallListener = CallListener:Line(`Spawn({PathExpr}, {ListenerArguments})`)
+				Call = Call:Line(`Spawn({PathExpr}, {ListenerArguments})`)
 			end
+
+			return Call
 		end
 
 		--> Read before the payload, because that is the order it was written in. The DECISION comes
@@ -215,7 +220,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Types.u16.Read("OrderIdentifier", Block)
 		end
 
-		Block:Line(`local {Values} = {Util.GetPath(Identifier, false, State.Scope)}()`)
+		Block:Line(`local {InnerValues} = {Util.GetPath(Identifier, false, State.Scope)}()`)
 
 		--> The decode above has to happen either way: payloads are variable length, so skipping an
 		--> event without reading it would leave the cursor mid-event and turn the rest of the packet
@@ -247,12 +252,14 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> Hands the event to its listeners, or -- for a reliable event with none bound -- queues it for
 		--> the listener to come. The receive branch and Predict both go through this, so an event
 		--> predicted locally is delivered exactly as one received from the network would be.
-		local function Deliver(Target: Blocks.Block)
+		local function Deliver(Target: Blocks.Block, Payload: string)
+			local ListenerArguments = `{Sender}{Payload}`
+			local Call = CallListener(ListenerArguments)
 			if not IsReliable then
 				if IsSingle then
-					Target:Compare(Connection, "nil", "Not"):Lines(CallListener.Content, Target.Indent):End()
+					Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent):End()
 				else
-					Target:Iterator("_", "Listener", Connection):Lines(CallListener.Content, Target.Indent):End()
+					Target:Iterator("_", "Listener", Connection):Lines(Call.Content, Target.Indent):End()
 				end
 
 				return
@@ -260,18 +267,18 @@ function Declarations.Event(Declaration: Parser.Event)
 
 			local Bound: Blocks.Block
 			if IsSingle then
-				Bound = Target:Compare(Connection, "nil", "Not"):Lines(CallListener.Content, Target.Indent)
+				Bound = Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent)
 			else
 				Bound = Target:Compare(`#{Connection}`, "0", "Greater")
 					:Iterator("_", "Listener", Connection)
-					:Lines(CallListener.Content, Target.Indent + 1)
+					:Lines(Call.Content, Target.Indent + 1)
 					:End()
 			end
 
 			Queues.Enqueue(Bound:Branch("Default"), State.Context, Queue, ListenerArguments, Declaration.Name):End()
 		end
 
-		Deliver(Block)
+		Deliver(Block, InnerArguments)
 
 		if IsReliable then
 			Listener = BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true))
@@ -310,7 +317,7 @@ function Declarations.Event(Declaration: Parser.Event)
 
 			--> A Many event with no listener used to be dropped here while the network queued it, and a
 			--> Single one was queued past the cap the network stops at. Both now share the receive path.
-			Deliver(Predict)
+			Deliver(Predict, Arguments)
 			Predict:End()
 
 			State.Noop.Push(`{State.Casing.On} = NOOP_RETURNING,`, 0, Indent + 1)

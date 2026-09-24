@@ -209,6 +209,17 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 				)
 			end
 
+			if Grammar.WRAPPER_NAMES[Text.Value] then
+				error(
+					self:Diagnostic(Error.AnalyzeReservedIdentifier, `"{Text.Value}" cannot name a type pack element`)
+						:Primary(Text, "Used by the generated code")
+						:Note(
+							"A named element becomes a parameter of the generated Fire and Invoke, whose bodies already use this name."
+						)
+						:Emit()
+				)
+			end
+
 			if Taken[Text.Value] then
 				error(
 					self:Diagnostic(Error.AnalyzeDuplicateField, `Duplicate element "{Text.Value}"`)

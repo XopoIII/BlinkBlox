@@ -59,10 +59,15 @@ function Generators.UserType(Declaration: Type, Read: Blocks.Block, Write: Block
 	end
 end
 
+--- `Positional` names a pack's elements `Value1`, `Value2`... whatever the schema called them. The
+--- names a schema gives belong in what the game sees -- a Fire's parameters, a listener's type -- and
+--- nowhere else: inside a serialiser, a decode branch or a listener's reply they shared a scope with
+--- the generated code's own locals, and `(s: string, Length: u16)` wrote `#s` as the u16.
 function Generators.LuauType(
 	Declaration: Type,
 	UseTypeAsValue: boolean?,
-	Prefix: string?
+	Prefix: string?,
+	Positional: boolean?
 ): (string, string, string, string)
 	Prefix = Prefix or ""
 
@@ -110,7 +115,8 @@ function Generators.LuauType(
 		--> The prefix applies to a named element too: a function's Data and Return packs share a scope
 		--> in the generated body, so it is what keeps `(id: u8)` and `(id: string)` from colliding.
 		for Index, TupleValue in Value.Values do
-			local Variable = `{Prefix}{Value.Names[Index] or `Value{Index}`}`
+			local Name = if Positional then nil else Value.Names[Index]
+			local Variable = `{Prefix}{Name or `Value{Index}`}`
 			local ValueType = Generators.LuauType(TupleValue)
 
 			TupleTypes[Index] = ValueType
@@ -228,7 +234,7 @@ function Generators.Event(
 ): ({ string }, { string })
 	local Type, Values, _, Returns = "nil", "Value: nil", nil, "nil"
 	if Data then
-		Type, Values, _, Returns = Generators.LuauType(Data, true)
+		Type, Values, _, Returns = Generators.LuauType(Data, true, nil, true)
 	end
 
 	local Arguments = `{Values}{Function and ", InvocationIdentifier: number" or ""}`

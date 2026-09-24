@@ -204,6 +204,70 @@ Grammar.LUAU_KEYWORDS = {
 	["while"] = true,
 }
 
+--- Names the public functions of a generated module use in their own bodies. A named type-pack
+--- element becomes a PARAMETER of those functions -- `Fire(chefId, dish)` -- so an element named after
+--- one of these shadows it there: `Player` would be the payload rather than the recipient, `Load`
+--- a number rather than the function every send begins with. Everywhere else in the module the
+--- elements travel under positional names, so this is the whole list.
+Grammar.WRAPPER_NAMES = {
+	Player = true,
+	Players = true,
+	PlayersMap = true,
+	Load = true,
+	Save = true,
+	Mark = true,
+	Rollback = true,
+	Cursor = true,
+	Instances = true,
+	Sent = true,
+	Failure = true,
+	Previous = true,
+	SerdesFunctions = true,
+	SavePlayerBuffer = true,
+	CheckUnreliableSize = true,
+	Buffer = true,
+	Size = true,
+	SendBuffer = true,
+	SendCursor = true,
+	SendInstances = true,
+	Allocate = true,
+	Position = true,
+	Unreliable = true,
+	Reliable = true,
+	NextOrder = true,
+	List = true,
+	Except = true,
+	InvocationIdentifier = true,
+	InvokePlayer = true,
+	ClaimInvocation = true,
+	Invocations = true,
+	PlayerInvocations = true,
+	ReleaseInvocation = true,
+	ParkInvocation = true,
+	TimeoutInvocation = true,
+	TimeoutPlayerInvocation = true,
+	Success = true,
+	Future = true,
+	Promise = true,
+	Resolve = true,
+	Reject = true,
+	OnCancel = true,
+	Events = true,
+	Queue = true,
+	Listener = true,
+	ListenerRan = true,
+	ListenerFailure = true,
+	SerdesEvent = true,
+	Spawn = true,
+	pcall = true,
+	error = true,
+	buffer = true,
+	table = true,
+	task = true,
+	coroutine = true,
+	typeof = true,
+}
+
 --- The option block's shape. Moved here from Parser.luau so that the code which PARSES it can
 --- live outside the parser without requiring it back.
 export type Options = {

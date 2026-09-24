@@ -922,3 +922,19 @@ event RangedFloat16 {
     Call: SingleSync,
     Data: f16(0.1..1)
 }
+
+--> Pack elements named after the serialisers' own locals. A string's writer declares `local Length`,
+--> which shadowed an element called Length, and the u16 went out as the string's length.
+event NamedLength {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: (s: string, Length: u16)
+}
+
+event LengthFirst {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: (Length: u16, s: string)
+}

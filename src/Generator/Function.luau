@@ -74,15 +74,20 @@ function Declarations.Function(Declaration: Parser.Function)
 		else `TimeoutInvocation(Invocations, InvocationIdentifier, {Timeout}, '"{Name}" was never answered')`
 
 	--> Data and return body
+	--> Positional names everywhere but the parameters of `Invoke`, the one place the game sees them;
+	--> see `Generators.LuauType`. A pack element named `Success` or `InvocationIdentifier` used to
+	--> shadow the generated code's own local of that name.
 	local DataTypes, DataValues, _, DataArguments = "nil", "Value: nil", nil, "Value"
+	local PublicValues, PublicArguments = DataValues, DataArguments
 	local ReturnTypes, ReturnValues, _, ReturnArguments = "nil", "ReturnValue: nil", nil, "ReturnValue"
 
 	if Value.Data then
-		DataTypes, DataValues, _, DataArguments = Generators.LuauType(Value.Data :: Type, true)
+		_, PublicValues, _, PublicArguments = Generators.LuauType(Value.Data :: Type, true)
+		DataTypes, DataValues, _, DataArguments = Generators.LuauType(Value.Data :: Type, true, nil, true)
 	end
 
 	if Value.Return then
-		ReturnTypes, ReturnValues, _, ReturnArguments = Generators.LuauType(Value.Return :: Type, true, "Return")
+		ReturnTypes, ReturnValues, _, ReturnArguments = Generators.LuauType(Value.Return :: Type, true, "Return", true)
 	end
 
 	do
@@ -241,7 +246,7 @@ function Declarations.Function(Declaration: Parser.Function)
 
 		local Error = `"There was an exception while processing \\"{Name}\\"."`
 		--> A server invoking has to say WHICH client it is asking.
-		local InvokeValues = `{if ServerCalls then "Player: Player, " else ""}{DataValues}`
+		local InvokeValues = `{if ServerCalls then "Player: Player, " else ""}{PublicValues}`
 		--> Claiming a slot and writing the call. Again the server has to select the target player's
 		--> buffer around the write. Shared by every yield style: a Promise does it inside its executor.
 		local function SendCall(Target: Blocks.Block): Blocks.Block
@@ -259,7 +264,7 @@ function Declarations.Function(Declaration: Parser.Function)
 			--> session. This is the one leak the timeout cannot cover, because it is armed after it.
 			Target:Line("local Cursor, Instances = Mark()")
 			Target:Line(
-				`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, State.Scope)}, {DataArguments}, InvocationIdentifier)`
+				`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, State.Scope)}, {PublicArguments}, InvocationIdentifier)`
 			)
 			Target:Compare("Sent", "true", "Not")
 				:Line("Rollback(Cursor, Instances)")

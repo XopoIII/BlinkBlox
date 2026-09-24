@@ -176,11 +176,11 @@ function Serde.Struct(Declaration: Parser.Struct, Read: Blocks.Block, Write: Blo
 	end
 end
 
+--- A pack's elements are serialised under positional names, never the ones the schema gave them; see
+--- `Generators.LuauType`.
 function Serde.Tuple(Declaration: Parser.Tuple, Read: Blocks.Block, Write: Blocks.Block)
-	local Names = Declaration.Value.Names
 	for Index, Value in Declaration.Value.Values do
-		local Variable = Names[Index] or `Value{Index}`
-		Serde.Emit(Value :: Type, Read, Write, Variable)
+		Serde.Emit(Value :: Type, Read, Write, `Value{Index}`)
 	end
 end
 
