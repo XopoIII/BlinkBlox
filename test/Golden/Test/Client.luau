@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "e87edeedffdcc6cf"
+local SCHEMA_SIGNATURE = "40aab18d5a9b14c9"
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -395,19 +395,22 @@ local function UnpackRotation(X: number, Y: number, Z: number, Index: number, A:
 	return CFrame.new(X, Y, Z, A, B, C, D)
 end
 
---> Sequence numbers for ordered unreliable events, one counter per event.
+--> Sequence numbers for ordered unreliable events, one counter per event each way.
 local OrderOut: { number } = {}
 local OrderIn: { number } = {}
 
---> Accepts a packet only if it is newer than the last one seen for this event. The
---> comparison tolerates the counter wrapping at 65536.
+--> Accepts a packet only if it is newer than the last one seen for this event.
 local function OrderAccept(Slot: number, Identifier: number): boolean
-	local Last = OrderIn[Slot]
-	if Last ~= nil and Identifier <= Last and (Last - Identifier) < 32767 then
-		return false
+	local State = OrderIn
+	local Last = State[Slot]
+	if Last ~= nil then
+		local Ahead = (Identifier - Last) % 65536
+		if Ahead == 0 or Ahead >= 32768 then
+			return false
+		end
 	end
 
-	OrderIn[Slot] = Identifier
+	State[Slot] = Identifier
 	return true
 end
 
@@ -545,6 +548,8 @@ Queue.Reliable[57] = table.create(256)
 EventNames.Reliable[57] = "Unanswered"
 Queue.Reliable[58] = table.create(256)
 EventNames.Reliable[58] = "QueuedHoles"
+Queue.Unreliable[18] = table.create(256)
+EventNames.Unreliable[18] = "OrderedToClient"
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
 export type Indexers_TestFlags = {["a a"]: boolean,}
 export type Indexers_TestEnums = ("b b")
@@ -3148,6 +3153,14 @@ function SerdesFunctions.ReadEVENT_QueuedHoles(): (number, number?, number?, num
 		Value5 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	end
 	return Value1, Value2, Value3, Value4, Value5
+end
+
+function SerdesFunctions.ReadEVENT_OrderedToClient(): (number)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	-- Value: OrderedToClient
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	return Value
 end
 
 if not RunService:IsRunning() then
@@ -7456,6 +7469,10 @@ if not RunService:IsRunning() then
 		On = NOOP_RETURNING,
 		Predict = NOOP
 	},
+	OrderedToClient = {
+		On = NOOP_RETURNING,
+		Predict = NOOP
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -8251,6 +8268,18 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				SerdesEvent = "TupleUnreliable"
 				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[16], Value1, Value2, Value3, Value4, Value5)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+		elseif Index == 18 then
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			local Value: number = SerdesFunctions.ReadEVENT_OrderedToClient()
+			if OrderAccept(18, OrderIdentifier) == true then
+				if Events.Unreliable[18] ~= nil then
+					SerdesEvent = "OrderedToClient"
+					local ListenerRan, ListenerFailure = pcall(Events.Unreliable[18], Value)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+				end
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -14029,6 +14058,26 @@ local Returns = table.freeze({
 					warn("[BlinkBlox]: Event queue of \"QueuedHoles\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[58], table.pack(Value1, Value2, Value3, Value4, Value5))
+			end
+		end
+	},
+	OrderedToClient = {
+		On = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Unreliable[18] ~= nil then
+				warn("[BlinkBlox]: \"OrderedToClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Unreliable[18] = Listener
+			return function (): ()
+				if Events.Unreliable[18] == Listener then
+					Events.Unreliable[18] = nil
+				end
+			end
+		end,
+		Predict = function(Value: number): ()
+			if Events.Unreliable[18] ~= nil then
+				SerdesEvent = "OrderedToClient"
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[18], Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
 	},

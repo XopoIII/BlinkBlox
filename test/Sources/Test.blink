@@ -889,3 +889,11 @@ event QueuedHoles {
     Call: SingleSync,
     Data: (u8, u8?, u8?, u8, u8?)
 }
+
+--> Ordered from the server, which stamps each player's own sequence number into each send.
+event OrderedToClient {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Data: u8
+}

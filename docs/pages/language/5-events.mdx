@@ -32,9 +32,12 @@ Determines the type (reliability) of the event.
     Plain `Unreliable` is right for independent one-off signals, where an older packet is still
     useful on its own.
 
-    The sequence is tracked per event, and on the server per player: sixty clients each run their own
-    counter, and one client's says nothing about another's. It wraps at 65536, and the comparison is
-    written to tolerate that.
+    The sequence is tracked per event, and on the server per player in both directions: sixty clients
+    each run their own counter, and the server counts what it sends to each of them separately, so a
+    player left out of a `FireList` or `FireExcept` is never told that the next packet it does get is
+    stale. It wraps at 65536: a packet counts as newer when it is less than half the counter's range
+    ahead of the last one seen, so one from just before the wrap that arrives just after it is still
+    recognised as old.
 </Callout>
 
 #### `Call`

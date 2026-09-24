@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "e87edeedffdcc6cf"
+local SCHEMA_SIGNATURE = "40aab18d5a9b14c9"
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -397,14 +397,39 @@ local function UnpackRotation(X: number, Y: number, Z: number, Index: number, A:
 end
 local RATE_TEMPLATE = table.freeze({10, 0, 0, 0, 10, 0, 0, 0, 2, 0, 0, 0})
 
---> Sequence numbers for ordered unreliable events, one counter per event.
-local OrderOut: { number } = {}
+--> Sequence numbers for ordered unreliable events, per player and per event, both ways.
+local OrderOut: { [Player]: { number } } = {}
 local OrderIn: { [Player]: { number } } = {}
 
---> Accepts a packet only if it is newer than the last one seen from this player for
---> this event. The comparison tolerates the counter wrapping at 65536: a sequence far
---> BELOW the last one is not stale, it is the counter having gone round.
+Players.PlayerRemoving:Connect(function(Player)
+	OrderOut[Player] = nil
+	OrderIn[Player] = nil
+end)
+
+--> The next sequence number this player is sent for this event. A player who has already left
+--> gets a number and keeps no state, which PlayerRemoving would have nothing left to clear.
+local function NextOrder(Player: Player, Slot: number): number
+	local State = OrderOut[Player]
+	if not State then
+		if Player.Parent == nil then
+			return 0
+		end
+		State = {}
+		OrderOut[Player] = State
+	end
+
+	local Identifier = ((State[Slot] or 0) + 1) % 65536
+	State[Slot] = Identifier
+	return Identifier
+end
+
+--> Accepts a packet only if it is newer than the last one this player sent for this event.
 local function OrderAccept(Player: Player, Slot: number, Identifier: number): boolean
+	if Player.Parent == nil then
+		OrderIn[Player] = nil
+		return false
+	end
+
 	local State = OrderIn[Player]
 	if not State then
 		State = {}
@@ -412,8 +437,11 @@ local function OrderAccept(Player: Player, Slot: number, Identifier: number): bo
 	end
 
 	local Last = State[Slot]
-	if Last ~= nil and Identifier <= Last and (Last - Identifier) < 32767 then
-		return false
+	if Last ~= nil then
+		local Ahead = (Identifier - Last) % 65536
+		if Ahead == 0 or Ahead >= 32768 then
+			return false
+		end
 	end
 
 	State[Slot] = Identifier
@@ -3287,6 +3315,19 @@ function SerdesFunctions.WriteEVENT_QueuedHoles(Value1: number, Value2: number?,
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value5)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_0)
+end
+
+function SerdesFunctions.WriteEVENT_OrderedToClient(Value: number): ()
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
+	-- EVENT_OrderedToClient (18)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 18)
+	buffer.writeu16(SendBuffer, BLOCK_START + 1, 0)
+	-- Value: OrderedToClient
+	if typeof(Value) ~= "number" then
+		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value)
 end
 
 if not RunService:IsRunning() then
@@ -7705,6 +7746,12 @@ if not RunService:IsRunning() then
 		On = NOOP_RETURNING
 	},
 	QueuedHoles = {
+		Fire = NOOP,
+		FireAll = NOOP,
+		FireList = NOOP,
+		FireExcept = NOOP
+	},
+	OrderedToClient = {
 		Fire = NOOP,
 		FireAll = NOOP,
 		FireList = NOOP,
@@ -15630,6 +15677,53 @@ local Returns = table.freeze({
 				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
 				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
 				SavePlayerBuffer(Player)
+			end
+		end,
+	},
+	OrderedToClient = {
+		Fire = function(Player: Player, Value: number): ()
+			Load()
+			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
+			if not CheckUnreliableSize("OrderedToClient") then return end
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			buffer.writeu16(Buffer, 1, NextOrder(Player, 18))
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end,
+		FireAll = function(Value: number): ()
+			Load()
+			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
+			if not CheckUnreliableSize("OrderedToClient") then return end
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			for _, Player in Players:GetPlayers() do
+				buffer.writeu16(Buffer, 1, NextOrder(Player, 18))
+				Unreliable:FireClient(Player, Buffer, SendInstances)
+			end
+		end,
+		FireList = function(List: {Player}, Value: number): ()
+			Load()
+			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
+			if not CheckUnreliableSize("OrderedToClient") then return end
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			for _, Player in List do
+				buffer.writeu16(Buffer, 1, NextOrder(Player, 18))
+				Unreliable:FireClient(Player, Buffer, SendInstances)
+			end
+		end,
+		FireExcept = function(Except: Player, Value: number): ()
+			Load()
+			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
+			if not CheckUnreliableSize("OrderedToClient") then return end
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
+				end
+				buffer.writeu16(Buffer, 1, NextOrder(Player, 18))
+				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 	},

@@ -27,8 +27,17 @@ local RateGuardExpression = Decode.RateGuardExpression
 local OrderGuardExpression = Decode.OrderGuardExpression
 local Declarations = Serde
 
---- What a server send needs to know about the event it sends.
-type Send = { IsReliable: boolean, WriteEvent: string, Name: string }
+--- What a server send needs to know about the event it sends. `Ordered` is the event's index when it
+--- is an ordered unreliable one, whose sequence number each send stamps per recipient.
+type Send = { IsReliable: boolean, WriteEvent: string, Name: string, Ordered: number? }
+
+--- Stamps the recipient's own sequence number into an ordered packet. An unreliable server send always
+--- starts from a fresh buffer, so the event sits at offset 0 and its sequence at offset 1.
+local function StampOrder(Target: Blocks.Block, Send: Send)
+	if Send.Ordered then
+		Target:Line(`buffer.writeu16(Buffer, 1, NextOrder(Player, {Send.Ordered}))`)
+	end
+end
 
 --- The loop over the players a send reaches, leaving out `Except` when asked to.
 local function EachRecipient(Target: Blocks.Block, Recipients: string, SkipExcept: boolean?): Blocks.Block
@@ -59,12 +68,13 @@ local function Broadcast(
 		Fire:Line(`if not CheckUnreliableSize("{Send.Name}") then return end`)
 		Fire:Lines(UNRELIABLE_BODY, 1)
 
-		if Options.AllClients then
+		--> An ordered packet carries a different number to each player, so it is sent one by one.
+		if Options.AllClients and not Send.Ordered then
 			Fire:Line("Unreliable:FireAllClients(Buffer, SendInstances)")
 		else
-			EachRecipient(Fire, Recipients, Options.SkipExcept)
-				:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
-				:End()
+			local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept)
+			StampOrder(Loop, Send)
+			Loop:Line("Unreliable:FireClient(Player, Buffer, SendInstances)"):End()
 		end
 	end
 
@@ -406,7 +416,12 @@ function Declarations.Event(Declaration: Parser.Event)
 		State.Noop.Push(`{State.Casing.Fire} = NOOP`, 0, Indent + 1)
 		Body.PushLines(Fire.Content, 0, Indent + 1)
 	else
-		local Send: Send = { IsReliable = IsReliable, WriteEvent = WriteEvent, Name = Declaration.Name }
+		local Send: Send = {
+			IsReliable = IsReliable,
+			WriteEvent = WriteEvent,
+			Name = Declaration.Name,
+			Ordered = if IsOrdered then Index else nil,
+		}
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 		if IsReliable then
 			Fire:Line("Load(PlayersMap[Player])")
@@ -417,6 +432,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Fire:Line(WriteEvent)
 			Fire:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
 			Fire:Lines(UNRELIABLE_BODY, 1)
+			StampOrder(Fire, Send)
 			Fire:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
 		end
 		Fire:End()

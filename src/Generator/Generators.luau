@@ -244,10 +244,16 @@ function Generators.Event(
 
 	--> An ordered event carries a per-event sequence number after its index. It wraps at 65536, and
 	--> the receiver's comparison is written to tolerate that.
+	--> On the server the sequence is per recipient, so the writer leaves a placeholder that each send
+	--> stamps with its own recipient's number; see the ordering body in Generator/init.luau.
 	if Ordered then
-		Write:Line(`local OrderIdentifier = ((OrderOut[{Index}] or 0) + 1) % 65536`)
-		Write:Line(`OrderOut[{Index}] = OrderIdentifier`)
-		Types.u16.Write("OrderIdentifier", Write)
+		if State.Context == "Server" then
+			Types.u16.Write("0", Write)
+		else
+			Write:Line(`local OrderIdentifier = ((OrderOut[{Index}] or 0) + 1) % 65536`)
+			Write:Line(`OrderOut[{Index}] = OrderIdentifier`)
+			Types.u16.Write("OrderIdentifier", Write)
+		end
 	end
 	--> A reply carries a flag after its id: 1 when the payload follows, 0 when the call failed and
 	--> nothing does. The flag is read by the reply branch, not here -- a failure reply is three bytes
