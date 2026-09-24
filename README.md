@@ -40,6 +40,10 @@ end)
 Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 ```
 
+<div align="center">
+  <img src="./docs/src/assets/bb_logo.jpg" alt="A Roblox builder feeding bricks into a machine that turns them into streams of data" width="640">
+</div>
+
 ## Why BlinkBlox
 
 - **Bounded inbound traffic.** Packet size, the number of events in a packet and the number of
@@ -69,6 +73,10 @@ Each tool fires 1000 events a frame from client to server. The run was in Studio
 \* Studio caps the frame rate at 60. The methodology and the full percentiles are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
 [`benchmark/Benchmarks.md`](benchmark/Benchmarks.md).
+
+<div align="center">
+  <img src="./docs/src/assets/bb_end.jpg" alt="A Roblox character holding up a pile of bricks against a flood of data" width="640">
+</div>
 
 ## Where it comes from
 
