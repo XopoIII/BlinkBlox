@@ -202,8 +202,9 @@ TextMate grammar, the one thing kept of editor support, learnt the fork's syntax
 0.31.0 came out of reading 2026's research for anything this fork could use, and what it took was
 a way of testing rather than a feature. VUPER (arXiv 2608.09094), a verified parser for ASN.1's
 packed encoding -- the closest relative of this wire format -- states the properties a bit-level
-serialiser must hold, and PBT-Bench (2605.15229) the reason random tests usually miss: a draw has to
-land where the bug is. `test/Properties.luau` draws every exported type of Test.blink, leaning on
+serialiser must hold, and PBT-Bench (2605.15229) that random draws find a bug only where their
+strategy concentrates -- a benchmark that left encoders out, since a round trip covers their bugs,
+so what carries over is the drawing, not a claim about serialisers. `test/Properties.luau` draws every exported type of Test.blink, leaning on
 the edges (`test/Generate.luau`), into a build with WriteValidations and one without, and judges
 the result by `test/Oracle.luau`, which reads the schema and never the generated code. Round trip,
 size inside the analysis, one encoding per value, every byte read, and corrupted bytes that decode
@@ -213,13 +214,32 @@ of zero, and a fixed-length array was cut short on send even under WriteValidati
 for the survey turned up the thesis again: the docs admitted that a 257th declaration on a channel
 compiled and went out with the first one's index. It is now `E3030`. `BLINKBLOX_SEED` replays or varies the draws.
 
+0.32.0 made the generated modules pass their own `--!strict` line. Every module declares it and none
+had ever been checked: the test schemas' output carried about 190 strict errors, and a game's editor
+showed them in a file its owner cannot edit. Almost all were the same few lines repeated -- a `pcall`
+of a writer that returns nothing destructured into two locals, a polled iterator ending in a bare
+`return`, an Instance compared with nil where its type says it cannot be, an enum read returned
+through a pcall that widened it to `string`, `require()` emitted for an empty `FutureLibrary`. Two
+were schema names the module could not express, now refused as `E3005`: a type named after a built-in
+Luau type, whose `export type number = number` Luau refuses, and a top-level type named after a
+Roblox type the module uses, whose `export type Player = Player` refers to itself and shadows every
+`Player` parameter. A library is now required only by a module that invokes through it. The type gate
+analyses `test/Golden` as a third contour, so it stays at zero. Reading the 0.31.0 papers in full
+added one test: `test/HalfFloats.luau` checks all 65536 f16 patterns against an independent decoder
+and every midpoint between neighbours; the 0.29 carry and the 0.31 signed zero, put back, each fail it.
+
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of
 responsibility, not an optimisation. If it is ever reopened, the shape is keyframes plus deltas
-against the last keyframe -- as real-time particle streaming does it (DELUGE, arXiv 2609.19750) --
-which bounds the divergence to one keyframe interval. It does not remove the per-player state, which
-is the actual objection.
+against the last keyframe, each delta naming the keyframe it refers to, so a receiver that missed
+one drops what follows until the next and the divergence is bounded by one keyframe interval.
+DELUGE (arXiv 2609.19750), read in full, is not a precedent for that: it chains deltas frame to frame
+over TCP and never evaluated loss. What it does show is that a delta saves bits only when it is
+entropy-coded -- a delta written at a fixed width saves nothing -- and that a broadcast needs one
+baseline per stream rather than per player. Neither removes the per-player state a per-player event
+needs, which is the actual objection.
+
 
 ## Commands
 

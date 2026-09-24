@@ -7,6 +7,43 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.32.0 — 2026-09-24
+
+The generated modules pass their own `--!strict` line. **The wire format does not change.**
+
+### Fixed
+
+- Every generated module declares `--!strict`, and none had been type-checked. The test schemas'
+  output carried about 190 strict errors, which a game's editor showed in a file its owner cannot
+  edit. They came from a few repeated lines:
+  - a `pcall` of a writer that returns nothing, destructured into two locals;
+  - a polled event's iterator ending in a bare `return`;
+  - an `Instance` compared with nil where its type does not allow nil;
+  - an exported enum's `Read` returning a value that `pcall` had widened to `string`.
+- An empty `FutureLibrary` or `PromiseLibrary` emitted `require()`, which fails to load. An empty
+  path now counts as no path.
+- A Future or Promise library is required only by a module that invokes through it. The side that
+  answers such a call never uses it, so the require was an unused import there.
+
+### Language
+
+- A type named after a built-in Luau type (`number`, `string`, `boolean`, `buffer`, `thread`, `any`,
+  `unknown`, `never`) is refused, `E3005`. It was exported as `export type number = number`, which
+  Luau does not allow.
+- A top-level type named after a Roblox type the module uses is refused, `E3005`. That covers
+  `Player`, `Instance`, `RemoteEvent`, `UnreliableRemoteEvent`, `CFrame`, `Vector3`, `Color3`,
+  `DateTime`, `BrickColor`, and any class the schema names in `Instance(...)`.
+  `type Player = Instance(Player)` exported a type that referred to itself and shadowed every
+  `Player` parameter in the module. A type inside a `scope` is exported with the scope's name in
+  front, so it is not affected.
+
+### Tests
+
+- The type gate analyses `test/Golden`, the output of every test schema, as a third contour.
+- `test/HalfFloats.luau` reads all 65536 f16 bit patterns and checks each against an IEEE decoder
+  written independently. It also writes every value midway between two neighbours and checks it
+  lands on one of them. Putting back the 0.29 carry bug or the 0.31 signed-zero bug makes it fail.
+
 ## 0.31.0 — 2026-09-24
 
 Property-based tests for every serialiser, and what they found. **The wire format does not change**:

@@ -137,8 +137,12 @@ option FutureLibrary = "ReplicatedStorage.Packages.Future"
 option PromiseLibrary = "ReplicatedStorage.Packages.Promise"
 ```
 
-Without it, a schema that uses the yield type fails to generate:
+Without it, a schema that uses the yield type fails to generate, and an empty string counts as
+without it:
 `Cannot use yield type: "Future", without providing a path to the future library.`
+
+The `require` is emitted only into a module that invokes such a function. The side that answers the
+call never touches the library, so it does not load it.
 
 ## Runtime behaviour
 

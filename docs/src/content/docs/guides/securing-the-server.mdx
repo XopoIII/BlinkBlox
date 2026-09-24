@@ -269,6 +269,9 @@ declared ranges, at no more than the declared rate. It cannot know whether it is
   all -- it can be any type the remote can carry. Avoid it in anything the client sends.
 - **Instances.** `Instance(Class)` checks the class, not ownership: a client can name any instance it
   can see, including another player's character.
+- **Timing.** A lag switch -- a client that holds its traffic and then releases it -- looks exactly like
+  a network hitch, and the inbound burst exists to let an honest hitch through. Judge time by when the
+  server received something, and treat any timestamp or tick a client puts in a schema as a claim.
 - **Traffic that is not BlinkBlox's.** Other remotes in your game, Roblox's own replication and
   anything that happens before a packet reaches the generated handler are outside it.
 - **The server's own sends.** The client trusts the server, and nothing limits what the server sends.

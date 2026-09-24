@@ -117,6 +117,10 @@ event however long the client waited. A `Burst` with no `Rate` -- and no
 [`DefaultRate`](/BlinkBlox/language/options/#defaultrate-requirerates) to supply one -- is refused,
 since nothing would refill it.
 
+Over any stretch of `t` seconds a player gets at most `Burst + Rate × t` events through, and never
+more than `Burst` at once. With the default `Burst`, that is up to twice `Rate` in a single second,
+and `Rate` per second over longer spans. Refused events cost the player nothing.
+
 ```blink
 event Purchase {
     From: Client,

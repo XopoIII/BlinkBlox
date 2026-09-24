@@ -158,7 +158,13 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 				local Exact = Assert.Exact
 				if Exact then
 					if Block == Write then
-						Block:Compare(TargetVariable, "nil", "Not"):Multiline(Exact, Block.Indent + 1):End()
+						--> Nil passes on send: an Instance the other side cannot see arrives as nil anyway,
+						--> and the receiver is the one that refuses it. The value is typed as a
+						--> non-optional Instance, which strict mode will not compare with nil, hence the
+						--> cast.
+						Block:Compare(`({TargetVariable} :: any)`, "nil", "Not")
+							:Multiline(Exact, Block.Indent + 1)
+							:End()
 					else
 						Block:Multiline(Exact, Block.Indent)
 					end

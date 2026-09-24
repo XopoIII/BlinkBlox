@@ -535,7 +535,7 @@ if not RunService:IsRunning() then
 				if Success ~= true then
 					error(Result, 0)
 				end
-				return Result
+				return Result :: Generics_Entity
 			end,
 			Write = function(Value: Generics_Entity): (buffer)
 				local Previous = Save()
@@ -598,7 +598,7 @@ if not RunService:IsRunning() then
 				if Success ~= true then
 					error(Result, 0)
 				end
-				return Result
+				return Result :: Example_Entity
 			end,
 			Write = function(Value: Example_Entity): (buffer)
 				local Previous = Save()
@@ -1020,7 +1020,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			break
 		end
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
@@ -1067,7 +1067,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			break
 		end
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -1133,7 +1133,7 @@ local Returns = table.freeze({
 				if Success ~= true then
 					error(Result, 0)
 				end
-				return Result
+				return Result :: Generics_Entity
 			end,
 			Write = function(Value: Generics_Entity): (buffer)
 				local Previous = Save()
@@ -1206,7 +1206,7 @@ local Returns = table.freeze({
 				if Success ~= true then
 					error(Result, 0)
 				end
-				return Result
+				return Result :: Example_Entity
 			end,
 			Write = function(Value: Example_Entity): (buffer)
 				local Previous = Save()

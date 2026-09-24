@@ -582,9 +582,13 @@ If you send instances that might not exist on the other side, mark them [optiona
 Narrow an instance to a class by naming it in parentheses:
 
 ```blink
-type Player = Instance(Player)
+type Target = Instance(Player)
 type Part = Instance(BasePart)
 ```
+
+A declared type is exported to Luau under its own name, so it cannot take the name of a Roblox type the
+module uses -- `Player`, `Instance`, `CFrame`, `Vector3`, a class it names in parentheses -- or of a
+built-in Luau type such as `number` (`E3005`).
 
 The receiver checks the class with `IsA`, so subclasses are accepted: an Instance typed as `BasePart`
 also accepts a `Part`. An instance of the wrong class fails the packet like any other bad value.

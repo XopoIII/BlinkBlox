@@ -517,7 +517,7 @@ if not RunService:IsRunning() then
 				if Success ~= true then
 					error(Result, 0)
 				end
-				return Result
+				return Result :: Generics_Entity
 			end,
 			Write = function(Value: Generics_Entity): (buffer)
 				local Previous = Save()
@@ -580,7 +580,7 @@ if not RunService:IsRunning() then
 				if Success ~= true then
 					error(Result, 0)
 				end
-				return Result
+				return Result :: Example_Entity
 			end,
 			Write = function(Value: Example_Entity): (buffer)
 				local Previous = Save()
@@ -722,7 +722,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
@@ -748,7 +748,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
@@ -798,7 +798,7 @@ local Returns = table.freeze({
 				if Success ~= true then
 					error(Result, 0)
 				end
-				return Result
+				return Result :: Generics_Entity
 			end,
 			Write = function(Value: Generics_Entity): (buffer)
 				local Previous = Save()
@@ -831,7 +831,7 @@ local Returns = table.freeze({
 			Fire = function(Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }): ()
 				local Previous = Save()
 				Load()
-				local Sent, Failure = pcall(SerdesFunctions.Generics_WriteEVENT_Snapshot, Value)
+				local Sent: boolean, Failure: any = pcall(SerdesFunctions.Generics_WriteEVENT_Snapshot, Value)
 				if Sent and CheckUnreliableSize("Snapshot") then
 					local Buffer = buffer.create(SendCursor)
 					buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
@@ -874,7 +874,7 @@ local Returns = table.freeze({
 				if Success ~= true then
 					error(Result, 0)
 				end
-				return Result
+				return Result :: Example_Entity
 			end,
 			Write = function(Value: Example_Entity): (buffer)
 				local Previous = Save()
@@ -907,7 +907,7 @@ local Returns = table.freeze({
 			Fire = function(Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }): ()
 				local Previous = Save()
 				Load()
-				local Sent, Failure = pcall(SerdesFunctions.Example_WriteEVENT_Snapshot, Value)
+				local Sent: boolean, Failure: any = pcall(SerdesFunctions.Example_WriteEVENT_Snapshot, Value)
 				if Sent and CheckUnreliableSize("Snapshot") then
 					local Buffer = buffer.create(SendCursor)
 					buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)

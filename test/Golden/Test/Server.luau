@@ -2330,7 +2330,7 @@ function SerdesFunctions.WriteEVENT_InstanceAny(Value: Instance): ()
 	-- EVENT_InstanceAny (32)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 32)
 	-- Value: InstanceAny
-	if Value ~= nil then
+	if (Value :: any) ~= nil then
 		if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
 	end
 	table.insert(SendInstances, Value or Null)
@@ -2342,7 +2342,7 @@ function SerdesFunctions.WriteEVENT_InstanceOfType(Value: Sound): ()
 	-- EVENT_InstanceOfType (33)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 33)
 	-- Value: InstanceOfType
-	if Value ~= nil then
+	if (Value :: any) ~= nil then
 		if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
 		if not Value:IsA("Sound") then error(`Expected an Instance of type "Sound", got "{Value.ClassName}" instead.`) end
 	end
@@ -2356,7 +2356,7 @@ function SerdesFunctions.WriteEVENT_InstanceOptional(Value: Instance?): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 34)
 	-- Value: InstanceOptional
 	-- Value: InstanceOptional
-	if Value ~= nil then
+	if (Value :: any) ~= nil then
 		if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
 	end
 	table.insert(SendInstances, Value or Null)
@@ -2368,7 +2368,7 @@ function SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value: Motor6D): ()
 	-- EVENT_InstanceOfClassWithDigit (35)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 35)
 	-- Value: InstanceOfClassWithDigit
-	if Value ~= nil then
+	if (Value :: any) ~= nil then
 		if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
 		if not Value:IsA("Motor6D") then error(`Expected an Instance of type "Motor6D", got "{Value.ClassName}" instead.`) end
 	end
@@ -2794,13 +2794,13 @@ function SerdesFunctions.WriteEVENT_Tuple(Value1: number, Value2: ("A" | "B" | "
 		buffer.writeu16(SendBuffer, BLOCK_START + 0, Value3)
 	end
 	-- Value4: Tuple
-	if Value4 ~= nil then
+	if (Value4 :: any) ~= nil then
 		if typeof(Value4) ~= "Instance" then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
 	end
 	table.insert(SendInstances, Value4 or Null)
 	-- Value5: Tuple
 	-- Value5: Tuple
-	if Value5 ~= nil then
+	if (Value5 :: any) ~= nil then
 		if typeof(Value5) ~= "Instance" then error(`Expected an Instance, got {typeof(Value5)} instead.`) end
 	end
 	table.insert(SendInstances, Value5 or Null)
@@ -2860,13 +2860,13 @@ function SerdesFunctions.WriteEVENT_TupleUnreliable(Value1: number, Value2: ("A"
 		buffer.writeu16(SendBuffer, BLOCK_START + 0, Value3)
 	end
 	-- Value4: TupleUnreliable
-	if Value4 ~= nil then
+	if (Value4 :: any) ~= nil then
 		if typeof(Value4) ~= "Instance" then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
 	end
 	table.insert(SendInstances, Value4 or Null)
 	-- Value5: TupleUnreliable
 	-- Value5: TupleUnreliable
-	if Value5 ~= nil then
+	if (Value5 :: any) ~= nil then
 		if typeof(Value5) ~= "Instance" then error(`Expected an Instance, got {typeof(Value5)} instead.`) end
 	end
 	table.insert(SendInstances, Value5 or Null)
@@ -2929,12 +2929,12 @@ function SerdesFunctions.WriteFUNCTION_RETURN_TupleFunction(Value1: Instance?, V
 	-- Value: TupleFunction
 	-- Value1: TupleFunction
 	-- Value1: TupleFunction
-	if Value1 ~= nil then
+	if (Value1 :: any) ~= nil then
 		if typeof(Value1) ~= "Instance" then error(`Expected an Instance, got {typeof(Value1)} instead.`) end
 	end
 	table.insert(SendInstances, Value1 or Null)
 	-- Value2: TupleFunction
-	if Value2 ~= nil then
+	if (Value2 :: any) ~= nil then
 		if typeof(Value2) ~= "Instance" then error(`Expected an Instance, got {typeof(Value2)} instead.`) end
 	end
 	table.insert(SendInstances, Value2 or Null)
@@ -3489,7 +3489,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Byte
 		end,
 		Write = function(Value: Byte): (buffer)
 			local Previous = Save()
@@ -3533,7 +3533,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Color
 		end,
 		Write = function(Value: Color): (buffer)
 			local Previous = Save()
@@ -3602,7 +3602,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ColorArray
 		end,
 		Write = function(Value: ColorArray): (buffer)
 			local Previous = Save()
@@ -3668,7 +3668,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DateSeconds
 		end,
 		Write = function(Value: DateSeconds): (buffer)
 			local Previous = Save()
@@ -3713,7 +3713,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DateMilliseconds
 		end,
 		Write = function(Value: DateMilliseconds): (buffer)
 			local Previous = Save()
@@ -3758,7 +3758,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BrickkColor
 		end,
 		Write = function(Value: BrickkColor): (buffer)
 			local Previous = Save()
@@ -3804,7 +3804,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ExactRange
 		end,
 		Write = function(Value: ExactRange): (buffer)
 			local Previous = Save()
@@ -3851,7 +3851,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DecimalRange
 		end,
 		Write = function(Value: DecimalRange): (buffer)
 			local Previous = Save()
@@ -3899,7 +3899,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: NegativeRange
 		end,
 		Write = function(Value: NegativeRange): (buffer)
 			local Previous = Save()
@@ -3946,7 +3946,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundUpper
 		end,
 		Write = function(Value: UnboundUpper): (buffer)
 			local Previous = Save()
@@ -3992,7 +3992,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundLower
 		end,
 		Write = function(Value: UnboundLower): (buffer)
 			local Previous = Save()
@@ -4042,7 +4042,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: RangedVector
 		end,
 		Write = function(Value: RangedVector): (buffer)
 			local Previous = Save()
@@ -4094,7 +4094,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Buffer
 		end,
 		Write = function(Value: Buffer): (buffer)
 			local Previous = Save()
@@ -4144,7 +4144,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ExactBuffer
 		end,
 		Write = function(Value: ExactBuffer): (buffer)
 			local Previous = Save()
@@ -4194,7 +4194,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BoundedBuffer
 		end,
 		Write = function(Value: BoundedBuffer): (buffer)
 			local Previous = Save()
@@ -4251,7 +4251,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PlainCFrame
 		end,
 		Write = function(Value: PlainCFrame): (buffer)
 			local Previous = Save()
@@ -4309,7 +4309,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatCFrame
 		end,
 		Write = function(Value: QuatCFrame): (buffer)
 			local Previous = Save()
@@ -4440,7 +4440,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatHalfCFrame
 		end,
 		Write = function(Value: QuatHalfCFrame): (buffer)
 			local Previous = Save()
@@ -4634,7 +4634,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatFirstCFrame
 		end,
 		Write = function(Value: QuatFirstCFrame): (buffer)
 			local Previous = Save()
@@ -4790,7 +4790,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatCFrames
 		end,
 		Write = function(Value: QuatCFrames): (buffer)
 			local Previous = Save()
@@ -4921,7 +4921,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: MultiDimensionalArray
 		end,
 		Write = function(Value: MultiDimensionalArray): (buffer)
 			local Previous = Save()
@@ -5004,7 +5004,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeByte
 		end,
 		Write = function(Value: SizeByte): (buffer)
 			local Previous = Save()
@@ -5049,7 +5049,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeFixedString
 		end,
 		Write = function(Value: SizeFixedString): (buffer)
 			local Previous = Save()
@@ -5098,7 +5098,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeBoundedString
 		end,
 		Write = function(Value: SizeBoundedString): (buffer)
 			local Previous = Save()
@@ -5159,7 +5159,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeFixedArray
 		end,
 		Write = function(Value: SizeFixedArray): (buffer)
 			local Previous = Save()
@@ -5229,7 +5229,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeBoundedArray
 		end,
 		Write = function(Value: SizeBoundedArray): (buffer)
 			local Previous = Save()
@@ -5293,7 +5293,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeOptionalByte
 		end,
 		Write = function(Value: SizeOptionalByte): (buffer)
 			local Previous = Save()
@@ -5348,7 +5348,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeVector
 		end,
 		Write = function(Value: SizeVector): (buffer)
 			local Previous = Save()
@@ -5402,7 +5402,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeStruct
 		end,
 		Write = function(Value: SizeStruct): (buffer)
 			local Previous = Save()
@@ -5469,7 +5469,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeEnum
 		end,
 		Write = function(Value: SizeEnum): (buffer)
 			local Previous = Save()
@@ -5522,7 +5522,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeFlags
 		end,
 		Write = function(Value: SizeFlags): (buffer)
 			local Previous = Save()
@@ -5577,7 +5577,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeMap
 		end,
 		Write = function(Value: SizeMap): (buffer)
 			local Previous = Save()
@@ -5656,7 +5656,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OffsetArray
 		end,
 		Write = function(Value: OffsetArray): (buffer)
 			local Previous = Save()
@@ -5720,7 +5720,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OffsetString
 		end,
 		Write = function(Value: OffsetString): (buffer)
 			local Previous = Save()
@@ -5778,7 +5778,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OffsetBuffer
 		end,
 		Write = function(Value: OffsetBuffer): (buffer)
 			local Previous = Save()
@@ -5833,7 +5833,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsOne
 		end,
 		Write = function(Value: BitsOne): (buffer)
 			local Previous = Save()
@@ -5895,7 +5895,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsSeven
 		end,
 		Write = function(Value: BitsSeven): (buffer)
 			local Previous = Save()
@@ -5989,7 +5989,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsEight
 		end,
 		Write = function(Value: BitsEight): (buffer)
 			local Previous = Save()
@@ -6091,7 +6091,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsNine
 		end,
 		Write = function(Value: BitsNine): (buffer)
 			local Previous = Save()
@@ -6217,7 +6217,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsSeventeen
 		end,
 		Write = function(Value: BitsSeventeen): (buffer)
 			local Previous = Save()
@@ -6367,7 +6367,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsMixed
 		end,
 		Write = function(Value: BitsMixed): (buffer)
 			local Previous = Save()
@@ -6457,7 +6457,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedBooleans
 		end,
 		Write = function(Value: PackedBooleans): (buffer)
 			local Previous = Save()
@@ -6533,7 +6533,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedFixed
 		end,
 		Write = function(Value: PackedFixed): (buffer)
 			local Previous = Save()
@@ -6612,7 +6612,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedRanged
 		end,
 		Write = function(Value: PackedRanged): (buffer)
 			local Previous = Save()
@@ -6709,7 +6709,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedNested
 		end,
 		Write = function(Value: PackedNested): (buffer)
 			local Previous = Save()
@@ -6801,7 +6801,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedThroughAlias
 		end,
 		Write = function(Value: PackedThroughAlias): (buffer)
 			local Previous = Save()
@@ -6904,7 +6904,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedBeside
 		end,
 		Write = function(Value: PackedBeside): (buffer)
 			local Previous = Save()
@@ -7036,7 +7036,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedMap
 		end,
 		Write = function(Value: PackedMap): (buffer)
 			local Previous = Save()
@@ -7141,7 +7141,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedOptional
 		end,
 		Write = function(Value: PackedOptional): (buffer)
 			local Previous = Save()
@@ -7247,7 +7247,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: MapNested
 		end,
 		Write = function(Value: MapNested): (buffer)
 			local Previous = Save()
@@ -7381,7 +7381,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Standalone
 		end,
 		Write = function(Value: Standalone): (buffer)
 			local Previous = Save()
@@ -7908,7 +7908,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OptionalHoles
 		end,
 		Write = function(Value: OptionalHoles): (buffer)
 			local Previous = Save()
@@ -7994,7 +7994,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: HalfFloat
 		end,
 		Write = function(Value: HalfFloat): (buffer)
 			local Previous = Save()
@@ -8098,7 +8098,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: FlagCarrier
 		end,
 		Write = function(Value: FlagCarrier): (buffer)
 			local Previous = Save()
@@ -8523,7 +8523,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			break
 		end
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -8904,7 +8904,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			break
 		end
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 1 then
@@ -9047,7 +9047,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Byte
 		end,
 		Write = function(Value: Byte): (buffer)
 			local Previous = Save()
@@ -9091,7 +9091,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Color
 		end,
 		Write = function(Value: Color): (buffer)
 			local Previous = Save()
@@ -9160,7 +9160,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ColorArray
 		end,
 		Write = function(Value: ColorArray): (buffer)
 			local Previous = Save()
@@ -9226,7 +9226,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DateSeconds
 		end,
 		Write = function(Value: DateSeconds): (buffer)
 			local Previous = Save()
@@ -9271,7 +9271,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DateMilliseconds
 		end,
 		Write = function(Value: DateMilliseconds): (buffer)
 			local Previous = Save()
@@ -9316,7 +9316,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BrickkColor
 		end,
 		Write = function(Value: BrickkColor): (buffer)
 			local Previous = Save()
@@ -9362,7 +9362,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ExactRange
 		end,
 		Write = function(Value: ExactRange): (buffer)
 			local Previous = Save()
@@ -9409,7 +9409,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DecimalRange
 		end,
 		Write = function(Value: DecimalRange): (buffer)
 			local Previous = Save()
@@ -9457,7 +9457,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: NegativeRange
 		end,
 		Write = function(Value: NegativeRange): (buffer)
 			local Previous = Save()
@@ -9504,7 +9504,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundUpper
 		end,
 		Write = function(Value: UnboundUpper): (buffer)
 			local Previous = Save()
@@ -9550,7 +9550,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundLower
 		end,
 		Write = function(Value: UnboundLower): (buffer)
 			local Previous = Save()
@@ -9600,7 +9600,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: RangedVector
 		end,
 		Write = function(Value: RangedVector): (buffer)
 			local Previous = Save()
@@ -9652,7 +9652,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Buffer
 		end,
 		Write = function(Value: Buffer): (buffer)
 			local Previous = Save()
@@ -9702,7 +9702,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ExactBuffer
 		end,
 		Write = function(Value: ExactBuffer): (buffer)
 			local Previous = Save()
@@ -9752,7 +9752,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BoundedBuffer
 		end,
 		Write = function(Value: BoundedBuffer): (buffer)
 			local Previous = Save()
@@ -9809,7 +9809,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PlainCFrame
 		end,
 		Write = function(Value: PlainCFrame): (buffer)
 			local Previous = Save()
@@ -9867,7 +9867,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatCFrame
 		end,
 		Write = function(Value: QuatCFrame): (buffer)
 			local Previous = Save()
@@ -9998,7 +9998,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatHalfCFrame
 		end,
 		Write = function(Value: QuatHalfCFrame): (buffer)
 			local Previous = Save()
@@ -10192,7 +10192,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatFirstCFrame
 		end,
 		Write = function(Value: QuatFirstCFrame): (buffer)
 			local Previous = Save()
@@ -10348,7 +10348,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatCFrames
 		end,
 		Write = function(Value: QuatCFrames): (buffer)
 			local Previous = Save()
@@ -10479,7 +10479,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: MultiDimensionalArray
 		end,
 		Write = function(Value: MultiDimensionalArray): (buffer)
 			local Previous = Save()
@@ -10562,7 +10562,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeByte
 		end,
 		Write = function(Value: SizeByte): (buffer)
 			local Previous = Save()
@@ -10607,7 +10607,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeFixedString
 		end,
 		Write = function(Value: SizeFixedString): (buffer)
 			local Previous = Save()
@@ -10656,7 +10656,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeBoundedString
 		end,
 		Write = function(Value: SizeBoundedString): (buffer)
 			local Previous = Save()
@@ -10717,7 +10717,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeFixedArray
 		end,
 		Write = function(Value: SizeFixedArray): (buffer)
 			local Previous = Save()
@@ -10787,7 +10787,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeBoundedArray
 		end,
 		Write = function(Value: SizeBoundedArray): (buffer)
 			local Previous = Save()
@@ -10851,7 +10851,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeOptionalByte
 		end,
 		Write = function(Value: SizeOptionalByte): (buffer)
 			local Previous = Save()
@@ -10906,7 +10906,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeVector
 		end,
 		Write = function(Value: SizeVector): (buffer)
 			local Previous = Save()
@@ -10960,7 +10960,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeStruct
 		end,
 		Write = function(Value: SizeStruct): (buffer)
 			local Previous = Save()
@@ -11027,7 +11027,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeEnum
 		end,
 		Write = function(Value: SizeEnum): (buffer)
 			local Previous = Save()
@@ -11080,7 +11080,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeFlags
 		end,
 		Write = function(Value: SizeFlags): (buffer)
 			local Previous = Save()
@@ -11135,7 +11135,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeMap
 		end,
 		Write = function(Value: SizeMap): (buffer)
 			local Previous = Save()
@@ -11230,7 +11230,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OffsetArray
 		end,
 		Write = function(Value: OffsetArray): (buffer)
 			local Previous = Save()
@@ -11294,7 +11294,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OffsetString
 		end,
 		Write = function(Value: OffsetString): (buffer)
 			local Previous = Save()
@@ -11352,7 +11352,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OffsetBuffer
 		end,
 		Write = function(Value: OffsetBuffer): (buffer)
 			local Previous = Save()
@@ -11407,7 +11407,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsOne
 		end,
 		Write = function(Value: BitsOne): (buffer)
 			local Previous = Save()
@@ -11469,7 +11469,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsSeven
 		end,
 		Write = function(Value: BitsSeven): (buffer)
 			local Previous = Save()
@@ -11563,7 +11563,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsEight
 		end,
 		Write = function(Value: BitsEight): (buffer)
 			local Previous = Save()
@@ -11665,7 +11665,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsNine
 		end,
 		Write = function(Value: BitsNine): (buffer)
 			local Previous = Save()
@@ -11791,7 +11791,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsSeventeen
 		end,
 		Write = function(Value: BitsSeventeen): (buffer)
 			local Previous = Save()
@@ -11941,7 +11941,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsMixed
 		end,
 		Write = function(Value: BitsMixed): (buffer)
 			local Previous = Save()
@@ -12031,7 +12031,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedBooleans
 		end,
 		Write = function(Value: PackedBooleans): (buffer)
 			local Previous = Save()
@@ -12107,7 +12107,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedFixed
 		end,
 		Write = function(Value: PackedFixed): (buffer)
 			local Previous = Save()
@@ -12186,7 +12186,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedRanged
 		end,
 		Write = function(Value: PackedRanged): (buffer)
 			local Previous = Save()
@@ -12283,7 +12283,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedNested
 		end,
 		Write = function(Value: PackedNested): (buffer)
 			local Previous = Save()
@@ -12375,7 +12375,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedThroughAlias
 		end,
 		Write = function(Value: PackedThroughAlias): (buffer)
 			local Previous = Save()
@@ -12478,7 +12478,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedBeside
 		end,
 		Write = function(Value: PackedBeside): (buffer)
 			local Previous = Save()
@@ -12610,7 +12610,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedMap
 		end,
 		Write = function(Value: PackedMap): (buffer)
 			local Previous = Save()
@@ -12715,7 +12715,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedOptional
 		end,
 		Write = function(Value: PackedOptional): (buffer)
 			local Previous = Save()
@@ -12800,7 +12800,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -12813,7 +12813,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end
 	},
@@ -12914,7 +12914,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: MapNested
 		end,
 		Write = function(Value: MapNested): (buffer)
 			local Previous = Save()
@@ -13048,7 +13048,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Standalone
 		end,
 		Write = function(Value: Standalone): (buffer)
 			local Previous = Save()
@@ -13158,7 +13158,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: Vector3): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_SendOccupiedCell, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_SendOccupiedCell, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -13215,7 +13215,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -13228,7 +13228,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end
 	},
@@ -13242,7 +13242,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -13255,7 +13255,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end
 	},
@@ -13269,7 +13269,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -13282,7 +13282,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end
 	},
@@ -13296,7 +13296,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -13309,7 +13309,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end
 	},
@@ -13317,7 +13317,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ServerPollEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ServerPollEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -13409,7 +13409,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: nil): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ServerEmptyPollEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ServerEmptyPollEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -13549,7 +13549,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: nil): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_EmptyEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_EmptyEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -13707,7 +13707,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Flags8, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags8, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -13758,7 +13758,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Flags16, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags16, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -13809,7 +13809,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Flags32, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags32, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -13860,7 +13860,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Flags33, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags33, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -13911,7 +13911,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_DynamicMap, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_DynamicMap, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -13962,7 +13962,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { { Static: number, Dynamic: buffer } }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_DynamicArray, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_DynamicArray, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14013,7 +14013,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_PlayerEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_PlayerEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14090,7 +14090,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Generic, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Generic, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14141,7 +14141,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_GenericArray, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_GenericArray, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14192,7 +14192,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: any): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Unknown, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Unknown, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14243,7 +14243,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {[string]: number}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_MapEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14294,7 +14294,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Map: {[string]: number} }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_MapStructEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapStructEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14345,7 +14345,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {[string]: { number }}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_MapComplexEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapComplexEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14396,7 +14396,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_MapReferenceEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapReferenceEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14529,7 +14529,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ManyReliableSync, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ManyReliableSync, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14580,7 +14580,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ManyReliableAsync, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ManyReliableAsync, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14713,7 +14713,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ReliableServer, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReliableServer, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14764,7 +14764,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ReliableServerAsync, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReliableServerAsync, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14945,7 +14945,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: Instance): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_InstanceAny, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceAny, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -14996,7 +14996,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: Sound): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_InstanceOfType, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOfType, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -15047,7 +15047,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: Instance?): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_InstanceOptional, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOptional, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -15098,7 +15098,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: Motor6D): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -15149,7 +15149,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Reference, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Reference, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -15200,7 +15200,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ReferenceArray, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReferenceArray, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -15251,7 +15251,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ReferenceOptional, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReferenceOptional, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -15335,7 +15335,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Tuple, Value1, Value2, Value3, Value4, Value5, Value6)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Tuple, Value1, Value2, Value3, Value4, Value5, Value6)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -15461,7 +15461,7 @@ local Returns = table.freeze({
 			Fire = function(Player: Player, Value: number): ()
 				Load(PlayersMap[Player])
 				local Cursor, Instances = Mark()
-				local Sent, Failure = pcall(SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent, Value)
+				local Sent: boolean, Failure: any = pcall(SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent, Value)
 				if Sent ~= true then
 					Rollback(Cursor, Instances)
 					error(Failure, 0)
@@ -15513,7 +15513,7 @@ local Returns = table.freeze({
 				Fire = function(Player: Player, Value: number): ()
 					Load(PlayersMap[Player])
 					local Cursor, Instances = Mark()
-					local Sent, Failure = pcall(SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent, Value)
+					local Sent: boolean, Failure: any = pcall(SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent, Value)
 					if Sent ~= true then
 						Rollback(Cursor, Instances)
 						error(Failure, 0)
@@ -15567,7 +15567,7 @@ local Returns = table.freeze({
 			Fire = function(Player: Player, Value: number): ()
 				Load(PlayersMap[Player])
 				local Cursor, Instances = Mark()
-				local Sent, Failure = pcall(SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent, Value)
+				local Sent: boolean, Failure: any = pcall(SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent, Value)
 				if Sent ~= true then
 					Rollback(Cursor, Instances)
 					error(Failure, 0)
@@ -15620,7 +15620,7 @@ local Returns = table.freeze({
 			Fire = function(Player: Player, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
 				Load(PlayersMap[Player])
 				local Cursor, Instances = Mark()
-				local Sent, Failure = pcall(SerdesFunctions.Issue33_WriteEVENT_Event, Value1, Value2, Value3)
+				local Sent: boolean, Failure: any = pcall(SerdesFunctions.Issue33_WriteEVENT_Event, Value1, Value2, Value3)
 				if Sent ~= true then
 					Rollback(Cursor, Instances)
 					error(Failure, 0)
@@ -15700,7 +15700,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, chefId: number, dish: string, portions: number?): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_NamedTuple, chefId, dish, portions)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_NamedTuple, chefId, dish, portions)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -15784,7 +15784,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value1: number, named: string, Value3: number): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_PartiallyNamedTuple, Value1, named, Value3)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_PartiallyNamedTuple, Value1, named, Value3)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -15869,7 +15869,7 @@ local Returns = table.freeze({
 			local InvocationIdentifier = InvokePlayer(Player, 51)
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteFUNCTION_DATA_AskClient, Value, InvocationIdentifier)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_AskClient, Value, InvocationIdentifier)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				ReleaseInvocation(PlayerInvocations[Player], InvocationIdentifier)
@@ -16085,7 +16085,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_QueuedHoles, Value1, Value2, Value3, Value4, Value5)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_QueuedHoles, Value1, Value2, Value3, Value4, Value5)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -16217,7 +16217,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OptionalHoles
 		end,
 		Write = function(Value: OptionalHoles): (buffer)
 			local Previous = Save()
@@ -16303,7 +16303,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: HalfFloat
 		end,
 		Write = function(Value: HalfFloat): (buffer)
 			local Previous = Save()
@@ -16408,7 +16408,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, s: string, Length: number): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_NamedLength, s, Length)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_NamedLength, s, Length)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -16459,7 +16459,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Length: number, s: string): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_LengthFirst, Length, s)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_LengthFirst, Length, s)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -16545,7 +16545,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: FlagCarrier
 		end,
 		Write = function(Value: FlagCarrier): (buffer)
 			local Previous = Save()

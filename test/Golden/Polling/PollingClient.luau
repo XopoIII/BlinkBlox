@@ -350,7 +350,7 @@ local EventNames: any = {
 
 local SerdesEvent = "?"
 local SerdesThread: thread?
-export type number = number
+export type Number = number
 export type a = { foo: number }
 export type b = { bar: number }
 export type c<A,B,C> = { a: A, B: { bar: number }, C: C }
@@ -485,7 +485,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
@@ -511,7 +511,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
@@ -534,7 +534,7 @@ local Returns = table.freeze({
 	PollingEvent = {
 		fire = function(Value: nil): ()
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_PollingEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_PollingEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -544,7 +544,7 @@ local Returns = table.freeze({
 	ImplicitPollingEvent = {
 		fire = function(Value: nil): ()
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ImplicitPollingEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ImplicitPollingEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
