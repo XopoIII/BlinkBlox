@@ -331,4 +331,38 @@ do
 	OkPrint(`Test "{Name}" passed!`)
 end
 
+do
+	--> An exported type's Write swaps the outgoing batch out for a scratch buffer and swaps it back
+	--> after. A value that throws part way used to skip the swap back: the scratch buffer stayed
+	--> installed, the events already queued were gone, and the next flush sent the half-written value
+	--> in their place.
+	local Name = "A failed exported Write leaves the queued batch in place"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	local Seen: { number } = {}
+	local Disconnect = Server.PlainFromClient.On(function(_Player, Value: number)
+		table.insert(Seen, Value)
+	end)
+
+	Client.PlainFromClient.Fire(15)
+	local Threw = not pcall(Client.Byte.Write, "not a number" :: any)
+	Client.PlainFromClient.Fire(12)
+
+	task.wait(FLUSH)
+	Disconnect()
+	Shared.DrainWarnings()
+
+	if not Threw then
+		ErrorPrint(`Failed "{Name}": the bad value was written instead of rejected.`)
+		return {}
+	end
+
+	if not Matches(Seen, { 15, 12 }) then
+		ErrorPrint(`Failed "{Name}": the server received {Describe(Seen)}, expected \{15, 12\}.`)
+		return {}
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end
+
 return {}

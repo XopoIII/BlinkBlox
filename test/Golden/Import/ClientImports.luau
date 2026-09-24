@@ -480,53 +480,59 @@ if not RunService:IsRunning() then
 	Generics = {
 		Entity = {
 			Read = function(Buffer: buffer): (Generics_Entity)
-				-- Buffer overwrite
 				local PreviousCursor = RecieveCursor
 				local PreviousBuffer = RecieveBuffer
 				local PreviousInstanceCursor = RecieveInstanceCursor
 				RecieveCursor = 0
 				RecieveBuffer = Buffer
-				-- Read BLOCK: 15 bytes
-				local BLOCK_START = Read(15)
-				-- Buffer read
-				-- Value: Entity
-				local Value = {} :: any
-				-- Value.id: id
-				Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				-- Value.pos: pos
-				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-				Value.pos = Vector3.new(X, Y, Z)
-				-- Value.angle: angle
-				Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
-				-- Buffer restore
+				local Success, Result = pcall(function (): (Generics_Entity)
+					-- Read BLOCK: 15 bytes
+					local BLOCK_START = Read(15)
+					-- Value: Entity
+					local Value = {} :: any
+					-- Value.id: id
+					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					-- Value.pos: pos
+					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+					Value.pos = Vector3.new(X, Y, Z)
+					-- Value.angle: angle
+					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
+					return Value
+				end)
 				RecieveCursor = PreviousCursor
 				RecieveBuffer = PreviousBuffer
 				RecieveInstanceCursor = PreviousInstanceCursor
-				return Value
+				if Success ~= true then
+					error(Result, 0)
+				end
+				return Result
 			end,
 			Write = function(Value: Generics_Entity): (buffer)
-				-- Buffer overwrite
 				local Previous = Save()
 				Load()
-				-- Allocate BLOCK: 15 bytes
-				local BLOCK_START = Allocate(15)
-				-- Buffer write
-				-- Value: Entity
-				-- Value.id: id
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-				-- Value.pos: pos
-				local Vector = Value.pos
-				buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-				buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-				buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
-				-- Value.angle: angle
-				buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
-				-- Buffer restore
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				local Success, Result = pcall(function (): (buffer)
+					-- Allocate BLOCK: 15 bytes
+					local BLOCK_START = Allocate(15)
+					-- Value: Entity
+					-- Value.id: id
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
+					-- Value.pos: pos
+					local Vector = Value.pos
+					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					-- Value.angle: angle
+					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
+					local Result = buffer.create(SendCursor)
+					buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+					return Result
+				end)
 				Load(Previous)
+				if Success ~= true then
+					error(Result, 0)
+				end
 				return Result
 			end
 		},
@@ -537,53 +543,59 @@ if not RunService:IsRunning() then
 	Example = {
 		Entity = {
 			Read = function(Buffer: buffer): (Example_Entity)
-				-- Buffer overwrite
 				local PreviousCursor = RecieveCursor
 				local PreviousBuffer = RecieveBuffer
 				local PreviousInstanceCursor = RecieveInstanceCursor
 				RecieveCursor = 0
 				RecieveBuffer = Buffer
-				-- Read BLOCK: 15 bytes
-				local BLOCK_START = Read(15)
-				-- Buffer read
-				-- Value: Entity
-				local Value = {} :: any
-				-- Value.id: id
-				Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				-- Value.pos: pos
-				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-				Value.pos = Vector3.new(X, Y, Z)
-				-- Value.angle: angle
-				Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
-				-- Buffer restore
+				local Success, Result = pcall(function (): (Example_Entity)
+					-- Read BLOCK: 15 bytes
+					local BLOCK_START = Read(15)
+					-- Value: Entity
+					local Value = {} :: any
+					-- Value.id: id
+					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					-- Value.pos: pos
+					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+					Value.pos = Vector3.new(X, Y, Z)
+					-- Value.angle: angle
+					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
+					return Value
+				end)
 				RecieveCursor = PreviousCursor
 				RecieveBuffer = PreviousBuffer
 				RecieveInstanceCursor = PreviousInstanceCursor
-				return Value
+				if Success ~= true then
+					error(Result, 0)
+				end
+				return Result
 			end,
 			Write = function(Value: Example_Entity): (buffer)
-				-- Buffer overwrite
 				local Previous = Save()
 				Load()
-				-- Allocate BLOCK: 15 bytes
-				local BLOCK_START = Allocate(15)
-				-- Buffer write
-				-- Value: Entity
-				-- Value.id: id
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-				-- Value.pos: pos
-				local Vector = Value.pos
-				buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-				buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-				buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
-				-- Value.angle: angle
-				buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
-				-- Buffer restore
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				local Success, Result = pcall(function (): (buffer)
+					-- Allocate BLOCK: 15 bytes
+					local BLOCK_START = Allocate(15)
+					-- Value: Entity
+					-- Value.id: id
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
+					-- Value.pos: pos
+					local Vector = Value.pos
+					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					-- Value.angle: angle
+					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
+					local Result = buffer.create(SendCursor)
+					buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+					return Result
+				end)
 				Load(Previous)
+				if Success ~= true then
+					error(Result, 0)
+				end
 				return Result
 			end
 		},
@@ -749,53 +761,59 @@ local Returns = table.freeze({
 	Generics = {
 		Entity = {
 			Read = function(Buffer: buffer): (Generics_Entity)
-				-- Buffer overwrite
 				local PreviousCursor = RecieveCursor
 				local PreviousBuffer = RecieveBuffer
 				local PreviousInstanceCursor = RecieveInstanceCursor
 				RecieveCursor = 0
 				RecieveBuffer = Buffer
-				-- Read BLOCK: 15 bytes
-				local BLOCK_START = Read(15)
-				-- Buffer read
-				-- Value: Entity
-				local Value = {} :: any
-				-- Value.id: id
-				Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				-- Value.pos: pos
-				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-				Value.pos = Vector3.new(X, Y, Z)
-				-- Value.angle: angle
-				Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
-				-- Buffer restore
+				local Success, Result = pcall(function (): (Generics_Entity)
+					-- Read BLOCK: 15 bytes
+					local BLOCK_START = Read(15)
+					-- Value: Entity
+					local Value = {} :: any
+					-- Value.id: id
+					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					-- Value.pos: pos
+					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+					Value.pos = Vector3.new(X, Y, Z)
+					-- Value.angle: angle
+					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
+					return Value
+				end)
 				RecieveCursor = PreviousCursor
 				RecieveBuffer = PreviousBuffer
 				RecieveInstanceCursor = PreviousInstanceCursor
-				return Value
+				if Success ~= true then
+					error(Result, 0)
+				end
+				return Result
 			end,
 			Write = function(Value: Generics_Entity): (buffer)
-				-- Buffer overwrite
 				local Previous = Save()
 				Load()
-				-- Allocate BLOCK: 15 bytes
-				local BLOCK_START = Allocate(15)
-				-- Buffer write
-				-- Value: Entity
-				-- Value.id: id
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-				-- Value.pos: pos
-				local Vector = Value.pos
-				buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-				buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-				buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
-				-- Value.angle: angle
-				buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
-				-- Buffer restore
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				local Success, Result = pcall(function (): (buffer)
+					-- Allocate BLOCK: 15 bytes
+					local BLOCK_START = Allocate(15)
+					-- Value: Entity
+					-- Value.id: id
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
+					-- Value.pos: pos
+					local Vector = Value.pos
+					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					-- Value.angle: angle
+					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
+					local Result = buffer.create(SendCursor)
+					buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+					return Result
+				end)
 				Load(Previous)
+				if Success ~= true then
+					error(Result, 0)
+				end
 				return Result
 			end
 		},
@@ -819,53 +837,59 @@ local Returns = table.freeze({
 	Example = {
 		Entity = {
 			Read = function(Buffer: buffer): (Example_Entity)
-				-- Buffer overwrite
 				local PreviousCursor = RecieveCursor
 				local PreviousBuffer = RecieveBuffer
 				local PreviousInstanceCursor = RecieveInstanceCursor
 				RecieveCursor = 0
 				RecieveBuffer = Buffer
-				-- Read BLOCK: 15 bytes
-				local BLOCK_START = Read(15)
-				-- Buffer read
-				-- Value: Entity
-				local Value = {} :: any
-				-- Value.id: id
-				Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				-- Value.pos: pos
-				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-				Value.pos = Vector3.new(X, Y, Z)
-				-- Value.angle: angle
-				Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
-				-- Buffer restore
+				local Success, Result = pcall(function (): (Example_Entity)
+					-- Read BLOCK: 15 bytes
+					local BLOCK_START = Read(15)
+					-- Value: Entity
+					local Value = {} :: any
+					-- Value.id: id
+					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					-- Value.pos: pos
+					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+					Value.pos = Vector3.new(X, Y, Z)
+					-- Value.angle: angle
+					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
+					return Value
+				end)
 				RecieveCursor = PreviousCursor
 				RecieveBuffer = PreviousBuffer
 				RecieveInstanceCursor = PreviousInstanceCursor
-				return Value
+				if Success ~= true then
+					error(Result, 0)
+				end
+				return Result
 			end,
 			Write = function(Value: Example_Entity): (buffer)
-				-- Buffer overwrite
 				local Previous = Save()
 				Load()
-				-- Allocate BLOCK: 15 bytes
-				local BLOCK_START = Allocate(15)
-				-- Buffer write
-				-- Value: Entity
-				-- Value.id: id
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-				-- Value.pos: pos
-				local Vector = Value.pos
-				buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-				buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-				buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
-				-- Value.angle: angle
-				buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
-				-- Buffer restore
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				local Success, Result = pcall(function (): (buffer)
+					-- Allocate BLOCK: 15 bytes
+					local BLOCK_START = Allocate(15)
+					-- Value: Entity
+					-- Value.id: id
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
+					-- Value.pos: pos
+					local Vector = Value.pos
+					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					-- Value.angle: angle
+					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
+					local Result = buffer.create(SendCursor)
+					buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+					return Result
+				end)
 				Load(Previous)
+				if Success ~= true then
+					error(Result, 0)
+				end
 				return Result
 			end
 		},

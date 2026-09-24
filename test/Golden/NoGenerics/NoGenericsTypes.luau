@@ -388,518 +388,566 @@ return {
 	},
 	Color = {
 		Read = function(Buffer: buffer): (Color)
-			-- Buffer overwrite
 			local PreviousCursor = RecieveCursor
 			local PreviousBuffer = RecieveBuffer
 			local PreviousInstanceCursor = RecieveInstanceCursor
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
-			-- Read BLOCK: 3 bytes
-			local BLOCK_START = Read(3)
-			-- Buffer read
-			-- Value: Color
-			local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
-			-- Buffer restore
+			local Success, Result = pcall(function (): (Color)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				-- Value: Color
+				local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
+				return Value
+			end)
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
 			RecieveInstanceCursor = PreviousInstanceCursor
-			return Value
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
 		end,
 		Write = function(Value: Color): (buffer)
-			-- Buffer overwrite
 			local Previous = Save()
 			Load()
-			-- Allocate BLOCK: 3 bytes
-			local BLOCK_START = Allocate(3)
-			-- Buffer write
-			-- Value: Color
-			if typeof(Value) ~= "Color3" then
-				error(`Expected Value to be of type Color3, got {type(Value)} instead.`)
-			end
-			local Color = Value
-			buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, math.clamp(math.round(Color.G * 255), 0, 255))
-			buffer.writeu8(SendBuffer, BLOCK_START + 2, math.clamp(math.round(Color.B * 255), 0, 255))
-			-- Buffer restore
-			local Result = buffer.create(SendCursor)
-			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				-- Value: Color
+				if typeof(Value) ~= "Color3" then
+					error(`Expected Value to be of type Color3, got {type(Value)} instead.`)
+				end
+				local Color = Value
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, math.clamp(math.round(Color.G * 255), 0, 255))
+				buffer.writeu8(SendBuffer, BLOCK_START + 2, math.clamp(math.round(Color.B * 255), 0, 255))
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
 			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
 			return Result
 		end
 	},
 	ExactRange = {
 		Read = function(Buffer: buffer): (ExactRange)
-			-- Buffer overwrite
 			local PreviousCursor = RecieveCursor
 			local PreviousBuffer = RecieveBuffer
 			local PreviousInstanceCursor = RecieveInstanceCursor
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
-			-- Read BLOCK: 4 bytes
-			local BLOCK_START = Read(4)
-			-- Buffer read
-			-- Value: ExactRange
-			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
-			-- Buffer restore
+			local Success, Result = pcall(function (): (ExactRange)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				-- Value: ExactRange
+				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
+				return Value
+			end)
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
 			RecieveInstanceCursor = PreviousInstanceCursor
-			return Value
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
 		end,
 		Write = function(Value: ExactRange): (buffer)
-			-- Buffer overwrite
 			local Previous = Save()
 			Load()
-			-- Allocate BLOCK: 4 bytes
-			local BLOCK_START = Allocate(4)
-			-- Buffer write
-			-- Value: ExactRange
-			if typeof(Value) ~= "number" then
-				error(`Expected Value to be of type number, got {type(Value)} instead.`)
-			end
-			if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
-			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-			-- Buffer restore
-			local Result = buffer.create(SendCursor)
-			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				-- Value: ExactRange
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
+				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
 			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
 			return Result
 		end
 	},
 	DecimalRange = {
 		Read = function(Buffer: buffer): (DecimalRange)
-			-- Buffer overwrite
 			local PreviousCursor = RecieveCursor
 			local PreviousBuffer = RecieveBuffer
 			local PreviousInstanceCursor = RecieveInstanceCursor
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
-			-- Read BLOCK: 4 bytes
-			local BLOCK_START = Read(4)
-			-- Buffer read
-			-- Value: DecimalRange
-			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
-			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
-			-- Buffer restore
+			local Success, Result = pcall(function (): (DecimalRange)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				-- Value: DecimalRange
+				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
+				if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
+				return Value
+			end)
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
 			RecieveInstanceCursor = PreviousInstanceCursor
-			return Value
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
 		end,
 		Write = function(Value: DecimalRange): (buffer)
-			-- Buffer overwrite
 			local Previous = Save()
 			Load()
-			-- Allocate BLOCK: 4 bytes
-			local BLOCK_START = Allocate(4)
-			-- Buffer write
-			-- Value: DecimalRange
-			if typeof(Value) ~= "number" then
-				error(`Expected Value to be of type number, got {type(Value)} instead.`)
-			end
-			if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
-			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
-			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-			-- Buffer restore
-			local Result = buffer.create(SendCursor)
-			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				-- Value: DecimalRange
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
+				if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
+				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
 			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
 			return Result
 		end
 	},
 	NegativeRange = {
 		Read = function(Buffer: buffer): (NegativeRange)
-			-- Buffer overwrite
 			local PreviousCursor = RecieveCursor
 			local PreviousBuffer = RecieveBuffer
 			local PreviousInstanceCursor = RecieveInstanceCursor
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
-			-- Buffer read
-			-- Value: NegativeRange
-			local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
-			if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
-			if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
-			-- Buffer restore
+			local Success, Result = pcall(function (): (NegativeRange)
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Value: NegativeRange
+				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+				if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
+				return Value
+			end)
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
 			RecieveInstanceCursor = PreviousInstanceCursor
-			return Value
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
 		end,
 		Write = function(Value: NegativeRange): (buffer)
-			-- Buffer overwrite
 			local Previous = Save()
 			Load()
-			-- Allocate BLOCK: 1 bytes
-			local BLOCK_START = Allocate(1)
-			-- Buffer write
-			-- Value: NegativeRange
-			if typeof(Value) ~= "number" then
-				error(`Expected Value to be of type number, got {type(Value)} instead.`)
-			end
-			if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
-			if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
-			buffer.writei8(SendBuffer, BLOCK_START + 0, Value)
-			-- Buffer restore
-			local Result = buffer.create(SendCursor)
-			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: NegativeRange
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+				if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
+				buffer.writei8(SendBuffer, BLOCK_START + 0, Value)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
 			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
 			return Result
 		end
 	},
 	UnboundUpper = {
 		Read = function(Buffer: buffer): (UnboundUpper)
-			-- Buffer overwrite
 			local PreviousCursor = RecieveCursor
 			local PreviousBuffer = RecieveBuffer
 			local PreviousInstanceCursor = RecieveInstanceCursor
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
-			-- Read BLOCK: 4 bytes
-			local BLOCK_START = Read(4)
-			-- Buffer read
-			-- Value: UnboundUpper
-			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
-			-- Buffer restore
+			local Success, Result = pcall(function (): (UnboundUpper)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				-- Value: UnboundUpper
+				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
+				return Value
+			end)
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
 			RecieveInstanceCursor = PreviousInstanceCursor
-			return Value
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
 		end,
 		Write = function(Value: UnboundUpper): (buffer)
-			-- Buffer overwrite
 			local Previous = Save()
 			Load()
-			-- Allocate BLOCK: 4 bytes
-			local BLOCK_START = Allocate(4)
-			-- Buffer write
-			-- Value: UnboundUpper
-			if typeof(Value) ~= "number" then
-				error(`Expected Value to be of type number, got {type(Value)} instead.`)
-			end
-			if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
-			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-			-- Buffer restore
-			local Result = buffer.create(SendCursor)
-			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				-- Value: UnboundUpper
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
+				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
 			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
 			return Result
 		end
 	},
 	UnboundLower = {
 		Read = function(Buffer: buffer): (UnboundLower)
-			-- Buffer overwrite
 			local PreviousCursor = RecieveCursor
 			local PreviousBuffer = RecieveBuffer
 			local PreviousInstanceCursor = RecieveInstanceCursor
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
-			-- Read BLOCK: 4 bytes
-			local BLOCK_START = Read(4)
-			-- Buffer read
-			-- Value: UnboundLower
-			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-			if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
-			-- Buffer restore
+			local Success, Result = pcall(function (): (UnboundLower)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				-- Value: UnboundLower
+				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
+				return Value
+			end)
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
 			RecieveInstanceCursor = PreviousInstanceCursor
-			return Value
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
 		end,
 		Write = function(Value: UnboundLower): (buffer)
-			-- Buffer overwrite
 			local Previous = Save()
 			Load()
-			-- Allocate BLOCK: 4 bytes
-			local BLOCK_START = Allocate(4)
-			-- Buffer write
-			-- Value: UnboundLower
-			if typeof(Value) ~= "number" then
-				error(`Expected Value to be of type number, got {type(Value)} instead.`)
-			end
-			if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
-			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-			-- Buffer restore
-			local Result = buffer.create(SendCursor)
-			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				-- Value: UnboundLower
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
+				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
 			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
 			return Result
 		end
 	},
 	MapNested = {
 		Read = function(Buffer: buffer): (MapNested)
-			-- Buffer overwrite
 			local PreviousCursor = RecieveCursor
 			local PreviousBuffer = RecieveBuffer
 			local PreviousInstanceCursor = RecieveInstanceCursor
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			-- Buffer read
-			-- Value: MapNested
-			local Value = {}
-			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-			for _ = 1, Elements_1 do
-				-- Key_1: MapNested
-				local OFFSET_0 = Read(2)
-				local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				-- Element_1: MapNested
-				local Element_1 = {}
-				local OFFSET_1 = Read(2)
-				local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
-				for _ = 1, Elements_2 do
-					-- Key_2: MapSimple
+			local Success, Result = pcall(function (): (MapNested)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: MapNested
+				local Value = {}
+				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				for _ = 1, Elements_1 do
+					-- Key_1: MapNested
 					local OFFSET_0 = Read(2)
-					Length = buffer.readu16(RecieveBuffer, OFFSET_0)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Element_2: MapSimple
-					local OFFSET_1 = Read(1)
-					local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_1)
-					Element_1[Key_2] = Element_2
+					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+					-- Element_1: MapNested
+					local Element_1 = {}
+					local OFFSET_1 = Read(2)
+					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
+					for _ = 1, Elements_2 do
+						-- Key_2: MapSimple
+						local OFFSET_0 = Read(2)
+						Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+						local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+						-- Element_2: MapSimple
+						local OFFSET_1 = Read(1)
+						local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_1)
+						Element_1[Key_2] = Element_2
+					end
+					Value[Key_1] = Element_1
 				end
-				Value[Key_1] = Element_1
-			end
-			-- Buffer restore
+				return Value
+			end)
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
 			RecieveInstanceCursor = PreviousInstanceCursor
-			return Value
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
 		end,
 		Write = function(Value: MapNested): (buffer)
-			-- Buffer overwrite
 			local Previous = Save()
 			Load()
-			-- Allocate BLOCK: 2 bytes
-			local BLOCK_START = Allocate(2)
-			-- Buffer write
-			-- Value: MapNested
-			local Elements_1 = 0
-			for Key_1, Element_1 in Value do
-				Elements_1 += 1
-				-- Key_1: MapNested
-				if typeof(Key_1) ~= "string" then
-					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
-				end
-				local Length = #Key_1
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				local OFFSET_0 = Allocate(2)
-				buffer.writeu16(SendBuffer, OFFSET_0, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
-				-- Element_1: MapNested
-				local OFFSET_1 = Allocate(2)
-				local Elements_2 = 0
-				for Key_2, Element_2 in Element_1 do
-					Elements_2 += 1
-					-- Key_2: MapSimple
-					if typeof(Key_2) ~= "string" then
-						error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.`)
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: MapNested
+				local Elements_1 = 0
+				for Key_1, Element_1 in Value do
+					Elements_1 += 1
+					-- Key_1: MapNested
+					if typeof(Key_1) ~= "string" then
+						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
 					end
-					local Length = #Key_2
+					local Length = #Key_1
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					local OFFSET_0 = Allocate(2)
 					buffer.writeu16(SendBuffer, OFFSET_0, Length)
 					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
-					-- Element_2: MapSimple
-					if typeof(Element_2) ~= "number" then
-						error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
+					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+					-- Element_1: MapNested
+					local OFFSET_1 = Allocate(2)
+					local Elements_2 = 0
+					for Key_2, Element_2 in Element_1 do
+						Elements_2 += 1
+						-- Key_2: MapSimple
+						if typeof(Key_2) ~= "string" then
+							error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.`)
+						end
+						local Length = #Key_2
+						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+						local OFFSET_0 = Allocate(2)
+						buffer.writeu16(SendBuffer, OFFSET_0, Length)
+						Allocate(Length)
+						buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
+						-- Element_2: MapSimple
+						if typeof(Element_2) ~= "number" then
+							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
+						end
+						local OFFSET_1 = Allocate(1)
+						buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
 					end
-					local OFFSET_1 = Allocate(1)
-					buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
+					if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
+					buffer.writeu16(SendBuffer, OFFSET_1, Elements_2)
 				end
-				if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
-				buffer.writeu16(SendBuffer, OFFSET_1, Elements_2)
-			end
-			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
-			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
-			-- Buffer restore
-			local Result = buffer.create(SendCursor)
-			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
 			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
 			return Result
 		end
 	},
 	Standalone = {
 		Read = function(Buffer: buffer): (Standalone)
-			-- Buffer overwrite
 			local PreviousCursor = RecieveCursor
 			local PreviousBuffer = RecieveBuffer
 			local PreviousInstanceCursor = RecieveInstanceCursor
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
-			-- Read BLOCK: 8 bytes
-			local BLOCK_START = Read(8)
-			-- Buffer read
-			-- Value: Standalone
-			local Value = {} :: any
-			-- Value.One: One
-			Value.One = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			-- Value.Two: Two
-			Value.Two = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-			-- Value.Three: Three
-			Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-			-- Value.Event: Event
-			local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-			Value.Event = true :: any
-			if Tag == 0 then
-				-- Read BLOCK: 10 bytes
-				local BLOCK_START = Read(10)
-				-- Value.Event: Join
-				Value.Event = {} :: any
-				-- Value.Event.Name: Name
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				-- Value.Event.UserId: UserId
-				Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
-				Value.Event.Type = "Join"
-			elseif Tag == 1 then
-				-- Read BLOCK: 10 bytes
-				local BLOCK_START = Read(10)
-				-- Value.Event: Chat
-				Value.Event = {} :: any
-				-- Value.Event.UserId: UserId
-				Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-				-- Value.Event.Message: Message
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				Value.Event.Type = "Chat"
-			elseif Tag == 2 then
+			local Success, Result = pcall(function (): (Standalone)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
-				-- Value.Event: Leave
-				Value.Event = {} :: any
-				-- Value.Event.UserId: UserId
-				Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-				Value.Event.Type = "Leave"
-			else
-				error(`Unexpected variant: {Tag}`)
-			end
-			-- Value.Nested: Nested
-			Value.Nested = {} :: any
-			-- Value.Nested.Four: Four
-			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
-			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-			Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
-			-- Value.Nested.Five: Five
-			Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
-			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-			Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
-			-- Buffer restore
+				-- Value: Standalone
+				local Value = {} :: any
+				-- Value.One: One
+				Value.One = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				-- Value.Two: Two
+				Value.Two = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				-- Value.Three: Three
+				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+				-- Value.Event: Event
+				local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+				Value.Event = true :: any
+				if Tag == 0 then
+					-- Read BLOCK: 10 bytes
+					local BLOCK_START = Read(10)
+					-- Value.Event: Join
+					Value.Event = {} :: any
+					-- Value.Event.Name: Name
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
+					-- Value.Event.UserId: UserId
+					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
+					Value.Event.Type = "Join"
+				elseif Tag == 1 then
+					-- Read BLOCK: 10 bytes
+					local BLOCK_START = Read(10)
+					-- Value.Event: Chat
+					Value.Event = {} :: any
+					-- Value.Event.UserId: UserId
+					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+					-- Value.Event.Message: Message
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
+					Value.Event.Type = "Chat"
+				elseif Tag == 2 then
+					-- Read BLOCK: 8 bytes
+					local BLOCK_START = Read(8)
+					-- Value.Event: Leave
+					Value.Event = {} :: any
+					-- Value.Event.UserId: UserId
+					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+					Value.Event.Type = "Leave"
+				else
+					error(`Unexpected variant: {Tag}`)
+				end
+				-- Value.Nested: Nested
+				Value.Nested = {} :: any
+				-- Value.Nested.Four: Four
+				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				-- Value.Nested.Five: Five
+				Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				return Value
+			end)
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
 			RecieveInstanceCursor = PreviousInstanceCursor
-			return Value
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
 		end,
 		Write = function(Value: Standalone): (buffer)
-			-- Buffer overwrite
 			local Previous = Save()
 			Load()
-			-- Allocate BLOCK: 8 bytes
-			local BLOCK_START = Allocate(8)
-			-- Buffer write
-			-- Value: Standalone
-			-- Value.One: One
-			if typeof(Value.One) ~= "number" then
-				error(`Expected Value.One to be of type number, got {type(Value.One)} instead.`)
-			end
-			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.One)
-			-- Value.Two: Two
-			if typeof(Value.Two) ~= "number" then
-				error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.`)
-			end
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Two)
-			-- Value.Three: Three
-			if typeof(Value.Three) ~= "number" then
-				error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.`)
-			end
-			buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
-			-- Value.Event: Event
-			if Value.Event.Type == "Join" then
-				buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
-				-- Allocate BLOCK: 10 bytes
-				local BLOCK_START = Allocate(10)
-				-- Value.Event: Join
-				-- Value.Event.Name: Name
-				if typeof(Value.Event.Name) ~= "string" then
-					error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
-				end
-				local Length = #Value.Event.Name
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
-				-- Value.Event.UserId: UserId
-				if typeof(Value.Event.UserId) ~= "number" then
-					error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
-				end
-				buffer.writef64(SendBuffer, BLOCK_START + 2, Value.Event.UserId)
-			elseif Value.Event.Type == "Chat" then
-				buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
-				-- Allocate BLOCK: 10 bytes
-				local BLOCK_START = Allocate(10)
-				-- Value.Event: Chat
-				-- Value.Event.UserId: UserId
-				if typeof(Value.Event.UserId) ~= "number" then
-					error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
-				end
-				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
-				-- Value.Event.Message: Message
-				if typeof(Value.Event.Message) ~= "string" then
-					error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
-				end
-				local Length = #Value.Event.Message
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
-			elseif Value.Event.Type == "Leave" then
-				buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
+			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 8 bytes
 				local BLOCK_START = Allocate(8)
-				-- Value.Event: Leave
-				-- Value.Event.UserId: UserId
-				if typeof(Value.Event.UserId) ~= "number" then
-					error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+				-- Value: Standalone
+				-- Value.One: One
+				if typeof(Value.One) ~= "number" then
+					error(`Expected Value.One to be of type number, got {type(Value.One)} instead.`)
 				end
-				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
-			else
-				error(`Unexpected variant: {Value.Event.Type}`)
-			end
-			-- Value.Nested: Nested
-			-- Value.Nested.Four: Four
-			if typeof(Value.Nested.Four) ~= "string" then
-				error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
-			end
-			local Length = #Value.Nested.Four
-			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
-			Allocate(Length)
-			buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
-			-- Value.Nested.Five: Five
-			if typeof(Value.Nested.Five) ~= "string" then
-				error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
-			end
-			local Length = #Value.Nested.Five
-			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
-			Allocate(Length)
-			buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
-			-- Buffer restore
-			local Result = buffer.create(SendCursor)
-			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.One)
+				-- Value.Two: Two
+				if typeof(Value.Two) ~= "number" then
+					error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Two)
+				-- Value.Three: Three
+				if typeof(Value.Three) ~= "number" then
+					error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
+				-- Value.Event: Event
+				if Value.Event.Type == "Join" then
+					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
+					-- Allocate BLOCK: 10 bytes
+					local BLOCK_START = Allocate(10)
+					-- Value.Event: Join
+					-- Value.Event.Name: Name
+					if typeof(Value.Event.Name) ~= "string" then
+						error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+					end
+					local Length = #Value.Event.Name
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
+					-- Value.Event.UserId: UserId
+					if typeof(Value.Event.UserId) ~= "number" then
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+					end
+					buffer.writef64(SendBuffer, BLOCK_START + 2, Value.Event.UserId)
+				elseif Value.Event.Type == "Chat" then
+					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
+					-- Allocate BLOCK: 10 bytes
+					local BLOCK_START = Allocate(10)
+					-- Value.Event: Chat
+					-- Value.Event.UserId: UserId
+					if typeof(Value.Event.UserId) ~= "number" then
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+					end
+					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
+					-- Value.Event.Message: Message
+					if typeof(Value.Event.Message) ~= "string" then
+						error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+					end
+					local Length = #Value.Event.Message
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
+				elseif Value.Event.Type == "Leave" then
+					buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
+					-- Allocate BLOCK: 8 bytes
+					local BLOCK_START = Allocate(8)
+					-- Value.Event: Leave
+					-- Value.Event.UserId: UserId
+					if typeof(Value.Event.UserId) ~= "number" then
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+					end
+					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
+				else
+					error(`Unexpected variant: {Value.Event.Type}`)
+				end
+				-- Value.Nested: Nested
+				-- Value.Nested.Four: Four
+				if typeof(Value.Nested.Four) ~= "string" then
+					error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+				end
+				local Length = #Value.Nested.Four
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
+				-- Value.Nested.Five: Five
+				if typeof(Value.Nested.Five) ~= "string" then
+					error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+				end
+				local Length = #Value.Nested.Five
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
 			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
 			return Result
 		end
 	},

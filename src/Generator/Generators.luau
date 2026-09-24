@@ -158,9 +158,27 @@ function Generators.Export(Declaration: Type)
 	local Indent = Util.GetScopeIndent(State.Scope)
 	Body.Push(`{Name} = \{`, 0, Indent)
 
-	--> Overwrite buffer
-	Read:Comment("Buffer overwrite")
-	Write:Comment("Buffer overwrite")
+	--> The serialiser runs against the module's own cursors, swapped out for the call and swapped back
+	--> after. Protected, because a value that fails validation throws part way through: before, the
+	--> swap back was skipped, so a failed Write left its scratch buffer installed as the outgoing one
+	--> -- the batch already queued was gone, and the next flush sent the half-written value instead --
+	--> and a failed Read left the receive cursors pointing into the caller's buffer, under a decode
+	--> loop that would carry on reading from it.
+	local Reader = Blocks.Function("", "", `({Export})`)
+	local Writer = Blocks.Function("", "", "(buffer)")
+
+	Generators.UserType(Declaration, Reader, Writer)
+
+	--> The payload is complete, so any half-filled bitfield has to reach the buffer BEFORE the trim
+	--> and the return below. Left to `End`, it would be emitted after the return.
+	Reader:FlushBits()
+	Writer:FlushBits()
+
+	Writer:Line("local Result = buffer.create(SendCursor)")
+	Writer:Line("buffer.copy(Result, 0, SendBuffer, 0, SendCursor)")
+
+	Reader:Return(Returns)
+	Writer:Return("Result")
 
 	Read:Lines({
 		"local PreviousCursor = RecieveCursor\n",
@@ -169,44 +187,23 @@ function Generators.Export(Declaration: Type)
 		"RecieveCursor = 0\n",
 		"RecieveBuffer = Buffer\n",
 	}, 1)
-
-	Write:Lines({
-		"local Previous = Save()\n",
-		"Load()\n",
-	}, 1)
-
-	Read:Advance(#Read.Content - 1)
-	Write:Advance(#Write.Content - 1)
-
-	--> Write to buffer
-	Read:Comment("Buffer read")
-	Write:Comment("Buffer write")
-
-	Generators.UserType(Declaration, Read, Write)
-
-	--> The payload is complete, so any half-filled bitfield has to reach the buffer BEFORE the trim
-	--> and the return below. Left to `End`, it would be emitted after the return.
-	Read:FlushBits()
-	Write:FlushBits()
-
-	--> Restore buffer
-	Read:Comment("Buffer restore")
-	Write:Comment("Buffer restore")
-
+	Read:Lines(Reader:End():Wrap("local Success, Result = pcall(", ")").Content, 1)
 	Read:Lines({
 		"RecieveCursor = PreviousCursor\n",
 		"RecieveBuffer = PreviousBuffer\n",
 		"RecieveInstanceCursor = PreviousInstanceCursor\n",
 	}, 1)
 
-	--> Trim buffer
-	Write:Line("local Result = buffer.create(SendCursor)")
-	Write:Line("buffer.copy(Result, 0, SendBuffer, 0, SendCursor)")
+	Write:Lines({
+		"local Previous = Save()\n",
+		"Load()\n",
+	}, 1)
+	Write:Lines(Writer:End():Wrap("local Success, Result = pcall(", ")").Content, 1)
+	Write:Line("Load(Previous)")
 
-	Write:Line(`Load(Previous)`)
-
-	--> End export
-	Read:Return(Returns)
+	Read:Compare("Success", "true", "Not"):Line("error(Result, 0)"):End()
+	Write:Compare("Success", "true", "Not"):Line("error(Result, 0)"):End()
+	Read:Return("Result")
 	Write:Return("Result")
 
 	Read:End():Wrap("", ",")
