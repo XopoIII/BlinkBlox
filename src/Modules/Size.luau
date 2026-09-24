@@ -222,6 +222,14 @@ local function MeasurePrimitive(Node: Node): Measurement
 	return Result
 end
 
+--- Whether the author wrote the array's bounds. `u8[]` with none written is the case worth warning
+--- about; `u8[0..16]` is not, even though both are variable length. Shared with the analysis, which
+--- asks the same question of a repetition that costs nothing to decode.
+local function RangeWritten(Node: Node): boolean
+	local RangeToken: Token? = Node.Tokens.Range
+	return if RangeToken then RangeToken.Value ~= "[]" else false
+end
+
 --- Whether an array of this element is packed eight elements to a byte rather than one per byte.
 ---
 --- Only a plain `boolean`: an optional one carries a presence bit AND a value bit per element, and
@@ -243,13 +251,10 @@ local function MeasureArray(Node: Node): Measurement
 		local Low = math.ceil(Lower / BITS_PER_BYTE)
 		local High = math.ceil(Upper / BITS_PER_BYTE)
 		local Prefix = if Lower == Upper then 0 else LengthPrefixBytes(Upper - Lower)
-		local RangeToken: Token? = Node.Tokens.Range
-		local Written = if RangeToken then RangeToken.Value ~= "[]" else false
-
 		Result.Min = Prefix + Low
 		Result.Max = Prefix + High
-		Result.Unbounded = (Lower ~= Upper) and not Written
-		Result.Culprit = if Result.Unbounded then RangeToken else nil
+		Result.Unbounded = (Lower ~= Upper) and not RangeWritten(Node)
+		Result.Culprit = if Result.Unbounded then Node.Tokens.Range else nil
 		return Result
 	end
 
@@ -268,13 +273,8 @@ local function MeasureArray(Node: Node): Measurement
 	Result.Max = Prefix + (Of.Max * Upper)
 	Result.Refs = Of.Refs * Upper
 
-	--> `u8[]` with no bounds written is the case worth warning about; `u8[0..16]` is not, even
-	--> though both are variable length.
-	local RangeToken: Token? = Node.Tokens.Range
-	local Written = if RangeToken then RangeToken.Value ~= "[]" else false
-
-	Result.Unbounded = Of.Unbounded or not Written
-	Result.Culprit = if Of.Unbounded then Of.Culprit else RangeToken
+	Result.Unbounded = Of.Unbounded or not RangeWritten(Node)
+	Result.Culprit = if Of.Unbounded then Of.Culprit else Node.Tokens.Range
 
 	return Result
 end
@@ -452,6 +452,8 @@ return {
 	Measure = Measure,
 	Sealed = Sealed,
 	PacksBooleans = PacksBooleans,
+	RangeWritten = RangeWritten,
+	TokenOf = TokenOf,
 	DefaultLength = DEFAULT_LENGTH,
 	OrderingBytes = ORDERING_BYTES,
 }

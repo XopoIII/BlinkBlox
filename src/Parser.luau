@@ -13,6 +13,7 @@ local PathParser = require("./Modules/Path")
 local Size = require("./Modules/Size")
 local SourceReader = require("./Modules/Source")
 local Table = require("./Modules/Table")
+local Walk = require("./Modules/Walk")
 
 local Settings = require("./Settings")
 
@@ -541,26 +542,30 @@ function Parser.ReplaceGenerics(self: Parser, Of: TypeNode): TypeNode
 	self:Consume("CloseChevrons")
 
 	--> hack to find lost references
+	-->
+	--> Not `Walk.Type`: that would go on into a node just substituted, and the argument may itself
+	--> hold a generic of the ENCLOSING template under the same name, which must be left for that
+	--> template to substitute.
 	local function Traverse(Type: TypeNode)
-		if Type.Type == "Array" or Type.Type == "Optional" then
-			Traverse(Type.Value.Of)
-		elseif Type.Type == "TagEnum" or Type.Type == "Struct" or Type.Type == "Map" then
-			for _, Nested in Type.Value.Values :: { any } do
+		if Type.Type ~= "Generic" then
+			for _, Nested in Walk.Children(Type) do
 				Traverse(Nested)
 			end
-		elseif Type.Type == "Generic" then
-			local Key = Type.Value.Generic
-			local Declaration = Replacements[Key]
-			if Declaration == nil then
-				return
-			end
 
-			local Replacement = Table.DeepClone(Declaration)
-
-			Type.Type = Replacement.Type
-			Type.Value = Replacement.Value
-			Type.Tokens = Replacement.Tokens
+			return
 		end
+
+		local Key = Type.Value.Generic
+		local Declaration = Replacements[Key]
+		if Declaration == nil then
+			return
+		end
+
+		local Replacement = Table.DeepClone(Declaration)
+
+		Type.Type = Replacement.Type
+		Type.Value = Replacement.Value
+		Type.Tokens = Replacement.Tokens
 	end
 
 	Traverse(Clone)

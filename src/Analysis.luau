@@ -12,6 +12,7 @@
 local Error = require("./Modules/Error")
 local Lexer = require("./Lexer")
 local Size = require("./Modules/Size")
+local Walk = require("./Modules/Walk")
 
 type Token = Lexer.Token
 
@@ -21,7 +22,6 @@ type Token = Lexer.Token
 type Declaration = any
 type Options = any
 type Event = any
-type ScopeNode = any
 
 --- Roblox drops an UnreliableRemoteEvent payload past roughly this many bytes. It does so silently
 --- and intermittently, which is why the compiler refuses a schema that cannot fit instead of leaving
@@ -31,18 +31,9 @@ local DEFAULT_MAX_UNRELIABLE_SIZE = 900
 --- Checks the rate limiting fields. Same file-scoping rule as AnalyzeUnreliableSizes: imported
 --- declarations are diagnosed by the parse of the file they came from.
 local function RateLimits(Source: string, File: string?, Declarations: { Declaration }, Options: Options)
-	for _, Declaration in Declarations do
-		if Declaration.Type == "Scope" then
-			local Scope = Declaration :: ScopeNode
-			if not Scope.Value.Imported then
-				RateLimits(Source, File, Scope.Value.Values, Options)
-			end
-
-			continue
-		end
-
+	Walk.Declarations(Declarations, function(Declaration: Declaration)
 		if Declaration.Type ~= "Event" and Declaration.Type ~= "Function" then
-			continue
+			return
 		end
 
 		local Value = Declaration.Value
@@ -71,7 +62,7 @@ local function RateLimits(Source: string, File: string?, Declarations: { Declara
 					:Warn()
 			end
 
-			continue
+			return
 		end
 
 		local Effective = Value.Rate or Options.DefaultRate
@@ -91,7 +82,7 @@ local function RateLimits(Source: string, File: string?, Declarations: { Declara
 				:Note("option RequireRates is set, so every inbound event and function must declare one.")
 				:Emit()
 		end
-	end
+	end)
 end
 
 --- Refuses unreliable events that cannot fit in a single unreliable packet, and warns about the ones
@@ -103,24 +94,15 @@ end
 local function UnreliableSizes(Source: string, File: string?, Declarations: { Declaration }, Options: Options)
 	local Limit = Options.MaxUnreliableSize or DEFAULT_MAX_UNRELIABLE_SIZE
 
-	for _, Declaration in Declarations do
-		if Declaration.Type == "Scope" then
-			local Scope = Declaration :: ScopeNode
-			if not Scope.Value.Imported then
-				UnreliableSizes(Source, File, Scope.Value.Values, Options)
-			end
-
-			continue
-		end
-
+	Walk.Declarations(Declarations, function(Declaration: Declaration)
 		if Declaration.Type ~= "Event" then
-			continue
+			return
 		end
 
 		local Event = Declaration :: Event
 		local Reliability = Event.Value.Type
 		if Reliability ~= "Unreliable" and Reliability ~= "OrderedUnreliable" then
-			continue
+			return
 		end
 
 		local Data = Event.Value.Data
@@ -146,7 +128,7 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 		end
 
 		if Maximum <= Limit then
-			continue
+			return
 		end
 
 		--> An unbounded type reports a real but absurd maximum -- a map of structs measures in the
@@ -170,17 +152,7 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 
 		Diagnostic:Note("Bound the variable-length fields -- `string(0..64)`, `u8[..16]` -- or send it reliably.")
 			:Warn()
-	end
-end
-
---- Best token to underline for a repetition: the brackets say more than the type name does.
-local function TokenOf(Node: Declaration): Token?
-	local Tokens = Node.Tokens
-	if not Tokens then
-		return nil
-	end
-
-	return Tokens.Range or Tokens.Primitive
+	end)
 end
 
 --- Whether one element of a repetition costs nothing to decode -- no buffer bytes, no bits, and no
@@ -213,7 +185,7 @@ local function CostlessRepetitions(Source: string, File: string?, Declarations: 
 		local Diagnostic =
 			Error.new(Error.AnalyzeCostlessRepetition, Source, `{What} of a type that costs nothing to decode`, File)
 
-		local Culprit = TokenOf(Node)
+		local Culprit = Size.TokenOf(Node)
 		if Culprit then
 			Diagnostic:Primary(Culprit, "The element count is read from the packet")
 		end
@@ -226,78 +198,23 @@ local function CostlessRepetitions(Source: string, File: string?, Declarations: 
 			:Emit()
 	end
 
-	local function Inspect(Node: Declaration)
-		if type(Node) ~= "table" or not Node.Type then
-			return
-		end
-
-		local Kind = Node.Type
+	Walk.Types(Declarations, function(Node: Declaration)
 		local Value = Node.Value
 
-		if Kind == "Array" then
-			local Range = Value.Range
-			local RangeToken: Token? = Node.Tokens.Range
-			local Written = if RangeToken then RangeToken.Value ~= "[]" else false
-
+		if Node.Type == "Array" then
 			--> A fixed-length array is unrolled against a count the schema wrote, and a bounded one
 			--> states its own ceiling -- twenty costless elements are twenty iterations. A bare `[]`
 			--> inherits whatever its u16 prefix can hold, which nobody chose.
-			if Range and Range.Min ~= Range.Max and not Written and Costless(Value.Of) then
+			local Range = Value.Range
+			if Range and Range.Min ~= Range.Max and not Size.RangeWritten(Node) and Costless(Value.Of) then
 				Report(Node, "Array")
 			end
-
-			Inspect(Value.Of)
-		elseif Kind == "Map" then
-			local Values = Value.Values
-			if Costless(Values[1]) and Costless(Values[2]) then
+		elseif Node.Type == "Map" then
+			if Costless(Value.Values[1]) and Costless(Value.Values[2]) then
 				Report(Node, "Map")
 			end
-
-			Inspect(Values[1])
-			Inspect(Values[2])
-		elseif Kind == "Optional" then
-			Inspect(Value.Of)
-		elseif Kind == "Struct" or Kind == "Tuple" then
-			for _, Field in Value.Values do
-				Inspect(Field)
-			end
-		elseif Kind == "TagEnum" then
-			for _, Variant in Value.Values do
-				for _, Field in (Variant :: Declaration).Value.Values do
-					Inspect(Field)
-				end
-			end
 		end
-	end
-
-	for _, Declaration in Declarations do
-		if Declaration.Type == "Scope" then
-			local Scope = Declaration :: ScopeNode
-			if not Scope.Value.Imported then
-				CostlessRepetitions(Source, File, Scope.Value.Values)
-			end
-
-			continue
-		end
-
-		--> A generic template is not a payload. Its parameters are unresolved here, so every one of
-		--> them would measure as costing nothing; it is the substituted copies that reach the wire,
-		--> and those are ordinary declarations by the time this runs.
-		if Declaration.Value and Declaration.Value.Generics then
-			continue
-		end
-
-		if Declaration.Type == "Event" then
-			Inspect(Declaration.Value.Data)
-		elseif Declaration.Type == "Function" then
-			Inspect(Declaration.Value.Data)
-			Inspect(Declaration.Value.Return)
-		else
-			--> A standalone `type` declaration carries its node kind directly, and it is exported
-			--> with a public reader of its own, so it is reachable whether an event names it or not.
-			Inspect(Declaration)
-		end
-	end
+	end)
 end
 
 --- Which decoded types can serve as a map key, and which produce a value the receiver can never
@@ -317,71 +234,13 @@ local UNUSABLE_KEYS: { [string]: string } = {
 	Tuple = "a type pack",
 }
 
---- Calls `Visit` on every type node this file's declarations contain, generics already substituted.
----
---- Same file-scoping rule as the checks above: an imported scope is walked by its own file's parse.
---- An uninstantiated generic is skipped, since its instantiations are walked where they are used.
-local function Walk(Declarations: { Declaration }, Visit: (Node: Declaration) -> ())
-	local function Inspect(Node: Declaration)
-		if type(Node) ~= "table" or not Node.Type then
-			return
-		end
-
-		Visit(Node)
-
-		local Kind = Node.Type
-		local Value = Node.Value
-
-		if Kind == "Map" then
-			Inspect(Value.Values[1])
-			Inspect(Value.Values[2])
-		elseif Kind == "Array" or Kind == "Optional" then
-			Inspect(Value.Of)
-		elseif Kind == "Struct" or Kind == "Tuple" then
-			for _, Field in Value.Values do
-				Inspect(Field)
-			end
-		elseif Kind == "TagEnum" then
-			for _, Variant in Value.Values do
-				for _, Field in (Variant :: Declaration).Value.Values do
-					Inspect(Field)
-				end
-			end
-		end
-	end
-
-	for _, Declaration in Declarations do
-		if Declaration.Type == "Scope" then
-			local Scope = Declaration :: ScopeNode
-			if not Scope.Value.Imported then
-				Walk(Scope.Value.Values, Visit)
-			end
-
-			continue
-		end
-
-		if Declaration.Value and Declaration.Value.Generics then
-			continue
-		end
-
-		if Declaration.Type == "Event" then
-			Inspect(Declaration.Value.Data)
-		elseif Declaration.Type == "Function" then
-			Inspect(Declaration.Value.Data)
-			Inspect(Declaration.Value.Return)
-		else
-			Inspect(Declaration)
-		end
-	end
-end
-
 --- Refuses map keys of a type that cannot be looked up.
 ---
 --- Runs here rather than in the parser because generics are already substituted by the time this
 --- walks: `GenericMap<u8[], f64>` is an ordinary map with an array key at this point, and checking
 --- where the map is written would not see it.
 local function MapKeys(Source: string, File: string?, Declarations: { Declaration })
-	Walk(Declarations, function(Node: Declaration)
+	Walk.Types(Declarations, function(Node: Declaration)
 		if Node.Type ~= "Map" then
 			return
 		end
@@ -395,7 +254,7 @@ local function MapKeys(Source: string, File: string?, Declarations: { Declaratio
 		local Diagnostic =
 			Error.new(Error.AnalyzeReferenceInvalidType, Source, `A map cannot be keyed by {Unusable}`, File)
 
-		local Culprit = (Node.Tokens and Node.Tokens.Key) or TokenOf(Key) or TokenOf(Node)
+		local Culprit = (Node.Tokens and Node.Tokens.Key) or Size.TokenOf(Key) or Size.TokenOf(Node)
 		if Culprit then
 			Diagnostic:Primary(Culprit, "This key decodes to a new table for every entry")
 		end
@@ -415,7 +274,7 @@ end
 --- knowing about it -- and also what lets it be written where it means nothing. The parser checks
 --- that a component is a component, not which type it is a component of, so that is checked here.
 local function Rotations(Source: string, File: string?, Declarations: { Declaration })
-	Walk(Declarations, function(Node: Declaration)
+	Walk.Types(Declarations, function(Node: Declaration)
 		if Node.Type ~= "Primitive" then
 			return
 		end
