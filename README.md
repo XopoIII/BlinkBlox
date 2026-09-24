@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./docs/public/Logo.png" class="center">
+  <img src="./docs/public/bb_logo.jpg" alt="BlinkBlox" class="center">
 </div>
 
 [![License](https://img.shields.io/github/license/XopoIII/blink?style=flat-square&color=%23a350af)](LICENSE)
@@ -79,6 +79,10 @@ rokit add XopoIII/blink
 ```
 
 Then head to the [documentation](https://xopoiii.github.io/blink/getting-started/1-installation).
+
+<div align="center">
+  <img src="./docs/public/bb_end.jpg" alt="BlinkBlox at work" class="center">
+</div>
 
 # Credits
 
