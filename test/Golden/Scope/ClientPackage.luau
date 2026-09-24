@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "Package_BLINK"
-local SCHEMA_SIGNATURE = "8ff84fa500597403"
+local SCHEMA_SIGNATURE = "8cf84aec00597400"
 --> Free-slot bitset for outstanding invocations: a set bit is a free slot.
 -->
 --> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the

@@ -158,6 +158,24 @@ export struct BitsMixed {
     D: u16?,
 }
 
+-- Fixtures for packed boolean arrays: eight elements to a byte, after the length. Beside plain
+-- booleans, inside a map and nested, the run must not disturb the bitfield or the block around it.
+type PackedAlias = boolean
+export type PackedBooleans = boolean[]
+export type PackedFixed = boolean[10]
+export type PackedRanged = boolean[3..20]
+export type PackedNested = boolean[][]
+export type PackedThroughAlias = PackedAlias[]
+export struct PackedBeside {
+    A: boolean,
+    List: boolean[],
+    B: boolean,
+    Fixed: boolean[3],
+    C: u8,
+}
+export map PackedMap = {[string]: boolean[]}
+export type PackedOptional = boolean?[]
+
 -- Fixtures for rate limiting. Rate is events per second and Burst is the bucket capacity, so
 -- "Burst" of them arrive at once and the rest need the clock to move.
 event RateLimited {

@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "36ca9fbdc525f75f"
+local SCHEMA_SIGNATURE = "42674156de7aee7c"
 --> Free-slot bitset for outstanding invocations: a set bit is a free slot.
 -->
 --> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
@@ -475,6 +475,15 @@ export type BitsEight = { A: boolean, B: boolean, C: boolean, D: boolean, E: boo
 export type BitsNine = { A: boolean, B: boolean, C: boolean, D: boolean, E: boolean, F: boolean, G: boolean, H: boolean, I: boolean }
 export type BitsSeventeen = { A: boolean, B: boolean, C: boolean, D: boolean, E: boolean, F: boolean, G: boolean, H: boolean, I: boolean, J: boolean, K: boolean, L: boolean, M: boolean, N: boolean, O: boolean, P: boolean, Q: boolean }
 export type BitsMixed = { A: boolean, B: number?, C: boolean, D: number? }
+export type PackedAlias = boolean
+export type PackedBooleans = { boolean }
+export type PackedFixed = { boolean }
+export type PackedRanged = { boolean }
+export type PackedNested = { { boolean } }
+export type PackedThroughAlias = { boolean }
+export type PackedBeside = { A: boolean, List: { boolean }, B: boolean, Fixed: { boolean }, C: number }
+export type PackedMap = {[string]: { boolean }}
+export type PackedOptional = { boolean? }
 export type States = ("A" | "B" | "C" | "D")
 export type Flags8 = {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}
 export type Flags16 = {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}
@@ -1694,20 +1703,24 @@ function SerdesFunctions.WriteEVENT_Booleans(Value: { boolean }): ()
 	-- Value: Booleans
 	-- START ARRAY
 	buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value)
-		-- Allocate BLOCK: 1 bytes
-	local ARRAY_START_1 = Allocate(1 * #Value)
-	for Index = 1, #Value do
-		local Item_1 = Value[Index]
-		-- Item_1: Booleans
-		if typeof(Item_1) ~= "boolean" then
-			error(`Expected Item_1 to be of type boolean, got {type(Item_1)} instead.`)
+	do
+		local PACKED_LENGTH = #Value
+		local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+		local PACKED_BITS = 0
+		for Index = 0, PACKED_LENGTH - 1 do
+			local PACKED_ITEM = Value[Index + 1]
+			if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+			if PACKED_ITEM then
+				PACKED_BITS += bit32.lshift(1, Index % 8)
+			end
+			if Index % 8 == 7 then
+				buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+				PACKED_BITS = 0
+			end
 		end
-		-- Allocate 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local BITFIELD_0 = 0
-		if Item_1 then BITFIELD_0 += 0x01 end
-		buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, BITFIELD_0)
+		if PACKED_LENGTH % 8 ~= 0 then
+			buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+		end
 	end
 	-- END ARRAY
 end
@@ -5116,6 +5129,714 @@ if not RunService:IsRunning() then
 			return Result
 		end
 	},
+	PackedBooleans = {
+		Read = function(Buffer: buffer): (PackedBooleans)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedBooleans
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+			do
+				local PACKED_OFFSET = Read((Length + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedBooleans): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedBooleans
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+			do
+				local PACKED_LENGTH = #Value
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedFixed = {
+		Read = function(Buffer: buffer): (PackedFixed)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedFixed
+			-- START ARRAY
+			local Length = 10
+			local Value = table.create(Length)
+			do
+				local PACKED_OFFSET = BLOCK_START + 0
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedFixed): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedFixed
+			-- START ARRAY
+			do
+				local PACKED_LENGTH = 10
+				local PACKED_OFFSET = BLOCK_START + 0
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedRanged = {
+		Read = function(Buffer: buffer): (PackedRanged)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: PackedRanged
+			-- START ARRAY
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 3
+			if not (Length >= 3) then error(`Expected "Length" to be larger than or equal to 3, got {Length} instead.`) end
+			if not (Length <= 20) then error(`Expected "Length" to be smaller than or equal to 20, got {Length} instead.`) end
+			if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+			do
+				local PACKED_OFFSET = Read((Length + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedRanged): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: PackedRanged
+			-- START ARRAY
+			if not (#Value >= 3) then error(`Expected "#Value" to be larger than or equal to 3, got {#Value} instead.`) end
+			if not (#Value <= 20) then error(`Expected "#Value" to be smaller than or equal to 20, got {#Value} instead.`) end
+			local LengthOffset = #Value - 3
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+			do
+				local PACKED_LENGTH = #Value
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedNested = {
+		Read = function(Buffer: buffer): (PackedNested)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedNested
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+				-- Read BLOCK: 2 bytes
+			local ARRAY_START_1 = Read(2 * Length)
+			for Index = 1, Length do
+				-- Item_1: PackedNested
+				-- START ARRAY
+				-- Read 2
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Item_1 = table.create(Length)
+				do
+					local PACKED_OFFSET = Read((Length + 7) // 8)
+					local PACKED_BITS = 0
+					for Index = 0, Length - 1 do
+						if Index % 8 == 0 then
+							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+						end
+						table.insert(Item_1, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+					end
+				end
+				-- END ARRAY
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedNested): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedNested
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				-- Allocate BLOCK: 2 bytes
+			local ARRAY_START_1 = Allocate(2 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: PackedNested
+				-- START ARRAY
+				-- Allocate 2
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
+				do
+					local PACKED_LENGTH = #Item_1
+					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+					local PACKED_BITS = 0
+					for Index = 0, PACKED_LENGTH - 1 do
+						local PACKED_ITEM = Item_1[Index + 1]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						if PACKED_ITEM then
+							PACKED_BITS += bit32.lshift(1, Index % 8)
+						end
+						if Index % 8 == 7 then
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+							PACKED_BITS = 0
+						end
+					end
+					if PACKED_LENGTH % 8 ~= 0 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+					end
+				end
+				-- END ARRAY
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedThroughAlias = {
+		Read = function(Buffer: buffer): (PackedThroughAlias)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedThroughAlias
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+			do
+				local PACKED_OFFSET = Read((Length + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedThroughAlias): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedThroughAlias
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+			do
+				local PACKED_LENGTH = #Value
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedBeside = {
+		Read = function(Buffer: buffer): (PackedBeside)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 5 bytes
+			local BLOCK_START = Read(5)
+			-- Buffer read
+			-- Value: PackedBeside
+			local Value = {} :: any
+			-- Value.A: A
+			local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_0, 0x01)
+			-- Value.List: List
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			Value.List = table.create(Length)
+			do
+				local PACKED_OFFSET = Read((Length + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value.List, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Value.B: B
+			Value.B = bit32.btest(BITFIELD_0, 0x02)
+			-- Value.Fixed: Fixed
+			-- START ARRAY
+			local Length = 3
+			Value.Fixed = table.create(Length)
+			do
+				local PACKED_OFFSET = BLOCK_START + 3
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value.Fixed, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Value.C: C
+			Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedBeside): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 5 bytes
+			local BLOCK_START = Allocate(5)
+			-- Buffer write
+			-- Value: PackedBeside
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
+			end
+			local BITFIELD_0 = 0
+			if Value.A then BITFIELD_0 += 0x01 end
+			-- Value.List: List
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value.List)
+			do
+				local PACKED_LENGTH = #Value.List
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value.List[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
+			end
+			if Value.B then BITFIELD_0 += 0x02 end
+			-- Value.Fixed: Fixed
+			-- START ARRAY
+			do
+				local PACKED_LENGTH = 3
+				local PACKED_OFFSET = BLOCK_START + 3
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value.Fixed[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Value.C: C
+			if typeof(Value.C) ~= "number" then
+				error(`Expected Value.C to be of type number, got {type(Value.C)} instead.`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 4, Value.C)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedMap = {
+		Read = function(Buffer: buffer): (PackedMap)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedMap
+			local Value = {}
+			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			for _ = 1, Elements_1 do
+				-- Key_1: PackedMap
+				local OFFSET_0 = Read(2)
+				local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				-- Element_1: PackedMap
+				-- START ARRAY
+				local OFFSET_1 = Read(2)
+				Length = buffer.readu16(RecieveBuffer, OFFSET_1)
+				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Element_1 = table.create(Length)
+				do
+					local PACKED_OFFSET = Read((Length + 7) // 8)
+					local PACKED_BITS = 0
+					for Index = 0, Length - 1 do
+						if Index % 8 == 0 then
+							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+						end
+						table.insert(Element_1, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+					end
+				end
+				-- END ARRAY
+				Value[Key_1] = Element_1
+			end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedMap): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedMap
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: PackedMap
+				if typeof(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+				end
+				local Length = #Key_1
+				local OFFSET_0 = Allocate(2)
+				buffer.writeu16(SendBuffer, OFFSET_0, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+				-- Element_1: PackedMap
+				-- START ARRAY
+				local OFFSET_1 = Allocate(2)
+				buffer.writeu16(SendBuffer, OFFSET_1, #Element_1)
+				do
+					local PACKED_LENGTH = #Element_1
+					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+					local PACKED_BITS = 0
+					for Index = 0, PACKED_LENGTH - 1 do
+						local PACKED_ITEM = Element_1[Index + 1]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						if PACKED_ITEM then
+							PACKED_BITS += bit32.lshift(1, Index % 8)
+						end
+						if Index % 8 == 7 then
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+							PACKED_BITS = 0
+						end
+					end
+					if PACKED_LENGTH % 8 ~= 0 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+					end
+				end
+				-- END ARRAY
+			end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedOptional = {
+		Read = function(Buffer: buffer): (PackedOptional)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedOptional
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_1 = Read(1 * Length)
+			for Index = 1, Length do
+				-- Item_1: PackedOptional
+				local Item_1
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				if bit32.btest(BITFIELD_0, 0x01) == true then
+					-- Read BLOCK: 1 bytes
+					local BLOCK_START = Read(1)
+					-- Item_1: PackedOptional
+					local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					Item_1 = bit32.btest(BITFIELD_0, 0x01)
+				end
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedOptional): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedOptional
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: PackedOptional
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local BITFIELD_0 = 0
+				if Item_1 ~= nil then BITFIELD_0 += 0x01 end
+				if Item_1 ~= nil then
+					-- Allocate BLOCK: 1 bytes
+					local BLOCK_START = Allocate(1)
+					-- Item_1: PackedOptional
+					if typeof(Item_1) ~= "boolean" then
+						error(`Expected Item_1 to be of type boolean, got {type(Item_1)} instead.`)
+					end
+					local BITFIELD_0 = 0
+					if Item_1 then BITFIELD_0 += 0x01 end
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+				end
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, BITFIELD_0)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
 	RateLimited = {
 		Fire = NOOP
 	},
@@ -8512,6 +9233,714 @@ local Returns = table.freeze({
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, Value.D)
 			end
 			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedBooleans = {
+		Read = function(Buffer: buffer): (PackedBooleans)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedBooleans
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+			do
+				local PACKED_OFFSET = Read((Length + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedBooleans): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedBooleans
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+			do
+				local PACKED_LENGTH = #Value
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedFixed = {
+		Read = function(Buffer: buffer): (PackedFixed)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedFixed
+			-- START ARRAY
+			local Length = 10
+			local Value = table.create(Length)
+			do
+				local PACKED_OFFSET = BLOCK_START + 0
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedFixed): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedFixed
+			-- START ARRAY
+			do
+				local PACKED_LENGTH = 10
+				local PACKED_OFFSET = BLOCK_START + 0
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedRanged = {
+		Read = function(Buffer: buffer): (PackedRanged)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			-- Buffer read
+			-- Value: PackedRanged
+			-- START ARRAY
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 3
+			if not (Length >= 3) then error(`Expected "Length" to be larger than or equal to 3, got {Length} instead.`) end
+			if not (Length <= 20) then error(`Expected "Length" to be smaller than or equal to 20, got {Length} instead.`) end
+			if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+			do
+				local PACKED_OFFSET = Read((Length + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedRanged): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Buffer write
+			-- Value: PackedRanged
+			-- START ARRAY
+			if not (#Value >= 3) then error(`Expected "#Value" to be larger than or equal to 3, got {#Value} instead.`) end
+			if not (#Value <= 20) then error(`Expected "#Value" to be smaller than or equal to 20, got {#Value} instead.`) end
+			local LengthOffset = #Value - 3
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+			do
+				local PACKED_LENGTH = #Value
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedNested = {
+		Read = function(Buffer: buffer): (PackedNested)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedNested
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+				-- Read BLOCK: 2 bytes
+			local ARRAY_START_1 = Read(2 * Length)
+			for Index = 1, Length do
+				-- Item_1: PackedNested
+				-- START ARRAY
+				-- Read 2
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Item_1 = table.create(Length)
+				do
+					local PACKED_OFFSET = Read((Length + 7) // 8)
+					local PACKED_BITS = 0
+					for Index = 0, Length - 1 do
+						if Index % 8 == 0 then
+							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+						end
+						table.insert(Item_1, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+					end
+				end
+				-- END ARRAY
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedNested): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedNested
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				-- Allocate BLOCK: 2 bytes
+			local ARRAY_START_1 = Allocate(2 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: PackedNested
+				-- START ARRAY
+				-- Allocate 2
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
+				do
+					local PACKED_LENGTH = #Item_1
+					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+					local PACKED_BITS = 0
+					for Index = 0, PACKED_LENGTH - 1 do
+						local PACKED_ITEM = Item_1[Index + 1]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						if PACKED_ITEM then
+							PACKED_BITS += bit32.lshift(1, Index % 8)
+						end
+						if Index % 8 == 7 then
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+							PACKED_BITS = 0
+						end
+					end
+					if PACKED_LENGTH % 8 ~= 0 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+					end
+				end
+				-- END ARRAY
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedThroughAlias = {
+		Read = function(Buffer: buffer): (PackedThroughAlias)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedThroughAlias
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+			do
+				local PACKED_OFFSET = Read((Length + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedThroughAlias): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedThroughAlias
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+			do
+				local PACKED_LENGTH = #Value
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedBeside = {
+		Read = function(Buffer: buffer): (PackedBeside)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 5 bytes
+			local BLOCK_START = Read(5)
+			-- Buffer read
+			-- Value: PackedBeside
+			local Value = {} :: any
+			-- Value.A: A
+			local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_0, 0x01)
+			-- Value.List: List
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			Value.List = table.create(Length)
+			do
+				local PACKED_OFFSET = Read((Length + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value.List, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Value.B: B
+			Value.B = bit32.btest(BITFIELD_0, 0x02)
+			-- Value.Fixed: Fixed
+			-- START ARRAY
+			local Length = 3
+			Value.Fixed = table.create(Length)
+			do
+				local PACKED_OFFSET = BLOCK_START + 3
+				local PACKED_BITS = 0
+				for Index = 0, Length - 1 do
+					if Index % 8 == 0 then
+						PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					end
+					table.insert(Value.Fixed, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+				end
+			end
+			-- END ARRAY
+			-- Value.C: C
+			Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedBeside): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 5 bytes
+			local BLOCK_START = Allocate(5)
+			-- Buffer write
+			-- Value: PackedBeside
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
+			end
+			local BITFIELD_0 = 0
+			if Value.A then BITFIELD_0 += 0x01 end
+			-- Value.List: List
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value.List)
+			do
+				local PACKED_LENGTH = #Value.List
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value.List[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
+			end
+			if Value.B then BITFIELD_0 += 0x02 end
+			-- Value.Fixed: Fixed
+			-- START ARRAY
+			do
+				local PACKED_LENGTH = 3
+				local PACKED_OFFSET = BLOCK_START + 3
+				local PACKED_BITS = 0
+				for Index = 0, PACKED_LENGTH - 1 do
+					local PACKED_ITEM = Value.Fixed[Index + 1]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					if PACKED_ITEM then
+						PACKED_BITS += bit32.lshift(1, Index % 8)
+					end
+					if Index % 8 == 7 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+						PACKED_BITS = 0
+					end
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Value.C: C
+			if typeof(Value.C) ~= "number" then
+				error(`Expected Value.C to be of type number, got {type(Value.C)} instead.`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 4, Value.C)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedMap = {
+		Read = function(Buffer: buffer): (PackedMap)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedMap
+			local Value = {}
+			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			for _ = 1, Elements_1 do
+				-- Key_1: PackedMap
+				local OFFSET_0 = Read(2)
+				local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				-- Element_1: PackedMap
+				-- START ARRAY
+				local OFFSET_1 = Read(2)
+				Length = buffer.readu16(RecieveBuffer, OFFSET_1)
+				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Element_1 = table.create(Length)
+				do
+					local PACKED_OFFSET = Read((Length + 7) // 8)
+					local PACKED_BITS = 0
+					for Index = 0, Length - 1 do
+						if Index % 8 == 0 then
+							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+						end
+						table.insert(Element_1, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+					end
+				end
+				-- END ARRAY
+				Value[Key_1] = Element_1
+			end
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedMap): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedMap
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: PackedMap
+				if typeof(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+				end
+				local Length = #Key_1
+				local OFFSET_0 = Allocate(2)
+				buffer.writeu16(SendBuffer, OFFSET_0, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+				-- Element_1: PackedMap
+				-- START ARRAY
+				local OFFSET_1 = Allocate(2)
+				buffer.writeu16(SendBuffer, OFFSET_1, #Element_1)
+				do
+					local PACKED_LENGTH = #Element_1
+					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+					local PACKED_BITS = 0
+					for Index = 0, PACKED_LENGTH - 1 do
+						local PACKED_ITEM = Element_1[Index + 1]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						if PACKED_ITEM then
+							PACKED_BITS += bit32.lshift(1, Index % 8)
+						end
+						if Index % 8 == 7 then
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+							PACKED_BITS = 0
+						end
+					end
+					if PACKED_LENGTH % 8 ~= 0 then
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+					end
+				end
+				-- END ARRAY
+			end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PackedOptional = {
+		Read = function(Buffer: buffer): (PackedOptional)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: PackedOptional
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_1 = Read(1 * Length)
+			for Index = 1, Length do
+				-- Item_1: PackedOptional
+				local Item_1
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				if bit32.btest(BITFIELD_0, 0x01) == true then
+					-- Read BLOCK: 1 bytes
+					local BLOCK_START = Read(1)
+					-- Item_1: PackedOptional
+					local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					Item_1 = bit32.btest(BITFIELD_0, 0x01)
+				end
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PackedOptional): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: PackedOptional
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: PackedOptional
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local BITFIELD_0 = 0
+				if Item_1 ~= nil then BITFIELD_0 += 0x01 end
+				if Item_1 ~= nil then
+					-- Allocate BLOCK: 1 bytes
+					local BLOCK_START = Allocate(1)
+					-- Item_1: PackedOptional
+					if typeof(Item_1) ~= "boolean" then
+						error(`Expected Item_1 to be of type boolean, got {type(Item_1)} instead.`)
+					end
+					local BITFIELD_0 = 0
+					if Item_1 then BITFIELD_0 += 0x01 end
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+				end
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, BITFIELD_0)
+			end
+			-- END ARRAY
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
 			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)

@@ -1,7 +1,7 @@
 --!strict
 --- Specs for the three wire-format changes that landed in 0.21.0: a sequence number on ordered
 --- unreliable events, lengths encoded relative to their declared minimum, and booleans and optional
---- presence flags packed into a shared bitfield.
+--- presence flags packed into a shared bitfield. And the one from 0.27.0: `boolean[]` eight to a byte.
 ---
 --- Each asserts on the BYTE COUNT as well as the round trip. A format change that still round-trips
 --- but costs what it used to has not done anything, and only the length tells them apart.
@@ -209,5 +209,83 @@ RunClosure("Bit packing", function()
 
 	if not Equals(Client.BitsMixed.Read(SparseBuffer), Sparse) then
 		ErrorPrint(`Failed "Bit packing": absent optionals did not survive the round trip.`)
+	end
+end)
+
+RunClosure("Packed boolean arrays", function()
+	--> A pattern that is neither all one value nor periodic in eight, so a wrong mask, a wrong byte
+	--> offset or a bit order reversed within the byte all show up as a changed element.
+	local Seed = 0
+	local function Pattern(Count: number): { boolean }
+		local Values = table.create(Count)
+		for Index = 1, Count do
+			Seed = (Seed * 1103515245 + 12345) % 2147483648
+			table.insert(Values, (Index % 3 == 0) ~= (Seed % 2 == 0))
+		end
+		return Values
+	end
+
+	--> The length prefix is a u16, then one byte per eight elements, rounded up.
+	local Cases = {
+		{ Count = 0, Bytes = 2 },
+		{ Count = 1, Bytes = 3 },
+		{ Count = 7, Bytes = 3 },
+		{ Count = 8, Bytes = 3 },
+		{ Count = 9, Bytes = 4 },
+		{ Count = 17, Bytes = 5 },
+		{ Count = 1000, Bytes = 127 },
+	}
+
+	for _, Case in Cases do
+		local Value = Pattern(Case.Count)
+		local Buffer = Client.PackedBooleans.Write(Value)
+
+		if buffer.len(Buffer) ~= Case.Bytes then
+			ErrorPrint(
+				`Failed "Packed boolean arrays": {Case.Count} elements serialised to {buffer.len(Buffer)} bytes, `
+					.. `expected {Case.Bytes}.`
+			)
+		end
+
+		if not Equals(Client.PackedBooleans.Read(Buffer), Value) then
+			ErrorPrint(`Failed "Packed boolean arrays": {Case.Count} elements did not survive the round trip.`)
+		end
+	end
+
+	--> Bit order is part of the format: element one is the least significant bit, like `Block.Bit`.
+	local Ordered = Client.PackedBooleans.Write({ true, false, false, false, false, false, false, false, true })
+	if buffer.readu8(Ordered, 2) ~= 0x01 or buffer.readu8(Ordered, 3) ~= 0x01 then
+		ErrorPrint(`Failed "Packed boolean arrays": the first element is not the least significant bit.`)
+	end
+
+	--> Every other shape a packed run can sit in. The fixed and ranged lengths, the run beside plain
+	--> booleans that share the struct's bitfield, one per map value, nested, and through an alias.
+	local Shapes: { { Name: string, Value: any, Bytes: number? } } = {
+		{ Name = "PackedFixed", Value = Pattern(10), Bytes = 2 },
+		{ Name = "PackedRanged", Value = Pattern(3), Bytes = 2 },
+		{ Name = "PackedRanged", Value = Pattern(20), Bytes = 4 },
+		{ Name = "PackedThroughAlias", Value = Pattern(12), Bytes = 4 },
+		{ Name = "PackedNested", Value = { Pattern(3), {}, Pattern(9) } },
+		{
+			Name = "PackedBeside",
+			Value = { A = true, List = Pattern(11), B = false, Fixed = { true, false, true }, C = 200 },
+			--> Bitfield, u16 length, the fixed run and the u8, then the variable run's two bytes.
+			Bytes = 7,
+		},
+		{ Name = "PackedMap", Value = { First = Pattern(5), Second = {}, Third = Pattern(16) } },
+	}
+
+	for _, Shape in Shapes do
+		local Buffer = Client[Shape.Name].Write(Shape.Value)
+		if Shape.Bytes and buffer.len(Buffer) ~= Shape.Bytes then
+			ErrorPrint(
+				`Failed "Packed boolean arrays": {Shape.Name} serialised to {buffer.len(Buffer)} bytes, `
+					.. `expected {Shape.Bytes}.`
+			)
+		end
+
+		if not Equals(Client[Shape.Name].Read(Buffer), Shape.Value) then
+			ErrorPrint(`Failed "Packed boolean arrays": {Shape.Name} did not survive the round trip.`)
+		end
 	end
 end)

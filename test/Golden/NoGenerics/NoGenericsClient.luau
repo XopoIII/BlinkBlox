@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "9ff3c592694af7a0"
+local SCHEMA_SIGNATURE = "257d4b4b39845da3"
 --> Free-slot bitset for outstanding invocations: a set bit is a free slot.
 -->
 --> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
@@ -1127,20 +1127,24 @@ function SerdesFunctions.WriteEVENT_Booleans(Value: { boolean }): ()
 	-- Value: Booleans
 	-- START ARRAY
 	buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value)
-		-- Allocate BLOCK: 1 bytes
-	local ARRAY_START_1 = Allocate(1 * #Value)
-	for Index = 1, #Value do
-		local Item_1 = Value[Index]
-		-- Item_1: Booleans
-		if typeof(Item_1) ~= "boolean" then
-			error(`Expected Item_1 to be of type boolean, got {type(Item_1)} instead.`)
+	do
+		local PACKED_LENGTH = #Value
+		local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+		local PACKED_BITS = 0
+		for Index = 0, PACKED_LENGTH - 1 do
+			local PACKED_ITEM = Value[Index + 1]
+			if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+			if PACKED_ITEM then
+				PACKED_BITS += bit32.lshift(1, Index % 8)
+			end
+			if Index % 8 == 7 then
+				buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
+				PACKED_BITS = 0
+			end
 		end
-		-- Allocate 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local BITFIELD_0 = 0
-		if Item_1 then BITFIELD_0 += 0x01 end
-		buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, BITFIELD_0)
+		if PACKED_LENGTH % 8 ~= 0 then
+			buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+		end
 	end
 	-- END ARRAY
 end
