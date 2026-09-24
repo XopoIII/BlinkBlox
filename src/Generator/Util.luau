@@ -1,6 +1,9 @@
 --!strict
+local Grammar = require("../Modules/Grammar")
 local Parser = require("../Parser")
 local Signature = require("../Modules/Signature")
+
+local LUAU_KEYWORDS = Grammar.LUAU_KEYWORDS
 
 type Scope = Parser.Scope
 
@@ -35,8 +38,11 @@ local function GenerateEnumLiterals(Variants: { string }): string
 	return `{table.concat(Literals, " | ")}`
 end
 
+--- Whether a name can be written bare, as a key or after a dot. A Luau keyword cannot, though it is a
+--- legal field, flag or tag in a schema: emitted bare, `end` made `{ end: number }` and `Value.end`,
+--- and the generated module failed to load.
 local function IsValidIdentifier(Identifier: string): boolean
-	return Identifier:match("%a%w*") == Identifier
+	return Identifier:match("%a%w*") == Identifier and not LUAU_KEYWORDS[Identifier]
 end
 
 --- A table key as it is written in a constructor: bare when it is an identifier, bracketed when a
