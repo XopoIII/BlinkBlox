@@ -22,8 +22,7 @@ LIMIT=500
 
 # path:maximum-lines
 GRANDFATHERED="plugin/src/Editor/init.luau:921
-plugin/src/init.server.luau:579
-test/Assertions.luau:559"
+plugin/src/init.server.luau:579"
 
 if [ "$#" -eq 0 ]; then
 	set -- $(find src plugin/src test .lune -name "*.luau" | sort)
