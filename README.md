@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./docs/src/assets/bb_logo.jpg" alt="BlinkBlox" width="640">
+  <img src="./docs/src/assets/logo.png" alt="BlinkBlox logo" width="160">
 
 # BlinkBlox
 

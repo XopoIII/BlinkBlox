@@ -32,8 +32,12 @@ export default defineConfig({
 		starlight({
 			title: 'BlinkBlox',
 			description: 'An IDL compiler for Roblox buffer networking whose generated server is safe to point at the open internet.',
-			logo: { src: './src/assets/letter.png' },
-			favicon: '/favicon.png',
+			logo: { src: './src/assets/logo.png', alt: 'BlinkBlox' },
+			favicon: '/favicon-32.png',
+			head: [
+				{ tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/BlinkBlox/favicon.png' } },
+				{ tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/BlinkBlox/apple-touch-icon.png' } },
+			],
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/XopoIII/BlinkBlox' }],
 			editLink: { baseUrl: 'https://github.com/XopoIII/BlinkBlox/edit/main/docs/' },
 			lastUpdated: true,
