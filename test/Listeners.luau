@@ -111,3 +111,24 @@ RunClosure("A queued event keeps every value after a nil", function()
 
 	assert(Fourth == 4, `the queued event was replayed with {Count} value(s) and no 4`)
 end)
+
+--> A Many event dispatches by walking its list of listeners. Disconnecting removed from that same
+--> list, so a listener that disconnected itself during dispatch -- the usual shape of a "once" --
+--> shifted the next listener into the index the loop had just passed, and that one never ran.
+RunClosure("A listener that disconnects itself does not cost the next one the event", function()
+	local Seen: { string } = {}
+	local DisconnectFirst: () -> ()
+	DisconnectFirst = Client.ManyReliableSync.On(function()
+		table.insert(Seen, "first")
+		DisconnectFirst()
+	end)
+	local DisconnectSecond = Client.ManyReliableSync.On(function()
+		table.insert(Seen, "second")
+	end)
+
+	Server.ManyReliableSync.FireAll(1)
+	task.wait(1 / 30)
+	DisconnectSecond()
+
+	assert(#Seen == 2, `one fire reached {table.concat(Seen, " and ")}, expected first and second`)
+end)

@@ -4421,7 +4421,9 @@ local Returns = table.freeze({
 	},
 	ManyReliableSync = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			table.insert(Events.Reliable[20], Listener)
+			local Listeners = table.clone(Events.Reliable[20])
+			table.insert(Listeners, Listener)
+			Events.Reliable[20] = Listeners
 			for Index, Arguments in Queue.Reliable[20] do
 				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
@@ -4429,14 +4431,18 @@ local Returns = table.freeze({
 			return function (): ()
 				local Index = table.find(Events.Reliable[20], Listener)
 				if Index ~= nil then
-					table.remove(Events.Reliable[20], Index)
+					local Listeners = table.clone(Events.Reliable[20])
+					table.remove(Listeners, Index)
+					Events.Reliable[20] = Listeners
 				end
 			end
 		end
 	},
 	ManyReliableAsync = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			table.insert(Events.Reliable[21], Listener)
+			local Listeners = table.clone(Events.Reliable[21])
+			table.insert(Listeners, Listener)
+			Events.Reliable[21] = Listeners
 			for Index, Arguments in Queue.Reliable[21] do
 				Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
 			end
@@ -4444,29 +4450,39 @@ local Returns = table.freeze({
 			return function (): ()
 				local Index = table.find(Events.Reliable[21], Listener)
 				if Index ~= nil then
-					table.remove(Events.Reliable[21], Index)
+					local Listeners = table.clone(Events.Reliable[21])
+					table.remove(Listeners, Index)
+					Events.Reliable[21] = Listeners
 				end
 			end
 		end
 	},
 	ManyUnreliableSync = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			table.insert(Events.Unreliable[8], Listener)
+			local Listeners = table.clone(Events.Unreliable[8])
+			table.insert(Listeners, Listener)
+			Events.Unreliable[8] = Listeners
 			return function (): ()
 				local Index = table.find(Events.Unreliable[8], Listener)
 				if Index ~= nil then
-					table.remove(Events.Unreliable[8], Index)
+					local Listeners = table.clone(Events.Unreliable[8])
+					table.remove(Listeners, Index)
+					Events.Unreliable[8] = Listeners
 				end
 			end
 		end
 	},
 	ManyUnreliableAsync = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			table.insert(Events.Unreliable[9], Listener)
+			local Listeners = table.clone(Events.Unreliable[9])
+			table.insert(Listeners, Listener)
+			Events.Unreliable[9] = Listeners
 			return function (): ()
 				local Index = table.find(Events.Unreliable[9], Listener)
 				if Index ~= nil then
-					table.remove(Events.Unreliable[9], Index)
+					local Listeners = table.clone(Events.Unreliable[9])
+					table.remove(Listeners, Index)
+					Events.Unreliable[9] = Listeners
 				end
 			end
 		end

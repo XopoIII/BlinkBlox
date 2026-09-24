@@ -143,8 +143,15 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> stops doing anything. Two systems that each connect and later disconnect therefore leave a
 		--> listener attached that neither of them believes it owns. Upstream #167.
 		local function BindListener(Target: Blocks.Block): Blocks.Block
+			--> A Many event's list is replaced, never edited in place: a dispatch in progress iterates
+			--> the list it started with. Removing from that list shifted the next listener into an index
+			--> the loop had already passed, so a listener that disconnected itself -- a "once" -- made
+			--> the one after it miss the event. Copying costs an allocation per connect and disconnect,
+			--> and nothing per event.
 			if not IsSingle then
-				return Target:Line(`table.insert({Connection}, Listener)`)
+				return Target:Line(`local Listeners = table.clone({Connection})`)
+					:Line("table.insert(Listeners, Listener)")
+					:Line(`{Connection} = Listeners`)
 			end
 
 			return Target:Line(`if {Connection} ~= nil then`)
@@ -207,7 +214,11 @@ function Declarations.Event(Declaration: Parser.Event)
 			Disconnect = Disconnect:Compare(Connection, "Listener", "Equals"):Line(`{Connection} = nil`):End()
 		else
 			Disconnect = Disconnect:Line(`local Index = table.find({Connection}, Listener)`)
-			Disconnect = Disconnect:Compare("Index", "nil", "Not"):Line(`table.remove({Connection}, Index)`):End()
+			Disconnect = Disconnect:Compare("Index", "nil", "Not")
+				:Line(`local Listeners = table.clone({Connection})`)
+				:Line("table.remove(Listeners, Index)")
+				:Line(`{Connection} = Listeners`)
+				:End()
 		end
 
 		Disconnect = Disconnect:End():Wrap("return ", "")
