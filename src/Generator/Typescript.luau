@@ -70,7 +70,7 @@ local function GetTypescriptType(State: State, Declaration: Type): (string, stri
 		local Literals = {}
 
 		for _, Variant in Value.Values do
-			local TagField = `{Value.Tag}: "{Variant.Name}"`
+			local TagField = `{FormatKey(Value.Tag)}: "{Variant.Name}"`
 			local ValueType = GetTypescriptType(State, Variant)
 			table.insert(Literals, `\{ {TagField},{string.sub(ValueType, 2)}`)
 		end
