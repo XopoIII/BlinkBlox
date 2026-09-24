@@ -182,6 +182,8 @@ export type Lexer = typeof(setmetatable(
 		Size: number,
 		Source: string,
 		Cursor: number,
+		--> The file being lexed, for the one diagnostic the lexer raises. Nil in the plugin's editor.
+		File: string?,
 	},
 	Lexer
 ))
@@ -198,10 +200,11 @@ function Lexer.new(Mode: Mode?): Lexer
 	)
 end
 
-function Lexer.Initialize(self: Lexer, Source: string)
+function Lexer.Initialize(self: Lexer, Source: string, File: string?)
 	self.Size = #Source
 	self.Source = Source
 	self.Cursor = 1
+	self.File = File
 end
 
 function Lexer.GetNextToken(self: Lexer, DontAdvanceCursor: boolean?, StartAt: number?): Token
@@ -272,7 +275,7 @@ function Lexer.GetNextToken(self: Lexer, DontAdvanceCursor: boolean?, StartAt: n
 	end
 
 	if not IsHighlighting then
-		Error.new(Error.LexerUnexpectedToken, self.Source, "Unexpected token")
+		Error.new(Error.LexerUnexpectedToken, self.Source, "Unexpected token", self.File)
 			:Primary({ Start = self.Cursor, End = self.Cursor }, `Unexpected token`)
 			:Emit()
 	end

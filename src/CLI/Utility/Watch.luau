@@ -70,7 +70,7 @@ end
 
 ---- Public Functions ----
 
-function Utility.Watch(Path: string, Profile: string?)
+function Utility.Watch(Path: string, Profile: string?, Check: boolean?)
 	local FilePath = GetDefinitionFilePath(Path)
 	local Imports: { string }
 
@@ -97,6 +97,7 @@ function Utility.Watch(Path: string, Profile: string?)
 		Traverse()
 		local Options = table.clone(WATCH_OPTIONS)
 		Options.Profile = Profile
+		Options.Check = Check
 		Compile.Compile(Path, Options)
 	end
 

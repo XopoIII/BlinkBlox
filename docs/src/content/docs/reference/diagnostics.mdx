@@ -47,6 +47,10 @@ it, and `note` lines with the fix. With `--compact` the CLI prints one line inst
 [W3019] [L001:L001] [Game.blink] Warning: Unreliable event "Snapshot" may exceed the packet limit
 ```
 
+A program reading the diagnostics -- an editor task, a CI step, an assistant -- should use `--json`
+instead, which gives each one's code, file, line and column, labels and notes as JSON. See
+[JSON output](/BlinkBlox/getting-started/cli/#json-output).
+
 ## Errors and warnings
 
 ### Reading and parsing

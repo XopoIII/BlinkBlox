@@ -7,6 +7,36 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.30.0 — 2026-09-24
+
+Tooling for the programs that read the compiler's output: editor tasks, CI steps and coding
+assistants. **The wire format does not change.**
+
+### Added
+
+- `--check` runs the whole compile and writes nothing: no modules, no output directories, no prompt.
+  The diagnostics and exit code are those of a real compile. It combines with `--watch`.
+- `--json` prints the result as one JSON document on standard output and nothing else: every
+  diagnostic with its code, name, file, line, column and byte offset, its labels and its notes, plus
+  the paths written. A failure that is not a diagnostic, such as a missing schema file, is reported in
+  the document too. It cannot be combined with `--watch`.
+
+### Fixed
+
+- A diagnostic named the schema by its bare file name, and one inside an import by the string the
+  `import` wrote, relative to whichever file wrote it. Both now name the file by its path, normalised.
+- The lexer's one diagnostic, an unexpected character, named the file `input.blink` whatever it was
+  called.
+- A schema without `ServerOutput` or `ClientOutput` was reported with the compiler's own file and line
+  in front of the message.
+
+### Documentation
+
+- The syntax highlighting knows `OrderedUnreliable`, `quat`, attributes such as `@profile`, and
+  decimal numbers.
+- The promise of an MCP server is withdrawn. `--check --json` gives an assistant what such a server
+  would have.
+
 ## 0.29.0 — 2026-09-24
 
 A runtime audit, made possible once 0.28.0 had split the runtime into files small enough to read
