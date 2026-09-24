@@ -103,6 +103,11 @@ None of this needs an option. The limits it uses have defaults you can change, b
    A rate on a `From: Server` event or function does nothing and warns (`W3020`): only inbound
    traffic is limited. A `Burst` with no `Rate` behind it is an error (`E3020`).
 
+   A function whose listener waits -- a DataStore save, a purchase, anything that yields -- also
+   wants a [`Concurrency`](/BlinkBlox/language/functions/#concurrency): how many of one player's calls
+   may be running at once. `Rate` bounds how many start; `Concurrency` bounds how many are still
+   waiting, which is what a stream of calls turns into when each one takes seconds to answer.
+
    The check runs after the event is decoded and before it is dispatched, so it protects your
    listener and the game logic behind it. It cannot run sooner: an event carries no length of its
    own, so the only way to find where the next event in a packet starts is to read this one. The

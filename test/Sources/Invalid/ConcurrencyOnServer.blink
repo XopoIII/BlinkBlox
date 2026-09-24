@@ -1,0 +1,12 @@
+-- expect W3020
+-- Concurrency limits the calls a server runs for a client. On a function the server invokes it would
+-- silently do nothing, so it warns.
+option ClientOutput = "../../Network/ConcurrencyOnServerClient.luau"
+option ServerOutput = "../../Network/ConcurrencyOnServerServer.luau"
+
+function Ask {
+    From: Server,
+    Yield: Coroutine,
+    Concurrency: 2,
+    Data: u8
+}

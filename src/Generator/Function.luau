@@ -129,13 +129,32 @@ function Declarations.Function(Declaration: Parser.Function)
 			Queues.Refuse(Block:Line(`if not {RateGuard} then`), Index, Block.Indent + 1):Line("end")
 		end
 
+		--> After the rate limit, so a refused call is not counted as running; before dispatch, so a
+		--> call waiting in the queue is. Released below wherever the call is answered. The client has
+		--> no such check: the server it listens to is trusted.
+		local Limit = if OnServer then Value.Concurrency else nil
+		local Release = if Limit then `ConcurrencyRelease(Player, {Index})` else nil
+		if Limit then
+			local Guard = `if not ConcurrencyAccept(Player, {Index}, {Limit}, "{Name}") then`
+			Queues.Refuse(Block:Line(Guard), Index, Block.Indent + 1):Line("end")
+		end
+
 		--> The listening side passes a Player only when it IS the server. A client listening to a
 		--> function the server invokes has no player to name: the caller is the server.
 		local Caller = if OnServer then "Player, " else ""
 		local Queued = Block:Compare(Connection, "nil", "Not")
 			:Line(`Spawn({Connection}, {Caller}{DataArguments}, InvocationIdentifier)`)
 			:Branch("Default")
-		Queues.Enqueue(Queued, State.Context, Queue, `{Caller}{DataArguments}, InvocationIdentifier`, Name, Index):End()
+		Queues.Enqueue(
+			Queued,
+			State.Context,
+			Queue,
+			`{Caller}{DataArguments}, InvocationIdentifier`,
+			Name,
+			Index,
+			Release
+		)
+			:End()
 
 		--> Data listener body
 		local FlushQueue = Blocks.Function("", "", "()")
@@ -194,6 +213,11 @@ function Declarations.Function(Declaration: Parser.Function)
 			:Line(`buffer.writeu8(SendBuffer, Position + 2, 0)`)
 			:Line(`warn(\`"{Name}" encountered an error, \{Error\}\`)`)
 			:End()
+
+		--> The reply is written, success or failure: the call is no longer running.
+		if Release then
+			TrueListener:Line(Release)
+		end
 
 		if OnServer then
 			TrueListener:Line("SavePlayerBuffer(Player)")

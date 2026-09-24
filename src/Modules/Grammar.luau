@@ -101,6 +101,10 @@ Grammar.FUNCTION = {
 	{ Key = "Yield", Type = "Identifier", Values = { "Future", "Promise", "Coroutine" } },
 	{ Key = "Rate", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Burst", Type = "Number", Values = {}, Optional = true, Numeric = true },
+	--- How many of one player's calls the server runs at once. Rate bounds how many START; this bounds
+	--- how many are still running, which is what a listener that waits -- a DataStore request, an
+	--- invocation back to the same client -- turns a flood of calls into.
+	{ Key = "Concurrency", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Data", Type = "Identifier", Values = {}, Optional = true },
 	{ Key = "Return", Type = "Identifier", Values = {}, Optional = true },
 } :: { EventOption }

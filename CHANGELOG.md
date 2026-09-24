@@ -7,6 +7,43 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.33.0 — 2026-09-24
+
+A limit on the calls a server runs at once, and tests for the seams between events. **The wire format
+does not change.**
+
+### Added
+
+- `Concurrency: N` on a function caps how many of one player's calls the server runs at once. `Rate`
+  limits how many calls *start* each second. A listener that waits (a DataStore save, an HTTP request,
+  an invocation back to the client) holds each call open while it waits, so calls arriving at an
+  allowed rate still piled up into suspended threads. A client sending its own requests is not bound
+  by the 32 outstanding calls an honest client module keeps to.
+  - A call past the limit is answered with a failure at once.
+  - It is reported through `SetRateLimitHandler` and a warning, once a second per player.
+  - The place is given back when the call is answered: returned, thrown, or failed to serialise.
+  - A call queued for a listener that has not connected counts as running.
+  - The counts go when the player leaves.
+  - A fractional value is refused (`E2003`), and `Concurrency` on a `From: Server` function warns
+    (`W3020`).
+
+### Tests
+
+- `test/Composition.luau` fires random sequences of client events into one packet, using a schema of
+  its own built on isolated remotes (`test/Isolated.luau`). It checks four things:
+  - the listeners receive exactly the sequence that was fired;
+  - the packet is the events' standalone packets laid end to end;
+  - a fire the sender refuses leaves the packet byte for byte unchanged;
+  - a packet cut short delivers every event that ended before the cut, then reports once, naming the
+    event it was cut inside.
+
+  It catches the 0.24 phantom event and the 0.29 closed-up holes when either is put back.
+- `test/EventIndices.luau` sends every one of the 256 index bytes, alone, on both channels of every
+  test schema's server. A declared index must be taken as its declaration, and any other index must
+  be reported exactly once as unknown. It catches the 0.26 channel that never refused when that bug is
+  put back.
+- `test/Concurrency.luau` covers the limit, and checks that a failing call gives its place back.
+
 ## 0.32.0 — 2026-09-24
 
 The generated modules pass their own `--!strict` line. **The wire format does not change.**

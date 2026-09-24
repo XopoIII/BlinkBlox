@@ -475,6 +475,16 @@ local MAX_POLLED = 256 * math.max(Players.MaxPlayers, 1)
 local RateBuckets: {[Player]: {number}} = {}
 local RateHandler: ((Player: Player, Event: string?, Refused: number) -> ())? = nil
 
+--> CALLS IN FLIGHT. For each player, how many calls of each function that declares a `Concurrency`
+--> the server has accepted and not yet answered, keyed by the function's event index; and beside it
+--> the refusals made since the last report. `Rate` bounds how many calls START a second. It says
+--> nothing about how many are still RUNNING, and a listener that waits -- a DataStore request, an
+--> invocation back to the same client, which that client can leave unanswered for the whole timeout
+--> -- turns a steady stream of calls into a growing pile of suspended threads. A hostile client is
+--> not held to the 32 outstanding calls an honest one is: it writes whatever invocation ids it likes.
+local InFlight: {[Player]: {[number]: number}} = {}
+local InFlightRefused: {[Player]: {[number]: number}} = {}
+
 --> THE INBOUND BUDGET. Bytes a player's packets may cost the server, refilled every second, charged
 --> before a packet is decoded: tokens left, refill clock, report clock, refusals since that report.
 --> Every other limit is per packet or per event, and a client that sends many packets each frame
@@ -566,6 +576,8 @@ Players.PlayerRemoving:Connect(function(Player)
     RateBuckets[Player] = nil
     InboundBudgets[Player] = nil
     Reports[Player] = nil
+    InFlight[Player] = nil
+    InFlightRefused[Player] = nil
 
     --> Every call outstanding to this player is now unanswerable. Failing them here rather than
     --> leaving them to time out matters because the thread on the other end is game code holding a
@@ -720,6 +732,66 @@ local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: num
 
     Bucket[Slot] = Tokens - 1
     return true
+end
+
+--> Claims one of a player's `Limit` running calls of function `Index`, or reports and refuses.
+-->
+--> Called once a call has been decoded and passed its rate limit, before it is dispatched or queued,
+--> so a call waiting in the queue for its listener counts as running: it holds the same thread and
+--> the same promise of a reply. Refusals are reported on RateAccept's schedule and through its
+--> handler, once a second per player per function, carrying the refusals since the last report.
+local function ConcurrencyAccept(Player: Player, Index: number, Limit: number, Name: string): boolean
+    if Player.Parent == nil then
+        InFlight[Player] = nil
+        InFlightRefused[Player] = nil
+        return false
+    end
+
+    local Counts = InFlight[Player]
+    if not Counts then
+        Counts = {}
+        InFlight[Player] = Counts
+    end
+
+    local Running = Counts[Index] or 0
+    if Running < Limit then
+        Counts[Index] = Running + 1
+        return true
+    end
+
+    local Pending = InFlightRefused[Player]
+    if not Pending then
+        Pending = {}
+        InFlightRefused[Player] = Pending
+    end
+
+    local Refused = (Pending[Index] or 0) + 1
+    if not ShouldReport(Player, `Concurrency {Index}`) then
+        Pending[Index] = Refused
+        return false
+    end
+
+    Pending[Index] = 0
+    warn(`[BlinkBlox]: "{Name}" from {Player.Name} already has {Limit} calls running, {Refused} refused.`)
+
+    local Handler = RateHandler
+    if Handler then
+        --> Spawned for RateAccept's reason: this runs inside the per-event pcall of the decode loop.
+        Spawn(Handler, Player, Name, Refused)
+    end
+
+    return false
+end
+
+--> Gives back the running call ConcurrencyAccept claimed, once its reply has been written. Every
+--> accepted call is answered exactly once -- the listener's reply, its failure reply, or the failure
+--> written when the queue is full -- and each of those paths releases, so the count cannot leak. A
+--> player who left has no counts to give back to: PlayerRemoving dropped them.
+local function ConcurrencyRelease(Player: Player, Index: number)
+    local Counts = InFlight[Player]
+    if Counts and (Counts[Index] or 0) > 0 then
+        Counts[Index] -= 1
+    end
 end
 
 --> Writing a player's buffer back is only safe while that player is still in the game.

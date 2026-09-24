@@ -43,7 +43,8 @@ end
 
 --- Emits the enqueue into `Target`, the branch taken when no listener is bound, and returns it.
 --- `Invocation` is the event index of a function, whose caller is answered rather than dropped when
---- the server's queue is full.
+--- the server's queue is full. `Release` is emitted on that refusal first: a call a `Concurrency`
+--- limit has already counted as running is given back when it is answered this way instead.
 --- Each row is `table.pack`ed and replayed with its own `n`. A row built as `{A, B, ...}` lost every
 --- value after a `nil` it ended on: `#{1, nil, nil, 4, nil}` is 1, so a tuple with optional elements
 --- that arrived before its listener was replayed with some of its values gone.
@@ -53,7 +54,8 @@ local function Enqueue(
 	Queue: string,
 	Row: string,
 	Name: string,
-	Invocation: number?
+	Invocation: number?,
+	Release: string?
 ): Block
 	local Insert = `table.insert({Queue}, table.pack({Row}))`
 
@@ -68,6 +70,10 @@ local function Enqueue(
 
 	if Invocation then
 		local Full = Target:Compare(`#{Queue}`, CAPACITY, "GreaterOrEquals")
+		if Release then
+			Full:Line(Release)
+		end
+
 		return Refuse(Full, Invocation, Full.Indent):End():Line(Insert)
 	end
 

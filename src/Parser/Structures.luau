@@ -94,6 +94,13 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 					:Emit()
 			end
 
+			--> A count of calls, so a whole one: `Concurrency: 1.5` has no meaning to round towards.
+			if Option.Key == "Concurrency" and Numeric and Numeric ~= math.floor(Numeric) then
+				self:Diagnostic(Error.ParserUnknownOption, `Invalid value for "Concurrency"`)
+					:Primary(Token, "Expected a whole number of calls")
+					:Emit()
+			end
+
 			--> Stored as a number: every consumer does arithmetic with it.
 			Value = Numeric
 		elseif Option.Key ~= "Data" and Option.Key ~= "Return" then
@@ -172,6 +179,7 @@ function Parser.Function(self: Parser, Name: Token): Function
 			Return = Structure.Return,
 			Rate = Structure.Rate,
 			Burst = Structure.Burst,
+			Concurrency = Structure.Concurrency,
 		},
 		Tokens = {
 			Identifier = Name,

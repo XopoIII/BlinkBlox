@@ -22,7 +22,7 @@ function GetBalance {
 }
 ```
 
-`Yield` is required. `From`, `Data`, `Return`, `Rate` and `Burst` are optional.
+`Yield` is required. `From`, `Data`, `Return`, `Rate`, `Burst` and `Concurrency` are optional.
 
 Calls and replies travel on the reliable channel, batched with reliable
 [events](/BlinkBlox/language/events/#type) and sent once a frame, so a call and its answer each wait for
@@ -120,6 +120,34 @@ event: rate limiting applies to inbound traffic, and the server is the party bei
 A refused invocation is answered with a failure rather than dropped, so the caller raises promptly
 instead of waiting out the timeout.
 
+### `Concurrency`
+How many of one player's calls to this function the server runs at once. `Rate` limits how many calls
+*start* each second; it says nothing about how many are still *running*. A listener that waits -- a
+DataStore request, an HTTP call, an invocation back to the same client -- holds each call open for as
+long as the wait, so calls arriving at an allowed rate can still pile up into hundreds of suspended
+threads, each holding whatever its listener holds. A client that sends the requests itself is not held
+to the [thirty-two calls in flight](#thirty-two-calls-in-flight) an honest client module is.
+
+```blink
+function SaveLoadout {
+    Yield: Coroutine,
+    Rate: 2,
+    Concurrency: 1,
+    Data: u8[..8],
+    Return: boolean
+}
+```
+
+With `Concurrency: 1`, a second `SaveLoadout` from a player whose first is still saving is refused.
+It is answered with a failure straight away, like a call refused by `Rate`, and reported through the
+same [rate-limit handler](/BlinkBlox/language/events/#rate-burst), once a second per player. The place
+is given back when the call is answered -- whether the listener returned, threw, or returned the wrong
+type -- and a call waiting in the queue for a listener that has not connected yet counts as running.
+When the player leaves, their count goes with them.
+
+`Concurrency` is a whole number of at least 1. Like `Rate`, it applies to a `From: Client` function
+and warns (`W3020`) on a `From: Server` one.
+
 ## Usage in Luau
 
 The module holds one table per function, named after it. The caller's side gets `Invoke`, the
@@ -174,6 +202,7 @@ rejects. What causes it:
 | The listener threw | The listening side warns `"Name" encountered an error, ...` with the error. |
 | The listener returned something its `Return` type does not allow | The same warning. The reply is taken back out of the batch rather than sent half-written. |
 | The call was refused by `Rate` | Reported through the [rate-limit handler](/BlinkBlox/language/events/#rate-burst). |
+| The player already had `Concurrency` calls running | Reported through the same handler, with the function's name. |
 | The server's queue for an unconnected listener was full | Nothing is reported. |
 | Nobody answered within `InvocationTimeout` | The caller's side warns, naming the function and, on the server, the player. |
 | The player being asked left the game | Every call outstanding to them fails at once rather than timing out. |
