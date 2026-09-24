@@ -1,0 +1,7 @@
+-- expect E3004
+-- An enum value named twice takes two indices; the writer only ever sends the first, so the second
+-- is one the decoder accepts and nobody can send.
+option ClientOutput = "../../Network/DuplicateEnumValueClient.luau"
+option ServerOutput = "../../Network/DuplicateEnumValueServer.luau"
+
+enum State = { Idle, Walking, Idle }

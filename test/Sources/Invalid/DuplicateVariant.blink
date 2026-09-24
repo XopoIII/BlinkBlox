@@ -1,0 +1,11 @@
+-- expect E3004
+-- A tagged enum dispatches on the variant's name, so a second variant of the same name can never be
+-- written: the first one always matches.
+option ClientOutput = "../../Network/DuplicateVariantClient.luau"
+option ServerOutput = "../../Network/DuplicateVariantServer.luau"
+
+enum Shape = "Kind" {
+    Circle { Radius: f32 },
+    Square { Side: f32 },
+    Circle { Diameter: f32 },
+}

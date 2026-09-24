@@ -1,0 +1,7 @@
+-- expect E3004
+-- A set names each flag once. Twice, the type the module declares has the key twice, and the flag
+-- takes two bits that always travel together.
+option ClientOutput = "../../Network/DuplicateFlagClient.luau"
+option ServerOutput = "../../Network/DuplicateFlagServer.luau"
+
+set Permissions = { "Read", "Write", "Read" }

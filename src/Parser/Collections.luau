@@ -27,12 +27,32 @@ local LUAU_KEYWORDS = Grammar.LUAU_KEYWORDS
 
 local Parser = ParserClass.Class
 
-function Parser.Set(self: Parser, Name: Token): Set
+--- Reads a set's flags or an enum's values: a braced list of names, each allowed once. A repeat was
+--- accepted, and meant a flag taking two bits that always travel together, or an enum index the
+--- writer never sends because the first of the two always matches.
+local function ReadNames(self: Parser, Noun: string): { string }
 	local Values: { string } = {}
+	local Seen: { [string]: true } = {}
+
 	self:List("OpenBraces", "CloseBraces", function()
 		local Token = self:ConsumeText(true, true)
+		if Seen[Token.Value] then
+			error(
+				self:Diagnostic(Error.AnalyzeDuplicateField, `Duplicate {Noun} "{Token.Value}"`)
+					:Primary(Token, `Duplicate {Noun}`)
+					:Emit()
+			)
+		end
+
+		Seen[Token.Value] = true
 		table.insert(Values, Token.Value)
 	end)
+
+	return Values
+end
+
+function Parser.Set(self: Parser, Name: Token): Set
+	local Values = ReadNames(self, "flag")
 
 	return {
 		Type = "Set",
@@ -82,18 +102,13 @@ function Parser.Map(self: Parser, Name: Token): Map
 end
 
 function Parser.Enum(self: Parser, Name: Token): Enum | TagEnum
-	local Values: { string } = {}
-
 	--> Is it a tagged enum?
 	local Tag = self:TryConsume("String")
 	if Tag then
 		return self:TagEnum(Tag, Name)
 	end
 
-	self:List("OpenBraces", "CloseBraces", function()
-		local Token = self:ConsumeText(true, true)
-		table.insert(Values, Token.Value)
-	end)
+	local Values = ReadNames(self, "value")
 
 	return {
 		Type = "Enum",
@@ -105,6 +120,7 @@ end
 
 function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 	local Values: { Struct } = {}
+	local Seen: { [string]: true } = {}
 
 	self:List("OpenBraces", "CloseBraces", function()
 		local Token: Token
@@ -116,6 +132,18 @@ function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 		else
 			Token = self:ConsumeText(true)
 		end
+
+		--> The writer dispatches on the variant's name, so a second variant of the same name could
+		--> never be sent: the first always matches.
+		if Seen[Token.Value] then
+			error(
+				self:Diagnostic(Error.AnalyzeDuplicateField, `Duplicate variant "{Token.Value}"`)
+					:Primary(Token, `Duplicate variant`)
+					:Emit()
+			)
+		end
+
+		Seen[Token.Value] = true
 
 		local Struct = self:Struct(Token)
 		local Fields = Struct.Value.Values
