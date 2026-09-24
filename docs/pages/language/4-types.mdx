@@ -261,6 +261,9 @@ set Flags = {
 ## Enums
 BlinkBlox supports two types of enums, unit and tagged enums.
 
+Either kind travels as a one-byte index, so an enum holds between 1 and 256 values or variants. An
+empty one, or one past 256, is refused at compile time (`E3029`).
+
 ### Unit Enums
 Units enums represent a set of possible values.<br/>
 They are defined using the `enum` type. 

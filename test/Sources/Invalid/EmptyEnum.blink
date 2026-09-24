@@ -1,0 +1,6 @@
+-- expect E3029
+-- An enum with no values gave the generator nothing to index, and it failed with an internal error.
+option ClientOutput = "../../Network/EmptyEnumClient.luau"
+option ServerOutput = "../../Network/EmptyEnumServer.luau"
+
+enum Nothing = {}

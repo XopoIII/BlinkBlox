@@ -27,14 +27,36 @@ local LUAU_KEYWORDS = Grammar.LUAU_KEYWORDS
 
 local Parser = ParserClass.Class
 
+--- An enum's value, and a tagged enum's variant, travel as a one-byte index. A 257th was written as
+--- index 0 -- `writeu8` keeps the low byte -- and decoded as the first, with a tagged enum then
+--- reading the first variant's fields out of the 257th's bytes. And an enum with nothing in it gave
+--- the generator nothing to index, and it failed with an internal error. `Count` is how many there are
+--- once `Token` is added; `Token` is the opening brace when checking a list that turned out empty.
+local function EnsureIndexable(self: Parser, Token: Token, Count: number, Noun: string)
+	if Count > 256 then
+		error(
+			self:Diagnostic(Error.AnalyzeEnumSize, `Too many {Noun}s`)
+				:Primary(Token, `The 257th {Noun}`)
+				:Note(`Each {Noun} is sent as a one-byte index, so an enum holds at most 256.`)
+				:Emit()
+		)
+	elseif Count == 0 then
+		error(
+			self:Diagnostic(Error.AnalyzeEnumSize, "Empty enum")
+				:Primary(Token, `An enum needs at least one {Noun}`)
+				:Emit()
+		)
+	end
+end
+
 --- Reads a set's flags or an enum's values: a braced list of names, each allowed once. A repeat was
 --- accepted, and meant a flag taking two bits that always travel together, or an enum index the
 --- writer never sends because the first of the two always matches.
-local function ReadNames(self: Parser, Noun: string): { string }
+local function ReadNames(self: Parser, Noun: string, Indexed: boolean?): { string }
 	local Values: { string } = {}
 	local Seen: { [string]: true } = {}
 
-	self:List("OpenBraces", "CloseBraces", function()
+	local Opening = self:List("OpenBraces", "CloseBraces", function()
 		local Token = self:ConsumeText(true, true)
 		if Seen[Token.Value] then
 			error(
@@ -44,9 +66,17 @@ local function ReadNames(self: Parser, Noun: string): { string }
 			)
 		end
 
+		if Indexed then
+			EnsureIndexable(self, Token, #Values + 1, Noun)
+		end
+
 		Seen[Token.Value] = true
 		table.insert(Values, Token.Value)
 	end)
+
+	if Indexed and #Values == 0 then
+		EnsureIndexable(self, Opening, 0, Noun)
+	end
 
 	return Values
 end
@@ -108,7 +138,7 @@ function Parser.Enum(self: Parser, Name: Token): Enum | TagEnum
 		return self:TagEnum(Tag, Name)
 	end
 
-	local Values = ReadNames(self, "value")
+	local Values = ReadNames(self, "value", true)
 
 	return {
 		Type = "Enum",
@@ -122,7 +152,7 @@ function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 	local Values: { Struct } = {}
 	local Seen: { [string]: true } = {}
 
-	self:List("OpenBraces", "CloseBraces", function()
+	local Opening = self:List("OpenBraces", "CloseBraces", function()
 		local Token: Token
 
 		if self:Peek().Type == "OpenBrackets" then
@@ -143,6 +173,7 @@ function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 			)
 		end
 
+		EnsureIndexable(self, Token, #Values + 1, "variant")
 		Seen[Token.Value] = true
 
 		local Struct = self:Struct(Token)
@@ -160,6 +191,10 @@ function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 
 		table.insert(Values, Struct)
 	end)
+
+	if #Values == 0 then
+		EnsureIndexable(self, Opening, 0, "variant")
+	end
 
 	return {
 		Type = "TagEnum",
