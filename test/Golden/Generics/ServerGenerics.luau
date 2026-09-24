@@ -21,7 +21,7 @@ local Future = require()
 local Promise = require()
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "62e07079c7e3d6bb"
+local SCHEMA_SIGNATURE = "c0528652a9ca2dd8"
 --> Free-slot bitset for outstanding invocations: a set bit is a free slot.
 -->
 --> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the

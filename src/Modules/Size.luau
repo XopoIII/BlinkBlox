@@ -215,17 +215,40 @@ local function MeasurePrimitive(Node: Node): Measurement
 	return Result
 end
 
+--- Whether an array of this element is packed eight elements to a byte rather than one per byte.
+---
+--- Only a plain `boolean`: an optional one carries a presence bit AND a value bit per element, and
+--- a map's value shares its loop body with the key. Shared with the emitter, so the two cannot come
+--- to disagree about which arrays are packed.
+local function PacksBooleans(Of: Node): boolean
+	return Of.Type == "Primitive" and Of.Tokens.Primitive.Value == "boolean"
+end
+
 local function MeasureArray(Node: Node): Measurement
 	local Value = Node.Value
 	local Range = Value.Range
 
-	--> The loop body is a block of its own, so the element's bits are packed per element rather than
-	--> shared with whatever surrounds the array.
-	local Of = Seal(Measure(Value.Of))
-
 	local Lower = Range.Min
 	local Upper = Range.Max
 	local Result = Empty()
+
+	if PacksBooleans(Value.Of) then
+		local Low = math.ceil(Lower / BITS_PER_BYTE)
+		local High = math.ceil(Upper / BITS_PER_BYTE)
+		local Prefix = if Lower == Upper then 0 else LengthPrefixBytes(Upper - Lower)
+		local RangeToken: Token? = Node.Tokens.Range
+		local Written = if RangeToken then RangeToken.Value ~= "[]" else false
+
+		Result.Min = Prefix + Low
+		Result.Max = Prefix + High
+		Result.Unbounded = (Lower ~= Upper) and not Written
+		Result.Culprit = if Result.Unbounded then RangeToken else nil
+		return Result
+	end
+
+	--> The loop body is a block of its own, so the element's bits are packed per element rather than
+	--> shared with whatever surrounds the array.
+	local Of = Seal(Measure(Value.Of))
 
 	--> A fixed-length array is unrolled and carries no length prefix.
 	if Lower == Upper then
@@ -418,6 +441,7 @@ local ORDERING_BYTES = 2
 return {
 	Measure = Measure,
 	Sealed = Sealed,
+	PacksBooleans = PacksBooleans,
 	DefaultLength = DEFAULT_LENGTH,
 	OrderingBytes = ORDERING_BYTES,
 }

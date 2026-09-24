@@ -108,6 +108,33 @@ ExpectRejection(
 	`bytes left in the packet`
 )
 
+--> A packed `boolean[]` costs an eighth of a byte an element, so its guard is on the bytes the run
+--> takes rather than on the count. 65535 elements need 8192 bytes; ten are not enough.
+local OversizePacked = buffer.create(2 + 10)
+buffer.writeu16(OversizePacked, 0, 65535)
+ExpectRejection(
+	"A packed boolean array is refused before its slots are reserved",
+	Client.PackedBooleans.Read,
+	OversizePacked,
+	`bytes left in the packet`
+)
+
+--> And the converse, which a guard written against a whole byte per element would get wrong: 800
+--> elements in the 100 bytes they honestly take.
+do
+	local Name = "A packed boolean array that fits is not refused"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	local Honest = buffer.create(2 + 100)
+	buffer.writeu16(Honest, 0, 800)
+	local Success, Result = pcall(Client.PackedBooleans.Read, Honest)
+	if not Success or #Result ~= 800 then
+		ErrorPrint(`Failed "{Name}": {if Success then `read {#Result} elements` else tostring(Result)}.`)
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end
+
 --> The instance table travels beside the buffer as the remote's second argument, and a client
 --> chooses both. `unknown` reads from it without checking, so a buffer that claims values the table
 --> does not hold used to decode as nil -- and inside a loop, to decode as nil for as long as the

@@ -184,6 +184,11 @@ For example, if you wanted to bound the length of an array between `25` and `50`
 string[25..50]
 ```
 
+### Arrays of booleans
+An array of plain booleans is packed eight elements to a byte, after its length: `boolean[1000]` costs
+125 bytes rather than 1000. An array of optional booleans, `boolean?[]`, is not packed, since each
+element carries a presence flag of its own as well as its value.
+
 ### Example Usage
 ```blink copy
 type UserIds = f64[1..50]

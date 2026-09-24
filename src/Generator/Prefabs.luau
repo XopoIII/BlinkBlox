@@ -146,6 +146,15 @@ end
 --- element that costs nothing either way is refused at compile time instead -- there is no resource
 --- left to measure it against.
 local function EmitCapacityGuard(Block: Block, Length: string, Variable: string, Of: Parser.TypeNode)
+	--> A packed boolean costs an eighth of a byte, which the per-element minimum below would round up
+	--> to one -- and then refuse an honest 800-element array for not fitting in its 100 bytes.
+	if Size.PacksBooleans(Of :: any) then
+		Block:Line(
+			`if ({Length} + 7) // 8 > buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR} then error(\`Expected "{Variable}" to fit in the \{buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR}} bytes left in the packet, got a length of \{{Length}} instead.\`) end`
+		)
+		return
+	end
+
 	local Element = Size.Sealed(Of :: any)
 
 	if Element.Min > 0 then

@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "9ff3c592694af7a0"
+local SCHEMA_SIGNATURE = "257d4b4b39845da3"
 --> Free-slot bitset for outstanding invocations: a set bit is a free slot.
 -->
 --> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
@@ -1093,18 +1093,17 @@ function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
 	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 	local Value = table.create(Length)
-		-- Read BLOCK: 1 bytes
-	local ARRAY_START_1 = Read(1 * Length)
-	for Index = 1, Length do
-		-- Item_1: Booleans
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		local Item_1 = bit32.btest(BITFIELD_0, 0x01)
-		table.insert(Value, Item_1)
+	do
+		local PACKED_OFFSET = Read((Length + 7) // 8)
+		local PACKED_BITS = 0
+		for Index = 0, Length - 1 do
+			if Index % 8 == 0 then
+				PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+			end
+			table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+		end
 	end
 	-- END ARRAY
 	return Value

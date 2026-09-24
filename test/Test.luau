@@ -647,6 +647,13 @@ RunClosure("Static size analysis matches the emitter", function()
 		{ Name = "ExactBuffer", Value = buffer.create(9) },
 		{ Name = "BoundedBuffer", Value = buffer.create(256) },
 		{ Name = "MultiDimensionalArray", Value = { { { 1, 2 }, { 3 } }, { { 4 } } } },
+		{ Name = "PackedBooleans", Value = table.create(1000, true) },
+		{ Name = "PackedRanged", Value = table.create(9, false) },
+		{ Name = "PackedFixed", Value = table.create(10, true) },
+		{
+			Name = "PackedBeside",
+			Value = { A = true, List = { true }, B = true, Fixed = { true, false, true }, C = 1 },
+		},
 	}
 
 	for _, Sample in Samples do

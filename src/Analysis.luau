@@ -185,6 +185,9 @@ end
 
 --- Whether one element of a repetition costs nothing to decode -- no buffer bytes, no bits, and no
 --- slot in the instance table.
+---
+--- A packed boolean is NOT costless, though it takes an eighth of a byte: sealed on its own it is a
+--- bit rounded up to a byte, and the loop over a packed run still ends when the packet does.
 local function Costless(Node: Declaration): boolean
 	local Measured = Size.Sealed(Node :: any)
 	return Measured.Max == 0 and Measured.Refs == 0

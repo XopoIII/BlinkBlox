@@ -8,6 +8,7 @@
 --- both ways -- the generator dispatches into these, and a struct or an array has to dispatch back
 --- out to whatever its fields are.
 local Parser = require("../Parser")
+local Size = require("../Modules/Size")
 
 local Blocks = require("./Blocks")
 local Prefabs = require("./Prefabs")
@@ -219,6 +220,58 @@ function Serde.TagEnum(Declaration: Parser.TagEnum, Read: Blocks.Block, Write: B
 
 	Write:Branch("Default"):Line(`error(\`Unexpected variant: \{{TagIndex}\}\`)`):End()
 end
+--- An array of plain booleans, eight to a byte, least significant bit first like `Block.Bit`.
+---
+--- A loop body is a block of its own, so the generic path gave every element a bitfield of its own:
+--- one byte per boolean. Here the whole array is one run of bytes. A variable length reserves its
+--- run at runtime, after the block's fixed bytes, the way a string does; a fixed one reserves it in
+--- the block. Each side runs in a `do` scope, so two such arrays in one struct do not redeclare.
+function Serde.PackedBooleans(Read: Blocks.Block, Write: Blocks.Block, Variable: string, Fixed: number?)
+	local Bytes = if Fixed then math.ceil(Fixed / 8) else nil
+	if Bytes == 0 then
+		return
+	end
+
+	--> Taken before the scopes open: in a loop body `_operation` emits the offset's declaration.
+	local ReadOffset = if Bytes then Read:Read(Bytes) else "Read((Length + 7) // 8)"
+	local WriteOffset = if Bytes then Write:Allocate(Bytes) else "Allocate((PACKED_LENGTH + 7) // 8)"
+
+	Read:Line("do")
+	Read:Line(`\tlocal PACKED_OFFSET = {ReadOffset}`)
+	Read:Line("\tlocal PACKED_BITS = 0")
+	Read:Line("\tfor Index = 0, Length - 1 do")
+	Read:Line("\t\tif Index % 8 == 0 then")
+	Read:Line("\t\t\tPACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)")
+	Read:Line("\t\tend")
+	Read:Line(`\t\ttable.insert({Variable}, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))`)
+	Read:Line("\tend")
+	Read:Line("end")
+
+	Write:Line("do")
+	Write:Line(`\tlocal PACKED_LENGTH = {Fixed or `#{Variable}`}`)
+	Write:Line(`\tlocal PACKED_OFFSET = {WriteOffset}`)
+	Write:Line("\tlocal PACKED_BITS = 0")
+	Write:Line("\tfor Index = 0, PACKED_LENGTH - 1 do")
+	Write:Line(`\t\tlocal PACKED_ITEM = {Variable}[Index + 1]`)
+	if Serde.Options.WriteValidations then
+		Write:Line(
+			`\t\tif typeof(PACKED_ITEM) ~= "boolean" then error(\`Expected {Variable}[\{Index + 1}] to be of type boolean, got \{type(PACKED_ITEM)} instead.\`) end`
+		)
+	end
+	Write:Line("\t\tif PACKED_ITEM then")
+	Write:Line("\t\t\tPACKED_BITS += bit32.lshift(1, Index % 8)")
+	Write:Line("\t\tend")
+	Write:Line("\t\tif Index % 8 == 7 then")
+	Write:Line("\t\t\tbuffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)")
+	Write:Line("\t\t\tPACKED_BITS = 0")
+	Write:Line("\t\tend")
+	Write:Line("\tend")
+	Write:Line("\tif PACKED_LENGTH % 8 ~= 0 then")
+	Write:Line("\t\tbuffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)")
+	Write:Line("\tend")
+	Write:Line("end")
+end
+
 function Serde.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
 	local Value = Declaration.Value
 	local Of = Value.Of
@@ -273,6 +326,13 @@ function Serde.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Block
 		Prefabs.EmitCapacityGuard(Read, "Length", Variable, Of)
 	end
 	Read:Line(`{Read:Declare(Variable)} = table.create(Length)`)
+
+	if Size.PacksBooleans(Of :: any) then
+		Serde.PackedBooleans(Read, Write, Variable, if IsVariableSize then nil else Upper)
+		Read:Comment("END ARRAY")
+		Write:Comment("END ARRAY")
+		return
+	end
 
 	--> Body
 	Read = Read:Loop("Index = 1", "Length")

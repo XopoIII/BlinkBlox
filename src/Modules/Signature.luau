@@ -30,7 +30,9 @@
 --- touched a single schema. Without this, two builds straddling that release would have agreed on
 --- their signature and disagreed on every byte -- which is the exact failure this module exists to
 --- catch, arriving through the one door an AST walk cannot watch.
-local WIRE_VERSION = 1
+---
+--- 2: 0.27.0 packed `boolean[]` eight elements to a byte, where every element had been a byte.
+local WIRE_VERSION = 2
 
 --- Structural stand-ins for the parser's nodes. Requiring the parser here would close a cycle.
 type Node = any
