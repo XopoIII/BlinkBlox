@@ -41,7 +41,8 @@ type Entry = {
 
 type Queue = {
     head: Entry?,
-    tail: Entry?
+    tail: Entry?,
+    count: number
 }
 
 type BufferSave = {
@@ -132,7 +133,8 @@ end
 local function CreateQueue(): Queue
     return {
         head = nil,
-        tail = nil
+        tail = nil,
+        count = 0
     }
 end
 
@@ -143,6 +145,12 @@ local function Pop(queue: Queue): any
     end
 
     queue.head = head.next
+    queue.count -= 1
+    if queue.head == nil then
+        --> Otherwise the last entry stays reachable, value and all, until the next push.
+        queue.tail = nil
+    end
+
     return head.value
 end
 
@@ -161,6 +169,8 @@ local function Push(queue: Queue, value: any)
     if queue.head == nil then
         queue.head = entry
     end
+
+    queue.count += 1
 end
 
 --> One Luau thread, reused across Async dispatches, instead of one allocated per event.
@@ -667,6 +677,12 @@ assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a R
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
 
 local PlayersMap: {[Player]: BufferSave} = {}
+
+--> How many rows a polled event's queue holds on the server before it stops taking more. Clients fill
+--> it, and a game that polls an event rarely, or has not got round to polling it at all, would let
+--> them grow it without end -- each row pinning its Player. A game that drains its queues every
+--> frame never comes near this, however full the server is.
+local MAX_POLLED = 256 * math.max(Players.MaxPlayers, 1)
 
 --> RATE LIMITING. One table per player, four numbers per limited event: tokens left, the clock
 --> reading those tokens were last refilled at, the clock reading the last report was made at, and

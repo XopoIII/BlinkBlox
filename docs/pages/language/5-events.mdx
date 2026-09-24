@@ -245,3 +245,7 @@ for Index, Player, Foo, Bar, FooBar in MyTypePackEvent.Iter() do
     -- ...
 end
 ```
+
+On the server a polled event's queue is filled by clients, so it stops taking rows at 256 for each
+player the server can hold (`Players.MaxPlayers`). A game that iterates its polled events every frame
+never comes near that; one that leaves an event unpolled no longer lets clients grow it without end.

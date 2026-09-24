@@ -41,7 +41,8 @@ type Entry = {
 
 type Queue = {
     head: Entry?,
-    tail: Entry?
+    tail: Entry?,
+    count: number
 }
 
 type BufferSave = {
@@ -132,7 +133,8 @@ end
 local function CreateQueue(): Queue
     return {
         head = nil,
-        tail = nil
+        tail = nil,
+        count = 0
     }
 end
 
@@ -143,6 +145,12 @@ local function Pop(queue: Queue): any
     end
 
     queue.head = head.next
+    queue.count -= 1
+    if queue.head == nil then
+        --> Otherwise the last entry stays reachable, value and all, until the next push.
+        queue.tail = nil
+    end
+
     return head.value
 end
 
@@ -161,6 +169,8 @@ local function Push(queue: Queue, value: any)
     if queue.head == nil then
         queue.head = entry
     end
+
+    queue.count += 1
 end
 
 --> One Luau thread, reused across Async dispatches, instead of one allocated per event.
@@ -3062,6 +3072,12 @@ assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable rem
 
 local PlayersMap: {[Player]: BufferSave} = {}
 
+--> How many rows a polled event's queue holds on the server before it stops taking more. Clients fill
+--> it, and a game that polls an event rarely, or has not got round to polling it at all, would let
+--> them grow it without end -- each row pinning its Player. A game that drains its queues every
+--> frame never comes near this, however full the server is.
+local MAX_POLLED = 256 * math.max(Players.MaxPlayers, 1)
+
 --> RATE LIMITING. One table per player, four numbers per limited event: tokens left, the clock
 --> reading those tokens were last refilled at, the clock reading the last report was made at, and
 --> the refusals made since that report, which the next one carries.
@@ -3370,9 +3386,15 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
-			Push(Queue.Reliable[0], table.pack(Player, SerdesFunctions.ReadEVENT_ClientPollEvent()))
+			local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientPollEvent())
+			if Queue.Reliable[0].count < MAX_POLLED then
+				Push(Queue.Reliable[0], Arguments)
+			end
 		elseif Index == 1 then
-			Push(Queue.Reliable[1], table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyPollEvent()))
+			local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyPollEvent())
+			if Queue.Reliable[1].count < MAX_POLLED then
+				Push(Queue.Reliable[1], Arguments)
+			end
 		elseif Index == 4 then
 			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyEvent()
 			if Events.Reliable[4] ~= nil then
@@ -3511,9 +3533,15 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
-			Push(Queue.Unreliable[0], table.pack(Player, SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent()))
+			local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent())
+			if Queue.Unreliable[0].count < MAX_POLLED then
+				Push(Queue.Unreliable[0], Arguments)
+			end
 		elseif Index == 1 then
-			Push(Queue.Unreliable[1], table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyUnreliablePollEvent()))
+			local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyUnreliablePollEvent())
+			if Queue.Unreliable[1].count < MAX_POLLED then
+				Push(Queue.Unreliable[1], Arguments)
+			end
 		elseif Index == 4 then
 			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyUnreliableEvent()
 			if Events.Unreliable[4] ~= nil then

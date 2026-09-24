@@ -338,12 +338,22 @@ function Declarations.Event(Declaration: Parser.Event)
 		local PollOrderGuard = OrderGuardExpression(IsOrdered, Index)
 		local PollRateGuard = RateGuardExpression(Value, Declaration.Name)
 
-		--> Both gate the same enqueue, so they combine into one condition rather than nesting.
-		if PollRateGuard and PollOrderGuard then
-			PollRateGuard = `{PollRateGuard} and {PollOrderGuard}`
-		elseif PollOrderGuard then
-			PollRateGuard = PollOrderGuard
+		--> On the server the queue is filled by clients, so it stops at a cap; see MAX_POLLED in the
+		--> server template. Every check gates the same enqueue, so they combine into one condition.
+		local Checks = {}
+		if State.Context == "Server" then
+			table.insert(Checks, `{Queue}.count < MAX_POLLED`)
 		end
+
+		if PollRateGuard then
+			table.insert(Checks, PollRateGuard)
+		end
+
+		if PollOrderGuard then
+			table.insert(Checks, PollOrderGuard)
+		end
+
+		PollRateGuard = if #Checks > 0 then table.concat(Checks, " and ") else nil
 
 		if PollRateGuard then
 			--> Split because the one-liner decodes and enqueues at once, and only the enqueue may be

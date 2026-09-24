@@ -48,6 +48,28 @@ local function Flood(Event: { number }, Count: number)
 	task.wait(0.3)
 end
 
+RunClosure("A client cannot grow a polled event's queue past its cap", function()
+	--> The same fault as the listener queue above, on the other queue a client fills: a polled event
+	--> is stored until the game asks for it, and a game that asks rarely, or not yet, let a client grow
+	--> it without end. It stops at 256 rows per player the server can hold, one in the mock.
+	--> Whatever earlier specs left queued, drained first.
+	local Drain = Server.ClientEmptyPollEvent.Iter()
+	while Drain() ~= nil do
+		continue
+	end
+
+	Flood({ ReliableIndex("ClientEmptyPollEvent") }, 300)
+
+	local Polled = 0
+	for _ in Server.ClientEmptyPollEvent.Iter() do
+		Polled += 1
+	end
+
+	if Polled ~= 256 then
+		ErrorPrint(`Failed "Polled queue": {Polled} rows were queued, expected the cap of 256.`)
+	end
+end)
+
 RunClosure("A client cannot grow the queue of an event nobody listens to", function()
 	--> Upstream issue #93. Events that arrive with no listener bound are queued for the listener
 	--> that has not connected yet -- and on the server, a client decides how many arrive. Uncapped,

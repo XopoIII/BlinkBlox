@@ -98,6 +98,8 @@ local function GetEnvironment()
 	local Services = {
 		Players = {
 			PlayerRemoving = Signal.new(),
+			--> One mock player, so a server's polled queues stop at 256 rows.
+			MaxPlayers = 1,
 			GetPlayers = function(_self)
 				return { Player }
 			end,

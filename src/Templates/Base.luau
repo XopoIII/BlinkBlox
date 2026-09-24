@@ -20,7 +20,8 @@ type Entry = {
 
 type Queue = {
     head: Entry?,
-    tail: Entry?
+    tail: Entry?,
+    count: number
 }
 
 type BufferSave = {
@@ -111,7 +112,8 @@ end
 local function CreateQueue(): Queue
     return {
         head = nil,
-        tail = nil
+        tail = nil,
+        count = 0
     }
 end
 
@@ -122,6 +124,12 @@ local function Pop(queue: Queue): any
     end
 
     queue.head = head.next
+    queue.count -= 1
+    if queue.head == nil then
+        --> Otherwise the last entry stays reachable, value and all, until the next push.
+        queue.tail = nil
+    end
+
     return head.value
 end
 
@@ -140,6 +148,8 @@ local function Push(queue: Queue, value: any)
     if queue.head == nil then
         queue.head = entry
     end
+
+    queue.count += 1
 end
 
 --> One Luau thread, reused across Async dispatches, instead of one allocated per event.

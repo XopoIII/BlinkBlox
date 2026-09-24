@@ -41,6 +41,12 @@ assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable rem
 
 local PlayersMap: {[Player]: BufferSave} = {}
 
+--> How many rows a polled event's queue holds on the server before it stops taking more. Clients fill
+--> it, and a game that polls an event rarely, or has not got round to polling it at all, would let
+--> them grow it without end -- each row pinning its Player. A game that drains its queues every
+--> frame never comes near this, however full the server is.
+local MAX_POLLED = 256 * math.max(Players.MaxPlayers, 1)
+
 --> RATE LIMITING. One table per player, four numbers per limited event: tokens left, the clock
 --> reading those tokens were last refilled at, the clock reading the last report was made at, and
 --> the refusals made since that report, which the next one carries.
