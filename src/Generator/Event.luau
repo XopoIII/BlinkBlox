@@ -115,10 +115,19 @@ function Declarations.Event(Declaration: Parser.Event)
 	local Body = Builder.new()
 	local Indent = Util.GetScopeIndent(State.Scope)
 	local WriteEvent = `{Util.GetPath(Identifier, true, State.Scope)}({Arguments})`
-	--> The same call, protected. Only the CLIENT needs it: every server fire begins with its own
-	--> `Load`, so a write that throws is confined to scratch state the next `Load` replaces, while
-	--> the client writes straight into the batch it is still accumulating.
+	--> The same call, protected, for every write into a batch that outlives it: the client's own, and
+	--> the one the server keeps per player. `Load(PlayersMap[Player])` installs that player's saved
+	--> instance list itself rather than a copy, so an Instance appended before a later field threw
+	--> stayed in it even though the cursor was never saved -- and every instance after it in that
+	--> flush reached the client one place out. A broadcast writes into a fresh buffer and needs none.
 	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, State.Scope)}, {Arguments})`
+
+	--> Writes into a batch that is kept, undoing whatever a write that throws had already added.
+	local function WriteKept(Target: Blocks.Block)
+		Target:Line("local Cursor, Instances = Mark()")
+		Target:Line(`local Sent, Failure = {TryWriteEvent}`)
+		Target:Compare("Sent", "true", "Not"):Line("Rollback(Cursor, Instances)"):Line("error(Failure, 0)"):End()
+	end
 
 	Body.Push(`{Declaration.Name} = \{`, 0, Indent)
 	State.Noop.Push(`{Declaration.Name} = \{`, 0, Indent)
@@ -348,9 +357,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			--> Rolled back rather than left, because this write lands in the batch every other event
 			--> is queued in. Half an event in there is not one bad send: the receiver reads the
 			--> truncated event and then decodes the REST of the batch from the wrong offset.
-			Fire:Line("local Cursor, Instances = Mark()")
-			Fire:Line(`local Sent, Failure = {TryWriteEvent}`)
-			Fire:Compare("Sent", "true", "Not"):Line("Rollback(Cursor, Instances)"):Line("error(Failure, 0)"):End()
+			WriteKept(Fire)
 		else
 			Fire:Line(`local Previous = Save()`)
 			Fire:Line(`Load()`)
@@ -378,7 +385,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 		if IsReliable then
 			Fire:Line("Load(PlayersMap[Player])")
-			Fire:Line(WriteEvent)
+			WriteKept(Fire)
 			Fire:Line("SavePlayerBuffer(Player)")
 		else
 			Fire:Line("Load()")

@@ -779,7 +779,12 @@ local Returns = table.freeze({
 	Alpha = {
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
-			SerdesFunctions.WriteEVENT_Alpha(Value)
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Alpha, Value)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: number): ()

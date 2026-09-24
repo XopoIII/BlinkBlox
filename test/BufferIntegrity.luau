@@ -281,4 +281,54 @@ do
 	OkPrint(`Test "{Name}" passed!`)
 end
 
+--> A mock Instance the generated code accepts: `typeof` reads `__typeof` in the test environment.
+local function MockInstance(Name: string): any
+	return setmetatable({
+		__typeof = "Instance",
+		Name = Name,
+		IsA = function()
+			return true
+		end,
+	}, {
+		__tostring = function()
+			return Name
+		end,
+	})
+end
+
+do
+	--> The server keeps a batch per player, and `Load` installs that player's saved instance list
+	--> itself. A fire that appended an Instance and then threw on a later field left the Instance in
+	--> that list though the cursor was never saved, so every instance after it in the flush reached
+	--> the client one place out -- here, the next event's Instance arrived as the rejected one's.
+	local Name = "A rejected server fire leaves no instance behind in the player's batch"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	local Rejected, Wanted = MockInstance("Rejected"), MockInstance("Wanted")
+	local Seen: any
+	local Disconnect = Client.InstanceAny.On(function(Value)
+		Seen = Value
+	end)
+
+	task.wait(FLUSH)
+	--> The Instance is the fourth element; the array after it is where the write throws.
+	local Threw = not pcall(Server.Tuple.Fire, Shared.Player, 1, "A", nil, Rejected, nil, "not an array" :: any)
+	Server.InstanceAny.Fire(Shared.Player, Wanted)
+	task.wait(FLUSH)
+	Disconnect()
+	Shared.DrainWarnings()
+
+	if not Threw then
+		ErrorPrint(`Failed "{Name}": the bad fire was accepted instead of rejected.`)
+		return {}
+	end
+
+	if Seen ~= Wanted then
+		ErrorPrint(`Failed "{Name}": the client received {tostring(Seen)}, expected Wanted.`)
+		return {}
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end
+
 return {}
