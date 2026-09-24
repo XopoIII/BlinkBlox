@@ -48,14 +48,14 @@ end)
 RunClosure("CLI --version prints a version", function()
 	local Result = process.exec("lune", { "run", Compiler, "--", "--version" }, { cwd = "../src/CLI" })
 	assert(Result.ok, Result.stderr)
-	assert(string.find(Result.stdout, "Blink", 1, true), `--version printed no version: {Result.stdout}`)
+	assert(string.find(Result.stdout, "BlinkBlox", 1, true), `--version printed no version: {Result.stdout}`)
 end)
 
 RunClosure("CLI --version answers even when quiet", function()
 	local Result = process.exec("lune", { "run", Compiler, "--", "--version", "--quiet" }, { cwd = "../src/CLI" })
 	assert(Result.ok, Result.stderr)
 	assert(
-		string.find(Result.stdout, "Blink", 1, true),
+		string.find(Result.stdout, "BlinkBlox", 1, true),
 		`--version was silenced by --quiet, which is the one thing it was asked for: {Result.stdout}`
 	)
 end)
@@ -67,7 +67,7 @@ RunClosure("CLI --quiet prints no banner", function()
 		{ cwd = "../src/CLI" }
 	)
 	assert(Result.ok, Result.stderr)
-	assert(not string.find(Result.stdout, "Blink", 1, true), `--quiet still printed the banner: {Result.stdout}`)
+	assert(not string.find(Result.stdout, "BlinkBlox", 1, true), `--quiet still printed the banner: {Result.stdout}`)
 end)
 
 --> `--profile` is the one flag with a value, so both orders are tried: the value must never be taken

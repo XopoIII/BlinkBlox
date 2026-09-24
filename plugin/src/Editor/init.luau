@@ -439,7 +439,7 @@ function Editor.Initialize(Widget: DockWidgetPluginGui)
 	--> Preload fira sans
 	ContentProvider:PreloadAsync({ Display }, function(AssetId: string, AssetFetchStatus: Enum.AssetFetchStatus)
 		if AssetId ~= "" and AssetFetchStatus ~= Enum.AssetFetchStatus.Success then
-			warn("[BLINK] There was an issue preloading the editors font.")
+			warn("[BlinkBlox] There was an issue preloading the editors font.")
 		end
 	end)
 

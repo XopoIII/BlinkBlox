@@ -37,7 +37,7 @@ local EXPAND_TWEEN = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirect
 
 ---- Constants ----
 
-local Toolbar = plugin:CreateToolbar("Blink Suite")
+local Toolbar = plugin:CreateToolbar("BlinkBlox Suite")
 local EditorButton = Toolbar:CreateButton("Editor", "Opens the configuration editor", "rbxassetid://118423040995617")
 EditorButton.ClickableWhenViewportHidden = true
 
@@ -60,7 +60,7 @@ ErrorInterface.Parent = ErrorWidget
 local ErrorText: TextLabel = ErrorInterface.Text
 
 local EditorWidget = plugin:CreateDockWidgetPluginGuiAsync("Configuration Editor", EDITOR_WIDGET)
-EditorWidget.Name = "Blink Editor"
+EditorWidget.Name = "BlinkBlox Editor"
 EditorWidget.Title = "Configuration Editor"
 EditorWidget.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 

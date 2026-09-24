@@ -143,7 +143,7 @@ RunClosure("Inbound packets are bounded", function()
 			["decoded event counter"] = "DecodedEvents += 1",
 			["decode pcall"] = "local Parsed, Failure = pcall(function()",
 			["decode failure is reported"] = "ReportDecodeFailure(Player, EventNames.Reliable[Decoding], Failure)",
-			["unknown event id stops the packet"] = `error("[Blink]: Unknown event index.")`,
+			["unknown event id stops the packet"] = `error("[BlinkBlox]: Unknown event index.")`,
 		}
 
 		for Name, Fragment in Required do

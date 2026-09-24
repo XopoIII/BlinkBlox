@@ -1,10 +1,10 @@
-# Blink — working notes
+# BlinkBlox — working notes
 
 An IDL compiler for ROBLOX buffer networking, written in Luau. A schema (`.blink`) compiles to
 server, client and shared Luau modules that serialise events into buffers.
 
-A maintained fork, `XopoIII/blink`, forked from the upstream project at `v0.18.8` and released from
-`0.19.0` onward. MIT licensed, and the upstream copyright stays in LICENSE — a fork is a derivative
+A maintained fork, `XopoIII/BlinkBlox` -- called Blink, like upstream, until 0.28.0 -- forked from the
+upstream project at `v0.18.8` and released from `0.19.0` onward. MIT licensed, and the upstream copyright stays in LICENSE — a fork is a derivative
 work, so removing it is not an option.
 
 ## Everything here is written in English
@@ -146,7 +146,24 @@ writing it turned up that the docs had described CFrame's two components backwar
 Color3 wrapped HDR channels (2.0 arrived as 254/255), and each flush threw away the buffer it had just
 grown -- keeping it measured 35 to 52 percent off the flush path, so it was kept.
 
-Still deferred, and deliberately: delta compression. It would require blink to hold per-player state
+0.28.0 renamed the fork to BlinkBlox and took its long files apart. The size cap came down from 900
+lines to 500 with no exceptions, and splitting the parser, the generator, the prefabs and the plugin
+editor put the copies of the same logic side by side, where the drift between them showed. Seven bugs
+came out of it. A length prefix wrapped on send: with a lower bound of 0 and WriteValidations off --
+the default -- a 300-byte value in `string(0..64)` went out with a length of 44 and all 300 bytes
+behind it, and the receiver decoded the rest of the packet from the wrong offset; the same held for
+buffers, arrays, unbounded lengths and a map's count, and the upper bound is now checked on send
+whatever the options say. `Predict` on a reliable Many event dropped the event with no listener bound,
+where the network queues it. A field, flag or tag named after a Luau keyword emitted a module that
+did not load. The plugin editor never showed a warning -- the same parse set it and cleared it --
+while printing each one to Output per keystroke. Smaller: a map's size diagnostic had nothing to
+underline, the plugin's file search took its query as a pattern, and exact-bound errors read "to
+equal to". The rename changes what the tools print and what the release artifacts are called, not
+what a game depends on: the remotes, `_G._BLINK`, the plugin's `Blink` output folder and
+`BLINK_CONFIGURATION_FILES`, and the `.blink` extension all keep their names, so builds either side
+of the rename still talk to each other.
+
+Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of
 responsibility, not an optimisation.
@@ -178,7 +195,7 @@ warning that is tolerated once stops being read.
 The version is recorded in two files -- `build/.darklua.json` and `pesde.toml` -- and
 `lune run bump <version>` writes both. `scripts/check-versions.sh` fails the build if they disagree.
 The plugin used to have a third copy in `plugin/.darklua.json`, which sat five minor releases behind
-the compiler's, so everything the Studio plugin generated went out stamped with a version Blink had
+the compiler's, so everything the Studio plugin generated went out stamped with a version the compiler had
 not been for a year. The plugin now bundles with `build/.darklua.json` like the CLI, and that file is
 gone. Never edit the version by hand.
 

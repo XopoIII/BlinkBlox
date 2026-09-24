@@ -10,7 +10,7 @@ local PATH_TO_PACKAGES = "./packages/"
 
 local Tools = {
 	zap = "https://api.github.com/repos/red-blox/zap/releases/latest",
-	blink = "https://api.github.com/repos/XopoIII/blink/releases/latest",
+	blink = "https://api.github.com/repos/XopoIII/BlinkBlox/releases/latest",
 }
 
 local Packages: { [string]: { GitHub: string, Wally: string } } = {

@@ -124,7 +124,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		local function EmitEventCap(Channel: Blocks.Block)
 			Channel:Line("DecodedEvents += 1")
 			Channel:Line(`if DecodedEvents > {MaxEvents} then`)
-			Channel:Line(`\twarn(\`[Blink]: Dropped the rest of a packet from \{Player.Name\}, too many events.\`)`)
+			Channel:Line(`\twarn(\`[BlinkBlox]: Dropped the rest of a packet from \{Player.Name\}, too many events.\`)`)
 			Channel:Line("\tbreak")
 			Channel:Line("end")
 		end
@@ -197,14 +197,14 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> `error` and not `break`: this branch sits inside the pcall'd decode function opened above, and
 	--> Luau cannot break out of a loop across a function boundary. Raising here lands in that pcall,
 	--> which turns into the `break` below — the same stop, expressed where it is legal.
-	local UNKNOWN_EVENT = `error("[Blink]: Unknown event index.")`
+	local UNKNOWN_EVENT = `error("[BlinkBlox]: Unknown event index.")`
 
 	--> A channel this side receives nothing on has no branch to hang that on, and its index read
 	--> alone never failed: junk was consumed byte by byte up to MaxEventsPerPacket, unreported. The
 	--> connection itself stays, since a remote nobody connects to queues whatever is sent to it.
 	local function CloseIndex(Channel: Blocks.Block, Listening: boolean): Blocks.Block
 		if not Listening then
-			return Channel:Line(`error("[Blink]: This channel receives no events.")`)
+			return Channel:Line(`error("[BlinkBlox]: This channel receives no events.")`)
 		end
 
 		return Channel:Branch("Default"):Line(UNKNOWN_EVENT):End()
@@ -240,11 +240,12 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 
 	local ScopeValidationBody = {}
 	if State.Context ~= "Shared" then
+		--> `BLINK`, not BlinkBlox, for the same reason the remotes keep the name; see Util.Constants.
 		local RemoteScope = State.Options.RemoteScope or "BLINK"
 		ScopeValidationBody = {
 			"_G._BLINK = _G._BLINK or {}\n",
 			`if _G._BLINK["{RemoteScope}"] then\n`,
-			`\terror("[Blink]: An instance of blink is already running with the remote scope \\"{RemoteScope}\\". Change the remote scope of either instance to avoid conflicts.")\n`,
+			`\terror("[BlinkBlox]: An instance of BlinkBlox is already running with the remote scope \\"{RemoteScope}\\". Change the remote scope of either instance to avoid conflicts.")\n`,
 			"end\n",
 			`_G._BLINK["{RemoteScope}"] = true\n`,
 		}
@@ -322,7 +323,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 			"\t\treturn true\n",
 			"\tend\n",
 			"\n",
-			'\twarn(`[Blink]: Dropped unreliable event "{Name}", {SendCursor} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)\n',
+			'\twarn(`[BlinkBlox]: Dropped unreliable event "{Name}", {SendCursor} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)\n',
 			"\treturn false\n",
 			"end\n",
 		}

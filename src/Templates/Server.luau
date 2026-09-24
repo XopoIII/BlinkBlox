@@ -36,8 +36,8 @@ end
 --> The server creates these when they are missing, but FindFirstChild above may have matched an
 --> instance of a different class that a plugin or an earlier build left behind. Failing loudly at
 --> require time beats failing per packet, forever, at runtime.
-assert(Reliable:IsA("RemoteEvent"), "[Blink]: The reliable remote is not a RemoteEvent.")
-assert(Unreliable:IsA("UnreliableRemoteEvent"), "[Blink]: The unreliable remote is not an UnreliableRemoteEvent.")
+assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
+assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
 
 local PlayersMap: {[Player]: BufferSave} = {}
 
@@ -77,13 +77,13 @@ local function InvokePlayer(Player: Player): number
     --> PlayerRemoving has cleared their tables, so claiming here would put back entries nothing
     --> removes again and park the caller for the whole timeout to learn what is already known.
     if not Player:IsDescendantOf(Players) then
-        error(`[Blink]: Cannot invoke {Player.Name}, they are no longer in the game.`)
+        error(`[BlinkBlox]: Cannot invoke {Player.Name}, they are no longer in the game.`)
     end
 
     local Slots = PlayerSlots[Player] or 0xFFFFFFFF
     local Slot = bit32.countrz(Slots)
     if Slot == 32 then
-        error("[Blink]: 32 calls to this player are already awaiting a response, this call has been dropped.")
+        error("[BlinkBlox]: 32 calls to this player are already awaiting a response, this call has been dropped.")
     end
 
     PlayerSlots[Player] = bit32.bxor(Slots, bit32.lshift(1, Slot))
@@ -134,7 +134,7 @@ local function TimeoutPlayerInvocation(Player: Player, Identifier: number, Secon
 
         ReleasePlayerInvocation(Player, Identifier)
         if coroutine.status(Thread) == "suspended" then
-            warn(`[Blink]: "{Name}" was never answered by {Player.Name} and has been failed after {Seconds} seconds.`)
+            warn(`[BlinkBlox]: "{Name}" was never answered by {Player.Name} and has been failed after {Seconds} seconds.`)
             task.spawn(Thread, false)
         end
     end)
@@ -227,7 +227,7 @@ local function InboundAccept(Player: Player, Cost: number, Rate: number, Burst: 
 
     Budget[3] = Now
     Budget[4] = 0
-    warn(`[Blink]: Dropped packets from {Player.Name} over the inbound budget of {Rate} bytes a second, {Refused} refused.`)
+    warn(`[BlinkBlox]: Dropped packets from {Player.Name} over the inbound budget of {Rate} bytes a second, {Refused} refused.`)
 
     local Handler = RateHandler
     if Handler then
@@ -278,7 +278,7 @@ local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: num
 
         Bucket[Slot + 2] = Now
         Bucket[Slot + 3] = 0
-        warn(`[Blink]: Rate limited event "{Name}" from {Player.Name}, {Refused} refused.`)
+        warn(`[BlinkBlox]: Rate limited event "{Name}" from {Player.Name}, {Refused} refused.`)
 
         local Handler = RateHandler
         if Handler then

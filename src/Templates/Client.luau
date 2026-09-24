@@ -13,8 +13,8 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EV
 --> WaitForChild returns whatever carries that name. A client can create an instance of any class in
 --> ReplicatedStorage, so without this the first thing to answer to the name wins -- and every
 --> outgoing packet is then handed to an object of the attacker's choosing.
-assert(Reliable:IsA("RemoteEvent"), "[Blink]: The reliable remote is not a RemoteEvent.")
-assert(Unreliable:IsA("UnreliableRemoteEvent"), "[Blink]: The unreliable remote is not an UnreliableRemoteEvent.")
+assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
+assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
 
 --> Refuse to run against a server built from a different schema.
 -->
@@ -39,9 +39,9 @@ if Signature == nil then
 end
 
 if Signature == nil then
-    error("[Blink]: The server did not publish a schema signature. It is running a build of Blink from before this check existed, or a different networking module created the remote.")
+    error("[BlinkBlox]: The server did not publish a schema signature. It is running a build of BlinkBlox from before this check existed, or a different networking module created the remote.")
 elseif Signature ~= SCHEMA_SIGNATURE then
-    error(`[Blink]: This client was built from a different schema than the server (client {SCHEMA_SIGNATURE}, server {Signature}). Recompile both sides from the same .blink file.`)
+    error(`[BlinkBlox]: This client was built from a different schema than the server (client {SCHEMA_SIGNATURE}, server {Signature}). Recompile both sides from the same .blink file.`)
 end
 
 --> Present so code shared between contexts can install a handler without branching on which module
@@ -65,7 +65,7 @@ local function ReportDecodeFailure(Event: string?, Failure: unknown)
         return
     end
 
-    warn(`[Blink]: Dropped a packet that could not be decoded, at event "{Event or "unknown"}": {Failure}`)
+    warn(`[BlinkBlox]: Dropped a packet that could not be decoded, at event "{Event or "unknown"}": {Failure}`)
 end
 
 local function StepReplication()

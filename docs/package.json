@@ -1,5 +1,5 @@
 {
-  "name": "blink-docs",
+  "name": "blinkblox-docs",
   "version": "0.0.1",
   "description": "Documentation site for the Blink IDL compiler",
   "private": true,

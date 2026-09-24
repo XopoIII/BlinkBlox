@@ -2,8 +2,8 @@
   <img src="./docs/public/bb_logo.jpg" alt="BlinkBlox" class="center">
 </div>
 
-[![License](https://img.shields.io/github/license/XopoIII/blink?style=flat-square&color=%23a350af)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/XopoIII/blink?style=flat-square&color=%23a350af)](https://github.com/XopoIII/blink/releases/latest)
+[![License](https://img.shields.io/github/license/XopoIII/BlinkBlox?style=flat-square&color=%23a350af)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/XopoIII/BlinkBlox?style=flat-square&color=%23a350af)](https://github.com/XopoIII/BlinkBlox/releases/latest)
 
 An IDL compiler written in Luau for ROBLOX buffer networking.
 
@@ -12,6 +12,12 @@ server, client and shared Luau modules that pack them into buffers, validate wha
 what leaves.
 
 # This fork
+
+BlinkBlox was called Blink until 0.28.0, and some things keep that name on purpose, because games and
+places depend on them: schemas are still `.blink` files, the remotes are still
+`BLINK_RELIABLE_REMOTE` and `BLINK_UNRELIABLE_REMOTE`, and the Studio plugin still generates into a
+`Blink` folder and keeps schemas in `ServerStorage.BLINK_CONFIGURATION_FILES`. A server and a client
+built before and after the rename still talk to each other.
 
 This is a maintained fork. Upstream stopped taking changes on this line of the compiler and moved to
 a rewrite, leaving reported defects — including an unbounded parse of hostile client input — closed
@@ -55,7 +61,7 @@ aborted on an interactive prompt.
 
 # Performance
 
-Blink aims to generate the most performant and bandwidth-efficient code for your specific experience.
+BlinkBlox aims to generate the most performant and bandwidth-efficient code for your specific experience.
 Lower bandwidth usage translates directly into **lower ping\*** for players, and the generated
 serialisers cost **less CPU** than a generalised networking library.
 
@@ -75,10 +81,10 @@ Two things work against bad actors:
 # Getting started
 
 ```sh
-rokit add XopoIII/blink
+rokit add XopoIII/BlinkBlox blinkblox
 ```
 
-Then head to the [documentation](https://xopoiii.github.io/blink/getting-started/1-installation).
+Then head to the [documentation](https://xopoiii.github.io/BlinkBlox/getting-started/1-installation).
 
 <div align="center">
   <img src="./docs/public/bb_end.jpg" alt="BlinkBlox at work" class="center">

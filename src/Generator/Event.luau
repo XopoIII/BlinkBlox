@@ -140,7 +140,7 @@ function Declarations.Event(Declaration: Parser.Event)
 
 			return Target:Line(`if {Connection} ~= nil then`)
 				:Line(
-					`\twarn("[Blink]: \\"{Declaration.Name}\\" already has a listener. {Value.Call} keeps only the newest one, and the replaced listener's disconnect stops working.")`
+					`\twarn("[BlinkBlox]: \\"{Declaration.Name}\\" already has a listener. {Value.Call} keeps only the newest one, and the replaced listener's disconnect stops working.")`
 				)
 				:Line("end")
 				:Line(`{Connection} = Listener`)

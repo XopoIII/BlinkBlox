@@ -57,7 +57,7 @@ local function Enqueue(
 	if Context ~= "Server" then
 		return Target:Compare(`#{Queue}`, CAPACITY, "Greater")
 			:Line(
-				`warn("[Blink]: Event queue of \\"{Name}\\" exceeded {CAPACITY}, did you forget to implement a listener?")`
+				`warn("[BlinkBlox]: Event queue of \\"{Name}\\" exceeded {CAPACITY}, did you forget to implement a listener?")`
 			)
 			:End()
 			:Line(Insert)

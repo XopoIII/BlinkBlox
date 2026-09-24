@@ -7,15 +7,15 @@ type Archs = | "aarch64" | "x86_64"
 
 type Platforms = | "macos" | "linux" | "windows"
 
-local EXE_NAME = "blink"
+local EXE_NAME = "blinkblox"
 
 local RELEASE_DIR = "release"
 local PLUGIN_SOURCE_DIR = `plugin/src`
 local PLUGIN_RELEASE_DIR = `{RELEASE_DIR}/plugin`
 
 local CLI_PATH = "src/CLI/init.luau"
-local BUNDLE_PATH = `{RELEASE_DIR}/blink.luau`
-local PESDE_RELEASE_PATH = `{RELEASE_DIR}/blink_pesde.luau`
+local BUNDLE_PATH = `{RELEASE_DIR}/blinkblox.luau`
+local PESDE_RELEASE_PATH = `{RELEASE_DIR}/blinkblox_pesde.luau`
 
 local BUNDLE_CONFIG = "build/.darklua.json"
 local PLUGIN_ROJO_CONFIG = "build/plugin.project.json"
@@ -38,7 +38,7 @@ local function build_executable(platform: Platforms, arch: Archs)
 	if platform == "windows" then
 		archive_result = process.exec("tar", {
 			"-czvf",
-			`{RELEASE_DIR}/blink-{target}.tar.gz`,
+			`{RELEASE_DIR}/blinkblox-{target}.tar.gz`,
 			"-C",
 			RELEASE_DIR,
 			exe_name,
@@ -46,7 +46,7 @@ local function build_executable(platform: Platforms, arch: Archs)
 	else
 		archive_result = process.exec("tar", {
 			"-cJvf",
-			`{RELEASE_DIR}/blink-{target}.tar.xz`,
+			`{RELEASE_DIR}/blinkblox-{target}.tar.xz`,
 			"-C",
 			RELEASE_DIR,
 			exe_name,
@@ -102,7 +102,7 @@ local function build_studio_plugin()
 		"build",
 		PLUGIN_ROJO_CONFIG,
 		"--output",
-		`{RELEASE_DIR}/blink-plugin.rbxm`,
+		`{RELEASE_DIR}/blinkblox-plugin.rbxm`,
 	})
 	assert(rojo_result.ok, rojo_result.stderr)
 

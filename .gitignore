@@ -11,6 +11,7 @@
 # the schema file rather than the repository root.
 /test/Network
 /Blink
+/plugin/BlinkBlox.rbxmx
 test/Sources/Game.txt
 sourcemap.json
 /plugin/bundle
