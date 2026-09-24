@@ -20,7 +20,7 @@ echo Compiling definitions
 if not exist "./src/shared/zap" mkdir "./src/shared/zap"
 if not exist "./src/shared/blink" mkdir "./src/shared/blink"
 "./tools/zap.exe" "./definitions/Definition.zap"
-"./tools/blink.exe" "./definitions/Definition.blink"
+"./tools/blinkblox.exe" "./definitions/Definition.blink"
 endlocal
 
 echo Building ROBLOX place
