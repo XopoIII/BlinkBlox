@@ -86,6 +86,14 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 					:Emit()
 			end
 
+			--> An event spends one whole token, so a bucket that can never hold one refuses every
+			--> event however long the client waits.
+			if Option.Key == "Burst" and Numeric and Numeric < 1 then
+				self:Diagnostic(Error.ParserUnknownOption, `Invalid value for "Burst"`)
+					:Primary(Token, "Expected at least 1: each event spends one whole token")
+					:Emit()
+			end
+
 			--> Stored as a number: every consumer does arithmetic with it.
 			Value = Numeric
 		elseif Option.Key ~= "Data" and Option.Key ~= "Return" then

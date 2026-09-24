@@ -84,7 +84,8 @@ event the server sends -- only inbound traffic is limited.
 
 `Rate` is the sustained number of events per second accepted from a single player. `Burst` is the
 bucket capacity: how many may arrive at once before the rate applies. It defaults to `Rate` rounded
-up.
+up, and may not be below 1: each event spends one whole token, so a smaller bucket would refuse every
+event however long the client waited.
 
 ```blink copy
 event Purchase {
