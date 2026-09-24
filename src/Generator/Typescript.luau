@@ -34,9 +34,6 @@ local function GetPrefix(Indent: number): string
 	return Indent == 0 and "declare " or ""
 end
 
---> The same decision the Luau output makes about a key, so the two agree on every name.
-local FormatKey = Util.FormatKey
-
 local function GetTypescriptType(State: State, Declaration: Type): (string, string)
 	local Type = ""
 	local Values = ""
@@ -54,45 +51,24 @@ local function GetTypescriptType(State: State, Declaration: Type): (string, stri
 			Type = "unknown"
 		end
 	elseif Declaration.Type == "Set" then
-		local Value = (Declaration :: Parser.Set).Value
-		local Entries: { string } = {}
-
-		for _, Flag in Value.Values do
-			table.insert(Entries, `{FormatKey(Flag)}: boolean,`)
-		end
-
-		Type = `\{{table.concat(Entries)}\}`
+		Type = Util.SetType((Declaration :: Parser.Set).Value.Values)
 	elseif Declaration.Type == "Enum" then
 		local Value = (Declaration :: Parser.Enum).Value
 		Type = Util.GenerateEnumLiterals(Value.Values)
 	elseif Declaration.Type == "TagEnum" then
 		local Value = (Declaration :: Parser.TagEnum).Value
-		local Literals = {}
-
-		for _, Variant in Value.Values do
-			local TagField = `{FormatKey(Value.Tag)}: "{Variant.Name}"`
-			local ValueType = GetTypescriptType(State, Variant)
-			table.insert(Literals, `\{ {TagField},{string.sub(ValueType, 2)}`)
-		end
-
-		Type = table.concat(Literals, " | ")
+		Type = Util.TagEnumType(Value.Tag, Value.Values, function(Variant)
+			return (GetTypescriptType(State, Variant))
+		end)
 	elseif Declaration.Type == "Map" then
 		local MapValue = (Declaration :: Parser.Map).Value
 		local Key = GetTypescriptType(State, MapValue.Values[1])
 		local Value = GetTypescriptType(State, MapValue.Values[2])
 		Type = `Map<{Key}, {Value}>`
 	elseif Declaration.Type == "Struct" then
-		local Value = Declaration.Value
-		local Fields = {}
-
-		for _, Field in Value.Values do
-			local Name = Field.Name
-			local FieldType = GetTypescriptType(State, Field)
-			local Optional = Field.Type == "Optional" and "?" or ""
-			table.insert(Fields, `{FormatKey(Name)}{Optional}: {FieldType}`)
-		end
-
-		Type = `\{ {table.concat(Fields, ", ")}\ }`
+		Type = Util.StructType(Declaration.Value.Values, function(Field)
+			return (GetTypescriptType(State, Field))
+		end, true)
 	elseif Declaration.Type == "Generic" then
 		Type = `{Declaration.Value.Generic}`
 	elseif Declaration.Type == "Tuple" then
@@ -140,15 +116,7 @@ function Generators.Type(State: State, Type: Type)
 
 	local TypescriptType = GetTypescriptType(State, Type)
 
-	local Generics = ""
-	if Value.Generics then
-		local Types = {}
-		for _, Generic in Value.Generics.List do
-			table.insert(Types, Generic)
-		end
-
-		Generics = `<{table.concat(Types, ",")}>`
-	end
+	local Generics = Util.GenericsHeader(Value.Generics)
 
 	StringBuilder.Push(`type {Name}{Generics} = {TypescriptType}`, 0, Indent)
 end
