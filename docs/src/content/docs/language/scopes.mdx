@@ -1,0 +1,114 @@
+---
+title: Scopes
+description: Group related types, events and functions under a name, in the schema and in the generated modules.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A scope groups declarations under a name. Inside the schema it is a namespace; in the generated
+modules it becomes a nested table and a prefix on type names. Use scopes to keep a large schema
+organised by feature -- `Shop`, `Combat`, `Admin` -- rather than as one flat list.
+
+## Defining a scope
+
+Write `scope`, a name, and the declarations inside braces. A scope may hold types, events,
+functions and other scopes:
+
+```blink
+type Coins = u32
+
+scope Shop {
+    type ItemId = u16
+
+    struct Offer {
+        Item: ItemId,
+        Price: Coins,
+    }
+
+    event OffersChanged {
+        From: Server,
+        Type: Reliable,
+        Call: SingleSync,
+        Data: Offer[..32]
+    }
+
+    scope Admin {
+        event SetPrice {
+            From: Client,
+            Type: Reliable,
+            Call: SingleSync,
+            Rate: 1,
+            Data: Offer
+        }
+    }
+}
+
+struct Receipt {
+    Item: Shop.ItemId,
+    Paid: Coins,
+}
+```
+
+[Options](/BlinkBlox/language/options/) cannot go in a scope: they apply to the whole schema and
+must come before any declaration.
+
+## Referring to names
+
+**Inside a scope, everything declared around it is visible.** `Offer` uses `ItemId` from its own
+scope and `Coins` from the top level without qualifying either, and `SetPrice` in the nested
+`Admin` scope uses `Offer` the same way.
+
+**Outside a scope, qualify the name with the scope's.** `Receipt` writes `Shop.ItemId`. A nested
+scope takes one qualifier per level: `Shop.Admin.SomeType`. An unqualified name from inside a
+scope is an unknown reference outside it.
+
+## Names must not collide
+
+A scope is not a way to reuse a name. A declaration inside a scope may not repeat a name already
+visible from it -- one declared at the top level, or in any scope around it:
+
+```blink error title="Refused: T is already declared at the top level"
+type T = u8
+
+scope Inner {
+    type T = u16
+}
+```
+
+Sibling scopes are separate, so `Shop.ItemId` and `Inventory.ItemId` can both exist, and so can
+two events named `Changed` in two different scopes.
+
+A scope's name is declared once. Writing `scope Shop { ... }` a second time is a duplicate
+declaration, not a continuation of the first.
+
+## In the generated modules
+
+A scope becomes a nested table of the module, holding its events and functions. Its types are
+exported with the scope's names joined to the type's by underscores:
+
+```luau title="Server.luau"
+local Net = require(path.to.Server)
+
+Net.Shop.OffersChanged.FireAll({
+    { Item = 1, Price = 250 },
+})
+
+Net.Shop.Admin.SetPrice.On(function(Player: Player, Offer: Net.Shop_Offer)
+    -- ...
+end)
+
+local Id: Net.Shop_ItemId = 1
+```
+
+A type in a nested scope takes every level: an `ItemId` in `Shop.Admin` is exported as
+`Net.Shop_Admin_ItemId`.
+
+<Aside type="caution">
+The flattened names can collide with top-level ones. A top-level `type Shop_ItemId` next to
+`scope Shop { type ItemId }` passes the name check above -- in the schema they are different names --
+but both are exported as `Shop_ItemId`, and the module fails to type-check. Avoid underscores in
+names that could meet a scope prefix.
+</Aside>
+
+[Imports](/BlinkBlox/language/imports/) are scopes too: an imported file's declarations land in a
+scope named after the file, and everything on this page applies to them.

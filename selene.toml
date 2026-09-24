@@ -23,7 +23,7 @@ exclude = [
 	"build/**",
 	# The benchmark tree pulls in third-party transports (zap, bytenet) for comparison.
 	"benchmark/**",
-	# Docs are a Next.js site, not Luau.
+	# Docs are an Astro Starlight site, not Luau.
 	"docs/**",
 ]
 

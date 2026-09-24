@@ -1,0 +1,107 @@
+---
+// Studio's Explorer, showing what the plugin writes into the place: the schemas it keeps in
+// ServerStorage, and the `Blink` folder of generated modules (plugin/src/Output.luau).
+import Icon from './Icon.astro';
+
+type Node = {
+	name: string;
+	icon: 'service' | 'folder' | 'module' | 'value';
+	children?: Node[];
+	/** Shown dimmed after the name. */
+	note?: string;
+	selected?: boolean;
+};
+
+interface Props {
+	items: Node[];
+	label: string;
+	caption?: string;
+}
+
+const { items, label, caption } = Astro.props;
+
+const rows: { node: Node; depth: number }[] = [];
+const walk = (nodes: Node[], depth: number) => {
+	for (const node of nodes) {
+		rows.push({ node, depth });
+		if (node.children) walk(node.children, depth + 1);
+	}
+};
+walk(items, 0);
+---
+
+<figure class="bbp-figure not-content">
+	<div class="bbp-explorer" role="img" aria-label={label}>
+		<div class="bbp-explorer-title">Explorer</div>
+		<div class="bbp-explorer-rows">
+			{
+				rows.map(({ node, depth }) => (
+					<div class:list={['bbp-explorer-row', { 'bbp-explorer-selected': node.selected }]} style={`padding-left:${6 + depth * 16}px`}>
+						<span class="bbp-explorer-arrow">
+							{node.children && node.children.length > 0 && <Icon name="chevron-down" size={12} />}
+						</span>
+						<Icon name={node.icon} size={16} />
+						<span class="bbp-explorer-name">{node.name}</span>
+						{node.note && <span class="bbp-explorer-note">{node.note}</span>}
+					</div>
+				))
+			}
+		</div>
+	</div>
+	{caption && <figcaption class="bbp-caption">{caption}</figcaption>}
+</figure>
+
+<style is:global>
+	.bbp-explorer {
+		width: 340px;
+		max-width: 100%;
+		box-sizing: border-box;
+		border: 1px solid #1a1a1a;
+		background: #2e2e2e;
+		color: #d4d4d4;
+		font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+		font-size: 13px;
+		line-height: normal;
+		box-shadow: 0 0.75rem 2rem -1rem rgb(0 0 0 / 0.6);
+		overflow-x: auto;
+	}
+
+	.bbp-explorer-title {
+		height: 24px;
+		line-height: 24px;
+		padding: 0 8px;
+		background: #353535;
+		border-bottom: 1px solid #1e1e1e;
+		color: #b8b8b8;
+	}
+
+	.bbp-explorer-rows {
+		padding: 4px 0;
+	}
+
+	.bbp-explorer-row {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		height: 22px;
+		padding-right: 8px;
+		white-space: nowrap;
+	}
+
+	.bbp-explorer-selected {
+		background: #0b5aaf;
+		color: #ffffff;
+	}
+
+	.bbp-explorer-arrow {
+		display: flex;
+		width: 12px;
+		color: #b8b8b8;
+	}
+
+	.bbp-explorer-note {
+		margin-left: 6px;
+		color: #8a8a8a;
+		font-style: italic;
+	}
+</style>

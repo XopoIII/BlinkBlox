@@ -1,0 +1,23 @@
+/* BlinkBlox purple, the colour of the README badges. */
+:root {
+	--sl-color-accent-low: #2c1830;
+	--sl-color-accent: #a350af;
+	--sl-color-accent-high: #e7c6ec;
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #f2dff5;
+	--sl-color-accent: #8a3a96;
+	--sl-color-accent-high: #4a1c52;
+}
+
+/* The changelog page imports CHANGELOG.md, whose own title repeats the page's. */
+.bb-changelog > h1:first-child {
+	display: none;
+}
+
+/* Home page hero art. */
+.hero img {
+	border-radius: 1rem;
+	box-shadow: 0 1.5rem 3rem -1.5rem rgb(0 0 0 / 0.5);
+}

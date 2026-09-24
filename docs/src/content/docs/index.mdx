@@ -1,0 +1,162 @@
+---
+title: BlinkBlox
+description: An IDL compiler for Roblox buffer networking whose generated server is safe to point at the open internet.
+template: splash
+hero:
+  tagline: Describe your remotes in a schema. Get server and client modules that pack them into buffers, check everything a client sends, and hold up when a client is hostile.
+  image:
+    file: ../../assets/bb_logo.jpg
+    alt: A Roblox builder feeding bricks into a machine that turns them into streams of data.
+  actions:
+    - text: Get started
+      link: /BlinkBlox/getting-started/installation/
+      icon: right-arrow
+    - text: Secure your server
+      link: /BlinkBlox/guides/securing-the-server/
+      variant: minimal
+    - text: GitHub
+      link: https://github.com/XopoIII/BlinkBlox
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## One schema, two modules
+
+You describe your events and functions, and what they carry, in a `.blink` file. The compiler turns
+that file into a server module and a client module. Both are plain Luau with no runtime dependency.
+Calls are batched into one buffer per frame, and each type is packed as tightly as its declaration
+allows.
+
+<Tabs>
+<TabItem label="Schema">
+```blink title="Net.blink"
+option DefaultRate = 20
+
+struct Hit {
+	Target: Instance(Humanoid),
+	Damage: u8(1..100),
+	Critical: boolean,
+}
+
+event Damage {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Rate: 10,
+	Data: Hit
+}
+
+event Position {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Data: (Id: u16, Where: vector<f32>)
+}
+
+function GetInventory {
+	Yield: Coroutine,
+	Data: u32,
+	Return: string(0..32)[..64]
+}
+```
+</TabItem>
+<TabItem label="Server">
+```luau title="Server.server.luau"
+local Net = require(ReplicatedStorage.Blink.Server)
+
+-- The event is dispatched only after its rate limit has passed and every field has been checked:
+-- Damage is 1..100 and Target is a Humanoid.
+Net.Damage.On(function(Player, Hit)
+	Combat.Apply(Player, Hit.Target, Hit.Damage, Hit.Critical)
+end)
+
+Net.GetInventory.On(function(Player, Page)
+	return Inventory.List(Player, Page)
+end)
+
+RunService.Heartbeat:Connect(function()
+	for Id, Unit in Units do
+		Net.Position.FireAll(Id, Unit.Position)
+	end
+end)
+```
+</TabItem>
+<TabItem label="Client">
+```luau title="Client.client.luau"
+local Net = require(ReplicatedStorage.Blink.Client)
+
+Net.Damage.Fire({ Target = Humanoid, Damage = 25, Critical = false })
+
+-- A packet that arrives after a newer one is dropped, so a unit never jumps back.
+Net.Position.On(function(Id, Where)
+	Units[Id]:MoveTo(Where)
+end)
+
+local Items = Net.GetInventory.Invoke(1)
+```
+</TabItem>
+</Tabs>
+
+## What it does for you
+
+<CardGrid>
+	<Card title="Safe to point at the internet" icon="warning">
+		Packets are bounded before they are parsed. Each player gets a byte budget, and each event can
+		get its own rate limit. Every length is checked before the read it pays for. One malformed
+		event is dropped without taking the rest of the batch with it. [How the server protects
+		itself](/BlinkBlox/guides/securing-the-server/).
+	</Card>
+	<Card title="Small on the wire" icon="rocket">
+		Booleans and optional flags share a bitfield, and `boolean[]` packs eight elements to a byte.
+		A length is sent relative to its range, and a rotation fits in 7 bytes. Unreliable events that
+		cannot fit are refused at compile time. [Bandwidth and sizes](/BlinkBlox/guides/bandwidth/).
+	</Card>
+	<Card title="Checked at compile time" icon="approve-check">
+		A schema that cannot work never builds. That covers map keys that can never be looked up,
+		cyclic imports, unbounded decode loops and debug remotes left in a release build. Each gets a
+		diagnostic with a code and a source span. [Diagnostics](/BlinkBlox/reference/diagnostics/).
+	</Card>
+	<Card title="Tooling included" icon="puzzle">
+		The CLI has watch mode and build profiles. A Studio plugin gives you an editor with live
+		diagnostics and autocomplete, and TypeScript definitions are available for roblox-ts.
+		[Studio plugin](/BlinkBlox/getting-started/studio-plugin/).
+	</Card>
+</CardGrid>
+
+## Measured
+
+A thousand events a frame from client to server, run in Studio on 0.29.0. The numbers are median
+frame rates, with bandwidth in brackets.
+
+| Payload | Roblox remotes | BlinkBlox | zap | ByteNet |
+|---|---|---|---|---|
+| 1000 booleans | 15 FPS | **57 FPS** (3.19 Kbps) | 37 FPS (8.53 Kbps) | 22 FPS (8.33 Kbps) |
+| 100 entities | 16 FPS | **60 FPS**\* (41.57 Kbps) | 42 FPS (41.86 Kbps) | 24 FPS (41.71 Kbps) |
+
+\* Studio caps the frame rate at 60. [How these were measured](/BlinkBlox/guides/benchmarks/).
+
+## Where it fits
+
+BlinkBlox is a maintained fork of [Blink](https://github.com/1Axen/blink). Upstream froze this line
+of the compiler in 2026 and began a rewrite, and it declared an unbounded parse of a hostile client
+buffer out of scope. This fork fixes that and continues from there, without giving up the
+TypeScript output, the Studio plugin or the documentation.
+
+[Zap](https://github.com/red-blox/zap) is a neighbouring compiler that focuses on bandwidth. It
+leaves rate limiting to the game, and one malformed event discards the rest of that player's batch.
+
+| | BlinkBlox | Blink 0.18 | Zap |
+|---|---|---|---|
+| Per-player, per-event rate limits | Yes | No | No |
+| A malformed event drops only itself | Yes | No | No |
+| Shared bitfield for booleans and optionals | Yes | No | Yes |
+| TypeScript output | Yes | Yes | Yes |
+
+<CardGrid>
+	<LinkCard title="Install BlinkBlox" href="/BlinkBlox/getting-started/installation/" description="Rokit, pesde, release binaries or the Studio plugin." />
+	<LinkCard title="Quick start" href="/BlinkBlox/getting-started/quick-start/" description="From an empty file to a working event in five minutes." />
+	<LinkCard title="Coming from Blink?" href="/BlinkBlox/guides/migrating-from-blink/" description="What was kept, what changed, and what to recompile." />
+	<LinkCard title="Changelog" href="/BlinkBlox/changelog/" description="Every release since the fork." />
+</CardGrid>

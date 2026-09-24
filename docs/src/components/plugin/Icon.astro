@@ -1,0 +1,126 @@
+---
+// Line icons for the plugin mockups. The plugin's own are Roblox image assets that cannot be shipped
+// here, so these are stand-ins drawn to read the same at a glance: same place, same size, same job.
+interface Props {
+	name:
+		| 'menu'
+		| 'import'
+		| 'delete'
+		| 'edit'
+		| 'generate'
+		| 'clear'
+		| 'save'
+		| 'close'
+		| 'undock'
+		| 'keyword'
+		| 'variable'
+		| 'editor'
+		| 'folder'
+		| 'module'
+		| 'value'
+		| 'service'
+		| 'chevron-down'
+		| 'chevron-right';
+	size?: number;
+}
+
+const { name, size = 16 } = Astro.props;
+---
+
+<svg
+	class="bbp-icon"
+	width={size}
+	height={size}
+	viewBox="0 0 24 24"
+	fill="none"
+	stroke="currentColor"
+	stroke-width="2"
+	stroke-linecap="round"
+	stroke-linejoin="round"
+	aria-hidden="true"
+	focusable="false"
+>
+	{name === 'menu' && <path d="M3 6h18M3 12h18M3 18h18" stroke-width="2.6" />}
+	{name === 'import' && (
+		<>
+			<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+			<path d="M14 3v5h5M12 11v6M9 14l3 3 3-3" />
+		</>
+	)}
+	{name === 'delete' && (
+		<>
+			<path d="M4 7h16M10 3h4" />
+			<path d="M6 7l1 13h10l1-13z" fill="currentColor" stroke="none" />
+		</>
+	)}
+	{name === 'edit' && <path d="M4 20l1-4L16 5l3 3L8 19zM14 7l3 3" fill="currentColor" stroke-width="1.5" />}
+	{name === 'generate' && (
+		<>
+			<path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
+			<path d="M15 4h5v5M10 14L20 4" />
+		</>
+	)}
+	{name === 'clear' && <path d="M6 6l12 12M18 6L6 18" />}
+	{name === 'save' && (
+		<>
+			<path d="M5 4h11l4 4v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
+			<path d="M8 4v5h7V4M8 20v-6h8v6" />
+		</>
+	)}
+	{name === 'close' && <path d="M7 7l10 10M17 7L7 17" stroke-width="1.6" />}
+	{name === 'undock' && (
+		<>
+			<path d="M10 5h9v9" stroke-width="1.6" />
+			<path d="M5 10h9v9H5z" stroke-width="1.6" />
+		</>
+	)}
+	{name === 'keyword' && (
+		<>
+			<path d="M4 7l8-4 8 4v10l-8 4-8-4z" stroke-width="1.8" />
+			<path d="M4 7l8 4 8-4M12 11v10" stroke-width="1.8" />
+		</>
+	)}
+	{name === 'variable' && (
+		<>
+			<rect x="3" y="6" width="18" height="12" rx="2" stroke-width="1.8" />
+			<path d="M8 10l4 4M12 10l-4 4M15 14h2" stroke-width="1.8" />
+		</>
+	)}
+	{name === 'editor' && (
+		<>
+			<path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7" stroke-width="1.6" />
+			<path d="M8 8h6M8 12h5M8 16h3" stroke-width="1.6" />
+			<path d="M14 20l.6-2.6L20 12l2 2-5.4 5.4z" fill="currentColor" stroke-width="1.2" />
+		</>
+	)}
+	{name === 'folder' && (
+		<path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="#E8B64C" stroke="none" />
+	)}
+	{name === 'module' && (
+		<>
+			<path d="M6 3h8l4 4v14H6z" fill="#8E7CC3" stroke="none" />
+			<path d="M9 12h6M9 15h6M9 18h4" stroke="#ffffff" stroke-width="1.5" />
+		</>
+	)}
+	{name === 'value' && (
+		<>
+			<rect x="3" y="6" width="18" height="12" rx="2" fill="#5A9BD5" stroke="none" />
+			<path d="M8 10v4M12 10v4M16 10v4" stroke="#ffffff" stroke-width="1.6" />
+		</>
+	)}
+	{name === 'service' && (
+		<>
+			<rect x="3" y="4" width="18" height="16" rx="2" fill="#C0504D" stroke="none" />
+			<path d="M7 9h10M7 13h10M7 17h6" stroke="#ffffff" stroke-width="1.5" />
+		</>
+	)}
+	{name === 'chevron-down' && <path d="M7 10l5 5 5-5" fill="currentColor" stroke-width="1" />}
+	{name === 'chevron-right' && <path d="M10 7l5 5-5 5" fill="currentColor" stroke-width="1" />}
+</svg>
+
+<style is:global>
+	.bbp-icon {
+		display: block;
+		flex: none;
+	}
+</style>

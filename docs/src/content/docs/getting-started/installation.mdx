@@ -1,0 +1,130 @@
+---
+title: Installation
+description: Install the BlinkBlox compiler with Rokit, pesde or a release archive, and the Studio plugin from the Creator Store.
+---
+
+import { Aside, Tabs, TabItem, LinkCard } from '@astrojs/starlight/components';
+
+BlinkBlox comes in two parts. The **compiler** is a command-line program, `blinkblox`, that turns a
+`.blink` schema into Luau modules on disk. The **Studio plugin**, BlinkBlox Editor, does the same
+inside Roblox Studio with no external tooling. Both accept the same schema language and produce
+the same modules, so pick whichever fits how you work. You can use both.
+
+## The compiler
+
+<Tabs syncKey="installer">
+<TabItem label="Rokit">
+
+[Rokit](https://github.com/rojo-rbx/rokit) is the recommended installer. It pins the version in
+your project's `rokit.toml`, so everyone who clones the project gets the same compiler.
+
+From your project directory:
+
+```sh
+rokit add XopoIII/BlinkBlox blinkblox
+```
+
+This downloads the build for your platform and records it in `rokit.toml`. `blinkblox` is now on
+your `PATH` inside the project. To pin an exact version, name it:
+
+```sh
+rokit add XopoIII/BlinkBlox@0.29.0 blinkblox
+```
+
+To move to the newest release later:
+
+```sh
+rokit update XopoIII/BlinkBlox
+```
+
+Add `--global` to `rokit add` to install it for every project on the machine instead.
+
+</TabItem>
+<TabItem label="pesde">
+
+The compiler is published to the [pesde](https://pesde.dev) registry as `xopoiii/blinkblox`. It is
+a binary package for the `lune` environment: pesde runs the compiler's bundled Luau source under
+[Lune](https://lune-org.github.io/docs) rather than downloading a native executable.
+
+In a project with a `pesde.toml`, add it as a dev dependency and install:
+
+```sh
+pesde add xopoiii/blinkblox --dev --target lune
+pesde install
+```
+
+pesde exposes a package's binary under its alias, so the command is `blinkblox`, exactly as with
+the other installers.
+
+<Aside type="caution" title="Not the upstream package">
+`1axen/blink` on the same registry is upstream Blink, the project this one forked from at 0.18.8.
+It is a different compiler with a different runtime; see
+[Migrating from Blink](/BlinkBlox/guides/migrating-from-blink/) before swapping one for the other.
+</Aside>
+
+</TabItem>
+<TabItem label="GitHub Releases">
+
+Every [release](https://github.com/XopoIII/BlinkBlox/releases) carries a prebuilt executable for
+each supported platform, packed in an archive with the executable alone inside:
+
+| Platform | Archive |
+|---|---|
+| Windows, x86-64 | `blinkblox-windows-x86_64.tar.gz` |
+| macOS, Apple silicon | `blinkblox-macos-aarch64.tar.xz` |
+| macOS, Intel | `blinkblox-macos-x86_64.tar.xz` |
+| Linux, x86-64 | `blinkblox-linux-x86_64.tar.xz` |
+| Linux, ARM64 | `blinkblox-linux-aarch64.tar.xz` |
+
+Unpack it and put the executable (`blinkblox`, or `blinkblox.exe` on Windows) somewhere on your
+`PATH`:
+
+```sh
+tar -xJf blinkblox-linux-x86_64.tar.xz
+```
+
+Windows 10 and later ship `tar`, so `tar -xzf blinkblox-windows-x86_64.tar.gz` works there too.
+
+</TabItem>
+</Tabs>
+
+Check that it runs:
+
+```sh
+blinkblox --version
+```
+
+It prints `BlinkBlox` followed by the version number. The [command-line page](/BlinkBlox/getting-started/cli/)
+covers every flag.
+
+## The Studio plugin
+
+The plugin, **BlinkBlox Editor**, gives you an editor with syntax highlighting, autocomplete and
+live diagnostics, and generates the modules straight into your place.
+
+<Tabs syncKey="plugin">
+<TabItem label="Creator Store">
+
+Install it from the
+[Creator Store](https://create.roblox.com/store/asset/132820603641668/BlinkBlox-Editor). Studio
+keeps it up to date from there.
+
+</TabItem>
+<TabItem label="GitHub Releases">
+
+Every release also carries the plugin as `blinkblox-plugin.rbxm`. Download it and put it in
+Studio's local plugins folder -- in Studio, **Plugins > Plugins Folder** opens it -- then restart
+Studio. A plugin installed this way does not update itself; replace the file on each release.
+
+</TabItem>
+</Tabs>
+
+The plugin and the compiler are released together from the same source and stamped with the same
+version. Keep them on the same release: the generated modules carry that version, and it is the
+first thing to compare when two builds disagree.
+
+<LinkCard
+	title="Quick start"
+	description="Write a schema, compile it, and fire your first event."
+	href="/BlinkBlox/getting-started/quick-start/"
+/>

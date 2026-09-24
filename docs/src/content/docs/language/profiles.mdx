@@ -1,0 +1,157 @@
+---
+title: Profiles
+description: Compile parts of a schema only in some builds, so debug remotes and development options never reach the shipped game.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A profile decides which parts of a schema a build compiles. Marking a statement with `@profile`
+compiles it only when that profile is active. This keeps debug tooling out of the game you ship
+without keeping a second schema file.
+
+```blink
+-- Validate writes while developing; trust your own code in the shipped game.
+@profile("dev")
+option WriteValidations = true
+
+-- A debug remote that must never reach a live server.
+@profile("dev")
+event GiveMoney {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u32
+}
+
+event Ping {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}
+```
+
+A `release` build of this schema compiles `Ping` alone, with `WriteValidations` off. A `dev` build
+compiles both events, with `WriteValidations` on.
+
+Why it matters for the server: every event a client can send is surface a client can reach. A
+debug remote left in a shipped schema is a remote any exploiter can call, rate limited or not. A
+remote that is not compiled does not exist.
+
+There are four profiles: `dev`, `debug`, `test` and `release`. A statement without `@profile` is
+compiled under every one of them.
+
+## Choosing a profile
+
+On the [command line](/BlinkBlox/getting-started/cli/#flags), pass `--profile` (or `-p`):
+
+```sh
+blinkblox net --profile dev
+```
+
+In the Studio plugin, set a string attribute named `Profile`, with one of the four names as its
+value, on the schema's file in `ServerStorage.BLINK_CONFIGURATION_FILES`. See the
+[Studio plugin](/BlinkBlox/getting-started/studio-plugin/) page.
+
+<Aside type="caution" title="The default is release">
+A build without a profile is compiled as `release`. That is deliberate: a statement marked `dev` is
+one somebody meant to keep out of the shipped game, so a build that forgot the flag leaves it out
+rather than ships it. Upstream Blink defaults to `dev`; this is one of the places the fork differs.
+</Aside>
+
+## What can be marked
+
+`@profile` goes in front of a type (`type`, `struct`, `enum`, `map`, `set`), an `event`, a
+`function`, a `scope`, an `import` or an `option`. Put it on its own line or on the same line as the
+statement; either works.
+
+**Everything inside a marked scope or import follows it.** A statement inside is compiled only if
+its scope is. Marking a statement inside an excluded scope with the active profile does not bring
+it back.
+
+```blink
+@profile("dev")
+scope Debug {
+    event Teleport {
+        From: Client,
+        Type: Reliable,
+        Call: SingleSync,
+        Data: vector
+    }
+
+    event Kill {
+        From: Client,
+        Type: Reliable,
+        Call: SingleSync,
+        Data: u8
+    }
+}
+```
+
+**An excluded import is still read.** A statement that is left out is still parsed and its names
+still registered, so the file an excluded `import` names must exist and must parse. What exclusion
+does is keep the declarations out of the generated modules.
+
+## Rules
+
+- **A compiled declaration cannot use an excluded one.** If `Ping` is compiled and uses a type
+  marked `dev`, a `release` build is refused with `E3027` rather than quietly carrying the type
+  into the build. Mark both, or neither:
+
+  ```blink error title="Refused under release: Ping uses a dev-only type"
+  @profile("dev")
+  struct Money {
+      Amount: u32,
+  }
+
+  event Ping {
+      From: Server,
+      Type: Reliable,
+      Call: SingleSync,
+      Data: Money
+  }
+  ```
+
+  The reverse is fine: a declaration marked `dev` may use anything that is always compiled.
+
+- **Names stay unique across profiles.** Two declarations with the same name are a duplicate, even
+  under different profiles. You cannot declare `GiveMoney` once for `dev` and again, differently,
+  for `release`.
+
+- **An option may be set once per profile, and once without one.** `@profile("dev")` and
+  `@profile("release")` may each set `MaxPacketSize`. Setting it both with and without a profile is
+  refused under every profile, so a schema is valid in all builds or in none:
+
+  ```blink error title="Refused: set with and without a profile"
+  option MaxPacketSize = 4096
+
+  @profile("dev")
+  option MaxPacketSize = 1024
+
+  event Ping {
+      From: Server,
+      Type: Reliable,
+      Call: SingleSync,
+      Data: u8
+  }
+  ```
+
+- **A statement takes one profile.** Two `@profile` attributes on the same statement are refused
+  (`E3028`). To compile a statement under two profiles but not the others, there is no syntax; leave
+  it unmarked, or declare it under one.
+
+- **A misspelt profile is an error** (`E3026`), not a statement that silently never compiles. The
+  attribute's name is checked too: `@profile` is the only one, and anything else is `E3025`.
+
+- **An attribute needs a statement after it.** One at the end of a file, or in front of a closing
+  brace, is refused (`E3028`).
+
+## The client and the server
+
+A single compile writes the client and the server module from the same profile, so they always
+agree. They only disagree if you mix modules from two builds -- a `dev` client with a `release`
+server. Their [schema signatures](/BlinkBlox/language/options/#schema-signatures) then differ, and the
+client module raises when it is required, rather than decoding one event as another.
+
+A schema with no `@profile` anywhere has the same signature under every profile, so the flag only
+matters where the schema uses it.

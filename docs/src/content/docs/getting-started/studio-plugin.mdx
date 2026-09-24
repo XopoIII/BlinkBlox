@@ -1,0 +1,382 @@
+---
+title: Studio plugin
+description: Write, check and generate BlinkBlox schemas inside Roblox Studio with the BlinkBlox Editor plugin.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import PluginToolbar from '../../../components/plugin/PluginToolbar.astro';
+import PluginWindow from '../../../components/plugin/PluginWindow.astro';
+import Editor from '../../../components/plugin/Editor.astro';
+import SideMenu from '../../../components/plugin/SideMenu.astro';
+import CompletionPopup from '../../../components/plugin/CompletionPopup.astro';
+import DiagnosticPopup from '../../../components/plugin/DiagnosticPopup.astro';
+import ErrorWindow from '../../../components/plugin/ErrorWindow.astro';
+import OutputTree from '../../../components/plugin/OutputTree.astro';
+import { template, typing, error, warning } from '../../../components/plugin/samples';
+
+The Studio plugin, **BlinkBlox Editor**, keeps your schemas inside the place, edits them with
+highlighting, autocomplete and live diagnostics, and generates the modules straight into the
+Explorer. It runs the same parser and generator as the [command line](/BlinkBlox/getting-started/cli/),
+from the same release, so a schema produces the same modules either way.
+[Installation](/BlinkBlox/getting-started/installation/#the-studio-plugin) covers getting it.
+
+The pictures on this page are drawn from the plugin's own interface files -- the layout, colours and
+text are the plugin's, and the code in them is coloured by the plugin's own highlighter.
+
+## Opening the plugin
+
+The plugin adds a toolbar named **BlinkBlox Suite** to the **Plugins** tab, with one button,
+**Editor**. Clicking it opens the editor window, docked on the left and titled *Configuration
+Editor*; clicking it again closes the window. The button stays highlighted while the window is open.
+
+<PluginToolbar
+	active
+	label="The Plugins tab of Roblox Studio, showing the BlinkBlox Suite toolbar group with its single button, Editor, highlighted."
+/>
+
+### The template
+
+The first time you open the editor in a place, the plugin creates the folder it keeps schemas in and
+saves a file named `Template` into it, then opens that file:
+
+<PluginWindow
+	title="Configuration Editor"
+	label="The Configuration Editor window. A narrow strip on the left holds the menu button; beside it are line numbers 1 to 7 and the Template schema, a type named Example and an event named MyEvent, coloured by the plugin's highlighter. Two small buttons, Clear and Save, sit in the bottom-right corner."
+>
+	<Editor lines={template.lines} rows={10} activeLine={1} />
+</PluginWindow>
+
+This happens only in a place that has never had the folder. Delete every file and the folder stays,
+empty: the plugin takes that as your choice and does not bring the template back.
+
+## Where schemas are stored
+
+Each schema is a `StringValue` in `ServerStorage.BLINK_CONFIGURATION_FILES`: its `Name` is the file
+name and its `Value` is the source. The files are saved with the place, travel with it through Team
+Create and version history, and never reach a client, because nothing in `ServerStorage` replicates.
+
+You can manage them in the Explorer like any other instance -- rename one, duplicate it, copy it
+into another place. The side menu reads the folder when it first opens and again after each save or
+delete, so a file changed in the Explorer shows up there after the next one. The folder keeps the name it had before the plugin was renamed to BlinkBlox, so places
+set up by older versions keep working.
+
+## The side menu
+
+The button at the top of the strip on the left opens the side menu over the editor. It holds every
+saved file, in name order, each with three buttons: **Delete**, **Edit** and **Generate**. Clicking
+the menu button again closes it.
+
+<Tabs>
+<TabItem label="Files">
+<PluginWindow
+	title="Configuration Editor"
+	label="The side menu open over a dimmed editor. At the top, an Import button and a Search box. Below them three files, Combat, Inventory and Template, each followed by Delete, Edit and Generate buttons. At the bottom, a Save button."
+>
+	<Editor lines={template.lines} rows={13}>
+		<SideMenu slot="overlay" files={['Template', 'Combat', 'Inventory']} />
+	</Editor>
+</PluginWindow>
+</TabItem>
+<TabItem label="Saving">
+<PluginWindow
+	title="Configuration Editor"
+	label="The side menu with the save prompt open: a Name box filled in with Combat, above a Cancel button and a green Save button."
+>
+	<Editor lines={template.lines} rows={13}>
+		<SideMenu slot="overlay" files={['Template', 'Combat', 'Inventory']} mode="save" saveName="Combat" />
+	</Editor>
+</PluginWindow>
+</TabItem>
+<TabItem label="Generating">
+<PluginWindow
+	title="Configuration Editor"
+	label="The side menu with the generate prompt open. It reads: Selected, ReplicatedStorage, above a Cancel and a Generate button."
+>
+	<Editor lines={template.lines} rows={13}>
+		<SideMenu slot="overlay" files={['Template', 'Combat', 'Inventory']} mode="generate" selected="ReplicatedStorage" />
+	</Editor>
+</PluginWindow>
+</TabItem>
+</Tabs>
+
+- **Edit** opens the file in the editor and closes the menu.
+- **Delete** removes the file at once. There is no confirmation.
+- **Generate** opens the generate prompt -- see [Generating](#generating).
+
+### Searching
+
+Type into the search box and press <kbd>Enter</kbd> to show only the files whose names contain what
+you typed. The match is plain, case-sensitive text: since 0.28.0, `(`, `[`, `%`, `.` and `-` mean
+themselves rather than being read as a Lua pattern. Clicking the box clears it; press
+<kbd>Enter</kbd> on an empty box to show every file again. Leaving the box without pressing
+<kbd>Enter</kbd> changes nothing.
+
+### Saving
+
+**Save** at the bottom of the menu saves what is in the editor. The first click opens a **Name** box,
+filled in with the name of the file you are editing, and turns **Save** green; the second click saves
+under that name. A name that is already taken replaces that file's contents, which is how you save
+changes to an existing file. **Cancel** closes the prompt without saving.
+
+<Aside type="caution">
+	Clicking into the **Name** box clears it. To save under the name already filled in, press **Save**
+	again without clicking the box.
+
+	Saving under a new name does not switch the editor to the new file: the editor still counts as
+	editing the file you opened, and [quick save](#quick-save-and-clear) keeps writing to that one.
+	Open the new file with **Edit** to carry on in it.
+</Aside>
+
+### Quick save and clear
+
+The two buttons in the editor's bottom-right corner work without opening the menu.
+
+- **Save** (the lower one) saves the editor's contents over the file you are editing, without asking.
+  If you are not editing a saved file -- the text was imported, say -- it opens the menu with the
+  save prompt instead.
+- **Clear** (the upper one) empties the editor. It does not touch the saved file.
+
+Both do nothing while the side menu is open.
+
+<Aside type="caution">
+	After **Clear**, the editor still counts as editing the same file. Quick-saving then writes the empty
+	text over that file. If you cleared by mistake, reopen the file with **Edit** instead of saving.
+</Aside>
+
+### Importing
+
+The button to the left of the search box imports a schema from your computer. Studio opens a file
+picker for `.blink` and `.txt` files, and the one you choose is loaded into the editor. It is not
+saved and not attached to any file: save it from the menu to keep it in the place.
+
+## Generating
+
+**Generate** on a file opens the generate prompt at the bottom of the menu. Select the destination in
+the Explorer -- the prompt shows its full name under **Selected** -- and press **Generate**. Until
+something is selected, the prompt asks you to select a location and **Generate** is dimmed and does
+nothing.
+
+<Aside type="caution">
+	Generate into somewhere both the server and the clients can reach, such as `ReplicatedStorage`.
+	Generated into `ServerStorage` or `ServerScriptService`, the client module cannot be required.
+</Aside>
+
+The plugin remembers the last destination between sessions. When the prompt opens with nothing
+selected, that destination is selected for you; selecting something else in the Explorer overrides
+it. The destination is remembered by its full name, so after you rename or move it the plugin no
+longer finds it and you select it again -- rather than generating into the old place.
+
+<Aside type="note">
+	Generating reads the **saved** file, not the editor. Save first, or you generate the version from
+	before your last edits.
+</Aside>
+
+### Script injection
+
+Creating scripts is a permission Studio grants plugins separately. The first time you generate,
+Studio asks whether to allow **BlinkBlox Editor** to inject scripts; allow it. If it is refused, the
+plugin opens its error window with *File generation failed, plugin doesn't have script inject
+permissions.* and writes nothing. You can grant it later from **Plugins > Manage Plugins**.
+
+### The output
+
+The plugin writes three `ModuleScript`s into a folder named `Blink` under the destination, creating
+the folder if it is not there:
+
+<OutputTree
+	label="The Explorer. ServerStorage contains the BLINK_CONFIGURATION_FILES folder with the Combat, Inventory and Template files. ReplicatedStorage contains a folder named Blink holding the Client, Server and Types modules and a module of the user's own named Wrapper."
+	items={[
+		{
+			name: 'ReplicatedStorage',
+			icon: 'service',
+			children: [
+				{
+					name: 'Blink',
+					icon: 'folder',
+					children: [
+						{ name: 'Client', icon: 'module' },
+						{ name: 'Server', icon: 'module' },
+						{ name: 'Types', icon: 'module' },
+						{ name: 'Wrapper', icon: 'module', note: 'yours, left alone' },
+					],
+				},
+			],
+		},
+		{
+			name: 'ServerStorage',
+			icon: 'service',
+			children: [
+				{
+					name: 'BLINK_CONFIGURATION_FILES',
+					icon: 'folder',
+					children: [
+						{ name: 'Combat', icon: 'value' },
+						{ name: 'Inventory', icon: 'value' },
+						{ name: 'Template', icon: 'value' },
+					],
+				},
+			],
+		},
+	]}
+/>
+
+- `Server` is required from server scripts, `Client` from `LocalScript`s:
+  `local Net = require(ReplicatedStorage.Blink.Server)`.
+- `Types` holds the schema's exported types, for code that wants to name them.
+
+The folder keeps the name `Blink` from before the rename, so code that requires through it keeps
+working.
+
+Generating again **updates the three modules in place**. They stay the same instances, so an open
+script tab, a breakpoint, or an `ObjectValue` pointing at one survives regeneration. **Nothing else in
+the folder is touched**: a wrapper module or configuration script you keep beside the generated ones
+stays. Before 0.23.0 the plugin emptied the folder on every generation. The one exception is an
+instance of another class sitting on one of the three names -- a `Folder` named `Server`, say -- which
+is replaced, with a warning in the Output window saying so.
+
+The modules are written through `ScriptEditorService`, so a large schema whose output passes the
+200,000 characters a script's `Source` property accepts still generates.
+
+### Profiles
+
+A schema that uses [`@profile`](/BlinkBlox/language/profiles/) is generated as `release` unless
+told otherwise. To generate another profile, select the file in
+`ServerStorage.BLINK_CONFIGURATION_FILES` and add a **string** attribute named `Profile` in the
+Properties window, set to `dev`, `debug`, `test` or `release`. Any other value, or an attribute of
+another type, stops generation with an error naming it -- *Unknown profile "beta" on Combat: expected
+dev, debug, test or release.* The attribute belongs to the file, so each schema keeps its own profile.
+
+### Imports
+
+An `import` in the plugin names another saved file rather than a path on disk:
+`import "Shared"` reads the file saved as `Shared`. See
+[Imports in the Studio plugin](/BlinkBlox/language/imports/#in-the-studio-plugin).
+
+### Errors
+
+If the file does not compile, nothing is written and a floating **Error** window opens with the
+compiler's diagnostic -- the same one the command line prints, with a plainer gutter. For the schema in [Live diagnostics](#live-diagnostics) below, with `Hit`
+misspelt as `Hitt` on line 14:
+
+<ErrorWindow
+	rendered={error.diagnostic.rendered}
+	label="The plugin's Error window. In red: [E3007] Error. Then: Unknown reference, in input.blink, pointing at line 014, Data: Hitt, with the word Hitt underlined in red and labelled Unknown reference."
+/>
+
+A schema always reports itself as `input.blink` here, since the plugin compiles text rather than a
+file on disk. Warnings do not stop generation; they are printed to the Output window.
+[Diagnostics](/BlinkBlox/reference/diagnostics/) lists every code.
+
+## The editor
+
+### Highlighting
+
+The editor colours the schema as you type: keywords in blue, primitives in teal, numbers and
+`Instance` classes in pale green, names you reference in light blue. A field name is left white,
+which is how `Hit:` reads differently from a reference to `Hit`.
+
+### Autocomplete
+
+A popup offers completions as you type:
+
+- At the start of a line, the declaration keywords: `set`, `map`, `type`, `enum`, `struct`,
+  `event`, `function`, `import`, `scope` and `export`.
+- After a field's `:` or a declaration's `=`, the primitive types and the names your schema declares
+  -- as of the last time it parsed without an error.
+
+<kbd>Tab</kbd> accepts the highlighted item and <kbd>Up</kbd> / <kbd>Down</kbd> move through the
+list. A keyword expands to its skeleton with the cursor where the name goes: `struct` becomes a
+struct declaration with empty braces, `map` a map with an empty `[]:` pair, and so on.
+
+<PluginWindow
+	title="Configuration Editor"
+	width={440}
+	label="The editor with a struct being typed. On line 5 the text reads Damage: u, with a red caret under the u. Below the cursor a popup lists u8, highlighted, then u16, u32 and unknown."
+>
+	<Editor lines={typing.lines} rows={10} activeLine={5} cursor={{ line: 5, column: 10 }} underline={{ line: 5, start: 9, end: 10, severity: 'Error' }}>
+		<CompletionPopup
+			slot="completion"
+			items={[
+				{ label: 'u8', kind: 'primitive' },
+				{ label: 'u16', kind: 'primitive' },
+				{ label: 'u32', kind: 'primitive' },
+				{ label: 'unknown', kind: 'primitive' },
+			]}
+		/>
+	</Editor>
+</PluginWindow>
+
+### Brackets and indentation
+
+Typing `(`, `[`, `{` or `<` adds its closing bracket when nothing but a closing bracket or the end of
+the line follows the cursor, and deleting an opening bracket with a closing one right after it
+deletes both. Pressing <kbd>Enter</kbd> after a `{` indents the new line by one more tab and moves
+anything after the cursor -- the closing brace, usually -- to a line of its own. Pressing
+<kbd>Enter</kbd> at the end of an indented line keeps the indentation.
+
+### Live diagnostics
+
+The editor parses the schema on every keystroke and marks the first problem it finds with a row of
+carets under where the problem starts: red for an error, amber for a warning. Hover over the carets
+to read the diagnostic -- its severity, name, message and code, then what each label says with the
+line it is on. The picture above shows the same thing mid-word: `u` is not a type yet, so it is marked
+until you finish typing it.
+
+<Tabs>
+<TabItem label="Error">
+<PluginWindow
+	title="Configuration Editor"
+	width={580}
+	label="The editor showing a schema whose line 14 reads Data: Hitt. The word Hitt has red carets under it, and a popup below reads: Error AnalyzeUnknownReference: Unknown reference BlinkBlox(3007), then Unknown reference [L14]."
+>
+	<Editor lines={error.lines} rows={19} activeLine={14} cursor={{ line: 14, column: 11 }} underline={{ line: 14, start: 7, end: 11, severity: 'Error' }}>
+		<DiagnosticPopup
+			slot="diagnostic"
+			severity={error.diagnostic.severity}
+			name={error.diagnostic.name}
+			code={error.diagnostic.code}
+			message={error.diagnostic.message}
+			labels={[{ text: error.diagnostic.label, line: error.diagnostic.line }]}
+		/>
+	</Editor>
+</PluginWindow>
+</TabItem>
+<TabItem label="Warning">
+<PluginWindow
+	title="Configuration Editor"
+	width={580}
+	label="The editor showing an event named HealthChanged, sent by the server, with a Rate field. The name HealthChanged has amber carets under it, and a popup below reads: Warning AnalyzeMissingRateLimit: Rate limiting a Server event has no effect BlinkBlox(3020), then This event is sent BY the server, not to it [L3]."
+>
+	<Editor lines={warning.lines} rows={11} activeLine={3} cursor={{ line: 3, column: 19 }} underline={{ line: 3, start: 6, end: 19, severity: 'Warning' }}>
+		<DiagnosticPopup
+			slot="diagnostic"
+			severity={warning.diagnostic.severity}
+			name={warning.diagnostic.name}
+			code={warning.diagnostic.code}
+			message={warning.diagnostic.message}
+			labels={[{ text: warning.diagnostic.label, line: warning.diagnostic.line }]}
+			shift={-110}
+		/>
+	</Editor>
+</PluginWindow>
+</TabItem>
+</Tabs>
+
+One diagnostic is shown at a time: the error when the schema does not parse, otherwise its first
+warning. Only the first line of what it points at is marked. Before 0.28.0 the editor never showed a
+warning at all -- each one was cleared by the parse that raised it and printed to the Output window
+on every keystroke instead. Warnings now appear here and are not printed.
+
+### Large files
+
+The editor does a fixed amount of work per keystroke however long the schema is. It draws the
+document once per change, and a diagnostic costs the same wherever it is -- until 0.23.0, a
+diagnostic on line 800 rebuilt 800 instances on every keystroke, about 39ms. Line numbers past the
+first 2,000 are created as they are needed; a longer document used to crash the editor. The mouse
+wheel scrolls two lines at a time.
+
+<Aside type="tip">
+	Right-click the menu button twice within a second to toggle a timing overlay that breaks down
+	each keystroke -- highlighting, analysis, completion and the rest. It is there for working on the
+	plugin, and useful if a schema ever feels slow.
+</Aside>

@@ -1,0 +1,356 @@
+---
+title: Events
+description: Declaring one-way messages between client and server, and the API BlinkBlox generates for sending, receiving and limiting them.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Events are BlinkBlox's version of Roblox's `RemoteEvent` and `UnreliableRemoteEvent`: one side sends,
+the other listens, and nobody waits for an answer. They are the main way client and server talk. When
+the sender needs a reply, use a [function](/BlinkBlox/language/functions/) instead.
+
+## Declaring an event
+
+Events are declared with the `event` keyword and a block of fields.
+
+```blink
+event MyEvent {
+    From: Server,
+    Type: Reliable,
+    Call: SingleAsync,
+    Data: f64
+}
+```
+
+`From`, `Type` and `Call` are required; `Data`, `Rate` and `Burst` are optional.
+
+### `From`
+The side that fires the event: `Server` or `Client`. The other side listens to it.
+
+### `Type`
+The reliability of the event.
+
+- `Reliable` -- guaranteed to arrive, in the order it was sent relative to every other reliable event
+  and function call. Reliable traffic is batched: each side collects it into one buffer (the server
+  keeps one per player) and sends the batch once a frame. See
+  [`ManualReplication`](/BlinkBlox/language/options/#manualreplication).
+- `Unreliable` -- may be lost, and may arrive out of order. Each `Fire` is sent at once, in a packet of
+  its own, and a payload may be at most 900 bytes by default. BlinkBlox enforces that at compile time
+  and again on send -- see [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize).
+- `OrderedUnreliable` -- as `Unreliable`, plus a two-byte sequence number: a packet that arrives
+  *after* a newer one is discarded rather than delivered late. Delivery is still not guaranteed and
+  packets can still be lost -- what is guaranteed is that your listener never sees an older state
+  after a newer one.
+
+<Aside>
+Use `OrderedUnreliable` for anything describing a **current** state -- a position, an aim direction, a
+health value -- where applying a stale packet makes the state visibly snap backwards. Plain
+`Unreliable` is right for independent one-off signals, where an older packet is still useful on its
+own.
+
+The sequence is tracked per event, and on the server per player in both directions: sixty clients each
+run their own counter, and the server counts what it sends to each of them separately, so a player
+left out of a `FireList` or `FireExcept` is never told that the next packet it does get is stale. It
+wraps at 65536: a packet counts as newer when it is less than half the counter's range ahead of the
+last one seen, so one from just before the wrap that arrives just after it is still recognised as old.
+</Aside>
+
+### `Call`
+The listening API generated on the receiving side.
+
+| `Call` | Listeners | May yield | Runs on |
+|---|---|---|---|
+| `SingleSync` | one | no | the decode thread |
+| `ManySync` | many | no | the decode thread |
+| `SingleAsync` | one | yes | a thread of its own |
+| `ManyAsync` | many | yes | a thread of its own |
+| `Polling` | none -- you iterate with [`Iter`](#iterating-an-event-polling) | -- | your loop |
+
+`Call` is required on every event, including on the side that only fires it, where it has no effect.
+It is not part of the [schema signature](/BlinkBlox/language/options/#schema-signatures), so changing it
+does not break a client built before the change.
+
+An `Async` listener is dispatched through a small thread pool rather than a fresh `task.spawn` per
+event: a thread is reused as long as the listener before it neither yielded nor errored.
+
+<Aside type="caution">
+A `Single` event keeps exactly one listener. Calling `.On()` a second time **replaces** the first and
+warns, rather than erroring -- but the displaced listener's disconnect function stops working at that
+moment, because it only detaches a listener that is still the current one.
+
+So two systems that each connect and later disconnect will leave a listener attached that neither
+believes it owns. If more than one place needs to hear an event, declare it `ManySync` or `ManyAsync`.
+</Aside>
+
+<Aside type="danger">
+A `Sync` listener runs **on the decode thread**. Yielding in one stops decoding the packet it arrived
+in, and the events behind it in that packet are lost -- see
+[`SyncValidation`](/BlinkBlox/language/options/#syncvalidation), which reports this but only once
+another packet turns up.
+
+An error thrown by a `Sync` listener costs nothing else: it is caught, raised again on a thread of its
+own -- where an `Async` listener's error surfaces too -- and the rest of the packet is still delivered.
+
+Prefer `SingleAsync` or `ManyAsync` unless the per-event cost of dispatching to a thread genuinely
+matters to you.
+</Aside>
+
+### `Poll`
+Deprecated, and worth reading even if you have never typed it -- it may be in a schema you inherited.
+
+`Poll: true` is the 0.x way of asking for polling. `Call` is still required beside it, and its value is
+then **discarded**: an event declared `Call: SingleSync, Poll: true` compiles to `Polling`, not to
+`SingleSync`. It went undocumented and unwarned for long enough that a schema using it had no way of
+learning there was a current spelling.
+
+It still works and now warns (`W3017`). Replace it with `Call: Polling` and delete the `Poll` line.
+
+### `Rate`, `Burst`
+Limits how often one player may send this event. Both fields are optional, and both are ignored on an
+event the server sends -- only inbound traffic is limited, and setting either there warns (`W3020`).
+
+`Rate` is the sustained number of events per second accepted from a single player. It may be any
+number above zero, including a fraction: `Rate: 0.5` is one event every two seconds. `Burst` is the
+bucket capacity: how many may arrive at once before the rate applies. It defaults to `Rate` rounded
+up, and may not be below 1: each event spends one whole token, so a smaller bucket would refuse every
+event however long the client waited. A `Burst` with no `Rate` -- and no
+[`DefaultRate`](/BlinkBlox/language/options/#defaultrate-requirerates) to supply one -- is refused,
+since nothing would refill it.
+
+```blink
+event Purchase {
+    From: Client,
+    Type: Reliable,
+    Call: SingleAsync,
+    Rate: 5,
+    Burst: 10,
+    Data: u16
+}
+```
+
+Each player's bucket starts full. Refused events are dropped before they reach your listener, and
+reported at most once per player per event per second. To do something else about them -- log to
+your analytics, flag the account -- pass a handler to `SetRateLimitHandler`. It is called on the same
+schedule as the warning, and `Refused` is how many refusals that call stands for: the one that made
+it, and those counted since the last. `Event` is `nil` when what was refused was whole packets over
+the [inbound budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) rather than one
+event:
+
+```luau title="Server.luau"
+local Net = require(path.to.Server)
+
+Net.SetRateLimitHandler(function(Player: Player, Event: string?, Refused: number)
+    Analytics:Record(Player, Event, Refused)
+end)
+```
+
+The handler runs on a thread of its own, so one that yields or throws does not touch the packet being
+decoded. The client module has a `SetRateLimitHandler` too, which does nothing -- it exists so code
+shared between both sides can call it without branching.
+
+<Aside>
+Nobody is kicked automatically. A false positive under server lag would eject a legitimate player, and
+whether that is the right response depends on the game -- so the decision is left to you.
+</Aside>
+
+The limit is checked after the event is deserialised and before it is dispatched. Payloads are
+variable length, so an event cannot be skipped without reading it: the cursor would be left mid-event
+and the rest of the packet would decode as garbage. What the limit saves is the listener and the game
+logic behind it. Bounding the decoding itself is what
+[`MaxEventsPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket)
+does.
+
+A refused [function](/BlinkBlox/language/functions/) call is still answered -- with a failure, so the
+caller's `Invoke` raises promptly rather than hanging.
+
+See [`DefaultRate` and `RequireRates`](/BlinkBlox/language/options/#defaultrate-requirerates) for
+applying a limit across a whole schema, and for making a missing one a compile error.
+
+### `Data`
+The data the event carries: any [type](/BlinkBlox/language/types/), written inline or by name. Omit
+the field when the event carries nothing.
+
+#### Type Packs
+Several values are sent with a type pack (commonly called a tuple): a list of
+[types](/BlinkBlox/language/types/) separated by commas, inside parentheses. A pack can only be written
+directly in a `Data` or `Return` field. For example, a pack of different
+[number types](/BlinkBlox/language/types/#numbers):
+
+```blink
+event MyTypePackEvent {
+    From: Server,
+    Type: Reliable,
+    Call: SingleAsync,
+    Data: (u8, u16, u32)
+}
+```
+
+Elements may be named. The name is what the parameter is called in the generated code, so a listener
+reads `function(chefId, dish)` rather than `function(Value1, Value2)`:
+
+```blink
+event CookRequest {
+    From: Client,
+    Type: Reliable,
+    Call: SingleAsync,
+    Data: (chefId: f64, dish: string)
+}
+```
+
+Naming is optional and may be partial: `(u8, named: string, u16)` is a valid pack, and the elements
+left unnamed keep their positional `Value1`, `Value3`.
+
+<Aside>
+A type pack is serialised positionally, with no field tags, so a name costs nothing on the wire:
+adding one does not change a single byte of what the event sends. It **does** change the
+[schema signature](/BlinkBlox/language/options/#schema-signatures), which includes element names, so
+rebuild both sides after renaming -- a client built before the change refuses the server that was
+built after it.
+</Aside>
+
+A name becomes a parameter of the generated `Fire` and `Invoke`, so it has to be usable as one: `end`,
+`local` and anything that is not an identifier are refused at compile time (`E3005`), as are two
+elements sharing a name, and the names those functions already use themselves -- `Player`, `Buffer`,
+`Instances`, `Load` and the like; the compiler says which. That is stricter than a
+[struct](/BlinkBlox/language/types/#structs) field, which becomes a table key and may be any string.
+Inside the module the elements travel under positional names, so a name can never collide with the
+serialisers' own.
+
+## Usage in Luau
+
+The generated module holds one table per event, named after it (inside a
+[scope](/BlinkBlox/language/scopes/), under the scope's table). Which members it has depends on the
+side:
+
+| | Sending side | Listening side |
+|---|---|---|
+| `From: Server` | server: `Fire`, `FireAll`, `FireList`, `FireExcept` | client: `On` (or `Iter`), `Predict` |
+| `From: Client` | client: `Fire` | server: `On` (or `Iter`), `Predict` |
+
+`Predict` exists only with [`option Predict`](/BlinkBlox/language/options/#predict). The names follow
+[`Casing`](/BlinkBlox/language/options/#casing).
+
+### Firing an Event
+```luau title="Client.luau"
+local Net = require(path.to.Client)
+
+Net.CookRequest.Fire(42, "Soup")
+```
+
+```luau title="Server.luau"
+local Net = require(path.to.Server)
+
+Net.MyEvent.Fire(Player, 5)          -- one player
+Net.MyEvent.FireAll(5)               -- every player
+Net.MyEvent.FireList({ A, B }, 5)    -- the players in a list
+Net.MyEvent.FireExcept(Player, 5)    -- every player but one
+Net.MyTypePackEvent.FireAll(2^8 - 1, 2^16 - 1, 2^32 - 1)
+```
+
+A value that fails to serialise -- see [`WriteValidations`](/BlinkBlox/language/options/#writevalidations)
+-- makes `Fire` throw, and whatever it had written is taken back out of the batch, so the events queued
+around it are unaffected.
+
+### Listening to an Event
+```luau title="Client.luau"
+Net.MyEvent.On(function(Value)
+    -- ...
+end)
+
+Net.MyTypePackEvent.On(function(Foo, Bar, FooBar)
+    -- ...
+end)
+```
+
+```luau title="Server.luau"
+Net.CookRequest.On(function(Player, chefId, dish)
+    -- ...
+end)
+```
+
+`On` returns a function that disconnects the listener:
+
+```luau
+local Disconnect = Net.MyEvent.On(Listener)
+Disconnect()
+```
+
+A listener of a `Many` event may disconnect itself, or another listener, from inside a dispatch
+without the others missing that event.
+
+### Events that arrive before a listener
+
+A reliable event that arrives while nothing is listening is queued, and the queue is handed to the
+listener the moment one connects -- so a listener connected a frame late still sees what was sent
+before it. An unreliable event with no listener is dropped.
+
+The queue holds 256 events. On the server it is filled by clients, so once it is full further events
+are dropped without a word: an event the game declares but never listens to cannot be used to grow
+server memory or fill the output. On the client a queue past 256 warns instead, because there it
+usually means a listener somebody forgot.
+
+### Packets that cannot be decoded
+A packet that fails to decode -- truncated, carrying an index no event has, or failing a range -- is
+abandoned at the event that failed, since nothing after that point can be trusted. Events decoded
+before it in the same packet have already been delivered. The server says nothing about it by default,
+so that a client sending garbage every frame cannot flood the output. To log it, flag the account or
+kick, install a handler:
+
+```luau title="Server.luau"
+Net.SetDecodeErrorHandler(function(Player: Player, Event: string?, Failure: string)
+    Analytics:Record(Player, Event, Failure)
+end)
+```
+
+`Event` is the event the packet claimed to carry, or `nil` if its index named no event at all -- or
+arrived on a remote this side receives nothing on. On the client the handler takes `(Event, Failure)`,
+and without one the client warns, naming both: from the server, a packet that cannot be decoded is a
+bug rather than an attack -- usually a `Sync` listener that yielded, or a client built from a different
+schema.
+
+On the server the handler is called at most once a second for each player, channel and event, like the
+rate-limit handler: a client sending a bad packet every frame costs the game one call a second, not
+one per packet. The server's own warnings about what a client sent -- a malformed packet, an oversized
+one, too many instances, too many events -- keep the same schedule, per player. Either way the handler
+runs on a thread of its own.
+
+An error thrown by a `Sync` listener is not a decode failure. It is raised as an error of its own, the
+way an `Async` listener's is, and the rest of the packet is still delivered.
+
+### Iterating an Event (Polling)
+An event declared `Call: Polling` -- or any event, under
+[`option UsePolling`](/BlinkBlox/language/options/#usepolling) -- has no listeners. Arriving events wait
+in a queue, and `Iter` drains it:
+
+```blink
+event Input {
+    From: Client,
+    Type: Unreliable,
+    Call: Polling,
+    Data: (Direction: vector, Jump: boolean)
+}
+```
+
+```luau title="Server.luau"
+RunService.Heartbeat:Connect(function()
+    for Index, Player, Direction, Jump in Net.Input.Iter() do
+        -- ...
+    end
+end)
+```
+
+```luau title="Client.luau"
+-- For an event sent by the server, the same loop without the Player.
+for Index, Value in Net.MyEvent.Iter() do
+    -- ...
+end
+```
+
+Each call to `Iter` returns an iterator that removes what it yields, so a second loop in the same frame
+sees only what arrived since. `Next` is the same function under its old name, deprecated since 0.14.1 and
+still generated beside `Iter` so older code keeps working; use `Iter`.
+
+On the server a polled event's queue is filled by clients, so it stops taking events once it holds 256
+for each player the server can hold (`256 * Players.MaxPlayers`). A game that iterates its polled
+events every frame never comes near that; one that leaves an event unpolled no longer lets clients grow
+it without end.

@@ -1,0 +1,103 @@
+---
+title: Wire compatibility
+description: When two generated modules can talk to each other -- the schema signature, the wire-format version, and which releases changed the bytes on the wire.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A server module and a client module talk only if they agree on every byte: which index names which
+event, and how each type is laid out. Two things decide that -- the **schema** they were built from,
+and the **wire format** of the compiler that built them. Both are summed up in one value, the schema
+signature, which the client checks when it loads.
+
+The rule that follows: **build the server and the client from the same schema, with the same compiler
+release and the same profile, and ship them together.**
+
+## Why it matters
+
+Events are numbered by position. The first reliable event or function declared is index 0, the next
+is 1, and unreliable events are counted separately. Inserting an event in the middle of a schema
+renumbers every event after it. A client one build behind then reads index 7 as whatever index 7
+used to be, decodes one event's payload as another's, and hands it to the wrong listener. Nothing
+errors -- the decoder has no way to know. The signature exists to turn that into an error at startup.
+
+## The schema signature
+
+Each generated module carries a 16-character hexadecimal signature. The server publishes it as the
+`SchemaSignature` attribute of its reliable remote, set before the remote is parented when the server
+creates it. The client compares it with its own when it is required:
+
+| Situation | What the client does |
+|---|---|
+| Signatures match | Loads normally. |
+| Signatures differ | Errors on require: `This client was built from a different schema than the server (client ..., server ...). Recompile both sides from the same .blink file.` |
+| No signature on the remote | Waits up to five seconds for it, then errors: `The server did not publish a schema signature.` The server is a build from before 0.23.0, upstream Blink, or something else that created a remote with that name. |
+| The remotes do not exist | Waits for them indefinitely, as `WaitForChild` does. This is what a different `RemoteScope` looks like. |
+
+### What it covers
+
+The signature is a hash of the wire-format version and, for every event and function in declaration
+order, including those inside scopes and imports:
+
+| Declaration | Included |
+|---|---|
+| Event | channel (reliable or unreliable), index, `From`, `Type`, name, and the full `Data` type |
+| Function | index, `From`, name, `Data` and `Return` types |
+
+A type is included as a whole: every primitive with its range, components and Instance class, struct
+field names, enum values, set flags, tagged-enum tags and variants, and type-pack element names. A
+named type that no event or function uses is not included, since nothing sends it.
+
+### What it does not cover
+
+- **Options.** They decide how a module is generated, not what it sends: `Casing`, `Typescript`, the
+  output paths, `SyncValidation`, `WriteValidations`, `Predict`, the packet limits, the rate options
+  and `InvocationTimeout` can all differ between the two sides. `RemoteScope` is left out too,
+  because it is already part of the remotes' names.
+- **`Call`, `Rate` and `Burst`.** They decide how the receiving side dispatches and throttles an
+  event, and change no byte.
+- Comments, formatting, and the order of type declarations.
+
+A profile is covered indirectly: a declaration a profile leaves out is not in the schema that build
+sees, so a `dev` client and a `release` server have different signatures whenever the schema marks
+anything with `@profile`.
+
+<Aside type="caution">
+Renaming something changes the signature even where it changes no byte on the wire. That includes
+renaming an event, a struct field, or a type-pack element. Rebuild both sides after any rename.
+</Aside>
+
+It is a check against mistakes, not a security measure. The client owns its copy of the module and
+can edit the check out; the server's own validation is what protects it.
+
+## The wire-format version
+
+The schema alone cannot see a change in how the compiler encodes a type: a release that packs
+booleans differently changes every packet without touching a single schema. So the signature also
+hashes `WIRE_VERSION`, a number the compiler bumps by hand whenever a type's bytes change.
+
+| `WIRE_VERSION` | Releases | Change |
+|---|---|---|
+| 1 | 0.23.0 to 0.26.x | The first version, introduced with the signature. |
+| 2 | 0.27.0 onward | `boolean[]` packed eight elements to a byte. |
+
+## Releases that changed the wire
+
+| Release | Change | Compatible with |
+|---|---|---|
+| 0.21.0 | Booleans and optional flags share a bitfield; lengths are encoded relative to their minimum; `OrderedUnreliable` added. The fork's first wire-format change. | 0.21.0 and 0.22.x. Neither carries a signature, so a mismatch between them is silent. |
+| 0.23.0 | Schema signature added, at `WIRE_VERSION` 1. No byte of a payload changed, but a client now refuses a server without a signature. | 0.23.0 to 0.26.x. |
+| 0.27.0 | `boolean[]` packed eight to a byte; `WIRE_VERSION` 2. `CFrame<quat>` added (opt-in, so only schemas that use it are affected). | 0.27.0 onward. |
+| 0.28.0 | Renamed from Blink to BlinkBlox. The remotes keep their names -- `BLINK_RELIABLE_REMOTE`, `BLINK_UNRELIABLE_REMOTE` -- as do `_G._BLINK` and the `SchemaSignature` attribute, so builds either side of the rename still find each other. | 0.27.0 onward. |
+| 0.29.0 | No change to the format. | 0.27.0 onward. |
+
+Modules from different releases with the same `WIRE_VERSION` interoperate, but a fix to how a value is
+read or handled applies only on the side built by the release that has it. Ship both sides from one
+release.
+
+## One byte per event index
+
+Each channel numbers its declarations with a single byte: reliable events and functions share one
+channel, `Unreliable` and `OrderedUnreliable` events the other. Keep each channel to 256
+declarations. The compiler does not refuse more yet, and a 257th would be sent with the first one's
+index.

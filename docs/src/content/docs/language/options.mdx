@@ -1,0 +1,485 @@
+---
+title: Options
+description: Every option a schema accepts, what it changes in the generated modules, and what it costs.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Options configure how BlinkBlox generates your modules: where they are written, what they are called,
+and how much a client is allowed to make the server do. They go at the top of a schema, before any
+declaration.
+
+```blink fragment
+option [OPTION] = [VALUE]
+```
+
+A few rules hold for all of them:
+
+- **Options come first.** An `option` after the first declaration is refused
+  (`E3016`, "Option set after start of file").
+- **Each option is set once.** Setting one twice is refused (`E3024`), unless the two settings sit
+  under different [profiles](/BlinkBlox/language/profiles/): `@profile("dev")` and `@profile("release")`
+  may each set `MaxPacketSize`, but not alongside an unmarked setting of it.
+- **Values are typed.** A boolean option takes `true` or `false`, a path takes a quoted string,
+  `Casing` takes a bare word, and every **numeric option takes a positive whole number** -- `0`,
+  `-5` and `0.5` are all refused (`E2003`). An unknown option name is refused too, with the list of
+  the ones that exist.
+
+## At a glance
+
+| Option | Value | Default | Section |
+|---|---|---|---|
+| `ServerOutput`, `ClientOutput` | path | required by the CLI | [Output](#serveroutput-clientoutput-typesoutput) |
+| `TypesOutput` | path | not generated | [Output](#serveroutput-clientoutput-typesoutput) |
+| `Typescript` | boolean | `false` | [Output](#typescript) |
+| `Casing` | `Pascal`, `Camel`, `Snake` | `Pascal` | [Output](#casing) |
+| `RemoteScope` | string | `""` | [Output](#remotescope) |
+| `FutureLibrary`, `PromiseLibrary` | Luau path | none | [Output](#futurelibrary-and-promiselibrary) |
+| `ManualReplication` | boolean | `false` | [Runtime behaviour](#manualreplication) |
+| `UsePolling` | boolean | `false` | [Runtime behaviour](#usepolling) |
+| `Predict` | boolean | `false` | [Runtime behaviour](#predict) |
+| `WriteValidations` | boolean | `false` | [Validation](#writevalidations) |
+| `SyncValidation` | boolean | `true` | [Validation](#syncvalidation) |
+| `MaxUnreliableSize` | bytes | `900` | [Validation](#maxunreliablesize) |
+| `MaxPacketSize` | bytes | `8192` | [Inbound limits](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) |
+| `MaxEventsPerPacket` | events | `64` | [Inbound limits](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) |
+| `MaxInstancesPerPacket` | instances | `256` | [Inbound limits](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) |
+| `InboundBytesPerSecond` | bytes | `8 * MaxPacketSize` | [Inbound limits](#inboundbytespersecond-inboundburst) |
+| `InboundBurst` | bytes | one second of the above | [Inbound limits](#inboundbytespersecond-inboundburst) |
+| `DefaultRate` | events a second | none | [Rate limits](#defaultrate-requirerates) |
+| `RequireRates` | boolean | `false` | [Rate limits](#defaultrate-requirerates) |
+| `InvocationTimeout` | seconds | `10` | [Invocations](#invocationtimeout) |
+| `UseColon` | boolean | -- | [Deprecated](#usecolon) |
+
+## Output
+
+### `ServerOutput`, `ClientOutput`, `TypesOutput`
+
+Where BlinkBlox writes the generated modules. A relative path is resolved against the directory of
+the schema file, not the directory you run the CLI from.
+
+```blink
+option TypesOutput = "../Network/Types.luau"
+option ServerOutput = "../Network/Server.luau"
+option ClientOutput = "../Network/Client.luau"
+```
+
+The [CLI](/BlinkBlox/getting-started/cli/) needs `ServerOutput` and `ClientOutput` and stops without
+them. The server and client paths always get a `.luau` extension, whatever extension you wrote.
+
+`TypesOutput` is optional. When set, BlinkBlox also writes a third, shared module that holds the Luau
+types of your declarations and the Read/Write pairs of your [exports](/BlinkBlox/language/types/#exports),
+but no events or functions -- useful for code that has to name a schema type on both sides without
+requiring either network module.
+
+The [Studio plugin](/BlinkBlox/getting-started/studio-plugin/) places its output itself and does not
+read these paths.
+
+### `Typescript`
+Default: `false`
+
+Also generate TypeScript declaration files for the server and client modules, for use with roblox-ts.
+Each `.d.ts` is written beside its module and named after it -- `Server.luau` gets `Server.d.ts`, and a
+module called `init.luau` gets `index.d.ts`. No declaration file is written for `TypesOutput`.
+
+```blink
+option Typescript = true
+```
+
+See [roblox-ts](/BlinkBlox/guides/roblox-ts/) for the full setup.
+
+### `Casing`
+Default: `Pascal`
+Values: `Pascal`, `Camel`, `Snake`
+
+The casing of the functions BlinkBlox generates. It changes the generated API, not the names of your
+events, functions or types.
+
+```blink
+option Casing = Camel
+```
+
+| `Pascal` | `Camel` | `Snake` |
+|---|---|---|
+| `Fire`, `FireAll`, `FireList`, `FireExcept` | `fire`, `fireAll`, `fireList`, `fireExcept` | `fire`, `fire_all`, `fire_list`, `fire_except` |
+| `On`, `Invoke`, `Predict`, `Iter` | `on`, `invoke`, `predict`, `iter` | `on`, `invoke`, `predict`, `iter` |
+| `Read`, `Write` | `read`, `write` | `read`, `write` |
+| `StepReplication` | `stepReplication` | `step_replication` |
+| `SetRateLimitHandler` | `setRateLimitHandler` | `set_rate_limit_handler` |
+| `SetDecodeErrorHandler` | `setDecodeErrorHandler` | `set_decode_error_handler` |
+
+### `RemoteScope`
+Default: `""`
+
+A prefix for the two remotes this schema creates. With `"PACKAGE"` they are named
+`PACKAGE_BLINK_RELIABLE_REMOTE` and `PACKAGE_BLINK_UNRELIABLE_REMOTE`; without it,
+`BLINK_RELIABLE_REMOTE` and `BLINK_UNRELIABLE_REMOTE`.
+
+```blink
+option RemoteScope = "PACKAGE"
+```
+
+Every generated module registers its scope in `_G._BLINK` when it is required, and **errors** if a
+module with the same scope is already running in that Luau VM. So two schemas in one game -- a library
+that ships its own networking inside your game's, for instance -- need different scopes. The scope is
+already part of the remote names, so it is not part of the
+[schema signature](#schema-signatures): a client with the wrong scope never finds the remote at all.
+
+### `FutureLibrary` and `PromiseLibrary`
+
+A [function](/BlinkBlox/language/functions/#yield) declared `Yield: Future` or `Yield: Promise` needs
+the library it yields through. The value is pasted into a `require(...)` at the top of the server and
+client modules, so it is a Luau expression rather than a file path. The modules define
+`ReplicatedStorage` themselves, so you can start from it.
+
+```blink
+option FutureLibrary = "ReplicatedStorage.Packages.Future"
+option PromiseLibrary = "ReplicatedStorage.Packages.Promise"
+```
+
+Without it, a schema that uses the yield type fails to generate:
+`Cannot use yield type: "Future", without providing a path to the future library.`
+
+## Runtime behaviour
+
+### `ManualReplication`
+Default: `false`
+
+Reliable events and function calls are not sent the moment you fire them. Each side batches them into
+one buffer (the server keeps one per player) and sends the batch once a frame, from
+`RunService.Heartbeat`. Unreliable events are the exception: each one is sent at once, in a packet of
+its own.
+
+`ManualReplication = true` removes that Heartbeat connection, and nothing is sent until you call
+`StepReplication` yourself. The function is exported either way; with this option it is the only thing
+that flushes.
+
+```blink
+option ManualReplication = true
+```
+
+```luau title="Server.luau"
+local RunService = game:GetService("RunService")
+local Net = require(path.to.Server)
+
+RunService.PostSimulation:Connect(function()
+    -- ... fire this frame's events ...
+    Net.StepReplication()
+end)
+```
+
+### `UsePolling`
+Default: `false`
+
+Receive every event through the polling API, as if each had been declared `Call: Polling`. The `Call`
+field is still required on each event, and its value is ignored. See
+[polling](/BlinkBlox/language/events/#iterating-an-event-polling).
+
+```blink
+option UsePolling = true
+```
+
+### `Predict`
+Default: `false`
+
+Adds a `Predict` entry point to every event on the side that listens to it with `On`. It hands the
+event straight to that side's own listeners without touching a remote.
+
+```blink
+option Predict = true
+
+event Damaged {
+    From: Server,
+    Type: Reliable,
+    Call: ManyAsync,
+    Data: u8
+}
+
+event Jumped {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}
+```
+
+```luau title="Server.luau"
+-- An event declared `From: Client` is listened to on the server, so Predict lives there.
+Net.Jumped.Predict(Player, 5)
+```
+
+```luau title="Client.luau"
+-- An event declared `From: Server` is listened to on the client.
+Net.Damaged.Predict(5)
+```
+
+It takes exactly what a listener receives and is delivered the way an arriving event is: to every
+listener of a `Many` event, and, for a reliable event with no listener connected yet, into the queue
+that is handed over when one connects. It does not pass through the event's rate limit -- nothing
+arrived from a client.
+
+Two uses. Tests can drive receiving code without standing up a network, and Roblox stories -- which
+run in edit mode, where no remotes exist -- can exercise UI that reacts to events. A polled event has
+no `Predict`, since it has no listeners to hand the event to.
+
+<Aside type="caution">
+Off by default because it is an entry point into your listeners that does not exist on the wire.
+Enable it where you want it -- a `@profile("dev")` or `@profile("test")` setting is a good fit -- and
+leave it off in builds where you do not.
+</Aside>
+
+## Validation
+
+### `WriteValidations`
+Default: `false`
+
+Check what you pass to `Fire` and `Invoke` before it is written: that each value has the right Luau
+type, that numbers, string lengths, buffer sizes and vector magnitudes are inside their
+[ranges](/BlinkBlox/language/types/#ranges), and that an `Instance` is of its declared class.
+Helpful while developing; it costs a comparison per field, so it is commonly enabled only in
+development builds.
+
+```blink
+@profile("dev")
+option WriteValidations = true
+```
+
+What it does **not** switch is anything the receiver relies on. Whatever this option says:
+
+- The **receiving** side always checks ranges and Instance classes on what it decodes, and drops a
+  packet that fails.
+- A string, buffer or array length, or a map's entry count, **outside its bounds** is always refused
+  on send. The length prefix is sized from the bounds, so such a value would not fit it: it would go
+  out with a wrapped length and every event behind it would decode from the wrong offset.
+- An enum value or tagged-enum variant that does not exist always errors on send.
+
+<Aside>
+Without this option, a value of the wrong kind is caught only when the buffer write itself fails, and
+a number outside an **unranged** integer type wraps silently: `300` sent as a `u8` arrives as `44`.
+Give integers a range if their limits matter.
+</Aside>
+
+### `SyncValidation`
+Default: `true`
+
+Reports a `Sync` listener that yielded.
+
+It is worth knowing exactly when it fires, because the obvious guess is wrong. BlinkBlox does **not**
+notice at the moment your listener yields. It notices when the **next packet arrives** and finds the
+previous decode still suspended inside one. So a listener that yields with no further traffic behind
+it is never reported -- which is why adding a yield to a `SingleSync` callback and seeing no error is
+a correct observation rather than a broken check.
+
+<Aside type="caution">
+When it does fire, the suspended decode is **closed**, and every event still unread in that earlier
+packet is discarded. Your listener is not resumed and those events never arrive. The warning says so:
+
+`Event "Name" yielded in a Sync call, so the rest of the packet it arrived in was discarded.`
+
+This is not a style warning. A `Sync` listener runs on the decode thread, so yielding in one stops the
+packet where it stands. If a listener needs to yield, it needs an
+[Async call](/BlinkBlox/language/events/#call).
+</Aside>
+
+The check costs one `coroutine.status` per packet, which is why it is on by default.
+
+### `MaxUnreliableSize`
+Default: `900` bytes
+
+The largest payload an unreliable event may carry, counting its one-byte event id and, for
+`OrderedUnreliable`, its two-byte sequence number.
+
+Roblox drops an `UnreliableRemoteEvent` payload past roughly this size. It does so silently, and only
+under the conditions that produce a large packet, so the failure shows up in production for some
+players and never in testing.
+
+BlinkBlox checks this twice. At compile time it measures every unreliable event: one that can **never**
+fit is a hard error (`E3018`), and one that merely **might not** is a warning (`W3019`) naming the
+field that has no upper bound. At runtime the send path checks the finished buffer, and drops an event
+that is too large with a warning naming it rather than letting the packet vanish.
+
+```blink
+option MaxUnreliableSize = 900
+```
+
+<Aside>
+Bounding the variable-length fields is what silences the warning: `string(0..64)` instead of
+`string`, `u8[..16]` instead of `u8[]`. A `map` cannot be bounded in the language at all, so an
+unreliable event carrying one always warns. See [types](/BlinkBlox/language/types/#size-on-the-wire)
+for what each type costs.
+</Aside>
+
+## Inbound limits
+
+These bound what a single client can make the **server** do, and all of them are checked before a
+packet is decoded. Only inbound server traffic is checked: the client trusts the server by
+construction, and capping what the server sends would drop legitimate replication. The
+[securing the server](/BlinkBlox/guides/securing-the-server/) guide puts them together with the
+rest.
+
+### `MaxPacketSize`, `MaxEventsPerPacket`, `MaxInstancesPerPacket`
+Defaults: `8192` bytes, `64` events, `256` instances
+
+Bound what a single inbound packet can make the server do.
+
+The server decodes a client's buffer in a loop, one event per iteration. Without a limit, a client
+that sends `buffer.create(1000000)` buys up to a million decode-and-dispatch cycles inside one remote
+callback -- enough to stall or crash the server.
+
+A packet larger than `MaxPacketSize`, or carrying more instance references than
+`MaxInstancesPerPacket`, is dropped before any of it is parsed. Once `MaxEventsPerPacket` events have
+been decoded from one packet, the rest is discarded. An unrecognised event id also stops the parse:
+the cursor is no longer at an event boundary, so nothing after it can be trusted.
+
+```blink
+option MaxPacketSize = 16384
+option MaxEventsPerPacket = 128
+option MaxInstancesPerPacket = 512
+```
+
+Before any of that, both remotes check that what arrived is a buffer and a table at all -- a client
+can call `FireServer` with any arguments it likes. Each kind of refusal warns at most once a second
+per player, so a client sending garbage every frame cannot flood the output.
+
+<Aside>
+The defaults are generous for real traffic -- a client batches a handful of events per frame into a
+few hundred bytes. Raise them only if your game legitimately sends more in one frame, and remember
+that whatever you allow is also what an attacker is allowed.
+</Aside>
+
+### `InboundBytesPerSecond`, `InboundBurst`
+Defaults: `8 * MaxPacketSize` (65536) bytes a second, and a burst of one second of that
+
+Bound how many bytes a second each player's packets may cost the server, before any of them is
+decoded.
+
+The limits above are per packet. A client firing hundreds of small, well-formed packets a frame passes
+every one of them, and the server would decode them all. The budget is a token bucket per player,
+shared by the reliable and the unreliable remote: each packet costs its size in bytes, and never less
+than `128`, so a flood of tiny packets is not free. A packet that finds the bucket short is dropped
+whole and unread.
+
+```blink
+option InboundBytesPerSecond = 131072
+option InboundBurst = 131072
+```
+
+At the defaults that is eight full-size packets a second, or 512 small ones. The default rate follows
+`MaxPacketSize`, so raising that raises the budget with it. `InboundBurst` must be at least
+`MaxPacketSize` (`E2003` otherwise), or the largest packet could never be afforded however long the
+client waited. The burst is a whole second because the clock is the server's: after a network hitch,
+Roblox delivers the packets that queued up together, and a refused reliable packet takes every event
+in it along.
+
+<Aside type="caution">
+Every unreliable `Fire` is a packet of its own. A client that fires more than about seven unreliable
+events a frame will reach the default budget; raise `InboundBytesPerSecond` for it.
+</Aside>
+
+Refusals are reported the way refused events are: a warning at most once per player per second, and
+a call to [`SetRateLimitHandler`](/BlinkBlox/language/events/#rate-burst)'s handler with `Event` set to
+`nil`.
+
+## Rate limits
+
+### `DefaultRate`, `RequireRates`
+Defaults: none, `false`
+
+Rate limiting for inbound events and functions.
+
+Per-event limits are declared on the event itself with
+[`Rate` and `Burst`](/BlinkBlox/language/events/#rate-burst). `DefaultRate` supplies a rate, in events
+per second per player, for every inbound event and function that does not declare one. `RequireRates`
+turns a missing rate into a compile error (`E3020`) -- the flag a project sets so that a forgotten
+limit fails the build instead of shipping. With a `DefaultRate`, nothing is missing.
+
+```blink
+option DefaultRate = 30
+option RequireRates = true
+```
+
+Unlike an event's own `Rate`, which may be fractional, `DefaultRate` is a whole number like every
+numeric option.
+
+<Aside>
+Rate limiting is off unless asked for. A silently dropped legitimate event looks like lag rather than
+like a bug, and no compiler can guess how much traffic a game means to send -- so the decision is
+yours, and `RequireRates` is how you make sure it gets made.
+</Aside>
+
+The packet limits, the inbound budget and this are different axes and none replaces the others.
+`MaxEventsPerPacket` bounds the work one packet can cause; the inbound budget bounds how many bytes of
+packets a second each player gets decoded at all; the event bucket bounds events per second, per
+player, per event, and so the game logic behind each listener.
+
+## Invocations
+
+### `InvocationTimeout`
+Default: `10` seconds
+
+How long an [`Invoke`](/BlinkBlox/language/functions/) waits for its answer before failing.
+
+A call that is never answered would otherwise wait forever, and it costs more than the one hung
+thread: each outstanding invocation holds one of thirty-two slots, and a call that never returns never
+gives its slot back. Thirty-two of those and every later `Invoke` is refused outright.
+
+When the timeout fires, the caller is failed the same way an errored handler fails it -- so a `pcall`
+around `Invoke`, or a rejected promise, catches it -- the slot is returned, and BlinkBlox warns naming
+the function. The timer belongs to that one call: a call answered in time cancels it, so it can never
+fail a later call, and an answer that arrives after the timeout is ignored rather than handed to
+whichever call came next.
+
+```blink
+option InvocationTimeout = 30
+```
+
+<Aside>
+Ten seconds sits above anything a legitimate handler is likely to do -- a datastore round trip, a
+marketplace prompt -- and below the point where the caller has given up anyway. Raise it if your
+handlers genuinely take longer.
+</Aside>
+
+## Deprecated
+
+### `UseColon`
+
+Accepted and ignored: no generator has read it since it was added. It warns (`W3017`,
+`Option "UseColon" is deprecated`) and will be removed in 1.0. Delete the line.
+
+## Schema signatures
+
+Not an option -- it is always on, and there is nothing to configure. It is documented here because
+you will meet its error message.
+
+Every generated pair carries a short signature of the schema it was built from. The server publishes
+it on the reliable remote; the client checks it before anything else and **errors on require** if
+they disagree:
+
+```
+[BlinkBlox]: This client was built from a different schema than the server
+(client 18198d53..., server 64b832be...). Recompile both sides from the same .blink file.
+```
+
+This exists because the alternative failure is silent. Event ids are positional -- the first event
+declared is `0`, the next is `1` -- so inserting an event renumbers every event after it. A client
+one build behind then reads index `7` as whatever index `7` means now and dispatches one event's
+payload to another's listener. Nothing errors. The usual symptoms are
+`invalid argument #3 to 'writeu8'` or a listener that receives data it cannot make sense of.
+
+<Aside>
+The signature covers the declarations: event and function order, direction, reliability, names, field
+names and field types, including the names of [type pack](/BlinkBlox/language/events/#type-packs)
+elements. It deliberately **ignores** every option -- `Casing`, `Typescript`, the output paths,
+`SyncValidation`, `Predict`, the packet caps, `RemoteScope` -- and an event's `Call`, `Rate` and
+`Burst`. Two builds differing only in those can still talk, and a check that cried wolf over them
+would soon be removed.
+</Aside>
+
+A [profile](/BlinkBlox/language/profiles/) changes which declarations are compiled, so the client and
+the server must be built with the same one.
+
+If you see the "did not publish a schema signature" variant, the server is running a build from before
+this check existed, or something other than BlinkBlox created a remote with the same name.
+
+It is a safety check, not a security one: the client owns its copy of the module and can edit the
+constant out. It catches drift between two builds, which is a mistake, not an attack.

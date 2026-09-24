@@ -1,0 +1,201 @@
+---
+title: Functions
+description: Declaring request-and-reply calls between client and server, how they fail, and the limits on calls in flight.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Functions are BlinkBlox's version of Roblox's `RemoteFunction`. They let one side ask the other a
+question and wait for the answer. Unlike a `RemoteFunction`, a call always ends: it is answered, or it
+fails -- the listener errored, the call was refused, the player left, or nobody answered within
+[`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout).
+
+## Declaring a function
+
+Functions are declared with the `function` keyword and a block of fields.
+
+```blink
+function GetBalance {
+    Yield: Coroutine,
+    Data: u8,
+    Return: u32
+}
+```
+
+`Yield` is required. `From`, `Data`, `Return`, `Rate` and `Burst` are optional.
+
+Calls and replies travel on the reliable channel, batched with reliable
+[events](/BlinkBlox/language/events/#type) and sent once a frame, so a call and its answer each wait for
+the next flush on their side on top of the network's own latency.
+
+### `From`
+Default: `Client`
+
+The side that **invokes**. The other side listens and answers.
+
+```blink
+-- The client asks the server. The default, and what every function did before `From` existed.
+function GetBalance {
+    Yield: Coroutine,
+    Data: u8,
+    Return: u32
+}
+
+-- The server asks a client, and names which one.
+function GetClientSetting {
+    From: Server,
+    Yield: Coroutine,
+    Data: u8,
+    Return: string
+}
+```
+
+```luau title="Server.luau"
+local Answer = Net.GetClientSetting.Invoke(Player, 1)
+```
+
+```luau title="Client.luau"
+Net.GetClientSetting.On(function(Which)
+    return Settings[Which]
+end)
+```
+
+<Aside type="caution">
+Asking a client a question means trusting a client's answer, and waiting on one. A client may reply
+with anything its schema allows, may take as long as it likes, and may never reply at all -- in which
+case the call fails after [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout).
+
+Treat the return value as you would any other data from a client, and do not hold anything important --
+a lock, a queue slot, a request handler -- across the call.
+</Aside>
+
+A client can only answer a call that was made **to it**, for the function it was made for: the server
+keeps each player's calls apart, so a reply naming a call that belongs to somebody else, or answering
+one function with another's return type, is ignored.
+
+### `Yield`
+How the caller waits for the answer.
+
+- `Coroutine` -- the built-in Luau coroutine library. `Invoke` yields and returns the answer, or throws
+  if the call failed.
+- `Future` -- a future library you provide with
+  [`option FutureLibrary`](/BlinkBlox/language/options/#futurelibrary-and-promiselibrary). redblox's
+  Future library is recommended. `Invoke` returns a future built with `Future.Try`, which completes
+  with a success flag followed by the answer.
+- `Promise` -- a promise library you provide with
+  [`option PromiseLibrary`](/BlinkBlox/language/options/#futurelibrary-and-promiselibrary). evaera's
+  Promise library, or a fork of it, is recommended. `Invoke` returns a promise that resolves with the
+  answer or rejects if the call failed. Cancelling it gives its slot back.
+
+A schema that uses `Future` or `Promise` without the matching option fails to generate.
+
+### `Data`
+The data the **caller** sends with the call -- the client, unless the function is `From: Server`, in
+which case it is the server. Any [type](/BlinkBlox/language/types/), or a
+[type pack](/BlinkBlox/language/events/#type-packs). Omit it when the call carries nothing.
+
+### `Return`
+The data the **listener** sends back to the caller -- the server, unless the function is
+`From: Server`, in which case it is the client. Any type or type pack, and omitted when the answer
+carries nothing.
+
+`Data` and `Return` may name their type pack elements the same way -- `Data: (id: u8, label: string)`
+alongside `Return: (id: u16, label: string)` is fine. The generated code keeps the two sets apart, so
+there is no need to invent distinct names for the same thing going each way.
+
+```blink
+function Rename {
+    Yield: Coroutine,
+    Data: (id: u8, label: string(1..32)),
+    Return: (id: u8, label: string(1..32))
+}
+```
+
+### `Rate`, `Burst`
+Limits how often one player may invoke this function, exactly as on
+[events](/BlinkBlox/language/events/#rate-burst). They apply only to a `From: Client` function -- the
+default. On a `From: Server` function they are ignored with a warning, exactly as on a `From: Server`
+event: rate limiting applies to inbound traffic, and the server is the party being protected.
+
+A refused invocation is answered with a failure rather than dropped, so the caller raises promptly
+instead of waiting out the timeout.
+
+## Usage in Luau
+
+The module holds one table per function, named after it. The caller's side gets `Invoke`, the
+listener's side gets `On`; the names follow [`Casing`](/BlinkBlox/language/options/#casing).
+
+### Invoking a Function
+```luau title="Client.luau (Coroutine)"
+local Ok, Balance = pcall(Net.GetBalance.Invoke, 1)
+```
+
+```luau title="Client.luau (Future)"
+local Success, Balance = Net.GetBalance.Invoke(1):Await()
+```
+
+```luau title="Client.luau (Promise)"
+Net.GetBalance.Invoke(1)
+    :andThen(function(Balance)
+        -- ...
+    end)
+    :catch(warn)
+```
+
+On the server, `Invoke` of a `From: Server` function takes the player to ask first:
+`Net.GetClientSetting.Invoke(Player, 1)`.
+
+### Listening to a Function
+```luau title="Server.luau"
+Net.GetBalance.On(function(Player, Account)
+    return Balances[Player][Account]
+end)
+```
+
+The listener receives the calling `Player` first on the server; on a client, answering a
+`From: Server` function, it receives only the data. Each call runs on a thread of its own, so the
+listener may yield -- a datastore read, say -- and whatever it returns is the answer.
+
+A function has one listener. `On` returns nothing, and calling it again replaces the listener.
+
+Calls that arrive before a listener connects are queued, up to 256 on the server, and run when it does.
+Past that the server answers each further call with a failure, so the caller's `Invoke` raises
+promptly instead of hanging. A client's queue is filled by the server, and warns once it passes 256
+instead.
+
+## When a call fails
+
+Every failure reaches the caller the same way: a `Coroutine` invoke throws
+`There was an exception while processing "Name".`, a `Future` completes with `false`, and a `Promise`
+rejects. What causes it:
+
+| Cause | What else happens |
+|---|---|
+| The listener threw | The listening side warns `"Name" encountered an error, ...` with the error. |
+| The listener returned something its `Return` type does not allow | The same warning. The reply is taken back out of the batch rather than sent half-written. |
+| The call was refused by `Rate` | Reported through the [rate-limit handler](/BlinkBlox/language/events/#rate-burst). |
+| The server's queue for an unconnected listener was full | Nothing is reported. |
+| Nobody answered within `InvocationTimeout` | The caller's side warns, naming the function and, on the server, the player. |
+| The player being asked left the game | Every call outstanding to them fails at once rather than timing out. |
+
+A late answer, arriving after its call has already failed, is ignored.
+
+Some calls fail before anything is sent, and throw from `Invoke` itself (or reject, or complete with
+`false`, for the other yield types):
+
+- The arguments do not serialise -- see
+  [`WriteValidations`](/BlinkBlox/language/options/#writevalidations).
+- The server invokes a player who is no longer in the game.
+- Thirty-two calls are already in flight.
+
+### Thirty-two calls in flight
+
+A call is known by a one-byte id that its answer carries back, and at most **32** calls may be
+outstanding at once -- per client module for calls a client makes, and per player for calls the
+server makes, so asking every player a question at once does not exhaust anything. A thirty-third
+concurrent call throws `32 calls are already awaiting a response, this call has been dropped.`
+
+A slot is given back when its call is answered, fails, times out or -- for a promise -- is cancelled,
+so reaching the cap takes thirty-two calls genuinely stuck at once. Without the timeout they would be
+stuck forever; with it, the worst case is
+[`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) seconds, ten by default.

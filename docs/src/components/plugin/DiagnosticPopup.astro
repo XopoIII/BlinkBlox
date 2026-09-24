@@ -1,0 +1,60 @@
+---
+// The message shown while the mouse is over a diagnostic's carets (the `Error` frame in
+// plugin/src/Widget.rbxmx). Its text is built the way plugin/src/Editor/Diagnostics.luau builds it:
+// severity, the diagnostic's name, its message and code, then each label with the line it is on.
+import { toHtml } from './rich';
+
+interface Props {
+	severity: 'Error' | 'Warning';
+	name: string;
+	code: number;
+	message: string;
+	labels: { text: string; line: number }[];
+	/** Pixels from the end of the marked text to the popup's left edge: where the mouse is. */
+	shift?: number;
+}
+
+const { severity, name, code, message, labels, shift = -24 } = Astro.props;
+
+// The theme's Error and Warning colours (plugin/src/Editor/Theme.luau).
+const color = severity === 'Warning' ? 'D7BA7D' : 'FF5050';
+let rich = `<font color="#${color}">${severity}</font> ${name}: ${message} <font transparency="0.5"><i>BlinkBlox(${code})</i></font>`;
+for (const label of labels) {
+	rich += `\n${label.text} [L${label.line}]`;
+}
+---
+
+<span class="bbp-diagnostic" style={`--bbp-shift:${shift}px`} set:html={toHtml(rich)} />
+
+<style is:global>
+	/* Opens under the end of the marked text, where the mouse would be (see Editor). */
+	.bbp-diagnostic {
+		position: absolute;
+		margin: 22px 0 0 var(--bbp-shift);
+		z-index: 6;
+		/* Inline, so its static position is where it sits in the line, not the start of the next. */
+		display: inline;
+		width: 400px;
+		padding: 2px 5px;
+		box-sizing: border-box;
+		border: 1px solid #787878;
+		border-radius: 2px;
+		background: #232323;
+		color: #ffffff;
+		font-size: 14px;
+		font-weight: 500;
+		line-height: 17px;
+		white-space: pre-wrap;
+		tab-size: 4;
+	}
+
+	/* The plugin's is a fixed 400 wide and clipped by the window; here it narrows to fit instead. */
+	@media (max-width: 600px) {
+		.bbp-diagnostic {
+			left: 8px;
+			right: 8px;
+			width: auto;
+			margin-left: 0;
+		}
+	}
+</style>

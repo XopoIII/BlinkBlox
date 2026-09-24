@@ -1,0 +1,200 @@
+---
+title: Command line
+description: Every flag of the blinkblox compiler, how it finds your schema, what it prints, and how watch mode behaves.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+```sh
+blinkblox [CONFIG] [OPTIONS]
+```
+
+`CONFIG` is the schema to compile. The compiler reads it, follows its imports, and writes the
+server and client modules to the paths the schema names in
+[`ServerOutput` and `ClientOutput`](/BlinkBlox/language/options/#serveroutput-clientoutput-typesoutput).
+Both options are required.
+
+## Compiling
+
+```sh
+blinkblox net
+```
+
+The schema's path is looked up in this order, and the first file that exists is used:
+
+1. the path exactly as given -- `net`
+2. with `.txt` appended -- `net.txt`
+3. with `.blink` appended -- `net.blink`
+
+So `blinkblox net` and `blinkblox net.blink` compile the same file. A path into another
+directory works the same way: `blinkblox schemas/net`.
+
+**Output paths are relative to the schema, not to where you run the command.** `option ServerOutput
+= "src/server/Net.luau"` in `schemas/net.blink` writes `schemas/src/server/Net.luau`. Absolute paths
+are used as they are. Whatever extension the path has, the module is written as `.luau`:
+`"out/Server.lua"` and `"out/Server"` both write `out/Server.luau`.
+
+What gets written:
+
+- the server module and the client module, always;
+- a shared types module, when [`TypesOutput`](/BlinkBlox/language/options/#serveroutput-clientoutput-typesoutput) is set;
+- a `.d.ts` declaration next to each module, when [`Typescript`](/BlinkBlox/language/options/#typescript)
+  is set. A module named `init` gets `index.d.ts`.
+
+On success it prints its progress and stops:
+
+```text
+BlinkBlox 0.29.0
+Reading source from net.blink...
+Parsing source into AST...
+Generating output files...
+Network files generated!
+```
+
+### A missing output directory
+
+If an output path points into a directory that does not exist, the compiler asks whether to
+create it. Answering no stops the compile. Two cases skip the question and create the directory:
+
+- `--yes` is passed.
+- **No terminal is attached** -- the compiler runs from a script, a git hook, a build task or CI.
+  There is nobody to answer, and naming the path in the schema is taken as the answer.
+
+A build therefore never hangs waiting on a prompt nobody can see, with or without `--yes`.
+
+## Flags
+
+Flags may come before or after the schema, in any order. The schema is the first argument that is
+not a flag -- `blinkblox --yes net` and `blinkblox net --yes` are the same command.
+
+| Flag | What it does |
+|---|---|
+| `-h`, `--help` | Prints the usage and the list of flags. Running `blinkblox` with no schema does the same. |
+| `-v`, `--version` | Prints `BlinkBlox` and the version, then exits without compiling. |
+| `-w`, `--watch` | Compiles, then keeps watching the schema and everything it imports, recompiling on every change. See [watch mode](#watch-mode). |
+| `-q`, `--quiet` | Prints nothing on success: no banner, no progress. Errors and warnings are still printed, `--version` still prints the version, and watch mode still says what it is watching. |
+| `-c`, `--compact` | Prints each diagnostic as a single line instead of the full rendering. See [diagnostics](#diagnostics). |
+| `-y`, `--yes` | Accepts every prompt. The only prompt is [creating a missing output directory](#a-missing-output-directory). |
+| `-p`, `--profile` | Compiles under a [profile](/BlinkBlox/language/profiles/): `dev`, `debug`, `test` or `release`. Takes a value: `--profile dev`. Without it the build is `release`. |
+
+Flags are matched whole, so short flags do not combine: write `-q -y`, not `-qy`. An argument the
+compiler does not recognise as a flag is taken for the schema's path, so a mistyped flag in front of
+the schema shows up as a missing file named after it.
+
+`--profile` is the only flag that takes a value, and its value is never mistaken for the schema:
+`blinkblox --profile dev net` compiles `net` under `dev`. A missing or misspelt profile stops the
+compiler before it reads anything:
+
+```text
+Expected a profile after "--profile": dev, debug, test or release
+```
+
+## Diagnostics
+
+When a schema is wrong the compiler prints a diagnostic, writes nothing, and exits. Each diagnostic
+has a code, a message, the offending line with the span underlined, and often a note on how to fix
+it. For this schema:
+
+```blink title="net.blink" error
+option ServerOutput = "src/server/Net.luau"
+option ClientOutput = "src/shared/Net.luau"
+option RequireRates = true
+
+event Chat {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: string(1..200)
+}
+```
+
+the compiler prints:
+
+```text
+BlinkBlox 0.29.0
+Reading source from net.blink...
+Parsing source into AST...
+[E3020] Error: Inbound "Chat" has no rate limit
+    ╭─[net.blink:1:11]
+    │
+005 │ event Chat {
+    ┆       ──┬──
+    ┆         │
+    ┆         ╰── Add a Rate, in events per second
+    │ = note: option RequireRates is set, so every inbound event and function must declare one.
+    │
+────╯
+```
+
+The bracket after the file name is the range of lines in the file -- line 1 to line 11 here -- not
+the position of the error. The line number on the left of the source is the one to look at.
+
+With `--compact`, the same diagnostic is one line, in the form
+`[code] [Lfirst:Llast] [file] Error: message`:
+
+```text
+[E3020] [L005:L005] [net.blink] Error: Inbound "Chat" has no rate limit
+```
+
+That form is meant for editors and scripts that pick errors out of the output. It carries no
+labels or notes.
+
+Warnings (codes starting with `W`) use the same layout in yellow. They do not stop the compile:
+the modules are written, and the warning is printed alongside. Diagnostics go to standard error;
+the banner and progress lines go to standard output.
+
+Every code, and what to do about it, is listed in the
+[diagnostics reference](/BlinkBlox/reference/diagnostics/).
+
+## Exit codes
+
+| Code | When |
+|---|---|
+| `0` | The modules were written, or `--help` or `--version` was asked for. Warnings do not change it. |
+| `1` | Anything else: a diagnostic error in the schema, an unknown `--profile`, a schema file that does not exist, a schema without `ServerOutput` or `ClientOutput`, or a refused directory prompt. |
+
+Only diagnostics are rendered as above. The last three are reported as a plain error message
+followed by a stack trace.
+
+## Watch mode
+
+```sh
+blinkblox net --watch
+```
+
+Watch mode compiles the schema once, then keeps running and recompiles whenever the schema or any
+file it imports changes -- imports of imports included. It prints what it is watching when it
+starts, and again whenever an edit changes how many imports there are:
+
+```text
+BlinkBlox 0.29.0
+BlinkBlox is watching for changes:
+	Entry: net.blink
+	Imports: 2
+```
+
+While it runs:
+
+- **It checks for changes once a second**, by comparing each file's modification time. Saving a
+  file with no change still counts as a change.
+- **A successful compile prints nothing.** Silence means the modules on disk are current.
+- **A failed compile prints its diagnostic and keeps watching.** Fix the schema and save; the next
+  compile replaces the error with silence. The modules from the last good compile stay on disk
+  until then.
+- **Missing output directories are created without asking**, as if `--yes` were passed.
+- **`--profile` applies to every recompile.** `--compact` does not; watch mode always renders
+  diagnostics in full.
+- It runs until you stop it with Ctrl+C.
+
+<Aside type="caution" title="An import of a missing file stops recompiles silently">
+If you save an `import` of a file that does not exist yet, watch mode stops recompiling and prints
+nothing about it. Recompiles resume once the file exists. If saves stop having an effect, check
+your imports, or run the compiler once without `--watch` to see the error.
+
+At startup the same thing is reported instead: watch mode prints
+`There was an error while trying to start the watcher thread`, names the missing file, and exits -- with code `0`, so a script cannot tell it from a clean stop.
+</Aside>
+
+Watch mode finds imports by reading `import "..."` lines as text. An import that is commented out,
+or marked with a [profile](/BlinkBlox/language/profiles/) the build leaves out, is still watched.
+That costs nothing, but a missing file named there has the effect described above.

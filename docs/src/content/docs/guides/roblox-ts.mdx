@@ -1,0 +1,135 @@
+---
+title: roblox-ts
+description: Generating TypeScript declarations for the server and client modules, and using them from a roblox-ts project.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+BlinkBlox generates Luau. For a [roblox-ts](https://roblox-ts.com/) project it can also write a
+TypeScript declaration file (`.d.ts`) beside each module, so TypeScript code imports the generated
+module with its types.
+
+## Turning it on
+
+Set [`Typescript`](/BlinkBlox/language/options/#typescript) and point the outputs into your project's
+source folder:
+
+```blink title="network.blink"
+option Typescript = true
+option ServerOutput = "src/server/network.luau"
+option ClientOutput = "src/client/network.luau"
+option PromiseLibrary = "ReplicatedStorage.rbxts_include.Promise"
+
+event Chat {
+    From: Client,
+    Type: Reliable,
+    Call: SingleAsync,
+    Rate: 2,
+    Data: string(1..200)
+}
+
+event Announce {
+    From: Server,
+    Type: Reliable,
+    Call: ManyAsync,
+    Data: (Text: string(0..200), Seconds: u8)
+}
+
+function GetCoins {
+    Yield: Promise,
+    Data: u8,
+    Return: u32
+}
+```
+
+Compiling writes four files:
+
+| File | What it is |
+|---|---|
+| `src/server/network.luau` | the server module |
+| `src/server/network.d.ts` | its declarations |
+| `src/client/network.luau` | the client module |
+| `src/client/network.d.ts` | its declarations |
+
+A module whose output is named `init.luau` gets `index.d.ts`, which is the name TypeScript looks for
+in a folder. roblox-ts copies the Luau files into `out` beside the compiled code and takes their types
+from the declaration of the same name.
+
+`PromiseLibrary` is spliced into the module as `require(...)`. The path above is where the default
+roblox-ts project places its Promise implementation; point it at yours if the layout differs. A
+`Yield: Promise` function needs it, and `Yield: Future` needs `FutureLibrary` in the same way.
+
+<Aside type="note">
+Only the command-line compiler writes `.d.ts` files. The Studio plugin ignores `Typescript`.
+</Aside>
+
+## Using the declarations
+
+```ts title="src/server/chat.server.ts"
+import { Chat, Announce, GetCoins } from "./network";
+
+Chat.On((player, text) => {
+	Announce.FireAll(`${player.Name}: ${text}`, 5);
+});
+
+GetCoins.On((player, slot) => {
+	return 100;
+});
+```
+
+```ts title="src/client/chat.client.ts"
+import { Chat, Announce, GetCoins } from "./network";
+
+Announce.On((text, seconds) => print(text, seconds));
+Chat.Fire("hello");
+
+GetCoins.Invoke(1).then((coins) => print(coins));
+```
+
+Each declaration mirrors the Luau API on its side, with the same [`Casing`](/BlinkBlox/language/options/#casing):
+
+| Schema | TypeScript |
+|---|---|
+| numbers | `number` |
+| `string`, `boolean`, `buffer` | `string`, `boolean`, `buffer` |
+| `vector`, `CFrame`, `Color3`, `BrickColor`, `DateTime`, `DateTimeMillis` | `Vector3`, `CFrame`, `Color3`, `BrickColor`, `DateTime`, `DateTime` |
+| `Instance(Part)` | `Part` |
+| `unknown` | `unknown` |
+| `T?` | `T \| undefined`, and an optional struct field is marked `?` |
+| `T[]` | `T[]` |
+| `map { [K]: V }` | `Map<K, V>` |
+| `set { A, B }` | `{ A: boolean, B: boolean }` |
+| `enum { A, B }` | `"A" \| "B"` |
+| tagged enum | a union of the variants' object types, each with its tag field |
+| type pack `(Text: string, Seconds: u8)` | separate parameters, named after the elements; as a function's `Return` or in `Iter`, a `LuaTuple` |
+| `scope` | a `namespace` |
+| `Yield: Promise` | `Invoke` returns `Promise<T>` |
+| a polled event | `Iter: () => IterableFunction<LuaTuple<[Index: number, ...]>>` |
+
+The full list of functions on each side is in [Generated API](/BlinkBlox/reference/generated-api/).
+
+## Current gaps
+
+The declarations lag the Luau API in a few places. Until they are closed, work around them:
+
+- **The two server handlers are not declared.** `SetRateLimitHandler` and `SetDecodeErrorHandler`
+  exist on the module but not in the `.d.ts`. Cast to reach them:
+
+  ```ts title="src/server/security.server.ts"
+  import * as Network from "./network";
+
+  const Handlers = Network as unknown as {
+  	SetRateLimitHandler(handler: (player: Player, event: string | undefined, refused: number) => void): void;
+  	SetDecodeErrorHandler(handler: (player: Player, event: string | undefined, failure: string) => void): void;
+  };
+
+  Handlers.SetRateLimitHandler((player, event, refused) => warn(player.Name, event, refused));
+  ```
+
+- **Schema types are not exported.** A named type such as `struct Pos` is declared in the `.d.ts` but
+  not exported, and neither is an `export`ed type's `Read`/`Write` pair. Derive a type from a function
+  that uses it instead, for example `Parameters<typeof Chat.Fire>[0]`.
+- **`Yield: Future` is typed as the bare return value**, not as a future. Prefer `Promise` or
+  `Coroutine` in a roblox-ts project.
+- **The deprecated `Next` is not declared.** Use `Iter`.
+- **`TypesOutput` has no declaration file.** The shared types module is for Luau consumers.

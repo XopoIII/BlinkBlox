@@ -1,0 +1,153 @@
+---
+title: Migrating from Blink
+description: Moving a game from upstream Blink 0.18.x to BlinkBlox -- what stays, what the new compiler refuses, and what a running game will notice.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+BlinkBlox forked from upstream Blink at `v0.18.8`, and was called Blink until 0.28.0. A schema written
+for Blink 0.18.x is a BlinkBlox schema: the language only grew. What changes is the compiler's name,
+the bytes on the wire, a handful of schemas it now refuses, and some runtime behaviour on the server.
+
+## The short version
+
+<Steps>
+
+1. Install the `blinkblox` compiler, and the BlinkBlox Editor plugin if you use Studio. See
+   [Installation](/BlinkBlox/getting-started/installation/).
+2. Compile your schema. Fix any new errors (below) and read the new warnings.
+3. Replace deprecated spellings: `Poll: true` with `Call: Polling`, `.Next()` with `.Iter()`, and
+   delete `option UseColon`.
+4. Decide rate limits for what clients send, and install the two server handlers. See
+   [Securing the server](/BlinkBlox/guides/securing-the-server/).
+5. Ship the regenerated server and client modules **together**. They do not talk to modules built by
+   upstream Blink, and a client refuses to run against a server built from a different schema.
+
+</Steps>
+
+## What stays the same
+
+These keep their upstream names on purpose, so that nothing in a game has to be renamed and builds on
+either side of the 0.28.0 rename still find each other:
+
+| Thing | Name |
+|---|---|
+| Schema files | `.blink` |
+| Remotes | `BLINK_RELIABLE_REMOTE`, `BLINK_UNRELIABLE_REMOTE` in `ReplicatedStorage`, prefixed by [`RemoteScope`](/BlinkBlox/language/options/#remotescope) when set |
+| Duplicate-instance guard | `_G._BLINK` |
+| Studio plugin output folder | `Blink` |
+| Studio plugin schema storage | `ServerStorage.BLINK_CONFIGURATION_FILES` |
+| Generated API | `Fire`, `FireAll`, `FireList`, `FireExcept`, `On`, `Iter`, `Invoke`, `StepReplication`, with the same `Casing` |
+| Options | the options upstream 0.18.x had keep their names and meaning; `UseColon` is deprecated |
+
+## What changes in the tooling
+
+| | Upstream Blink | BlinkBlox |
+|---|---|---|
+| Command-line binary | `blink` | `blinkblox` |
+| Rokit | | `rokit add XopoIII/BlinkBlox blinkblox` |
+| pesde | | `xopoiii/blinkblox` |
+| Studio plugin | upstream's plugin | BlinkBlox Editor |
+| Release artifacts | | `blinkblox-<os>-<arch>.tar.xz` (`.tar.gz` on Windows), `blinkblox-plugin.rbxm` |
+
+Scripts, CI jobs and git hooks that call `blink` need the new binary name. The flags, including the
+new `--profile`, are listed under [Command line](/BlinkBlox/getting-started/cli/).
+
+## The wire format is not upstream's
+
+BlinkBlox packs data differently from Blink 0.18.x, so a module built by one cannot decode traffic from
+a module built by the other:
+
+- **0.21.0** put booleans and optional flags into a shared bitfield, encoded lengths relative to their
+  minimum, and added `OrderedUnreliable`.
+- **0.27.0** packed `boolean[]` eight elements to a byte.
+
+Since 0.23.0 each pair of modules also carries a **schema signature**, a hash of every event and
+function and the types they carry, plus a wire-format version. The server publishes it on its
+reliable remote, and the client checks it when it is required: a mismatch is an error at startup
+rather than one event silently decoded as another. A server built by upstream Blink publishes no
+signature at all, so a BlinkBlox client errors after waiting five seconds for one.
+
+The practical rule: regenerate both modules with the same compiler, from the same schema, with the
+same profile, and ship them together. See [Wire compatibility](/BlinkBlox/reference/wire-compatibility/)
+for exactly what the signature covers.
+
+## Deprecated spellings
+
+Each still works. The first two warn when compiled.
+
+| Deprecated | Replace with | Notice |
+|---|---|---|
+| `Poll: true` on an event | `Call: Polling` | `W3017`. The `Call` value written beside `Poll: true` is discarded. |
+| `option UseColon` | delete the line | `W3017`. No generator has ever read it. |
+| `Event.Next()` | `Event.Iter()` | Annotated `@deprecated` in the generated module, so your editor flags it. The two are the same function. |
+
+## Schemas the compiler now refuses
+
+Some schemas that compiled on upstream Blink are errors now. Each of these compiled into a module that
+misbehaved at runtime -- usually silently -- and is refused at compile time instead. The
+[diagnostics reference](/BlinkBlox/reference/diagnostics/) has the full list.
+
+| Code | What is refused | What to do |
+|---|---|---|
+| `E3001` | A map keyed by a struct, tagged enum, map, set, array or type pack. Each decoded key is a fresh table that nothing can look up. | Key by a string, number, boolean or enum; move the rest into the value. |
+| `E3004` | A set flag, enum value or tagged-enum variant named twice. | Remove the duplicate. |
+| `E3005` | A declaration named `SetRateLimitHandler` or `SetDecodeErrorHandler`, which the module now uses; a type-pack element named after a Luau keyword or a name the generated code uses. | Rename it. |
+| `E3013` | An exported type containing an `Instance` or `unknown`. | Drop `export`, or move the Instance out of the type. |
+| `E3018` | An unreliable event whose smallest payload cannot fit in an unreliable packet. | Send it `Reliable`, or shrink it. |
+| `E3021` | An unbounded array or a map whose elements cost nothing to decode, such as `struct {}[]`. | Bound it (`[..16]`) or give the element a field. |
+| `E3022` | A type that refers to itself. | Restructure it; references are inlined, so a type cannot contain itself. |
+| `E3024` | The same option set twice. | Keep one. |
+| `E3029` | An enum with no values, or more than 256. | An enum travels as one byte. |
+| `E2003` | A numeric option that is not a positive whole number, or an unknown `Casing`. | Fix the value. |
+
+New warnings are worth reading too. `W3019` means an unreliable event may exceed the ~900-byte limit
+Roblox enforces; bound the field it names.
+
+## What a running game will notice
+
+### On the server
+
+- **Inbound packets are bounded by default.** A client's packet is dropped if it is over 8192 bytes or
+  carries more than 256 instances; decoding stops after 64 events in one packet; and each player's
+  packets may cost at most 65536 bytes a second. Reliable events are batched per frame, so a client
+  that fires more than 64 of them in one frame loses the rest of that frame's. See
+  [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket)
+  and [`InboundBytesPerSecond`](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) if your
+  game sends more.
+- **Rate limits apply only where you declare them.** Nothing is rate-limited until you add `Rate`,
+  `DefaultRate` or `RequireRates`.
+- **Queues are capped.** A reliable event that arrives with no listener is queued up to 256, then
+  dropped without a warning; a call to a function with no listener past 256 is answered with a
+  failure; a polled event's queue stops at 256 rows per `Players.MaxPlayers`.
+- **Decode failures are silent** unless you install `SetDecodeErrorHandler`, so that a client sending
+  garbage cannot fill your output. Warnings about malformed, oversized or refused packets are printed
+  at most once a second per player.
+- **The server can invoke a client**, with a `From: Server` function. Existing functions are
+  `From: Client` by default and unchanged.
+
+### On both sides
+
+- **Invocations time out.** An `Invoke` that is not answered within
+  [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) (10 seconds) fails the same way
+  an errored handler does, instead of waiting forever. At most 32 may be outstanding at once; the
+  33rd errors.
+- **`Fire` enforces length bounds.** A string, buffer or array longer than its declared bound makes
+  `Fire` throw even with `WriteValidations` off, instead of sending a length prefix that wrapped. When
+  any write throws, the half-written event is taken back out, so the rest of the frame's batch is
+  unaffected.
+- **A second `.On` on a `Single` event warns.** It still replaces the first listener, and the first
+  listener's disconnect function stops working.
+- **An error in a Sync listener** is raised on its own thread, rather than being reported as a packet
+  that failed to decode and taking the rest of the packet with it.
+- **Ranged floats refuse NaN**, and an open float range such as `f32(0..)` is no longer capped at 2^24.
+- **`Color3` channels are rounded and clamped** to 0..255, so an HDR channel above 1 arrives as 255
+  instead of wrapping.
+- **Edit mode keeps the API's shape.** When `RunService:IsRunning()` is false every entry point is a
+  stub, and `On` returns a disconnect function and `Iter` iterates zero times, so stories do not error.
+  See [Generated API](/BlinkBlox/reference/generated-api/#edit-mode).
+
+<Aside type="tip">
+The upstream `rewrite` branch (Blink 1.0 pre-releases) is a different compiler with a different
+schema dialect and runtime. This page is about the 0.18.x line, which BlinkBlox continues.
+</Aside>

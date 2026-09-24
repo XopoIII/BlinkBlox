@@ -209,6 +209,7 @@ responsibility, not an optimisation.
 | Compile a schema | `lune run init <path-to-.blink> -- --yes` (from `src/CLI`) |
 | Build release binaries | `lune run build` |
 | Docs, locally | `cd docs && npm install && npm run dev` |
+| Build the docs (dead links fail it) | `cd docs && npm run build` |
 
 The same gates run in CI (`.github/workflows/checks.yaml`) and before each commit (`lefthook.yml`).
 
@@ -298,6 +299,26 @@ terminal is attached, and the test runner compiles by default. `--yes` still for
 and flag order no longer matters — the config path is the first non-flag argument.
 
 Keep this in mind before adding any new prompt.
+
+## Documentation
+
+`docs/` is an Astro Starlight site, deployed to GitHub Pages from main by `.github/workflows/docs.yml`
+and built on every pull request by `checks.yaml`. It replaced Nextra 2 in 0.29.x; the old page URLs
+redirect (see `redirects` in `docs/astro.config.mjs`). Pages are `docs/src/content/docs/**.mdx`,
+grouped Getting Started / Language / Guides / Reference, and the sidebar order is written out in
+the config.
+
+- **Every ```` ```blink ```` block is compiled by `test/DocExamples.luau`**, README included, and both
+  generated modules must load as Luau. A fence opts out with `fragment` (not a whole schema) or
+  inverts with `error` (must be refused). That test exists because the old docs carried examples the
+  parser had never accepted.
+- Internal links are absolute and carry the base, `/BlinkBlox/...`; `starlight-links-validator`
+  fails the build on a dead link or anchor.
+- The Studio plugin is shown with HTML mockups in `docs/src/components/plugin/`, not screenshots:
+  its colours come from `plugin/src/Editor/Theme.luau` and the `.rbxmx` layouts, so a plugin UI
+  change should update them.
+- `CHANGELOG.md` at the root is rendered as the site's Changelog page; add each release there.
+- The site publishes `llms.txt` / `llms-full.txt` for AI assistants (`starlight-llms-txt`).
 
 ## Downstream
 

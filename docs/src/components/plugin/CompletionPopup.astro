@@ -1,0 +1,71 @@
+---
+// The completion popup (the `Completion` frame in plugin/src/Widget.rbxmx, filled by
+// plugin/src/Editor/Popup.luau): 200 wide, one 16-pixel row per item, the selected row highlighted
+// in the theme's `Complete` colour. Placed by the Editor under its cursor.
+import Icon from './Icon.astro';
+
+interface Props {
+	items: { label: string; kind: 'keyword' | 'primitive' | 'variable' }[];
+	/** 1-based, as in the plugin. */
+	selected?: number;
+}
+
+const { items, selected = 1 } = Astro.props;
+---
+
+<span class="bbp-completion">
+	{
+		items.map((item, index) => (
+			<span class:list={['bbp-completion-row', { 'bbp-completion-selected': index + 1 === selected }]}>
+				{/* The plugin gives keywords and primitives the same icon. */}
+				<Icon name={item.kind === 'variable' ? 'variable' : 'keyword'} size={16} />
+				<span class="bbp-completion-text">{item.label}</span>
+			</span>
+		))
+	}
+</span>
+
+<style is:global>
+	/* Opens one line below the cursor it follows in the source (see Editor). */
+	.bbp-completion {
+		position: absolute;
+		margin-top: 18px;
+		z-index: 5;
+		/* Inline, so its static position is where it sits in the line, not the start of the next. */
+		display: inline;
+		width: 200px;
+		padding: 2px 0;
+		box-sizing: border-box;
+		border: 1px solid #787878;
+		border-radius: 2px;
+		background: #232323;
+		white-space: nowrap;
+	}
+
+	/* The plugin clamps the popup inside the editor; on a narrow screen that means its right edge. */
+	@media (max-width: 600px) {
+		.bbp-completion {
+			right: 10px;
+		}
+	}
+
+	.bbp-completion-row {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		height: 16px;
+		padding: 0 5px;
+		border-radius: 4px;
+		color: #ffffff;
+	}
+
+	.bbp-completion-selected {
+		background: #04385f;
+	}
+
+	.bbp-completion-text {
+		font-size: 14px;
+		font-weight: 500;
+		line-height: 16px;
+	}
+</style>
