@@ -19,7 +19,7 @@ cd "$ROOT"
 LIMIT=900
 
 # path:maximum-lines
-GRANDFATHERED="src/Parser.luau:1771
+GRANDFATHERED="src/Parser.luau:1768
 src/Generator/init.luau:1602
 plugin/src/Editor/init.luau:935"
 

@@ -135,6 +135,33 @@ do
 	OkPrint(`Test "{Name}" passed!`)
 end
 
+--> `CFrame<quat>` names the dropped component in a byte, and only 0 to 3 name one.
+local BadRotation = buffer.create(19)
+buffer.writeu8(BadRotation, 12, 4)
+ExpectRejection("A rotation index past 3 is refused", Client.QuatCFrame.Read, BadRotation, `rotation index`)
+
+--> Three components at their limit square to 1.5, which no unit quaternion can have. The fourth is
+--> clamped at zero rather than taken the square root of a negative, and the result renormalised, so
+--> the decoder yields a rotation instead of NaN.
+do
+	local Name = "An impossible quaternion still decodes to a rotation"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	local Extreme = buffer.create(19)
+	for Offset = 13, 17, 2 do
+		buffer.writei16(Extreme, Offset, 32767)
+	end
+
+	local Got = Client.QuatCFrame.Read(Extreme)
+	local Components = { Got:GetComponents() }
+	local Row = math.sqrt(Components[4] ^ 2 + Components[5] ^ 2 + Components[6] ^ 2)
+	if not (math.abs(Row - 1) < 1e-4) then
+		ErrorPrint(`Failed "{Name}": the first row has length {Row}, expected 1.`)
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end
+
 --> The instance table travels beside the buffer as the remote's second argument, and a client
 --> chooses both. `unknown` reads from it without checking, so a buffer that claims values the table
 --> does not hold used to decode as nil -- and inside a loop, to decode as nil for as long as the

@@ -153,6 +153,16 @@ local Primitives: { [string]: Primitive } = {
 		AllowedComponents = 0,
 		Bytes = 8,
 	},
+	--> A rotation encoding, not a number: valid only as a CFrame component, where `CFrame<quat>`
+	--> writes the rotation as a unit quaternion's three smallest components -- a u8 naming the one
+	--> left out, then three i16. `src/Analysis.luau` refuses it anywhere else.
+	quat = {
+		Component = true,
+		AllowsRange = false,
+		AllowsOptional = false,
+		AllowedComponents = 0,
+		Bytes = 7,
+	},
 	boolean = {
 		Component = false,
 		AllowsRange = false,

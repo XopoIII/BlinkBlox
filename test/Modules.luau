@@ -34,6 +34,8 @@ local function MockRequire(Path: string, Environment)
 	--> Lune has no global `Vector3`, so until this was passed in no spec could run a vector's
 	--> serialiser at all -- the magnitude assert was emitted and never executed.
 	Environment.Vector3 = roblox.Vector3
+	--> Likewise `CFrame`: every CFrame serialiser was emitted and none had ever run.
+	Environment.CFrame = roblox.CFrame
 
 	--> Records what the module warns about before passing it on, so a spec can assert on it. The
 	--> generated code reports several things through `warn` and nothing else, and none of that was

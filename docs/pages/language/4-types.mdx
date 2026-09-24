@@ -416,17 +416,31 @@ type Location = CFrame
 ```
 
 ### Specifying Encoding
-CFrames can be passed two [number types](#numbers) within angular brackets after the type, to be used for the positional and rotational encoding respectively.
-For example, a CFrame which uses an `i16` for it's positional encoding and a `f16` for it's rotational encoding can be defined like so:
+CFrames can be passed up to two [number types](#numbers) within angular brackets after the type. The
+**first** is used for the rotation and the **last** for the position, so a single type is used for both.
+For example, a CFrame with an `f16` rotation and an `f32` position can be defined like so:
 ```blink copy
-type MyCFrame = CFrame<i16, f16>
+type MyCFrame = CFrame<f16, f32>
 ```
 <Callout type="warning">
     The numerical precision limitations of [vectors](#specifying-encoding) also apply to CFrames.<br/>
     Furthermore, using an [integer type](#unsigned-integers) for the rotational encoding will result in the rotation being zeroed out.
 </Callout>
 
-## Other Roblox Types
+### Quaternion Rotation
+By default a CFrame's rotation is three Euler angles, 12 bytes as `f32`. Writing `quat` as one of the
+components encodes the rotation as a unit quaternion instead, in 7 bytes: the three smallest of its four
+components as `i16`, and a byte naming the one left out. The other component, if there is one, is the
+position's type:
+```blink copy
+type Pose = CFrame<quat>         -- 19 bytes: f32 position, quaternion rotation
+type SmallPose = CFrame<quat, f16> -- 13 bytes: f16 position, quaternion rotation
+```
+The rotation is quantised, so it comes back within about 0.002 degrees of what was sent rather than
+exactly. That suits characters, projectiles and cameras. It does not suit anything that compares
+rotations for equality or snaps to a grid, which is why it is not the default.
+
+## Other Roblox Types## Other Roblox Types
 Blink also supports a handful of other Roblox types like:
     * `BrickColor`
     * `Color3`

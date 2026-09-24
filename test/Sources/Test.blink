@@ -51,6 +51,14 @@ export type BoundedBuffer = buffer(0..1000)
 type IntegerVector = vector<i16>
 type HalfPrecisionCFrame = CFrame<f32, f16>
 
+-- Fixtures for CFrame encodings: the default, the quaternion rotation in either slot, and one
+-- inside an array, where its locals are declared once per element.
+export type PlainCFrame = CFrame
+export type QuatCFrame = CFrame<quat>
+export type QuatHalfCFrame = CFrame<f16, quat>
+export type QuatFirstCFrame = CFrame<quat, f16>
+export type QuatCFrames = CFrame<quat>[]
+
 type InstanceArray = Instance(Sound)[10]
 type InstanceArrayOptional = Instance(Sound)[10]?
 type ConstrainedArray = u8(0..10)[10]

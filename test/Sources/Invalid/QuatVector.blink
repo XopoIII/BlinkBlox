@@ -1,0 +1,3 @@
+-- expect E3023
+-- A vector has no rotation for `quat` to encode.
+type Direction = vector<quat>

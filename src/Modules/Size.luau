@@ -196,6 +196,13 @@ local function MeasurePrimitive(Node: Node): Measurement
 		local Rotation = if Components then Components[1] else nil
 		local Bytes = (ComponentBytes(Position) * 3) + (ComponentBytes(Rotation) * 3)
 
+		--> `quat` may stand in either slot; the rotation is then its fixed seven bytes, and the
+		--> position is whichever component remains.
+		if Components and table.find(Components, "quat") then
+			local Other = if Components[1] == "quat" then Components[2] else Components[1]
+			Bytes = (ComponentBytes(Other) * 3) + PRIMITIVES.quat.Bytes
+		end
+
 		local Result = Empty()
 		Result.Min = Bytes
 		Result.Max = Bytes

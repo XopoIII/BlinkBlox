@@ -317,40 +317,22 @@ local UNUSABLE_KEYS: { [string]: string } = {
 	Tuple = "a type pack",
 }
 
---- Refuses map keys of a type that cannot be looked up.
+--- Calls `Visit` on every type node this file's declarations contain, generics already substituted.
 ---
---- Runs here rather than in the parser because generics are already substituted by the time this
---- walks: `GenericMap<u8[], f64>` is an ordinary map with an array key at this point, and checking
---- where the map is written would not see it.
-local function MapKeys(Source: string, File: string?, Declarations: { Declaration })
+--- Same file-scoping rule as the checks above: an imported scope is walked by its own file's parse.
+--- An uninstantiated generic is skipped, since its instantiations are walked where they are used.
+local function Walk(Declarations: { Declaration }, Visit: (Node: Declaration) -> ())
 	local function Inspect(Node: Declaration)
 		if type(Node) ~= "table" or not Node.Type then
 			return
 		end
 
+		Visit(Node)
+
 		local Kind = Node.Type
 		local Value = Node.Value
 
 		if Kind == "Map" then
-			local Key = Value.Values[1]
-			local Unusable = Key and UNUSABLE_KEYS[Key.Type]
-			if Unusable then
-				local Diagnostic =
-					Error.new(Error.AnalyzeReferenceInvalidType, Source, `A map cannot be keyed by {Unusable}`, File)
-
-				local Culprit = (Node.Tokens and Node.Tokens.Key) or TokenOf(Key) or TokenOf(Node)
-				if Culprit then
-					Diagnostic:Primary(Culprit, "This key decodes to a new table for every entry")
-				end
-
-				Diagnostic:Note(
-					"Each decoded key is a table with its own identity, so nothing the receiving side "
-						.. "builds will ever index the map -- every entry is reachable only by iterating it."
-				)
-					:Note("Key it by a string, a number, a boolean or an enum, and move the rest into the value.")
-					:Emit()
-			end
-
 			Inspect(Value.Values[1])
 			Inspect(Value.Values[2])
 		elseif Kind == "Array" or Kind == "Optional" then
@@ -372,14 +354,12 @@ local function MapKeys(Source: string, File: string?, Declarations: { Declaratio
 		if Declaration.Type == "Scope" then
 			local Scope = Declaration :: ScopeNode
 			if not Scope.Value.Imported then
-				MapKeys(Source, File, Scope.Value.Values)
+				Walk(Scope.Value.Values, Visit)
 			end
 
 			continue
 		end
 
-		--> An uninstantiated generic is not a concrete type yet; its instantiations are walked where
-		--> they are used, with the substitution already made.
 		if Declaration.Value and Declaration.Value.Generics then
 			continue
 		end
@@ -395,9 +375,89 @@ local function MapKeys(Source: string, File: string?, Declarations: { Declaratio
 	end
 end
 
+--- Refuses map keys of a type that cannot be looked up.
+---
+--- Runs here rather than in the parser because generics are already substituted by the time this
+--- walks: `GenericMap<u8[], f64>` is an ordinary map with an array key at this point, and checking
+--- where the map is written would not see it.
+local function MapKeys(Source: string, File: string?, Declarations: { Declaration })
+	Walk(Declarations, function(Node: Declaration)
+		if Node.Type ~= "Map" then
+			return
+		end
+
+		local Key = Node.Value.Values[1]
+		local Unusable = Key and UNUSABLE_KEYS[Key.Type]
+		if not Unusable then
+			return
+		end
+
+		local Diagnostic =
+			Error.new(Error.AnalyzeReferenceInvalidType, Source, `A map cannot be keyed by {Unusable}`, File)
+
+		local Culprit = (Node.Tokens and Node.Tokens.Key) or TokenOf(Key) or TokenOf(Node)
+		if Culprit then
+			Diagnostic:Primary(Culprit, "This key decodes to a new table for every entry")
+		end
+
+		Diagnostic:Note(
+			"Each decoded key is a table with its own identity, so nothing the receiving side "
+				.. "builds will ever index the map -- every entry is reachable only by iterating it."
+		)
+			:Note("Key it by a string, a number, a boolean or an enum, and move the rest into the value.")
+			:Emit()
+	end)
+end
+
+--- Refuses `quat` anywhere but a CFrame's rotation.
+---
+--- `quat` is a component like `f16`, which is what lets `CFrame<quat>` parse without the parser
+--- knowing about it -- and also what lets it be written where it means nothing. The parser checks
+--- that a component is a component, not which type it is a component of, so that is checked here.
+local function Rotations(Source: string, File: string?, Declarations: { Declaration })
+	Walk(Declarations, function(Node: Declaration)
+		if Node.Type ~= "Primitive" then
+			return
+		end
+
+		local Token = Node.Tokens.Primitive
+		local Components: { string } = Node.Value.Components or {}
+		local Quaternions = 0
+		for _, Component in Components do
+			if Component == "quat" then
+				Quaternions += 1
+			end
+		end
+
+		local Message, Label
+		if Token.Value == "quat" then
+			Message, Label = "`quat` is not a type on its own", "Write CFrame<quat> for a quaternion rotation"
+		elseif Quaternions > 0 and Token.Value ~= "CFrame" then
+			Message, Label = "Only a CFrame's rotation can be a quaternion", "`quat` is a component of CFrame alone"
+		elseif Quaternions > 1 then
+			Message, Label = "A CFrame has one rotation", "Name the position's type in the other component"
+		else
+			return
+		end
+
+		Error.new(Error.AnalyzeInvalidComponents, Source, Message, File):Primary(Token, Label):Emit()
+	end)
+end
+
+--- Every check, in the order the parser has always run them.
+local function Run(Source: string, File: string?, Declarations: { Declaration }, Options: Options)
+	UnreliableSizes(Source, File, Declarations, Options)
+	RateLimits(Source, File, Declarations, Options)
+	CostlessRepetitions(Source, File, Declarations)
+	MapKeys(Source, File, Declarations)
+	Rotations(Source, File, Declarations)
+end
+
 return {
 	RateLimits = RateLimits,
 	UnreliableSizes = UnreliableSizes,
 	CostlessRepetitions = CostlessRepetitions,
 	MapKeys = MapKeys,
+	Rotations = Rotations,
+	Run = Run,
 }

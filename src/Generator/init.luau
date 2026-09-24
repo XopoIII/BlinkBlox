@@ -1201,6 +1201,7 @@ function Generator.Reset()
 	Return = Builder.new()
 
 	table.clear(RateSlots)
+	table.clear(Prefabs.Required)
 	UsesOrdering = false
 
 	--> Reset channels
@@ -1529,6 +1530,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		{ "local SerdesFunctions = {}\n" },
 		Util.Constants(Options.RemoteScope, AbstractSyntaxTree),
 		string.split(Sources.Base, "\r"),
+		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
 		RateTemplateBody,
 		OrderingBody,
 		UnreliableGuardBody,
@@ -1565,6 +1567,7 @@ function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 		VERSION_HEADER,
 		string.split(Source[1], "\r"),
 		string.split(Sources.Base, "\r"),
+		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
 		LuauTypes.DumpLines(),
 		{ "\n" },
 		UserTypes.DumpLines(),

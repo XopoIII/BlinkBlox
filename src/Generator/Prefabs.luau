@@ -48,6 +48,10 @@ local FLOAT = 4
 local DOUBLE = 8
 
 local Types = {}
+
+--- Runtime helpers the emitted code has called during the current generate, so the generator splices
+--- in only those. Cleared by `Generator.Reset`; `Rotation` is `Fragments.ROTATION_HELPERS`.
+local Required: { Rotation: boolean? } = {}
 local Asserts = {
 	--> Written as `not (x >= Min)` rather than `x < Min`, here and for vectors: NaN compares false
 	--> against everything, so `x < Min` and `x > Max` both let it through, and a client could hand a
@@ -559,8 +563,50 @@ end
 
 --> CFrame
 do
+	--- `CFrame<quat>`: the position in the other component (or f32), then the rotation as the three
+	--- smallest components of a unit quaternion. 7 bytes of rotation where three Euler angles take 12,
+	--- at a worst-case error near 0.002 degrees. Opt-in, because it is lossy where `f32` is not.
+	local function QuaternionCFrame(Components: { string }): TypePrefab
+		local Position: TypePrefab = Types.f32
+		for _, Component in Components do
+			if Component ~= "quat" then
+				Position = Types[Component]
+			end
+		end
+
+		return {
+			Read = function(Variable: string, Block: Block)
+				Position.Read("X", Block)
+				Position.Read("Y", Block)
+				Position.Read("Z", Block)
+				Types.u8.Read("QIndex", Block)
+				Types.i16.Read("QA", Block)
+				Types.i16.Read("QB", Block)
+				Types.i16.Read("QC", Block)
+				Block:Line(`{Block:Declare(Variable)} = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)`)
+			end,
+			Write = function(Value: string, Block: Block)
+				Block:Line(`local Position = {Value}.Position`)
+				Block:Line(`local QIndex, QA, QB, QC = PackRotation({Value})`)
+				Position.Write("Position.X", Block)
+				Position.Write("Position.Y", Block)
+				Position.Write("Position.Z", Block)
+				Types.u8.Write("QIndex", Block)
+				Types.i16.Write("QA", Block)
+				Types.i16.Write("QB", Block)
+				Types.i16.Write("QC", Block)
+			end,
+		}
+	end
+
 	Types.CFrame = {
 		Read = function(Variable: string, Block: Block, _, Components: { string }?)
+			if Components and table.find(Components, "quat") then
+				Required.Rotation = true
+				QuaternionCFrame(Components).Read(Variable, Block)
+				return
+			end
+
 			local Prefab: TypePrefab = Types.f32
 			if Components then
 				Prefab = Types[Components[1]]
@@ -573,6 +619,12 @@ do
 			Block:Line(`{Block:Declare(Variable)} = CFrame.new(Position) * CFrame.fromOrientation(rX, rY, rZ)`)
 		end,
 		Write = function(Value: string, Block: Block, _, Components: { string }?)
+			if Components and table.find(Components, "quat") then
+				Required.Rotation = true
+				QuaternionCFrame(Components).Write(Value, Block)
+				return
+			end
+
 			local Prefab: TypePrefab = Types.f32
 			if Components then
 				Prefab = Types[Components[1]]
@@ -734,6 +786,7 @@ return {
 	EmitCapacityGuard = EmitCapacityGuard,
 	Primitives = Primitives,
 	Structures = Structures,
+	Required = Required,
 	GetTypeToUse = GetTypeToUse,
 	GetTypeToUseByBits = GetTypeToUseByBits,
 }

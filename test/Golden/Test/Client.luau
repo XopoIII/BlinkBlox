@@ -273,6 +273,62 @@ local EventNames: any = {
 }
 
 
+local ROTATION_SCALE = 32767 * math.sqrt(2)
+local function PackRotation(Value: CFrame): (number, number, number, number)
+	local _, _, _, R00, R01, R02, R10, R11, R12, R20, R21, R22 = Value:GetComponents()
+	local X, Y, Z, W
+	local Trace = R00 + R11 + R22
+	if Trace > 0 then
+		local S = math.sqrt(Trace + 1) * 2
+		X, Y, Z, W = (R21 - R12) / S, (R02 - R20) / S, (R10 - R01) / S, 0.25 * S
+	elseif R00 > R11 and R00 > R22 then
+		local S = math.sqrt(1 + R00 - R11 - R22) * 2
+		X, Y, Z, W = 0.25 * S, (R01 + R10) / S, (R02 + R20) / S, (R21 - R12) / S
+	elseif R11 > R22 then
+		local S = math.sqrt(1 + R11 - R00 - R22) * 2
+		X, Y, Z, W = (R01 + R10) / S, 0.25 * S, (R12 + R21) / S, (R02 - R20) / S
+	else
+		local S = math.sqrt(1 + R22 - R00 - R11) * 2
+		X, Y, Z, W = (R02 + R20) / S, (R12 + R21) / S, 0.25 * S, (R10 - R01) / S
+	end
+	local Length = math.sqrt(X * X + Y * Y + Z * Z + W * W)
+	if not (Length > 0 and Length < math.huge) then
+		error("Expected a CFrame with a valid rotation.")
+	end
+	local Index, A, B, C, Largest = 0, Y, Z, W, X
+	if math.abs(Y) > math.abs(Largest) then
+		Index, A, B, C, Largest = 1, X, Z, W, Y
+	end
+	if math.abs(Z) > math.abs(Largest) then
+		Index, A, B, C, Largest = 2, X, Y, W, Z
+	end
+	if math.abs(W) > math.abs(Largest) then
+		Index, A, B, C, Largest = 3, X, Y, Z, W
+	end
+	local Scale = (if Largest < 0 then -ROTATION_SCALE else ROTATION_SCALE) / Length
+	return Index,
+		math.clamp(math.round(A * Scale), -32767, 32767),
+		math.clamp(math.round(B * Scale), -32767, 32767),
+		math.clamp(math.round(C * Scale), -32767, 32767)
+end
+local function UnpackRotation(X: number, Y: number, Z: number, Index: number, A: number, B: number, C: number): CFrame
+	if Index > 3 then
+		error(`Expected a rotation index from 0 to 3, got {Index} instead.`)
+	end
+	A, B, C = A / ROTATION_SCALE, B / ROTATION_SCALE, C / ROTATION_SCALE
+	local D = math.sqrt(math.max(0, 1 - A * A - B * B - C * C))
+	local Length = math.sqrt(A * A + B * B + C * C + D * D)
+	A, B, C, D = A / Length, B / Length, C / Length, D / Length
+	if Index == 0 then
+		return CFrame.new(X, Y, Z, D, A, B, C)
+	elseif Index == 1 then
+		return CFrame.new(X, Y, Z, A, D, B, C)
+	elseif Index == 2 then
+		return CFrame.new(X, Y, Z, A, B, D, C)
+	end
+	return CFrame.new(X, Y, Z, A, B, C, D)
+end
+
 --> Sequence numbers for ordered unreliable events, one counter per event.
 local OrderOut: { number } = {}
 local OrderIn: { number } = {}
@@ -451,6 +507,11 @@ export type ExactBuffer = buffer
 export type BoundedBuffer = buffer
 export type IntegerVector = Vector3
 export type HalfPrecisionCFrame = CFrame
+export type PlainCFrame = CFrame
+export type QuatCFrame = CFrame
+export type QuatHalfCFrame = CFrame
+export type QuatFirstCFrame = CFrame
+export type QuatCFrames = { CFrame }
 export type InstanceArray = { Sound }
 export type InstanceArrayOptional = { Sound }?
 export type ConstrainedArray = { number }
@@ -3688,6 +3749,610 @@ if not RunService:IsRunning() then
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
 			Allocate(Length)
 			buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PlainCFrame = {
+		Read = function(Buffer: buffer): (PlainCFrame)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 24 bytes
+			local BLOCK_START = Read(24)
+			-- Buffer read
+			-- Value: PlainCFrame
+			local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+			local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+			local Position = Vector3.new(X, Y, Z)
+			local rX = buffer.readf32(RecieveBuffer, BLOCK_START + 12)
+			local rY = buffer.readf32(RecieveBuffer, BLOCK_START + 16)
+			local rZ = buffer.readf32(RecieveBuffer, BLOCK_START + 20)
+			local Value = CFrame.new(Position) * CFrame.fromOrientation(rX, rY, rZ)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PlainCFrame): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 24 bytes
+			local BLOCK_START = Allocate(24)
+			-- Buffer write
+			-- Value: PlainCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.`)
+			end
+			local Vector = Value.Position
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
+			local rX, rY, rZ = Value:ToOrientation()
+			buffer.writef32(SendBuffer, BLOCK_START + 12, rX)
+			buffer.writef32(SendBuffer, BLOCK_START + 16, rY)
+			buffer.writef32(SendBuffer, BLOCK_START + 20, rZ)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	QuatCFrame = {
+		Read = function(Buffer: buffer): (QuatCFrame)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 19 bytes
+			local BLOCK_START = Read(19)
+			-- Buffer read
+			-- Value: QuatCFrame
+			local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+			local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+			local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 12)
+			local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 13)
+			local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 15)
+			local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 17)
+			local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: QuatCFrame): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 19 bytes
+			local BLOCK_START = Allocate(19)
+			-- Buffer write
+			-- Value: QuatCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.`)
+			end
+			local Position = Value.Position
+			local QIndex, QA, QB, QC = PackRotation(Value)
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Position.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 4, Position.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 8, Position.Z)
+			buffer.writeu8(SendBuffer, BLOCK_START + 12, QIndex)
+			buffer.writei16(SendBuffer, BLOCK_START + 13, QA)
+			buffer.writei16(SendBuffer, BLOCK_START + 15, QB)
+			buffer.writei16(SendBuffer, BLOCK_START + 17, QC)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	QuatHalfCFrame = {
+		Read = function(Buffer: buffer): (QuatHalfCFrame)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 13 bytes
+			local BLOCK_START = Read(13)
+			-- Buffer read
+			-- Value: QuatHalfCFrame
+			local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			local X
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					X = -math.huge
+				else
+					X = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				X = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				X = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				X = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+			local Y
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Y = -math.huge
+				else
+					Y = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				Y = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Y = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Y = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+			local Z
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Z = -math.huge
+				else
+					Z = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				Z = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Z = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Z = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
+			local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 7)
+			local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 9)
+			local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 11)
+			local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: QuatHalfCFrame): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 13 bytes
+			local BLOCK_START = Allocate(13)
+			-- Buffer write
+			-- Value: QuatHalfCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.`)
+			end
+			local Position = Value.Position
+			local QIndex, QA, QB, QC = PackRotation(Value)
+			if Position.X > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+			elseif Position.X < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+			elseif Position.X ~= Position.X then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+			elseif Position.X == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+			else
+				local float = Position.X
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+			end
+			if Position.Y > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b0_11111_0000000000)
+			elseif Position.Y < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000000)
+			elseif Position.Y ~= Position.Y then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000001)
+			elseif Position.Y == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0)
+			else
+				local float = Position.Y
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, Result)
+			end
+			if Position.Z > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b0_11111_0000000000)
+			elseif Position.Z < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000000)
+			elseif Position.Z ~= Position.Z then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000001)
+			elseif Position.Z == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0)
+			else
+				local float = Position.Z
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, Result)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 6, QIndex)
+			buffer.writei16(SendBuffer, BLOCK_START + 7, QA)
+			buffer.writei16(SendBuffer, BLOCK_START + 9, QB)
+			buffer.writei16(SendBuffer, BLOCK_START + 11, QC)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	QuatFirstCFrame = {
+		Read = function(Buffer: buffer): (QuatFirstCFrame)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 13 bytes
+			local BLOCK_START = Read(13)
+			-- Buffer read
+			-- Value: QuatFirstCFrame
+			local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			local X
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					X = -math.huge
+				else
+					X = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				X = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				X = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				X = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+			local Y
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Y = -math.huge
+				else
+					Y = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				Y = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Y = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Y = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+			local Z
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Z = -math.huge
+				else
+					Z = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				Z = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Z = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Z = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
+			local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 7)
+			local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 9)
+			local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 11)
+			local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: QuatFirstCFrame): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 13 bytes
+			local BLOCK_START = Allocate(13)
+			-- Buffer write
+			-- Value: QuatFirstCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.`)
+			end
+			local Position = Value.Position
+			local QIndex, QA, QB, QC = PackRotation(Value)
+			if Position.X > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+			elseif Position.X < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+			elseif Position.X ~= Position.X then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+			elseif Position.X == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+			else
+				local float = Position.X
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+			end
+			if Position.Y > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b0_11111_0000000000)
+			elseif Position.Y < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000000)
+			elseif Position.Y ~= Position.Y then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000001)
+			elseif Position.Y == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0)
+			else
+				local float = Position.Y
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, Result)
+			end
+			if Position.Z > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b0_11111_0000000000)
+			elseif Position.Z < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000000)
+			elseif Position.Z ~= Position.Z then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000001)
+			elseif Position.Z == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0)
+			else
+				local float = Position.Z
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, Result)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 6, QIndex)
+			buffer.writei16(SendBuffer, BLOCK_START + 7, QA)
+			buffer.writei16(SendBuffer, BLOCK_START + 9, QB)
+			buffer.writei16(SendBuffer, BLOCK_START + 11, QC)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	QuatCFrames = {
+		Read = function(Buffer: buffer): (QuatCFrames)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: QuatCFrames
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if Length * 19 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+				-- Read BLOCK: 19 bytes
+			local ARRAY_START_1 = Read(19 * Length)
+			for Index = 1, Length do
+				-- Item_1: QuatCFrames
+				-- Read 4
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				local X = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_0)
+				-- Read 4
+				local OPERATION_OFFSET_1 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				local Y = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_1)
+				-- Read 4
+				local OPERATION_OFFSET_2 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				local Z = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_2)
+				-- Read 1
+				local OPERATION_OFFSET_3 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local QIndex = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_3)
+				-- Read 2
+				local OPERATION_OFFSET_4 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local QA = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_4)
+				-- Read 2
+				local OPERATION_OFFSET_5 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local QB = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_5)
+				-- Read 2
+				local OPERATION_OFFSET_6 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local QC = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_6)
+				local Item_1 = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: QuatCFrames): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: QuatCFrames
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				-- Allocate BLOCK: 19 bytes
+			local ARRAY_START_1 = Allocate(19 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: QuatCFrames
+				if typeof(Item_1) ~= "CFrame" then
+					error(`Expected Item_1 to be of type CFrame, got {type(Item_1)} instead.`)
+				end
+				local Position = Item_1.Position
+				local QIndex, QA, QB, QC = PackRotation(Item_1)
+				-- Allocate 4
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				buffer.writef32(SendBuffer, OPERATION_OFFSET_0, Position.X)
+				-- Allocate 4
+				local OPERATION_OFFSET_1 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				buffer.writef32(SendBuffer, OPERATION_OFFSET_1, Position.Y)
+				-- Allocate 4
+				local OPERATION_OFFSET_2 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				buffer.writef32(SendBuffer, OPERATION_OFFSET_2, Position.Z)
+				-- Allocate 1
+				local OPERATION_OFFSET_3 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_3, QIndex)
+				-- Allocate 2
+				local OPERATION_OFFSET_4 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writei16(SendBuffer, OPERATION_OFFSET_4, QA)
+				-- Allocate 2
+				local OPERATION_OFFSET_5 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writei16(SendBuffer, OPERATION_OFFSET_5, QB)
+				-- Allocate 2
+				local OPERATION_OFFSET_6 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writei16(SendBuffer, OPERATION_OFFSET_6, QC)
+			end
+			-- END ARRAY
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
 			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
@@ -7786,6 +8451,610 @@ local Returns = table.freeze({
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
 			Allocate(Length)
 			buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	PlainCFrame = {
+		Read = function(Buffer: buffer): (PlainCFrame)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 24 bytes
+			local BLOCK_START = Read(24)
+			-- Buffer read
+			-- Value: PlainCFrame
+			local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+			local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+			local Position = Vector3.new(X, Y, Z)
+			local rX = buffer.readf32(RecieveBuffer, BLOCK_START + 12)
+			local rY = buffer.readf32(RecieveBuffer, BLOCK_START + 16)
+			local rZ = buffer.readf32(RecieveBuffer, BLOCK_START + 20)
+			local Value = CFrame.new(Position) * CFrame.fromOrientation(rX, rY, rZ)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: PlainCFrame): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 24 bytes
+			local BLOCK_START = Allocate(24)
+			-- Buffer write
+			-- Value: PlainCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.`)
+			end
+			local Vector = Value.Position
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
+			local rX, rY, rZ = Value:ToOrientation()
+			buffer.writef32(SendBuffer, BLOCK_START + 12, rX)
+			buffer.writef32(SendBuffer, BLOCK_START + 16, rY)
+			buffer.writef32(SendBuffer, BLOCK_START + 20, rZ)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	QuatCFrame = {
+		Read = function(Buffer: buffer): (QuatCFrame)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 19 bytes
+			local BLOCK_START = Read(19)
+			-- Buffer read
+			-- Value: QuatCFrame
+			local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+			local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+			local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 12)
+			local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 13)
+			local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 15)
+			local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 17)
+			local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: QuatCFrame): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 19 bytes
+			local BLOCK_START = Allocate(19)
+			-- Buffer write
+			-- Value: QuatCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.`)
+			end
+			local Position = Value.Position
+			local QIndex, QA, QB, QC = PackRotation(Value)
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Position.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 4, Position.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 8, Position.Z)
+			buffer.writeu8(SendBuffer, BLOCK_START + 12, QIndex)
+			buffer.writei16(SendBuffer, BLOCK_START + 13, QA)
+			buffer.writei16(SendBuffer, BLOCK_START + 15, QB)
+			buffer.writei16(SendBuffer, BLOCK_START + 17, QC)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	QuatHalfCFrame = {
+		Read = function(Buffer: buffer): (QuatHalfCFrame)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 13 bytes
+			local BLOCK_START = Read(13)
+			-- Buffer read
+			-- Value: QuatHalfCFrame
+			local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			local X
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					X = -math.huge
+				else
+					X = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				X = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				X = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				X = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+			local Y
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Y = -math.huge
+				else
+					Y = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				Y = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Y = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Y = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+			local Z
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Z = -math.huge
+				else
+					Z = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				Z = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Z = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Z = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
+			local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 7)
+			local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 9)
+			local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 11)
+			local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: QuatHalfCFrame): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 13 bytes
+			local BLOCK_START = Allocate(13)
+			-- Buffer write
+			-- Value: QuatHalfCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.`)
+			end
+			local Position = Value.Position
+			local QIndex, QA, QB, QC = PackRotation(Value)
+			if Position.X > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+			elseif Position.X < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+			elseif Position.X ~= Position.X then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+			elseif Position.X == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+			else
+				local float = Position.X
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+			end
+			if Position.Y > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b0_11111_0000000000)
+			elseif Position.Y < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000000)
+			elseif Position.Y ~= Position.Y then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000001)
+			elseif Position.Y == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0)
+			else
+				local float = Position.Y
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, Result)
+			end
+			if Position.Z > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b0_11111_0000000000)
+			elseif Position.Z < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000000)
+			elseif Position.Z ~= Position.Z then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000001)
+			elseif Position.Z == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0)
+			else
+				local float = Position.Z
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, Result)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 6, QIndex)
+			buffer.writei16(SendBuffer, BLOCK_START + 7, QA)
+			buffer.writei16(SendBuffer, BLOCK_START + 9, QB)
+			buffer.writei16(SendBuffer, BLOCK_START + 11, QC)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	QuatFirstCFrame = {
+		Read = function(Buffer: buffer): (QuatFirstCFrame)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 13 bytes
+			local BLOCK_START = Read(13)
+			-- Buffer read
+			-- Value: QuatFirstCFrame
+			local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			local X
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					X = -math.huge
+				else
+					X = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				X = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				X = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				X = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+			local Y
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Y = -math.huge
+				else
+					Y = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				Y = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Y = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Y = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+			local Z
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Z = -math.huge
+				else
+					Z = math.huge
+				end
+			elseif MantissaExponent == 0b1_11111_0000000000   then
+				Z = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Z = 0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Z = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
+			local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 7)
+			local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 9)
+			local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 11)
+			local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: QuatFirstCFrame): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 13 bytes
+			local BLOCK_START = Allocate(13)
+			-- Buffer write
+			-- Value: QuatFirstCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.`)
+			end
+			local Position = Value.Position
+			local QIndex, QA, QB, QC = PackRotation(Value)
+			if Position.X > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+			elseif Position.X < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+			elseif Position.X ~= Position.X then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+			elseif Position.X == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+			else
+				local float = Position.X
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+			end
+			if Position.Y > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b0_11111_0000000000)
+			elseif Position.Y < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000000)
+			elseif Position.Y ~= Position.Y then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000001)
+			elseif Position.Y == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0)
+			else
+				local float = Position.Y
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, Result)
+			end
+			if Position.Z > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b0_11111_0000000000)
+			elseif Position.Z < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000000)
+			elseif Position.Z ~= Position.Z then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000001)
+			elseif Position.Z == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0)
+			else
+				local float = Position.Z
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Mantissa = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800) % 0x400
+				local Result = Mantissa
+					+ math.max(Exponent, 0) * 0x400
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, Result)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 6, QIndex)
+			buffer.writei16(SendBuffer, BLOCK_START + 7, QA)
+			buffer.writei16(SendBuffer, BLOCK_START + 9, QB)
+			buffer.writei16(SendBuffer, BLOCK_START + 11, QC)
+			-- Buffer restore
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			Load(Previous)
+			return Result
+		end
+	},
+	QuatCFrames = {
+		Read = function(Buffer: buffer): (QuatCFrames)
+			-- Buffer overwrite
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			-- Buffer read
+			-- Value: QuatCFrames
+			-- START ARRAY
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			if Length * 19 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length)
+				-- Read BLOCK: 19 bytes
+			local ARRAY_START_1 = Read(19 * Length)
+			for Index = 1, Length do
+				-- Item_1: QuatCFrames
+				-- Read 4
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				local X = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_0)
+				-- Read 4
+				local OPERATION_OFFSET_1 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				local Y = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_1)
+				-- Read 4
+				local OPERATION_OFFSET_2 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				local Z = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_2)
+				-- Read 1
+				local OPERATION_OFFSET_3 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local QIndex = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_3)
+				-- Read 2
+				local OPERATION_OFFSET_4 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local QA = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_4)
+				-- Read 2
+				local OPERATION_OFFSET_5 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local QB = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_5)
+				-- Read 2
+				local OPERATION_OFFSET_6 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local QC = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_6)
+				local Item_1 = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+				table.insert(Value, Item_1)
+			end
+			-- END ARRAY
+			-- Buffer restore
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			return Value
+		end,
+		Write = function(Value: QuatCFrames): (buffer)
+			-- Buffer overwrite
+			local Previous = Save()
+			Load()
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Buffer write
+			-- Value: QuatCFrames
+			-- START ARRAY
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				-- Allocate BLOCK: 19 bytes
+			local ARRAY_START_1 = Allocate(19 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: QuatCFrames
+				if typeof(Item_1) ~= "CFrame" then
+					error(`Expected Item_1 to be of type CFrame, got {type(Item_1)} instead.`)
+				end
+				local Position = Item_1.Position
+				local QIndex, QA, QB, QC = PackRotation(Item_1)
+				-- Allocate 4
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				buffer.writef32(SendBuffer, OPERATION_OFFSET_0, Position.X)
+				-- Allocate 4
+				local OPERATION_OFFSET_1 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				buffer.writef32(SendBuffer, OPERATION_OFFSET_1, Position.Y)
+				-- Allocate 4
+				local OPERATION_OFFSET_2 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				buffer.writef32(SendBuffer, OPERATION_OFFSET_2, Position.Z)
+				-- Allocate 1
+				local OPERATION_OFFSET_3 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_3, QIndex)
+				-- Allocate 2
+				local OPERATION_OFFSET_4 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writei16(SendBuffer, OPERATION_OFFSET_4, QA)
+				-- Allocate 2
+				local OPERATION_OFFSET_5 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writei16(SendBuffer, OPERATION_OFFSET_5, QB)
+				-- Allocate 2
+				local OPERATION_OFFSET_6 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writei16(SendBuffer, OPERATION_OFFSET_6, QC)
+			end
+			-- END ARRAY
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
 			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
