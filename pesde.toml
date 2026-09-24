@@ -6,16 +6,16 @@ description = "An IDL compiler written in Luau for ROBLOX buffer networking, wit
 includes = [
     "README.md",
     "pesde.toml",
-    "release/blink_pesde.luau",
+    "release/blinkblox_pesde.luau",
 ]
 license = "MIT"
-name = "xopoiii/blink"
-repository = "https://github.com/XopoIII/blink"
+name = "xopoiii/blinkblox"
+repository = "https://github.com/XopoIII/BlinkBlox"
 version = "0.27.0"
 
 [indices]
 default = "https://github.com/pesde-pkg/index"
 
 [target]
-bin = "release/blink_pesde.luau"
+bin = "release/blinkblox_pesde.luau"
 environment = "lune"

@@ -41,6 +41,6 @@ const withNextra = nextra({
 
 export default withNextra({
   output: "export",
-  basePath: "/blink",
+  basePath: "/BlinkBlox",
   images: {unoptimized: true}
 })

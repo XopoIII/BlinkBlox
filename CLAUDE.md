@@ -3,7 +3,7 @@
 An IDL compiler for ROBLOX buffer networking, written in Luau. A schema (`.blink`) compiles to
 server, client and shared Luau modules that serialise events into buffers.
 
-A maintained fork, `XopoIII/blink`, forked from the upstream project at `v0.18.8` and released from
+A maintained fork, `XopoIII/BlinkBlox`, forked from the upstream project at `v0.18.8` and released from
 `0.19.0` onward. MIT licensed, and the upstream copyright stays in LICENSE — a fork is a derivative
 work, so removing it is not an option.
 

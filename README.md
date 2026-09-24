@@ -2,8 +2,8 @@
   <img src="./docs/public/bb_logo.jpg" alt="BlinkBlox" class="center">
 </div>
 
-[![License](https://img.shields.io/github/license/XopoIII/blink?style=flat-square&color=%23a350af)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/XopoIII/blink?style=flat-square&color=%23a350af)](https://github.com/XopoIII/blink/releases/latest)
+[![License](https://img.shields.io/github/license/XopoIII/BlinkBlox?style=flat-square&color=%23a350af)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/XopoIII/BlinkBlox?style=flat-square&color=%23a350af)](https://github.com/XopoIII/BlinkBlox/releases/latest)
 
 An IDL compiler written in Luau for ROBLOX buffer networking.
 
@@ -75,10 +75,10 @@ Two things work against bad actors:
 # Getting started
 
 ```sh
-rokit add XopoIII/blink
+rokit add XopoIII/BlinkBlox
 ```
 
-Then head to the [documentation](https://xopoiii.github.io/blink/getting-started/1-installation).
+Then head to the [documentation](https://xopoiii.github.io/BlinkBlox/getting-started/1-installation).
 
 <div align="center">
   <img src="./docs/public/bb_end.jpg" alt="BlinkBlox at work" class="center">
