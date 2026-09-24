@@ -27,6 +27,50 @@ local RateGuardExpression = Decode.RateGuardExpression
 local OrderGuardExpression = Decode.OrderGuardExpression
 local Declarations = Serde
 
+--- What a server send needs to know about the event it sends.
+type Send = { IsReliable: boolean, WriteEvent: string, Name: string }
+
+--- The loop over the players a send reaches, leaving out `Except` when asked to.
+local function EachRecipient(Target: Blocks.Block, Recipients: string, SkipExcept: boolean?): Blocks.Block
+	local Loop = Target:Iterator("_", "Player", Recipients)
+	if SkipExcept then
+		Loop = Loop:Compare("Player", "Except", "Equals"):Line("continue"):End()
+	end
+
+	return Loop
+end
+
+--- A server send to more than one player: FireAll, FireList and FireExcept. Each writes the event
+--- once into a fresh buffer and hands it to every recipient; they differ only in who that is. An
+--- unreliable FireAll hands it to `FireAllClients` instead of looping.
+local function Broadcast(
+	Fire: Blocks.Block,
+	Send: Send,
+	Recipients: string,
+	Options: { AllClients: boolean?, SkipExcept: boolean? }
+): Blocks.Block
+	Fire:Line("Load()")
+	Fire:Line(Send.WriteEvent)
+
+	if Send.IsReliable then
+		Fire:Line(RELIABLE_BODY.Header)
+		EachRecipient(Fire, Recipients, Options.SkipExcept):Lines(RELIABLE_BODY.Body, 2):End()
+	else
+		Fire:Line(`if not CheckUnreliableSize("{Send.Name}") then return end`)
+		Fire:Lines(UNRELIABLE_BODY, 1)
+
+		if Options.AllClients then
+			Fire:Line("Unreliable:FireAllClients(Buffer, SendInstances)")
+		else
+			EachRecipient(Fire, Recipients, Options.SkipExcept)
+				:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
+				:End()
+		end
+	end
+
+	return Fire:End()
+end
+
 function Declarations.Event(Declaration: Parser.Event)
 	local Value = Declaration.Value
 
@@ -44,7 +88,6 @@ function Declarations.Event(Declaration: Parser.Event)
 	local IsPolling = (Value.Call == "Polling" or State.Options.UsePolling)
 	local IsSameContext = Value.From == State.Context
 
-	local Block = IsUnreliable and State.Unreliables or State.Reliables
 	local Channel = IsUnreliable and State.Channels.Unreliable or State.Channels.Reliable
 
 	local Index = Channel.Count
@@ -110,18 +153,7 @@ function Declarations.Event(Declaration: Parser.Event)
 
 		State.Events.Push(`{Queue} = table.create(256)`)
 		State.Events.Push(`EventNames.{ChannelName}[{Index}] = "{Declaration.Name}"`)
-		Block = (Channel.Listening == false) and Block:Compare("Index", Index, "Equals")
-			or Block:Branch("Conditional", "Index", Index, "Equals")
-
-		--> Update event block to branch block
-		if IsUnreliable then
-			State.Unreliables = Block
-		else
-			State.Reliables = Block
-		end
-
-		--> Update channel status
-		Channel.Listening = true
+		local Block = Decode.Open(IsUnreliable, Index)
 
 		--> Event recieve body
 		local Listener: Blocks.Block
@@ -246,16 +278,7 @@ function Declarations.Event(Declaration: Parser.Event)
 	elseif Value.From ~= State.Context and IsPolling then
 		State.Events.Push(`{Queue} = CreateQueue()`)
 		State.Events.Push(`EventNames.{ChannelName}[{Index}] = "{Declaration.Name}"`)
-		Block = (Channel.Listening == false) and Block:Compare("Index", Index, "Equals")
-			or Block:Branch("Conditional", "Index", Index, "Equals")
-
-		if IsUnreliable then
-			State.Unreliables = Block
-		else
-			State.Reliables = Block
-		end
-
-		Channel.Listening = true
+		local Block = Decode.Open(IsUnreliable, Index)
 
 		if IsOrdered then
 			Types.u16.Read("OrderIdentifier", Block)
@@ -299,18 +322,17 @@ function Declarations.Event(Declaration: Parser.Event)
 			:End()
 			:Wrap("return ", "")
 
-		local Deprecated = Blocks.Function(State.Casing.Next, "", `() -> ({IterTypes})`, true)
-			:Line(`local index = 0`)
-			:Line(`local queue = {Queue}`)
-			:Lines(Next.Content, 1)
-			:End()
+		--> `Next` is the deprecated name of `Iter`, and the two are the same function.
+		local function Iterator(Name: string): Blocks.Block
+			return Blocks.Function(Name, "", `() -> ({IterTypes})`, true)
+				:Line(`local index = 0`)
+				:Line(`local queue = {Queue}`)
+				:Lines(Next.Content, 1)
+				:End()
+		end
 
-		local Iter = Blocks.Function(State.Casing.Iter, "", `() -> ({IterTypes})`, true)
-			:Line(`local index = 0`)
-			:Line(`local queue = {Queue}`)
-			:Lines(Next.Content, 1)
-			:End()
-			:Wrap("", ",")
+		local Deprecated = Iterator(State.Casing.Next)
+		local Iter = Iterator(State.Casing.Iter):Wrap("", ",")
 
 		State.Noop.Push(`{State.Casing.Iter} = NOOP_RETURNING,`, 0, Indent + 1)
 		State.Noop.Push(`{State.Casing.Next} = NOOP_RETURNING`, 0, Indent + 1)
@@ -350,6 +372,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		State.Noop.Push(`{State.Casing.Fire} = NOOP`, 0, Indent + 1)
 		Body.PushLines(Fire.Content, 0, Indent + 1)
 	else
+		local Send: Send = { IsReliable = IsReliable, WriteEvent = WriteEvent, Name = Declaration.Name }
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 		if IsReliable then
 			Fire:Line("Load(PlayersMap[Player])")
@@ -364,60 +387,24 @@ function Declarations.Event(Declaration: Parser.Event)
 		end
 		Fire:End()
 
-		local FireAll = Blocks.Function(State.Casing.FireAll, Values, "()", true)
-		if IsReliable then
-			FireAll:Line("Load()")
-			FireAll:Line(WriteEvent)
-			FireAll:Line(RELIABLE_BODY.Header)
-			FireAll:Iterator("_", "Player", "Players:GetPlayers()"):Lines(RELIABLE_BODY.Body, 2):End()
-		else
-			FireAll:Line("Load()")
-			FireAll:Line(WriteEvent)
-			FireAll:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
-			FireAll:Lines(UNRELIABLE_BODY, 1)
-			FireAll:Line("Unreliable:FireAllClients(Buffer, SendInstances)")
-		end
-		FireAll:End()
-
-		local FireList = Blocks.Function(State.Casing.FireList, `List: \{Player\}, {Values}`, "()", true)
-		if IsReliable then
-			FireList:Line("Load()")
-			FireList:Line(WriteEvent)
-			FireList:Line(RELIABLE_BODY.Header)
-			FireList:Iterator("_", "Player", "List"):Lines(RELIABLE_BODY.Body, 2):End()
-		else
-			FireList:Line("Load()")
-			FireList:Line(WriteEvent)
-			FireList:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
-			FireList:Lines(UNRELIABLE_BODY, 1)
-			FireList:Iterator("_", "Player", "List"):Line("Unreliable:FireClient(Player, Buffer, SendInstances)"):End()
-		end
-		FireList:End()
-
-		local FireExcept = Blocks.Function(State.Casing.FireExcept, `Except: Player, {Values}`, "()", true)
-		if IsReliable then
-			FireExcept:Line("Load()")
-			FireExcept:Line(WriteEvent)
-			FireExcept:Line(RELIABLE_BODY.Header)
-			FireExcept:Iterator("_", "Player", "Players:GetPlayers()")
-				:Compare("Player", "Except", "Equals")
-				:Line("continue")
-				:End()
-				:Lines(RELIABLE_BODY.Body, 2)
-				:End()
-		else
-			FireExcept:Line("Load()")
-			FireExcept:Line(WriteEvent)
-			FireExcept:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
-			FireExcept:Lines(UNRELIABLE_BODY, 1)
-			FireExcept:Iterator("_", "Player", "Players:GetPlayers()")
-				:Compare("Player", "Except", "Equals")
-				:Line("continue")
-				:End()
-				:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
-				:End()
-		end
-		FireExcept:End()
+		local FireAll = Broadcast(
+			Blocks.Function(State.Casing.FireAll, Values, "()", true),
+			Send,
+			"Players:GetPlayers()",
+			{ AllClients = true }
+		)
+		local FireList = Broadcast(
+			Blocks.Function(State.Casing.FireList, `List: \{Player\}, {Values}`, "()", true),
+			Send,
+			"List",
+			{}
+		)
+		local FireExcept = Broadcast(
+			Blocks.Function(State.Casing.FireExcept, `Except: Player, {Values}`, "()", true),
+			Send,
+			"Players:GetPlayers()",
+			{ SkipExcept = true }
+		)
 
 		State.Noop.PushLines({
 			`{State.Casing.Fire} = NOOP,\n`,

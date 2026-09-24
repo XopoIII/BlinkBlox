@@ -44,7 +44,6 @@ function Declarations.Function(Declaration: Parser.Function)
 		error(`Cannot use yield type: "Promise", without providing a path to the promise library.`)
 	end
 
-	local Block = State.Reliables
 	local Channel = State.Channels.Reliable
 
 	local Index = Channel.Count
@@ -114,11 +113,7 @@ function Declarations.Function(Declaration: Parser.Function)
 	--> Create queue and event branch
 	State.Events.Push(`{Queue} = table.create(256)`)
 	State.Events.Push(`EventNames.Reliable[{Index}] = "{Name}"`)
-	Block = (Channel.Listening == false) and Block:Compare("Index", Index, "Equals")
-		or Block:Branch("Conditional", "Index", Index, "Equals")
-
-	--> Update event block to branch block
-	State.Reliables = Block
+	local Block = Decode.Open(false, Index)
 
 	if not IsCaller then
 		--> Data recieve body
@@ -241,34 +236,40 @@ function Declarations.Function(Declaration: Parser.Function)
 		local Error = `"There was an exception while processing \\"{Name}\\"."`
 		--> A server invoking has to say WHICH client it is asking.
 		local InvokeValues = `{if ServerCalls then "Player: Player, " else ""}{DataValues}`
-		--> Sending the call. Again the server has to select the target player's buffer around the write.
-		local Send = Blocks.Block():Line(`local InvocationIdentifier = {ClaimSlot}`)
-		if ServerCalls then
-			Send:Line("Load(PlayersMap[Player])")
+		--> Claiming a slot and writing the call. Again the server has to select the target player's
+		--> buffer around the write. Shared by every yield style: a Promise does it inside its executor.
+		local function SendCall(Target: Blocks.Block): Blocks.Block
+			Target:Line(`local InvocationIdentifier = {ClaimSlot}`)
+			if ServerCalls then
+				Target:Line("Load(PlayersMap[Player])")
+			end
+
+			--> Releasing the slot when the ARGUMENTS fail to serialise.
+			-->
+			--> The slot is claimed before the write and the caller is parked after it, so a throw in
+			--> between used to strand the slot with nothing outstanding: no entry in `Calls`, so
+			--> nothing for the timeout to find and reclaim. Thirty-two rejected calls -- the same wrong
+			--> argument thirty-two times -- and every later invocation fails for the lifetime of the
+			--> session. This is the one leak the timeout cannot cover, because it is armed after it.
+			Target:Line("local Cursor, Instances = Mark()")
+			Target:Line(
+				`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, State.Scope)}, {DataArguments}, InvocationIdentifier)`
+			)
+			Target:Compare("Sent", "true", "Not")
+				:Line("Rollback(Cursor, Instances)")
+				:Line(ReleaseSlot)
+				:Line("error(Failure, 0)")
+				:End()
+
+			if ServerCalls then
+				Target:Line("SavePlayerBuffer(Player)")
+			end
+
+			return Target
 		end
 
-		--> Releasing the slot when the ARGUMENTS fail to serialise.
-		-->
-		--> The slot is claimed before the write and the caller is parked after it, so a throw in
-		--> between used to strand the slot with nothing outstanding: no entry in `Calls`, so nothing
-		--> for the timeout to find and reclaim. Thirty-two rejected calls -- the same wrong argument
-		--> thirty-two times -- and every later invocation fails for the lifetime of the session.
-		--> This is the one leak the timeout cannot cover, because the timeout is armed after it.
-		Send:Line("local Cursor, Instances = Mark()")
-		Send:Line(
-			`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, State.Scope)}, {DataArguments}, InvocationIdentifier)`
-		)
-		Send:Compare("Sent", "true", "Not")
-			:Line("Rollback(Cursor, Instances)")
-			:Line(ReleaseSlot)
-			:Line("error(Failure, 0)")
-			:End()
-
-		if ServerCalls then
-			Send:Line("SavePlayerBuffer(Player)")
-		end
-
-		local Contents = Send:Line(ParkCaller)
+		local Contents = SendCall(Blocks.Block())
+			:Line(ParkCaller)
 			:Line(ArmTimeout)
 			:Line(`local Success, {ReturnValues} = coroutine.yield()`)
 			:Compare("Success", "true", "Not")
@@ -292,27 +293,8 @@ function Declarations.Function(Declaration: Parser.Function)
 
 			local OnCancel = Cancel:Line(ReleaseSlot):End():Wrap("OnCancel(", ")")
 
-			local Promise = Blocks.Function("", "Resolve, Reject, OnCancel")
-				:Line(`local InvocationIdentifier = {ClaimSlot}`)
-			if ServerCalls then
-				Promise:Line("Load(PlayersMap[Player])")
-			end
-
-			Promise:Line("local Cursor, Instances = Mark()")
-			Promise:Line(
-				`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, State.Scope)}, {DataArguments}, InvocationIdentifier)`
-			)
-			Promise:Compare("Sent", "true", "Not")
-				:Line("Rollback(Cursor, Instances)")
-				:Line(ReleaseSlot)
-				:Line("error(Failure, 0)")
-				:End()
-
-			if ServerCalls then
-				Promise:Line("SavePlayerBuffer(Player)")
-			end
-
-			Promise:Line(ParkCaller)
+			local Promise = SendCall(Blocks.Function("", "Resolve, Reject, OnCancel"))
+				:Line(ParkCaller)
 				:Line(ArmTimeout)
 				:Lines(OnCancel.Content, 1)
 				:Line(`local Success, {ReturnValues} = coroutine.yield()`)
@@ -337,7 +319,6 @@ function Declarations.Function(Declaration: Parser.Function)
 	end
 
 	Channel.Count += 1
-	Channel.Listening = true
 
 	State.Noop.Push(`\},`, 0, Indent)
 	Body.Push(`\},`, 0, Indent)
