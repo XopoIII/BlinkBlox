@@ -136,3 +136,35 @@ RunClosure("An array of optionals keeps its holes where they were", function()
 		)
 	end
 end)
+
+RunClosure("Half floats keep NaN, the infinities and the carry out of a subnormal", function()
+	local function RoundTrip(Value: number): number
+		return Server.HalfFloat.Read(Server.HalfFloat.Write(Value))
+	end
+
+	--> NaN was written correctly and read as -65600: the reader compared the value, sign stripped,
+	--> against a pattern that included the sign.
+	local NaN = RoundTrip(0 / 0)
+	if NaN == NaN then
+		ErrorPrint(`Failed "Half floats": NaN came back as {NaN}.`)
+	end
+
+	if RoundTrip(math.huge) ~= math.huge or RoundTrip(-math.huge) ~= -math.huge then
+		ErrorPrint(`Failed "Half floats": an infinity lost its sign.`)
+	end
+
+	--> Just below 2^-14, the smallest normal number. Rounded to the nearest subnormal it carries into
+	--> the exponent, and the carry used to be dropped: the value went out as zero.
+	local Carried = RoundTrip(6.102e-5)
+	if Carried ~= 2 ^ -14 then
+		ErrorPrint(`Failed "Half floats": 6.102e-5 came back as {Carried}, expected 2^-14.`)
+	end
+
+	--> Ordinary values are unchanged.
+	for _, Value in { 1, 1.5, -2.25, 65504, 2 ^ -14, 2 ^ -24, 0.099975586 } do
+		local Back = RoundTrip(Value)
+		if math.abs(Back - Value) > math.abs(Value) * 2 ^ -10 then
+			ErrorPrint(`Failed "Half floats": {Value} came back as {Back}.`)
+		end
+	end
+end)

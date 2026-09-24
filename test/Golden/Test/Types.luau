@@ -497,6 +497,7 @@ export type Issue33_Map<T> = {[("One" | "Two")]: number}
 export type Issue33_Enum<T> = { Tag: "Variant", field: ("One" | "Two") }
 export type Issue33_Struct<T> = { field: ("One" | "Two") }
 export type OptionalHoles = { number? }
+export type HalfFloat = number
 
 
 
@@ -1403,7 +1404,7 @@ return {
 					else
 						X = math.huge
 					end
-				elseif MantissaExponent == 0b1_11111_0000000000   then
+				elseif MantissaExponent > 0b0_11111_0000000000 then
 					X = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
 					X = 0
@@ -1428,7 +1429,7 @@ return {
 					else
 						Y = math.huge
 					end
-				elseif MantissaExponent == 0b1_11111_0000000000   then
+				elseif MantissaExponent > 0b0_11111_0000000000 then
 					Y = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
 					Y = 0
@@ -1453,7 +1454,7 @@ return {
 					else
 						Z = math.huge
 					end
-				elseif MantissaExponent == 0b1_11111_0000000000   then
+				elseif MantissaExponent > 0b0_11111_0000000000 then
 					Z = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
 					Z = 0
@@ -1511,11 +1512,10 @@ return {
 					local RoundedValue = (Abosulte // Interval) * Interval
 					local Fraction, Exponent = math.frexp(RoundedValue)
 					Exponent += 14
-					local Mantissa = math.round(if Exponent <= 0
+					local Scaled = math.round(if Exponent <= 0
 						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800) % 0x400
-					local Result = Mantissa
-						+ math.max(Exponent, 0) * 0x400
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
 						+ if float < 0 then 0x8000 else 0
 					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
 				end
@@ -1534,11 +1534,10 @@ return {
 					local RoundedValue = (Abosulte // Interval) * Interval
 					local Fraction, Exponent = math.frexp(RoundedValue)
 					Exponent += 14
-					local Mantissa = math.round(if Exponent <= 0
+					local Scaled = math.round(if Exponent <= 0
 						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800) % 0x400
-					local Result = Mantissa
-						+ math.max(Exponent, 0) * 0x400
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
 						+ if float < 0 then 0x8000 else 0
 					buffer.writeu16(SendBuffer, BLOCK_START + 2, Result)
 				end
@@ -1557,11 +1556,10 @@ return {
 					local RoundedValue = (Abosulte // Interval) * Interval
 					local Fraction, Exponent = math.frexp(RoundedValue)
 					Exponent += 14
-					local Mantissa = math.round(if Exponent <= 0
+					local Scaled = math.round(if Exponent <= 0
 						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800) % 0x400
-					local Result = Mantissa
-						+ math.max(Exponent, 0) * 0x400
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
 						+ if float < 0 then 0x8000 else 0
 					buffer.writeu16(SendBuffer, BLOCK_START + 4, Result)
 				end
@@ -1600,7 +1598,7 @@ return {
 					else
 						X = math.huge
 					end
-				elseif MantissaExponent == 0b1_11111_0000000000   then
+				elseif MantissaExponent > 0b0_11111_0000000000 then
 					X = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
 					X = 0
@@ -1625,7 +1623,7 @@ return {
 					else
 						Y = math.huge
 					end
-				elseif MantissaExponent == 0b1_11111_0000000000   then
+				elseif MantissaExponent > 0b0_11111_0000000000 then
 					Y = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
 					Y = 0
@@ -1650,7 +1648,7 @@ return {
 					else
 						Z = math.huge
 					end
-				elseif MantissaExponent == 0b1_11111_0000000000   then
+				elseif MantissaExponent > 0b0_11111_0000000000 then
 					Z = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
 					Z = 0
@@ -1708,11 +1706,10 @@ return {
 					local RoundedValue = (Abosulte // Interval) * Interval
 					local Fraction, Exponent = math.frexp(RoundedValue)
 					Exponent += 14
-					local Mantissa = math.round(if Exponent <= 0
+					local Scaled = math.round(if Exponent <= 0
 						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800) % 0x400
-					local Result = Mantissa
-						+ math.max(Exponent, 0) * 0x400
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
 						+ if float < 0 then 0x8000 else 0
 					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
 				end
@@ -1731,11 +1728,10 @@ return {
 					local RoundedValue = (Abosulte // Interval) * Interval
 					local Fraction, Exponent = math.frexp(RoundedValue)
 					Exponent += 14
-					local Mantissa = math.round(if Exponent <= 0
+					local Scaled = math.round(if Exponent <= 0
 						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800) % 0x400
-					local Result = Mantissa
-						+ math.max(Exponent, 0) * 0x400
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
 						+ if float < 0 then 0x8000 else 0
 					buffer.writeu16(SendBuffer, BLOCK_START + 2, Result)
 				end
@@ -1754,11 +1750,10 @@ return {
 					local RoundedValue = (Abosulte // Interval) * Interval
 					local Fraction, Exponent = math.frexp(RoundedValue)
 					Exponent += 14
-					local Mantissa = math.round(if Exponent <= 0
+					local Scaled = math.round(if Exponent <= 0
 						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800) % 0x400
-					local Result = Mantissa
-						+ math.max(Exponent, 0) * 0x400
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
 						+ if float < 0 then 0x8000 else 0
 					buffer.writeu16(SendBuffer, BLOCK_START + 4, Result)
 				end
@@ -4589,6 +4584,95 @@ return {
 					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, BITFIELD_0)
 				end
 				-- END ARRAY
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	HalfFloat = {
+		Read = function(Buffer: buffer): (HalfFloat)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (HalfFloat)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: HalfFloat
+				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Value
+				local MantissaExponent = Encoded % 0x8000
+				if MantissaExponent == 0b0_11111_0000000000  then
+					if Encoded // 0x8000 == 1 then
+						Value = -math.huge
+					else
+						Value = math.huge
+					end
+				elseif MantissaExponent > 0b0_11111_0000000000 then
+					Value = 0 / 0
+				elseif MantissaExponent == 0b0_00000_0000000000   then
+					Value = 0
+				else
+					local Mantissa = MantissaExponent % 0x400
+					local Exponent = MantissaExponent // 0x400
+					local Fraction;
+					if Exponent == 0 then
+						Fraction = Mantissa / 0x400
+					else
+						Fraction = Mantissa / 0x800 + 0.5
+					end
+					local Result = math.ldexp(Fraction, Exponent - 14)
+					Value = if Encoded // 0x8000 == 1 then -Result else Result
+				end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end,
+		Write = function(Value: HalfFloat): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: HalfFloat
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				if Value > 65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+				elseif Value < -65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+				elseif Value ~= Value then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+				elseif Value == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+				else
+					local float = Value
+					local Abosulte = math.abs(float)
+					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+					local RoundedValue = (Abosulte // Interval) * Interval
+					local Fraction, Exponent = math.frexp(RoundedValue)
+					Exponent += 14
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+						+ if float < 0 then 0x8000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+				end
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result

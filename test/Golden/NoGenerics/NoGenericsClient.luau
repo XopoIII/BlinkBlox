@@ -540,11 +540,10 @@ function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Flo
 			local RoundedValue = (Abosulte // Interval) * Interval
 			local Fraction, Exponent = math.frexp(RoundedValue)
 			Exponent += 14
-			local Mantissa = math.round(if Exponent <= 0
+			local Scaled = math.round(if Exponent <= 0
 				then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-				else Fraction * 0x800) % 0x400
-			local Result = Mantissa
-				+ math.max(Exponent, 0) * 0x400
+				else Fraction * 0x800)
+			local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
 				+ if float < 0 then 0x8000 else 0
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
 		end
@@ -648,11 +647,10 @@ function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: nu
 			local RoundedValue = (Abosulte // Interval) * Interval
 			local Fraction, Exponent = math.frexp(RoundedValue)
 			Exponent += 14
-			local Mantissa = math.round(if Exponent <= 0
+			local Scaled = math.round(if Exponent <= 0
 				then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-				else Fraction * 0x800) % 0x400
-			local Result = Mantissa
-				+ math.max(Exponent, 0) * 0x400
+				else Fraction * 0x800)
+			local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
 				+ if float < 0 then 0x8000 else 0
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
 		end
@@ -754,7 +752,7 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 			else
 				Value.Float16Field = math.huge
 			end
-		elseif MantissaExponent == 0b1_11111_0000000000   then
+		elseif MantissaExponent > 0b0_11111_0000000000 then
 			Value.Float16Field = 0 / 0
 		elseif MantissaExponent == 0b0_00000_0000000000   then
 			Value.Float16Field = 0
@@ -851,7 +849,7 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 			else
 				Value.Float16Field = math.huge
 			end
-		elseif MantissaExponent == 0b1_11111_0000000000   then
+		elseif MantissaExponent > 0b0_11111_0000000000 then
 			Value.Float16Field = 0 / 0
 		elseif MantissaExponent == 0b0_00000_0000000000   then
 			Value.Float16Field = 0
@@ -1540,7 +1538,7 @@ function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field:
 				else
 					Value.Float16Field = math.huge
 				end
-			elseif MantissaExponent == 0b1_11111_0000000000   then
+			elseif MantissaExponent > 0b0_11111_0000000000 then
 				Value.Float16Field = 0 / 0
 			elseif MantissaExponent == 0b0_00000_0000000000   then
 				Value.Float16Field = 0
@@ -1646,7 +1644,7 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 				else
 					Item_1.Float16Field = math.huge
 				end
-			elseif MantissaExponent == 0b1_11111_0000000000   then
+			elseif MantissaExponent > 0b0_11111_0000000000 then
 				Item_1.Float16Field = 0 / 0
 			elseif MantissaExponent == 0b0_00000_0000000000   then
 				Item_1.Float16Field = 0
@@ -1758,7 +1756,7 @@ function SerdesFunctions.ReadEVENT_ReferenceOptional(): ({ Field: number?, Float
 				else
 					Value.Float16Field = math.huge
 				end
-			elseif MantissaExponent == 0b1_11111_0000000000   then
+			elseif MantissaExponent > 0b0_11111_0000000000 then
 				Value.Float16Field = 0 / 0
 			elseif MantissaExponent == 0b0_00000_0000000000   then
 				Value.Float16Field = 0
