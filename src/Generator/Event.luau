@@ -203,20 +203,36 @@ function Declarations.Event(Declaration: Parser.Event)
 
 		Disconnect = Disconnect:End():Wrap("return ", "")
 
-		if IsReliable then
-			local ListenerBound: Blocks.Block
+		--> Hands the event to its listeners, or -- for a reliable event with none bound -- queues it for
+		--> the listener to come. The receive branch and Predict both go through this, so an event
+		--> predicted locally is delivered exactly as one received from the network would be.
+		local function Deliver(Target: Blocks.Block)
+			if not IsReliable then
+				if IsSingle then
+					Target:Compare(Connection, "nil", "Not"):Lines(CallListener.Content, Target.Indent):End()
+				else
+					Target:Iterator("_", "Listener", Connection):Lines(CallListener.Content, Target.Indent):End()
+				end
+
+				return
+			end
+
+			local Bound: Blocks.Block
 			if IsSingle then
-				ListenerBound = Block:Compare(Connection, "nil", "Not"):Lines(CallListener.Content, Block.Indent)
+				Bound = Target:Compare(Connection, "nil", "Not"):Lines(CallListener.Content, Target.Indent)
 			else
-				ListenerBound = Block:Compare(`#{Connection}`, "0", "Greater")
+				Bound = Target:Compare(`#{Connection}`, "0", "Greater")
 					:Iterator("_", "Listener", Connection)
-					:Lines(CallListener.Content, Block.Indent + 1)
+					:Lines(CallListener.Content, Target.Indent + 1)
 					:End()
 			end
 
-			Queues.Enqueue(ListenerBound:Branch("Default"), State.Context, Queue, ListenerArguments, Declaration.Name)
-				:End()
+			Queues.Enqueue(Bound:Branch("Default"), State.Context, Queue, ListenerArguments, Declaration.Name):End()
+		end
 
+		Deliver(Block)
+
+		if IsReliable then
 			Listener = BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true))
 				:Iterator("Index", "Arguments", Queue)
 				:Line(IsSync and `Listener(table.unpack(Arguments))` or `Spawn(Listener, table.unpack(Arguments))`)
@@ -225,12 +241,6 @@ function Declarations.Event(Declaration: Parser.Event)
 				:Lines(Disconnect.Content, 1)
 				:End()
 		else
-			if IsSingle then
-				Block:Compare(Connection, "nil", "Not"):Lines(CallListener.Content, Block.Indent):End()
-			else
-				Block:Iterator("_", "Listener", Connection):Lines(CallListener.Content, Block.Indent):End()
-			end
-
 			Listener = BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true))
 				:Lines(Disconnect.Content, 1)
 				:End()
@@ -254,17 +264,9 @@ function Declarations.Event(Declaration: Parser.Event)
 			local PredictArguments = `{State.Context == "Server" and "Player: Player, " or ""}{Values}`
 			local Predict = Blocks.Function(State.Casing.Predict, PredictArguments, "()", true)
 
-			if IsSingle then
-				local Bound = Predict:Compare(Connection, "nil", "Not"):Lines(CallListener.Content, Predict.Indent)
-				if IsReliable then
-					Bound:Branch("Default"):Line(`table.insert({Queue}, \{{ListenerArguments}\} :: \{any\})`):End()
-				else
-					Bound:End()
-				end
-			else
-				Predict:Iterator("_", "Listener", Connection):Lines(CallListener.Content, Predict.Indent):End()
-			end
-
+			--> A Many event with no listener used to be dropped here while the network queued it, and a
+			--> Single one was queued past the cap the network stops at. Both now share the receive path.
+			Deliver(Predict)
 			Predict:End()
 
 			State.Noop.Push(`{State.Casing.On} = NOOP_RETURNING,`, 0, Indent + 1)

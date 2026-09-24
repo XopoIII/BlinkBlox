@@ -11563,6 +11563,9 @@ local Returns = table.freeze({
 				SerdesEvent = "SendOccupiedCell"
 				Events.Reliable[3](Value)
 			else
+				if #Queue.Reliable[3] > 256 then
+					warn("[Blink]: Event queue of \"SendOccupiedCell\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[3], {Value} :: {any})
 			end
 		end
@@ -11774,6 +11777,9 @@ local Returns = table.freeze({
 				SerdesEvent = "EmptyEvent"
 				Events.Reliable[9](Value)
 			else
+				if #Queue.Reliable[9] > 256 then
+					warn("[Blink]: Event queue of \"EmptyEvent\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[9], {Value} :: {any})
 			end
 		end
@@ -11856,6 +11862,9 @@ local Returns = table.freeze({
 				SerdesEvent = "Flags8"
 				Events.Reliable[12](Value)
 			else
+				if #Queue.Reliable[12] > 256 then
+					warn("[Blink]: Event queue of \"Flags8\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[12], {Value} :: {any})
 			end
 		end
@@ -11881,6 +11890,9 @@ local Returns = table.freeze({
 				SerdesEvent = "Flags16"
 				Events.Reliable[13](Value)
 			else
+				if #Queue.Reliable[13] > 256 then
+					warn("[Blink]: Event queue of \"Flags16\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[13], {Value} :: {any})
 			end
 		end
@@ -11906,6 +11918,9 @@ local Returns = table.freeze({
 				SerdesEvent = "Flags32"
 				Events.Reliable[14](Value)
 			else
+				if #Queue.Reliable[14] > 256 then
+					warn("[Blink]: Event queue of \"Flags32\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[14], {Value} :: {any})
 			end
 		end
@@ -11931,6 +11946,9 @@ local Returns = table.freeze({
 				SerdesEvent = "Flags33"
 				Events.Reliable[15](Value)
 			else
+				if #Queue.Reliable[15] > 256 then
+					warn("[Blink]: Event queue of \"Flags33\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[15], {Value} :: {any})
 			end
 		end
@@ -11956,6 +11974,9 @@ local Returns = table.freeze({
 				SerdesEvent = "DynamicMap"
 				Events.Reliable[16](Value)
 			else
+				if #Queue.Reliable[16] > 256 then
+					warn("[Blink]: Event queue of \"DynamicMap\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[16], {Value} :: {any})
 			end
 		end
@@ -11981,6 +12002,9 @@ local Returns = table.freeze({
 				SerdesEvent = "DynamicArray"
 				Events.Reliable[17](Value)
 			else
+				if #Queue.Reliable[17] > 256 then
+					warn("[Blink]: Event queue of \"DynamicArray\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[17], {Value} :: {any})
 			end
 		end
@@ -12006,6 +12030,9 @@ local Returns = table.freeze({
 				SerdesEvent = "PlayerEvent"
 				Events.Reliable[18](Value)
 			else
+				if #Queue.Reliable[18] > 256 then
+					warn("[Blink]: Event queue of \"PlayerEvent\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[18], {Value} :: {any})
 			end
 		end
@@ -12041,6 +12068,9 @@ local Returns = table.freeze({
 				SerdesEvent = "Generic"
 				Events.Reliable[20](Value)
 			else
+				if #Queue.Reliable[20] > 256 then
+					warn("[Blink]: Event queue of \"Generic\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[20], {Value} :: {any})
 			end
 		end
@@ -12066,6 +12096,9 @@ local Returns = table.freeze({
 				SerdesEvent = "GenericArray"
 				Events.Reliable[21](Value)
 			else
+				if #Queue.Reliable[21] > 256 then
+					warn("[Blink]: Event queue of \"GenericArray\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[21], {Value} :: {any})
 			end
 		end
@@ -12091,6 +12124,9 @@ local Returns = table.freeze({
 				SerdesEvent = "Unknown"
 				Events.Reliable[22](Value)
 			else
+				if #Queue.Reliable[22] > 256 then
+					warn("[Blink]: Event queue of \"Unknown\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[22], {Value} :: {any})
 			end
 		end
@@ -12116,6 +12152,9 @@ local Returns = table.freeze({
 				SerdesEvent = "MapEvent"
 				Events.Reliable[23](Value)
 			else
+				if #Queue.Reliable[23] > 256 then
+					warn("[Blink]: Event queue of \"MapEvent\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[23], {Value} :: {any})
 			end
 		end
@@ -12141,6 +12180,9 @@ local Returns = table.freeze({
 				SerdesEvent = "MapStructEvent"
 				Events.Reliable[24](Value)
 			else
+				if #Queue.Reliable[24] > 256 then
+					warn("[Blink]: Event queue of \"MapStructEvent\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[24], {Value} :: {any})
 			end
 		end
@@ -12166,6 +12208,9 @@ local Returns = table.freeze({
 				SerdesEvent = "MapComplexEvent"
 				Events.Reliable[25](Value)
 			else
+				if #Queue.Reliable[25] > 256 then
+					warn("[Blink]: Event queue of \"MapComplexEvent\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[25], {Value} :: {any})
 			end
 		end
@@ -12191,6 +12236,9 @@ local Returns = table.freeze({
 				SerdesEvent = "MapReferenceEvent"
 				Events.Reliable[26](Value)
 			else
+				if #Queue.Reliable[26] > 256 then
+					warn("[Blink]: Event queue of \"MapReferenceEvent\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[26], {Value} :: {any})
 			end
 		end
@@ -12248,9 +12296,16 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: number): ()
-			for _, Listener in Events.Reliable[27] do
-				SerdesEvent = "ManyReliableSync"
-				Listener(Value)
+			if #Events.Reliable[27] > 0 then
+				for _, Listener in Events.Reliable[27] do
+					SerdesEvent = "ManyReliableSync"
+					Listener(Value)
+				end
+			else
+				if #Queue.Reliable[27] > 256 then
+					warn("[Blink]: Event queue of \"ManyReliableSync\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[27], {Value} :: {any})
 			end
 		end
 	},
@@ -12269,8 +12324,15 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: number): ()
-			for _, Listener in Events.Reliable[28] do
-				Spawn(Listener, Value)
+			if #Events.Reliable[28] > 0 then
+				for _, Listener in Events.Reliable[28] do
+					Spawn(Listener, Value)
+				end
+			else
+				if #Queue.Reliable[28] > 256 then
+					warn("[Blink]: Event queue of \"ManyReliableAsync\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[28], {Value} :: {any})
 			end
 		end
 	},
@@ -12328,6 +12390,9 @@ local Returns = table.freeze({
 				SerdesEvent = "ReliableServer"
 				Events.Reliable[29](Value)
 			else
+				if #Queue.Reliable[29] > 256 then
+					warn("[Blink]: Event queue of \"ReliableServer\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[29], {Value} :: {any})
 			end
 		end
@@ -12352,6 +12417,9 @@ local Returns = table.freeze({
 			if Events.Reliable[30] ~= nil then
 				Spawn(Events.Reliable[30], Value)
 			else
+				if #Queue.Reliable[30] > 256 then
+					warn("[Blink]: Event queue of \"ReliableServerAsync\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[30], {Value} :: {any})
 			end
 		end
@@ -12440,6 +12508,9 @@ local Returns = table.freeze({
 				SerdesEvent = "InstanceAny"
 				Events.Reliable[32](Value)
 			else
+				if #Queue.Reliable[32] > 256 then
+					warn("[Blink]: Event queue of \"InstanceAny\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[32], {Value} :: {any})
 			end
 		end
@@ -12465,6 +12536,9 @@ local Returns = table.freeze({
 				SerdesEvent = "InstanceOfType"
 				Events.Reliable[33](Value)
 			else
+				if #Queue.Reliable[33] > 256 then
+					warn("[Blink]: Event queue of \"InstanceOfType\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[33], {Value} :: {any})
 			end
 		end
@@ -12490,6 +12564,9 @@ local Returns = table.freeze({
 				SerdesEvent = "InstanceOptional"
 				Events.Reliable[34](Value)
 			else
+				if #Queue.Reliable[34] > 256 then
+					warn("[Blink]: Event queue of \"InstanceOptional\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[34], {Value} :: {any})
 			end
 		end
@@ -12515,6 +12592,9 @@ local Returns = table.freeze({
 				SerdesEvent = "InstanceOfClassWithDigit"
 				Events.Reliable[35](Value)
 			else
+				if #Queue.Reliable[35] > 256 then
+					warn("[Blink]: Event queue of \"InstanceOfClassWithDigit\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[35], {Value} :: {any})
 			end
 		end
@@ -12540,6 +12620,9 @@ local Returns = table.freeze({
 				SerdesEvent = "Reference"
 				Events.Reliable[36](Value)
 			else
+				if #Queue.Reliable[36] > 256 then
+					warn("[Blink]: Event queue of \"Reference\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[36], {Value} :: {any})
 			end
 		end
@@ -12565,6 +12648,9 @@ local Returns = table.freeze({
 				SerdesEvent = "ReferenceArray"
 				Events.Reliable[37](Value)
 			else
+				if #Queue.Reliable[37] > 256 then
+					warn("[Blink]: Event queue of \"ReferenceArray\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[37], {Value} :: {any})
 			end
 		end
@@ -12590,6 +12676,9 @@ local Returns = table.freeze({
 				SerdesEvent = "ReferenceOptional"
 				Events.Reliable[38](Value)
 			else
+				if #Queue.Reliable[38] > 256 then
+					warn("[Blink]: Event queue of \"ReferenceOptional\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[38], {Value} :: {any})
 			end
 		end
@@ -12634,6 +12723,9 @@ local Returns = table.freeze({
 				SerdesEvent = "Tuple"
 				Events.Reliable[40](Value1, Value2, Value3, Value4, Value5, Value6)
 			else
+				if #Queue.Reliable[40] > 256 then
+					warn("[Blink]: Event queue of \"Tuple\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[40], {Value1, Value2, Value3, Value4, Value5, Value6} :: {any})
 			end
 		end
@@ -12698,6 +12790,9 @@ local Returns = table.freeze({
 					SerdesEvent = "InScopeEvent"
 					Events.Reliable[42](Value)
 				else
+					if #Queue.Reliable[42] > 256 then
+						warn("[Blink]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
+					end
 					table.insert(Queue.Reliable[42], {Value} :: {any})
 				end
 			end
@@ -12724,6 +12819,9 @@ local Returns = table.freeze({
 						SerdesEvent = "InAnotherScopeEvent"
 						Events.Reliable[43](Value)
 					else
+						if #Queue.Reliable[43] > 256 then
+							warn("[Blink]: Event queue of \"InAnotherScopeEvent\" exceeded 256, did you forget to implement a listener?")
+						end
 						table.insert(Queue.Reliable[43], {Value} :: {any})
 					end
 				end
@@ -12752,6 +12850,9 @@ local Returns = table.freeze({
 					SerdesEvent = "InScopeEvent"
 					Events.Reliable[44](Value)
 				else
+					if #Queue.Reliable[44] > 256 then
+						warn("[Blink]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
+					end
 					table.insert(Queue.Reliable[44], {Value} :: {any})
 				end
 			end
@@ -12779,6 +12880,9 @@ local Returns = table.freeze({
 					SerdesEvent = "Event"
 					Events.Reliable[45](Value1, Value2, Value3)
 				else
+					if #Queue.Reliable[45] > 256 then
+						warn("[Blink]: Event queue of \"Event\" exceeded 256, did you forget to implement a listener?")
+					end
 					table.insert(Queue.Reliable[45], {Value1, Value2, Value3} :: {any})
 				end
 			end
@@ -12815,6 +12919,9 @@ local Returns = table.freeze({
 				SerdesEvent = "NamedTuple"
 				Events.Reliable[47](chefId, dish, portions)
 			else
+				if #Queue.Reliable[47] > 256 then
+					warn("[Blink]: Event queue of \"NamedTuple\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[47], {chefId, dish, portions} :: {any})
 			end
 		end
@@ -12859,6 +12966,9 @@ local Returns = table.freeze({
 				SerdesEvent = "PartiallyNamedTuple"
 				Events.Reliable[49](Value1, named, Value3)
 			else
+				if #Queue.Reliable[49] > 256 then
+					warn("[Blink]: Event queue of \"PartiallyNamedTuple\" exceeded 256, did you forget to implement a listener?")
+				end
 				table.insert(Queue.Reliable[49], {Value1, named, Value3} :: {any})
 			end
 		end

@@ -11503,7 +11503,9 @@ local Returns = table.freeze({
 				SerdesEvent = "RateLimited"
 				Events.Reliable[0](Player, Value)
 			else
-				table.insert(Queue.Reliable[0], {Player, Value} :: {any})
+				if #Queue.Reliable[0] < 256 then
+					table.insert(Queue.Reliable[0], {Player, Value} :: {any})
+				end
 			end
 		end
 	},
@@ -12199,7 +12201,9 @@ local Returns = table.freeze({
 				SerdesEvent = "ClientEmptyEvent"
 				Events.Reliable[8](Player, Value)
 			else
-				table.insert(Queue.Reliable[8], {Player, Value} :: {any})
+				if #Queue.Reliable[8] < 256 then
+					table.insert(Queue.Reliable[8], {Player, Value} :: {any})
+				end
 			end
 		end
 	},
@@ -12717,7 +12721,9 @@ local Returns = table.freeze({
 			if Events.Reliable[19] ~= nil then
 				Spawn(Events.Reliable[19], Player, Value)
 			else
-				table.insert(Queue.Reliable[19], {Player, Value} :: {any})
+				if #Queue.Reliable[19] < 256 then
+					table.insert(Queue.Reliable[19], {Player, Value} :: {any})
+				end
 			end
 		end
 	},
@@ -13412,7 +13418,9 @@ local Returns = table.freeze({
 				SerdesEvent = "ReliableClient"
 				Events.Reliable[31](Player, Value)
 			else
-				table.insert(Queue.Reliable[31], {Player, Value} :: {any})
+				if #Queue.Reliable[31] < 256 then
+					table.insert(Queue.Reliable[31], {Player, Value} :: {any})
+				end
 			end
 		end
 	},
@@ -14205,7 +14213,9 @@ local Returns = table.freeze({
 				SerdesEvent = "UnknownInbound"
 				Events.Reliable[46](Player, Value)
 			else
-				table.insert(Queue.Reliable[46], {Player, Value} :: {any})
+				if #Queue.Reliable[46] < 256 then
+					table.insert(Queue.Reliable[46], {Player, Value} :: {any})
+				end
 			end
 		end
 	},
@@ -14409,7 +14419,9 @@ local Returns = table.freeze({
 				SerdesEvent = "RangedFromClient"
 				Events.Reliable[52](Player, Value)
 			else
-				table.insert(Queue.Reliable[52], {Player, Value} :: {any})
+				if #Queue.Reliable[52] < 256 then
+					table.insert(Queue.Reliable[52], {Player, Value} :: {any})
+				end
 			end
 		end
 	},
@@ -14453,7 +14465,9 @@ local Returns = table.freeze({
 				SerdesEvent = "RangedVectorFromClient"
 				Events.Reliable[53](Player, Value)
 			else
-				table.insert(Queue.Reliable[53], {Player, Value} :: {any})
+				if #Queue.Reliable[53] < 256 then
+					table.insert(Queue.Reliable[53], {Player, Value} :: {any})
+				end
 			end
 		end
 	},
@@ -14511,7 +14525,9 @@ local Returns = table.freeze({
 				SerdesEvent = "PlainFromClient"
 				Events.Reliable[55](Player, Value)
 			else
-				table.insert(Queue.Reliable[55], {Player, Value} :: {any})
+				if #Queue.Reliable[55] < 256 then
+					table.insert(Queue.Reliable[55], {Player, Value} :: {any})
+				end
 			end
 		end
 	},
@@ -14535,7 +14551,9 @@ local Returns = table.freeze({
 			if Events.Reliable[56] ~= nil then
 				Spawn(Events.Reliable[56], Player, Value)
 			else
-				table.insert(Queue.Reliable[56], {Player, Value} :: {any})
+				if #Queue.Reliable[56] < 256 then
+					table.insert(Queue.Reliable[56], {Player, Value} :: {any})
+				end
 			end
 		end
 	},
