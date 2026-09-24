@@ -465,7 +465,13 @@ local PlayersMap: {[Player]: BufferSave} = {}
 --> A flat array rather than a table per event because a player who fires nothing still pays for the
 --> allocation, and this is on the path of every inbound packet.
 local RateBuckets: {[Player]: {number}} = {}
-local RateHandler: ((Player: Player, Event: string, Refused: number) -> ())? = nil
+local RateHandler: ((Player: Player, Event: string?, Refused: number) -> ())? = nil
+
+--> THE INBOUND BUDGET. Bytes a player's packets may cost the server, refilled every second, charged
+--> before a packet is decoded: tokens left, refill clock, report clock, refusals since that report.
+--> Every other limit is per packet or per event, and a client that sends many packets each frame
+--> passed all of them while the server decoded every one.
+local InboundBudgets: {[Player]: {number}} = {}
 
 --> INVOCATION STATE FOR FUNCTIONS THE SERVER CALLS, kept per player rather than in the single bitset
 --> Base.luau gives a client. Three separate reasons, and the second is the one that matters.
@@ -555,6 +561,7 @@ end
 Players.PlayerRemoving:Connect(function(Player)
     PlayersMap[Player] = nil
     RateBuckets[Player] = nil
+    InboundBudgets[Player] = nil
 
     --> Every call outstanding to this player is now unanswerable. Failing them here rather than
     --> leaving them to time out matters because the thread on the other end is game code holding a
@@ -573,10 +580,11 @@ Players.PlayerRemoving:Connect(function(Player)
 end)
 
 --> Installs the callback told about refused events: at most once per player per event per second,
---> with `Refused` the number of refusals that report stands for. Nothing is kicked automatically: a
---> false positive under server lag would eject a legitimate player, and whether that is the right
+--> with `Refused` the number of refusals that report stands for. `Event` is nil when what was refused
+--> was whole packets over the inbound budget rather than one event. Nothing is kicked automatically:
+--> a false positive under server lag would eject a legitimate player, and whether that is the right
 --> response is a decision only the game can make.
-local function SetRateLimitHandler(Handler: ((Player: Player, Event: string, Refused: number) -> ())?)
+local function SetRateLimitHandler(Handler: ((Player: Player, Event: string?, Refused: number) -> ())?)
     RateHandler = Handler
 end
 
@@ -600,12 +608,62 @@ local function ReportDecodeFailure(Player: Player, Event: string?, Failure: unkn
     end
 end
 
+--> Charges a packet against its sender's inbound budget, or reports and refuses it.
+-->
+--> Called from the connection before the packet is decoded, so a refusal costs the server a table
+--> lookup rather than a decode. The burst is a whole second of budget because the clock here is the
+--> server's: after a hitch Roblox delivers the queued packets together, and a refused reliable packet
+--> takes every event in it along. Reported on the same once-a-second schedule as RateAccept.
+local function InboundAccept(Player: Player, Cost: number, Rate: number, Burst: number): boolean
+    if Player.Parent == nil then
+        InboundBudgets[Player] = nil
+        return false
+    end
+
+    local Now = os.clock()
+    local Budget = InboundBudgets[Player]
+    if not Budget then
+        --> The report clock starts at minus infinity so the first refusal is always reported.
+        Budget = {Burst, Now, -math.huge, 0}
+        InboundBudgets[Player] = Budget
+    end
+
+    local Tokens = math.min(Burst, Budget[1] + ((Now - Budget[2]) * Rate))
+    Budget[2] = Now
+
+    if Tokens >= Cost then
+        Budget[1] = Tokens - Cost
+        return true
+    end
+
+    Budget[1] = Tokens
+    local Refused = Budget[4] + 1
+    if (Now - Budget[3]) < 1 then
+        Budget[4] = Refused
+        return false
+    end
+
+    Budget[3] = Now
+    Budget[4] = 0
+    warn(`[Blink]: Dropped packets from {Player.Name} over the inbound budget of {Rate} bytes a second, {Refused} refused.`)
+
+    local Handler = RateHandler
+    if Handler then
+        --> Spawned: this runs in the remote's connection, outside any pcall, and a throwing handler
+        --> would take the connection's thread with it.
+        Spawn(Handler, Player, nil, Refused)
+    end
+
+    return false
+end
+
 --> Refills lazily and spends one token, or reports and refuses.
 --> 
 --> Called after an event has been DESERIALIZED, never before: payloads are variable length, so an
 --> event cannot be skipped without decoding it -- the cursor would be left mid-event and the rest of
 --> the packet would decode as garbage. So this bounds listener dispatch and the game logic behind
---> it, while MaxEventsPerPacket bounds the decoding itself. The two limits are different axes.
+--> it, while MaxEventsPerPacket bounds the decoding of one packet and InboundAccept how many packets
+--> a second get decoded at all. The three limits are different axes.
 local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: number, Name: string): boolean
     --> Same PlayerRemoving race the buffer save guards against, handled the same way: the entry is
     --> dropped here rather than left for a sweep that does not exist.
@@ -703,6 +761,9 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		warn(`[Blink]: Dropped an oversized packet from {Player.Name}.`)
 		return
 	end
+	if not InboundAccept(Player, math.max(buffer.len(Buffer), 128), 65536, 65536) then
+		return
+	end
 	if #Instances > 256 then
 		warn(`[Blink]: Dropped a packet with too many instances from {Player.Name}.`)
 		return
@@ -745,6 +806,9 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 	if buffer.len(Buffer) > 8192 then
 		warn(`[Blink]: Dropped an oversized packet from {Player.Name}.`)
+		return
+	end
+	if not InboundAccept(Player, math.max(buffer.len(Buffer), 128), 65536, 65536) then
 		return
 	end
 	if #Instances > 256 then

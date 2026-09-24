@@ -65,11 +65,24 @@ Grammar.OPTIONS = {
 	MaxEventsPerPacket = "Number",
 	MaxInstancesPerPacket = "Number",
 	MaxUnreliableSize = "Number",
+	InboundBytesPerSecond = "Number",
+	InboundBurst = "Number",
 	DefaultRate = "Number",
 	RequireRates = "Boolean",
 	Predict = "Boolean",
 	InvocationTimeout = "Number",
 } :: { [string]: Lexer.Types }
+
+--> Defaults the option checks and the generator both need. Here because this module is data only,
+--> and the generator's Fragments cannot be required from the option parser.
+-->
+--> The inbound budget charges every packet at least `InboundFloor` bytes, so a flood of tiny packets
+--> is not free, and refills at `InboundRatePackets` full-size packets a second.
+Grammar.DEFAULTS = {
+	MaxPacketSize = 8192,
+	InboundFloor = 128,
+	InboundRatePackets = 8,
+}
 
 Grammar.EVENT = {
 	{ Key = "From", Type = "Identifier", Values = { "Client", "Server" } },
@@ -213,6 +226,11 @@ export type Options = {
 	MaxPacketSize: number?,
 	MaxEventsPerPacket: number?,
 	MaxInstancesPerPacket: number?,
+
+	--> The per-player inbound budget: bytes a client's packets may cost the server each second, and
+	--> the most it may bank. Checked before a packet is decoded, unlike the limits per packet.
+	InboundBytesPerSecond: number?,
+	InboundBurst: number?,
 
 	--> Largest payload an unreliable event may carry. Roblox drops an UnreliableRemoteEvent past
 	--> roughly 900 bytes, so this is a property of the platform rather than a preference -- it is
