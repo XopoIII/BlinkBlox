@@ -1,10 +1,13 @@
 --!strict
---- Fixed text spliced into generated modules, and the defaults for the inbound limits.
+--- Fixed text spliced into generated modules, the defaults for the inbound limits, and the inbound
+--- guard built from the options.
 ---
---- Constant data only: nothing here reads generator state, which is why it can sit apart from the
+--- Nothing here reads generator state, which is why it can sit apart from the
 --- emitter that uses it. Keeping it beside 1500 lines of code-emitting logic made the emitter harder
 --- to read for no benefit -- a reader looking for how an event is generated had to scroll past
 --- eighty lines of string tables first.
+
+local Grammar = require("../Modules/Grammar")
 
 local EVENTS_TYPE = "BLINK_EVENTS_SYMBOL"
 local DIRECTIVES = {
@@ -41,7 +44,7 @@ local EVENT_BODY = {
 -->
 --> Only the SERVER is guarded. The client trusts the server by construction, and capping the
 --> server's own traffic would silently drop legitimate replication.
-local DEFAULT_MAX_PACKET_SIZE = 8192
+local DEFAULT_MAX_PACKET_SIZE = Grammar.DEFAULTS.MaxPacketSize
 local DEFAULT_MAX_EVENTS_PER_PACKET = 64
 local DEFAULT_MAX_INSTANCES_PER_PACKET = 256
 
@@ -104,6 +107,42 @@ local IGNORED_TYPES_IN_SHARED = {
 	Event = true,
 	Function = true,
 }
+
+--- The guard at the top of each server connection, rejecting a hostile packet before any of it is
+--- parsed. It reads the arguments the remote handed over, so it runs before EVENT_BODY copies them
+--- into the module-level cursors.
+---
+--- The order is deliberate. The TYPES first: nothing stops a client from calling FireServer with
+--- arguments of its own choosing, `buffer.len` on a string throws from inside the connection itself
+--- where no listener's pcall can reach it, and the signature is a promise the client never made.
+--- Then the SIZE, so the budget is never charged more than MaxPacketSize and a burst of at least that
+--- always has room for one packet. Then the BUDGET (see InboundAccept in the server template), and
+--- only then anything that costs work in proportion to what was sent.
+local function InboundGuard(Options: Grammar.Options): { string }
+	local MaxPacketSize = Options.MaxPacketSize or DEFAULT_MAX_PACKET_SIZE
+	local MaxInstances = Options.MaxInstancesPerPacket or DEFAULT_MAX_INSTANCES_PER_PACKET
+	local Rate = Options.InboundBytesPerSecond or (MaxPacketSize * Grammar.DEFAULTS.InboundRatePackets)
+	local Burst = Options.InboundBurst or math.max(Rate, MaxPacketSize)
+	local Floor = Grammar.DEFAULTS.InboundFloor
+
+	return {
+		'if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then\n',
+		"\twarn(`[Blink]: Dropped a malformed packet from {Player.Name}.`)\n",
+		"\treturn\n",
+		"end\n",
+		`if buffer.len(Buffer) > {MaxPacketSize} then\n`,
+		"\twarn(`[Blink]: Dropped an oversized packet from {Player.Name}.`)\n",
+		"\treturn\n",
+		"end\n",
+		`if not InboundAccept(Player, math.max(buffer.len(Buffer), {Floor}), {Rate}, {Burst}) then\n`,
+		"\treturn\n",
+		"end\n",
+		`if #Instances > {MaxInstances} then\n`,
+		"\twarn(`[Blink]: Dropped a packet with too many instances from {Player.Name}.`)\n",
+		"\treturn\n",
+		"end\n",
+	}
+end
 
 --> CFrame<quat>. Spliced in only when a schema uses it; see `Prefabs.Required`.
 -->
@@ -174,6 +213,7 @@ local ROTATION_HELPERS = {
 return {
 	EVENTS_TYPE = EVENTS_TYPE,
 	ROTATION_HELPERS = ROTATION_HELPERS,
+	InboundGuard = InboundGuard,
 	DIRECTIVES = DIRECTIVES,
 	VERSION_HEADER = VERSION_HEADER,
 	EVENT_BODY = EVENT_BODY,

@@ -1,0 +1,3 @@
+-- expect E2003
+-- A burst smaller than the largest packet a client may send refuses that packet however long it waits.
+option InboundBurst = 1024

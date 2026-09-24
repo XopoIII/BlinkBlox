@@ -20,7 +20,7 @@ LIMIT=900
 
 # path:maximum-lines
 GRANDFATHERED="src/Parser.luau:1768
-src/Generator/init.luau:1602
+src/Generator/init.luau:1568
 plugin/src/Editor/init.luau:935"
 
 if [ "$#" -eq 0 ]; then

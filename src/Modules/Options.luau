@@ -159,6 +159,17 @@ function Utility.Parse(Reader: Reader): Options
 		end
 	end
 
+	--> A burst below the largest packet a client may send refuses that packet every time, however
+	--> long the client waits: the bucket never holds enough to pay for it.
+	local Burst = Options.InboundBurst
+	local Smallest = math.max(Options.MaxPacketSize or Grammar.DEFAULTS.MaxPacketSize, Grammar.DEFAULTS.InboundFloor)
+	if Burst and Burst < Smallest then
+		local Given = Declared.InboundBurst
+		Error.new(Error.ParserUnknownOption, Reader.Source, `Invalid value for option "InboundBurst"`, Reader.File)
+			:Primary(Given[#Given].Key, `Expected at least {Smallest}, the largest packet a client may send`)
+			:Emit()
+	end
+
 	return Options
 end
 

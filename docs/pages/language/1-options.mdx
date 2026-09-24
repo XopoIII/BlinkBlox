@@ -112,6 +112,36 @@ option MaxInstancesPerPacket = 512
 Only inbound server traffic is checked. The client trusts the server by construction, and capping
 what the server sends would drop legitimate replication.
 
+## `InboundBytesPerSecond`, `InboundBurst`
+Defaults: `8 × MaxPacketSize` (65536) bytes a second, and a burst of one second of that
+
+Bound how many bytes a second each player's packets may cost the **server**, before any of them is
+decoded.
+
+The limits above are per packet. A client firing hundreds of small, well-formed packets a frame passed
+every one of them, and the server decoded them all. The budget is a token bucket per player, shared
+by the reliable and the unreliable remote: each packet costs its size in bytes, and never less than
+`128`, so a flood of tiny packets is not free. A packet that finds the bucket short is dropped whole
+and unread.
+
+```blink copy
+option InboundBytesPerSecond = 131072
+option InboundBurst = 131072
+```
+
+At the defaults that is eight full-size packets a second, or 512 small ones. `InboundBurst` must be at
+least `MaxPacketSize`, or the largest packet could never be afforded however long the client waited.
+The burst is a whole second because the clock is the server's: after a network hitch, Roblox delivers
+the packets that queued up together, and a refused reliable packet takes every event in it along.
+
+<Callout type="warning">
+    Every unreliable `Fire` is a packet of its own. A client that fires more than about seven
+    unreliable events a frame will reach the default budget; raise `InboundBytesPerSecond` for it.
+</Callout>
+
+Refusals are reported the way refused events are: a warning at most once per player per second, and
+a call to [`SetRateLimitHandler`](5-events#rate-burst)'s handler with `Event` set to `nil`.
+
 ## `MaxUnreliableSize`
 Default: `900` bytes
 
@@ -157,9 +187,10 @@ option RequireRates = true
     decision is yours, and `RequireRates` is how you make sure it gets made.
 </Callout>
 
-The packet limits above and this are different axes and neither replaces the other.
-`MaxEventsPerPacket` bounds the work one packet can cause; two hundred well-formed packets a second
-pass every one of those checks. The bucket bounds events per second, per player, per event.
+The packet limits, the inbound budget and this are different axes and none replaces the others.
+`MaxEventsPerPacket` bounds the work one packet can cause; the inbound budget bounds how many bytes of
+packets a second each player gets decoded at all; the event bucket bounds events per second, per
+player, per event, and so the game logic behind each listener.
 
 ## `Predict`
 Default: `false`

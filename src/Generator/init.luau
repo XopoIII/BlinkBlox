@@ -26,9 +26,7 @@ local RELIABLE_BODY = Fragments.RELIABLE_BODY
 local UNRELIABLE_BODY = Fragments.UNRELIABLE_BODY
 local IGNORED_TYPES_IN_SHARED = Fragments.IGNORED_TYPES_IN_SHARED
 
-local DEFAULT_MAX_PACKET_SIZE = Fragments.DEFAULT_MAX_PACKET_SIZE
 local DEFAULT_MAX_EVENTS_PER_PACKET = Fragments.DEFAULT_MAX_EVENTS_PER_PACKET
-local DEFAULT_MAX_INSTANCES_PER_PACKET = Fragments.DEFAULT_MAX_INSTANCES_PER_PACKET
 local DEFAULT_MAX_UNRELIABLE_SIZE = Fragments.DEFAULT_MAX_UNRELIABLE_SIZE
 local DEFAULT_INVOCATION_TIMEOUT = Fragments.DEFAULT_INVOCATION_TIMEOUT
 
@@ -1244,33 +1242,11 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	Reliables = Blocks.Connection(`Reliable.{Signal}`, Arguments)
 	Unreliables = Blocks.Connection(`Unreliable.{Signal}`, Arguments)
 
-	--> Reject a hostile packet before any of it is parsed. Both checks read the arguments the remote
-	--> handed us, so they must come before EVENT_BODY copies them into the module-level cursors.
+	--> Reject a hostile packet before any of it is parsed; see Fragments.InboundGuard.
 	if Context == "Server" then
-		local MaxPacketSize = Options.MaxPacketSize or DEFAULT_MAX_PACKET_SIZE
-		local MaxInstances = Options.MaxInstancesPerPacket or DEFAULT_MAX_INSTANCES_PER_PACKET
-
-		local function EmitInboundGuard(Channel: Blocks.Block)
-			--> Nothing stops a client from calling FireServer with arguments of its own choosing, and
-			--> the signature is a promise the client never made. `buffer.len` on a string throws from
-			--> inside the connection itself, where no listener's pcall can reach it, so the types have
-			--> to be established before any other guard reads them.
-			Channel:Line(`if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then`, 1)
-			Channel:Line(`\twarn(\`[Blink]: Dropped a malformed packet from \{Player.Name\}.\`)`, 1)
-			Channel:Line("\treturn", 1)
-			Channel:Line("end", 1)
-			Channel:Line(`if buffer.len(Buffer) > {MaxPacketSize} then`, 1)
-			Channel:Line(`\twarn(\`[Blink]: Dropped an oversized packet from \{Player.Name\}.\`)`, 1)
-			Channel:Line("\treturn", 1)
-			Channel:Line("end", 1)
-			Channel:Line(`if #Instances > {MaxInstances} then`, 1)
-			Channel:Line(`\twarn(\`[Blink]: Dropped a packet with too many instances from \{Player.Name\}.\`)`, 1)
-			Channel:Line("\treturn", 1)
-			Channel:Line("end", 1)
-		end
-
-		EmitInboundGuard(Reliables)
-		EmitInboundGuard(Unreliables)
+		local Guard = Fragments.InboundGuard(Options)
+		Reliables:Lines(Guard, 1)
+		Unreliables:Lines(Guard, 1)
 	end
 
 	Reliables:Lines(EVENT_BODY, 1)
