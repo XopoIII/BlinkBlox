@@ -125,3 +125,14 @@ RunClosure("Quaternion CFrames round-trip within their precision", function()
 		ErrorPrint(`Failed "Quaternion CFrames": the default CFrame encoding changed.`)
 	end
 end)
+
+RunClosure("An array of optionals keeps its holes where they were", function()
+	--> The reader inserted each element, and inserting nil does nothing: `{1, nil, 3}` arrived as
+	--> `{1, 3}`, every element after a hole one place early.
+	local Read = Server.OptionalHoles.Read(Server.OptionalHoles.Write({ 1, nil, 3 } :: any)) :: { number? }
+	if Read[1] ~= 1 or Read[2] ~= nil or Read[3] ~= 3 then
+		ErrorPrint(
+			`Failed "Optional holes": read back \{{tostring(Read[1])}, {tostring(Read[2])}, {tostring(Read[3])}\}, expected \{1, nil, 3\}.`
+		)
+	end
+end)

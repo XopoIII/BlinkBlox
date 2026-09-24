@@ -503,13 +503,13 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 	Value.Nested.Array = table.create(Length)
 		-- Read BLOCK: 1 bytes
 	local ARRAY_START_1 = Read(1 * Length)
-	for Index = 1, Length do
+	for Slot_1 = 1, Length do
 		-- Item_1: Array
 		-- Read 1
 		local OPERATION_OFFSET_0 = ARRAY_START_1
 		ARRAY_START_1 += 1
 		local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		table.insert(Value.Nested.Array, Item_1)
+		Value.Nested.Array[Slot_1] = Item_1
 	end
 	-- END ARRAY
 	-- Value.Nested.OptionalArray: OptionalArray
@@ -520,13 +520,13 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		Value.Nested.OptionalArray = table.create(Length)
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_2 = Read(1 * Length)
-		for Index = 1, Length do
+		for Slot_2 = 1, Length do
 			-- Item_2: OptionalArray
 			-- Read 1
 			local OPERATION_OFFSET_0 = ARRAY_START_2
 			ARRAY_START_2 += 1
 			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			table.insert(Value.Nested.OptionalArray, Item_2)
+			Value.Nested.OptionalArray[Slot_2] = Item_2
 		end
 		-- END ARRAY
 	end
@@ -600,13 +600,13 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 	Value.Nested.Array = table.create(Length)
 		-- Read BLOCK: 1 bytes
 	local ARRAY_START_1 = Read(1 * Length)
-	for Index = 1, Length do
+	for Slot_1 = 1, Length do
 		-- Item_1: Array
 		-- Read 1
 		local OPERATION_OFFSET_0 = ARRAY_START_1
 		ARRAY_START_1 += 1
 		local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		table.insert(Value.Nested.Array, Item_1)
+		Value.Nested.Array[Slot_1] = Item_1
 	end
 	-- END ARRAY
 	-- Value.Nested.OptionalArray: OptionalArray
@@ -617,13 +617,13 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		Value.Nested.OptionalArray = table.create(Length)
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_2 = Read(1 * Length)
-		for Index = 1, Length do
+		for Slot_2 = 1, Length do
 			-- Item_2: OptionalArray
 			-- Read 1
 			local OPERATION_OFFSET_0 = ARRAY_START_2
 			ARRAY_START_2 += 1
 			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			table.insert(Value.Nested.OptionalArray, Item_2)
+			Value.Nested.OptionalArray[Slot_2] = Item_2
 		end
 		-- END ARRAY
 	end

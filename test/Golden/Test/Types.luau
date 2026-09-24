@@ -496,6 +496,7 @@ export type Issue33_Foo = ("One" | "Two")
 export type Issue33_Map<T> = {[("One" | "Two")]: number}
 export type Issue33_Enum<T> = { Tag: "Variant", field: ("One" | "Two") }
 export type Issue33_Struct<T> = { field: ("One" | "Two") }
+export type OptionalHoles = { number? }
 
 
 
@@ -620,7 +621,7 @@ return {
 				local Value = table.create(Length)
 					-- Read BLOCK: 3 bytes
 				local ARRAY_START_1 = Read(3 * Length)
-				for Index = 1, Length do
+				for Slot_1 = 1, Length do
 					-- Item_1: ColorArray
 					-- Read 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
@@ -632,7 +633,7 @@ return {
 					local OPERATION_OFFSET_2 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					local Item_1 = Color3.fromRGB(buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0), buffer.readu8(RecieveBuffer, OPERATION_OFFSET_1), buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2))
-					table.insert(Value, Item_1)
+					Value[Slot_1] = Item_1
 				end
 				-- END ARRAY
 				return Value
@@ -1795,7 +1796,7 @@ return {
 				local Value = table.create(Length)
 					-- Read BLOCK: 19 bytes
 				local ARRAY_START_1 = Read(19 * Length)
-				for Index = 1, Length do
+				for Slot_1 = 1, Length do
 					-- Item_1: QuatCFrames
 					-- Read 4
 					local OPERATION_OFFSET_0 = ARRAY_START_1
@@ -1826,7 +1827,7 @@ return {
 					ARRAY_START_1 += 2
 					local QC = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_6)
 					local Item_1 = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
-					table.insert(Value, Item_1)
+					Value[Slot_1] = Item_1
 				end
 				-- END ARRAY
 				return Value
@@ -1919,7 +1920,7 @@ return {
 				local Value = table.create(Length)
 					-- Read BLOCK: 2 bytes
 				local ARRAY_START_1 = Read(2 * Length)
-				for Index = 1, Length do
+				for Slot_1 = 1, Length do
 					-- Item_1: MultiDimensionalArray
 					-- START ARRAY
 					-- Read 2
@@ -1932,7 +1933,7 @@ return {
 					local Item_1 = table.create(Length)
 						-- Read BLOCK: 2 bytes
 					local ARRAY_START_2 = Read(2 * Length)
-					for Index = 1, Length do
+					for Slot_2 = 1, Length do
 						-- Item_2: MultiDimensionalArray
 						-- START ARRAY
 						-- Read 2
@@ -1945,19 +1946,19 @@ return {
 						local Item_2 = table.create(Length)
 							-- Read BLOCK: 1 bytes
 						local ARRAY_START_3 = Read(1 * Length)
-						for Index = 1, Length do
+						for Slot_3 = 1, Length do
 							-- Item_3: MultiDimensionalArray
 							-- Read 1
 							local OPERATION_OFFSET_0 = ARRAY_START_3
 							ARRAY_START_3 += 1
 							local Item_3 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-							table.insert(Item_2, Item_3)
+							Item_2[Slot_3] = Item_3
 						end
 						-- END ARRAY
-						table.insert(Item_1, Item_2)
+						Item_1[Slot_2] = Item_2
 					end
 					-- END ARRAY
-					table.insert(Value, Item_1)
+					Value[Slot_1] = Item_1
 				end
 				-- END ARRAY
 				return Value
@@ -2189,13 +2190,13 @@ return {
 				local Value = table.create(Length)
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
-				for Index = 1, Length do
+				for Slot_1 = 1, Length do
 					-- Item_1: SizeFixedArray
 					-- Read 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					table.insert(Value, Item_1)
+					Value[Slot_1] = Item_1
 				end
 				-- END ARRAY
 				return Value
@@ -2258,13 +2259,13 @@ return {
 				local Value = table.create(Length)
 					-- Read BLOCK: 2 bytes
 				local ARRAY_START_1 = Read(2 * Length)
-				for Index = 1, Length do
+				for Slot_1 = 1, Length do
 					-- Item_1: SizeBoundedArray
 					-- Read 2
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 2
 					local Item_1 = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
-					table.insert(Value, Item_1)
+					Value[Slot_1] = Item_1
 				end
 				-- END ARRAY
 				return Value
@@ -2681,13 +2682,13 @@ return {
 				local Value = table.create(Length)
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
-				for Index = 1, Length do
+				for Slot_1 = 1, Length do
 					-- Item_1: OffsetArray
 					-- Read 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					table.insert(Value, Item_1)
+					Value[Slot_1] = Item_1
 				end
 				-- END ARRAY
 				return Value
@@ -3717,7 +3718,7 @@ return {
 				local Value = table.create(Length)
 					-- Read BLOCK: 2 bytes
 				local ARRAY_START_1 = Read(2 * Length)
-				for Index = 1, Length do
+				for Slot_1 = 1, Length do
 					-- Item_1: PackedNested
 					-- START ARRAY
 					-- Read 2
@@ -3739,7 +3740,7 @@ return {
 						end
 					end
 					-- END ARRAY
-					table.insert(Value, Item_1)
+					Value[Slot_1] = Item_1
 				end
 				-- END ARRAY
 				return Value
@@ -4156,7 +4157,7 @@ return {
 				local Value = table.create(Length)
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
-				for Index = 1, Length do
+				for Slot_1 = 1, Length do
 					-- Item_1: PackedOptional
 					local Item_1
 					-- Read 1
@@ -4170,7 +4171,7 @@ return {
 						local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 						Item_1 = bit32.btest(BITFIELD_0, 0x01)
 					end
-					table.insert(Value, Item_1)
+					Value[Slot_1] = Item_1
 				end
 				-- END ARRAY
 				return Value
@@ -4519,6 +4520,85 @@ return {
 	ExampleScope = {
 	},
 	Issue33 = {
+	},
+	OptionalHoles = {
+		Read = function(Buffer: buffer): (OptionalHoles)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (OptionalHoles)
+				-- Value: OptionalHoles
+				-- START ARRAY
+				local Length = 3
+				local Value = table.create(Length)
+					-- Read BLOCK: 1 bytes
+				local ARRAY_START_1 = Read(1 * Length)
+				for Slot_1 = 1, Length do
+					-- Item_1: OptionalHoles
+					local Item_1
+					-- Read 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					local BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+					if bit32.btest(BITFIELD_0, 0x01) == true then
+						-- Read BLOCK: 1 bytes
+						local BLOCK_START = Read(1)
+						-- Item_1: OptionalHoles
+						Item_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					end
+					Value[Slot_1] = Item_1
+				end
+				-- END ARRAY
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end,
+		Write = function(Value: OptionalHoles): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Value: OptionalHoles
+				-- START ARRAY
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_1 = Allocate(1 * 3)
+				for Index = 1, 3 do
+					local Item_1 = Value[Index]
+					-- Item_1: OptionalHoles
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					local BITFIELD_0 = 0
+					if Item_1 ~= nil then BITFIELD_0 += 0x01 end
+					if Item_1 ~= nil then
+						-- Allocate BLOCK: 1 bytes
+						local BLOCK_START = Allocate(1)
+						-- Item_1: OptionalHoles
+						if typeof(Item_1) ~= "number" then
+							error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+						end
+						buffer.writeu8(SendBuffer, BLOCK_START + 0, Item_1)
+					end
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, BITFIELD_0)
+				end
+				-- END ARRAY
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
 	},
 
 }

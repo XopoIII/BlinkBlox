@@ -897,3 +897,7 @@ event OrderedToClient {
     Call: SingleSync,
     Data: u8
 }
+
+--> An array of optional elements with a hole in it. The reader inserted each element, and inserting a
+--> nil does nothing, so every element after the hole arrived one place early.
+export type OptionalHoles = u8?[3]
