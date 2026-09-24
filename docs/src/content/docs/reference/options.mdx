@@ -1,0 +1,55 @@
+---
+title: Options
+description: Every option a schema accepts, with its value, its default and what it does, in one table.
+---
+
+Options go at the top of a schema, before any declaration, as `option Name = Value`. Each may be set
+once, or once per [profile](/BlinkBlox/language/profiles/). The [Options](/BlinkBlox/language/options/)
+page explains each one in full.
+
+| Option | Value | Default | What it does |
+|---|---|---|---|
+| [`Casing`](/BlinkBlox/language/options/#casing) | `Pascal`, `Camel` or `Snake` | `Pascal` | Casing of the generated methods: `FireAll`, `fireAll` or `fire_all`. |
+| [`ServerOutput`](/BlinkBlox/language/options/#serveroutput-clientoutput-typesoutput) | path string | none; required by the CLI | Where the server module is written, relative to the schema. |
+| [`ClientOutput`](/BlinkBlox/language/options/#serveroutput-clientoutput-typesoutput) | path string | none; required by the CLI | Where the client module is written. |
+| [`TypesOutput`](/BlinkBlox/language/options/#serveroutput-clientoutput-typesoutput) | path string | none | Where a shared module with the schema's types and exported `Read`/`Write` pairs is written. Not written when unset. |
+| [`Typescript`](/BlinkBlox/language/options/#typescript) | boolean | `false` | Also write a `.d.ts` beside the server and client modules. CLI only. |
+| [`UsePolling`](/BlinkBlox/language/options/#usepolling) | boolean | `false` | Give every event the polling API (`Iter`), as if each were `Call: Polling`. |
+| [`FutureLibrary`](/BlinkBlox/language/options/#futurelibrary-and-promiselibrary) | Luau path string | none | What `require` loads for `Yield: Future`. Required by any such function. |
+| [`PromiseLibrary`](/BlinkBlox/language/options/#futurelibrary-and-promiselibrary) | Luau path string | none | What `require` loads for `Yield: Promise`. Required by any such function. |
+| [`SyncValidation`](/BlinkBlox/language/options/#syncvalidation) | boolean | `true` | Warn when a Sync listener yielded, and discard the rest of the packet it held up. |
+| [`WriteValidations`](/BlinkBlox/language/options/#writevalidations) | boolean | `false` | Check types, ranges and Instance classes on send. Length bounds are checked on send regardless. |
+| [`ManualReplication`](/BlinkBlox/language/options/#manualreplication) | boolean | `false` | Do not flush reliable traffic on `Heartbeat`; call `StepReplication` yourself. |
+| [`RemoteScope`](/BlinkBlox/language/options/#remotescope) | string | none | Prefix for the remotes' names: `"PKG"` gives `PKG_BLINK_RELIABLE_REMOTE`. |
+| [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | whole number | `8192` | Largest inbound packet the server reads, in bytes. |
+| [`MaxEventsPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | whole number | `64` | Events the server decodes from one packet before dropping the rest. |
+| [`MaxInstancesPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | whole number | `256` | Instance and `unknown` values one inbound packet may carry. |
+| [`InboundBytesPerSecond`](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) | whole number | `8 * MaxPacketSize` (65536) | Bytes a second each player's packets may cost the server; a packet costs at least 128. |
+| [`InboundBurst`](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) | whole number, at least `MaxPacketSize` | the larger of `InboundBytesPerSecond` and `MaxPacketSize` (65536) | The most inbound budget a player may bank. |
+| [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) | whole number | `900` | Largest unreliable payload, checked at compile time and on send. |
+| [`DefaultRate`](/BlinkBlox/language/options/#defaultrate-requirerates) | whole number | none | Events per second per player for every inbound event and function without its own `Rate`. |
+| [`RequireRates`](/BlinkBlox/language/options/#defaultrate-requirerates) | boolean | `false` | Make an inbound event or function with no effective rate a compile error (`E3020`). |
+| [`Predict`](/BlinkBlox/language/options/#predict) | boolean | `false` | Add `Predict` to every event this side listens to (not polled ones): it delivers to local listeners without a remote. |
+| [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) | whole number | `10` | Seconds before an unanswered `Invoke` fails. |
+| `UseColon` | boolean | none | Deprecated and ignored; warns `W3017`. Delete it. |
+
+## Value syntax
+
+| Value | Written as | Example |
+|---|---|---|
+| boolean | `true` or `false` | `option Predict = true` |
+| path string | a quoted path, relative to the schema's folder unless absolute | `option ServerOutput = "../src/Network/Server.luau"` |
+| Luau path string | a quoted Luau expression, inserted into `require(...)` | `option PromiseLibrary = "ReplicatedStorage.Packages.Promise"` |
+| whole number | a positive integer | `option MaxPacketSize = 16384` |
+| casing | a bare word | `option Casing = Camel` |
+
+A number that is zero, negative or fractional is refused (`E2003`), as is an unknown option name or
+casing. An option after the first declaration is `E3016`; one set twice for the same build is `E3024`.
+
+## What the options do not change
+
+None of these options changes the bytes on the wire, so none of them is part of the
+[schema signature](/BlinkBlox/reference/wire-compatibility/). A server and a client built from the
+same declarations with different options still talk to each other. `RemoteScope` is the exception in
+practice: it changes the remotes' names, so a client with a different scope never finds the server's
+remotes at all.

@@ -9,18 +9,19 @@ import starlightLlmsTxt from 'starlight-llms-txt';
 const blinkGrammar = JSON.parse(readFileSync(new URL('./syntax/blink.tmLanguage.json', import.meta.url), 'utf8'));
 
 // Pages moved when the site left Nextra; these keep links in old posts and issues working.
+// Astro prefixes the base to the source path but not to the destination, so the destination carries it.
 const redirects = {
-	'/getting-started/1-installation': '/getting-started/installation',
-	'/getting-started/2-introduction': '/getting-started/quick-start',
-	'/getting-started/3-cli': '/getting-started/cli',
-	'/getting-started/4-plugin': '/getting-started/studio-plugin',
-	'/language/1-options': '/language/options',
-	'/language/2-scopes': '/language/scopes',
-	'/language/3-imports': '/language/imports',
-	'/language/4-types': '/language/types',
-	'/language/5-events': '/language/events',
-	'/language/6-functions': '/language/functions',
-	'/language/7-profiles': '/language/profiles',
+	'/getting-started/1-installation': '/BlinkBlox/getting-started/installation',
+	'/getting-started/2-introduction': '/BlinkBlox/getting-started/quick-start',
+	'/getting-started/3-cli': '/BlinkBlox/getting-started/cli',
+	'/getting-started/4-plugin': '/BlinkBlox/getting-started/studio-plugin',
+	'/language/1-options': '/BlinkBlox/language/options',
+	'/language/2-scopes': '/BlinkBlox/language/scopes',
+	'/language/3-imports': '/BlinkBlox/language/imports',
+	'/language/4-types': '/BlinkBlox/language/types',
+	'/language/5-events': '/BlinkBlox/language/events',
+	'/language/6-functions': '/BlinkBlox/language/functions',
+	'/language/7-profiles': '/BlinkBlox/language/profiles',
 };
 
 export default defineConfig({

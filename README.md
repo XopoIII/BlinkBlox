@@ -64,8 +64,8 @@ a hostile client buffer. This fork fixes them and continues from `v0.18.8`. See
 ## Install
 
 ```sh
-rokit add XopoIII/BlinkBlox blinkblox   # CLI through Rokit
-pesde add xopoiii/blinkblox             # or through pesde
+rokit add XopoIII/BlinkBlox blinkblox             # CLI through Rokit
+pesde add xopoiii/blinkblox --dev --target lune   # or through pesde
 ```
 
 Binaries for every platform, and the Studio plugin (`blinkblox-plugin.rbxm`), are attached to each

@@ -1,0 +1,270 @@
+---
+// The side menu opened over the editor (the `Side` frame in plugin/src/Widget.rbxmx, driven by
+// plugin/src/init.server.luau): import and search at the top, the saved files in name order with
+// their Delete, Edit and Generate buttons, and the save and generate prompts at the bottom.
+// Goes in an Editor's `overlay` slot, which it dims the way the plugin's Overlay frame does.
+import Icon from './Icon.astro';
+
+interface Props {
+	files: string[];
+	search?: string;
+	/** `save` shows the name prompt; `generate` the destination prompt. */
+	mode?: 'browse' | 'save' | 'generate';
+	saveName?: string;
+	/** The destination's full name once one is selected, as the prompt prints it. */
+	selected?: string;
+}
+
+const { files, search = '', mode = 'browse', saveName = '', selected } = Astro.props;
+const sorted = [...files].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+---
+
+<div class="bbp-overlay"></div>
+<div class="bbp-side">
+	<div class="bbp-side-title">
+		<span class="bbp-square-button" title="Import"><Icon name="import" size={16} /></span>
+		<span class="bbp-textbox">
+			{search ? <span>{search}</span> : <span class="bbp-placeholder">Search</span>}
+		</span>
+	</div>
+
+	<div class="bbp-files">
+		{
+			sorted.map((name) => (
+				<div class="bbp-file">
+					<span class="bbp-file-title">{name}</span>
+					<span class="bbp-file-buttons">
+						<span class="bbp-square-button" title="Delete"><Icon name="delete" size={16} /></span>
+						<span class="bbp-square-button" title="Edit"><Icon name="edit" size={16} /></span>
+						<span class="bbp-square-button" title="Generate"><Icon name="generate" size={16} /></span>
+					</span>
+				</div>
+			))
+		}
+	</div>
+
+	<div class="bbp-side-bottom">
+		{
+			mode === 'generate' && (
+				<div class="bbp-generate">
+					<div class="bbp-hint">
+						{selected ? (
+							<>
+								<b>Selected</b>
+								<br />
+								{selected}
+							</>
+						) : (
+							'Select the location in which to generate the output scripts.'
+						)}
+					</div>
+					<div class="bbp-generate-buttons">
+						<span class="bbp-small-button">Cancel</span>
+						<span class:list={['bbp-small-button', { 'bbp-disabled': !selected }]}>Generate</span>
+					</div>
+				</div>
+			)
+		}
+		{
+			mode === 'save' && (
+				<span class="bbp-textbox">
+					{saveName ? <span>{saveName}</span> : <span class="bbp-placeholder">Name</span>}
+				</span>
+			)
+		}
+		<div class="bbp-bottom-buttons">
+			{mode === 'save' && <span class="bbp-wide-button">Cancel</span>}
+			<span class:list={['bbp-wide-button', { 'bbp-saving': mode === 'save' }]}>Save</span>
+		</div>
+	</div>
+
+	<span class="bbp-expand"><Icon name="menu" size={22} /></span>
+</div>
+
+<style is:global>
+	.bbp-overlay {
+		position: absolute;
+		inset: 0;
+		z-index: 2;
+		background: rgb(0 0 0 / 0.5);
+	}
+
+	.bbp-side {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		z-index: 3;
+		width: 250px;
+		max-width: 100%;
+		padding: 10px;
+		box-sizing: border-box;
+		background: #2d2d2d;
+		color: #ffffff;
+	}
+
+	.bbp-side::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 100%;
+		width: 8px;
+		background: linear-gradient(to right, rgb(0 0 0 / 0.3), transparent);
+	}
+
+	.bbp-side-title {
+		display: flex;
+		gap: 5px;
+		height: 22px;
+		padding-right: 30px;
+	}
+
+	.bbp-side-title .bbp-textbox {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.bbp-textbox {
+		display: flex;
+		align-items: center;
+		height: 22px;
+		padding: 0 5%;
+		box-sizing: border-box;
+		border-radius: 6px;
+		background: #232323;
+		box-shadow: 0 0 0 1px #191919;
+		font-size: 14px;
+		font-weight: 500;
+		white-space: nowrap;
+		overflow: hidden;
+	}
+
+	.bbp-placeholder {
+		color: #707070;
+	}
+
+	.bbp-square-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex: none;
+		width: 24px;
+		height: 24px;
+		border-radius: 6px;
+		background: #1e1e1e;
+		color: #ffffff;
+	}
+
+	.bbp-files {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		margin-top: 10px;
+	}
+
+	.bbp-file {
+		display: flex;
+		align-items: center;
+		height: 24px;
+	}
+
+	.bbp-file-title {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		font-size: 16px;
+		white-space: nowrap;
+	}
+
+	.bbp-file-buttons {
+		display: flex;
+		gap: 5px;
+	}
+
+	.bbp-side-bottom {
+		position: absolute;
+		left: 10px;
+		right: 10px;
+		bottom: 10px;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.bbp-bottom-buttons {
+		display: flex;
+		gap: 10px;
+	}
+
+	.bbp-wide-button {
+		flex: 1;
+		height: 22px;
+		line-height: 22px;
+		border-radius: 6px;
+		background: #1e1e1e;
+		font-size: 14px;
+		text-align: center;
+	}
+
+	.bbp-saving {
+		background: #006400;
+	}
+
+	.bbp-generate {
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		height: 72px;
+		padding: 8px;
+		box-sizing: border-box;
+		border-radius: 6px;
+		background: #232323;
+		box-shadow: 0 0 0 1px #191919;
+	}
+
+	.bbp-hint {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		height: 30px;
+		font-size: 14px;
+		line-height: 15px;
+		text-align: center;
+		overflow: hidden;
+	}
+
+	.bbp-hint br {
+		display: none;
+	}
+
+	.bbp-generate-buttons {
+		display: flex;
+		gap: 10px;
+		width: 90%;
+		margin: 0 auto;
+	}
+
+	.bbp-small-button {
+		flex: 1;
+		height: 18px;
+		line-height: 18px;
+		border-radius: 6px;
+		background: #323232;
+		font-size: 14px;
+		text-align: center;
+	}
+
+	.bbp-disabled {
+		color: rgb(255 255 255 / 0.5);
+	}
+
+	.bbp-side > .bbp-expand {
+		position: absolute;
+		top: 10px;
+		right: 10px;
+		width: 22px;
+		height: 22px;
+		color: #ffffff;
+	}
+</style>

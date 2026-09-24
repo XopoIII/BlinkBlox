@@ -1,0 +1,275 @@
+---
+title: Securing the server
+description: A checklist for pointing a BlinkBlox server at the open internet -- what the generated module already refuses, and the decisions that are left to you.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Every client can call `FireServer` with anything it likes, as often as it likes. The generated server
+module is written on that assumption: it should be safe to point at the open internet. Much of that
+is on by default and needs nothing from you. Some of it cannot be, because only the game knows how
+much traffic it means to receive -- and a limit set too low drops real players' events, which looks
+like lag rather than like a bug.
+
+This page is the checklist: what the server already does, the decisions you have to make, and what
+BlinkBlox does not protect you from.
+
+## What the server does without being asked
+
+Every packet a client sends goes through these checks, in this order. Each one is cheaper than the
+next, so a hostile packet is refused as early as possible.
+
+| Order | Check | On failure |
+|---|---|---|
+| 1 | The remote's arguments are a `buffer` and a table. | Dropped unread, warned. |
+| 2 | The packet is at most [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) bytes (8192). | Dropped unread, warned. |
+| 3 | The player's [inbound byte budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) can pay for it (65536 bytes a second, each packet costing at least 128). | Dropped unread, warned, rate-limit handler called with `Event = nil`. |
+| 4 | It carries at most [`MaxInstancesPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) instance references (256). | Dropped unread, warned. |
+| 5 | Decoding runs one event at a time, and stops when the player has left. | The rest of the packet is skipped. |
+| 6 | At most [`MaxEventsPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) events are decoded from one packet (64). | The rest of the packet is dropped, warned. |
+| 7 | Each event is decoded inside a `pcall`. An index that names no event, a truncated payload, a length or count that the packet cannot back, a value outside its range or an Instance of the wrong class all fail here. | The rest of the packet is dropped; your decode-error handler is called. |
+| 8 | The event's [rate bucket](/BlinkBlox/language/events/#rate-burst) has a token, if the event has a rate. | The event is dropped before any listener runs; the rate-limit handler is called. |
+| 9 | A reliable event with no listener is queued, up to 256. | Further events are dropped silently. |
+
+Some of what step 7 covers is worth knowing in detail:
+
+- **A length is checked before the read it authorises.** A string, buffer or array length prefix is
+  compared against its declared bound, and against the bytes still left in the packet, before
+  anything is read or allocated for it. A client cannot buy a 65535-slot `table.create` with two
+  bytes.
+- **Ranged floats refuse NaN.** Range checks are written so that NaN fails them rather than slipping
+  through both comparisons.
+- **A loop always has something to run out of.** An array or map whose elements cost no bytes and no
+  instances (`struct {}[]`) is refused at compile time (`E3021`), because nothing would stop its decode
+  loop.
+
+And outside the decode loop:
+
+- Both remotes are checked for the right class when the module loads, so an instance of the wrong
+  class planted under the remote's name is refused rather than used.
+- Every warning the server prints about a client's traffic, and every call it makes to your handlers
+  about it, happens at most once a second per player (per kind, and per event for decode failures and
+  rate limits). A client cannot use a stream of bad packets to fill your output or spawn your handler
+  hundreds of times a second.
+- A player who leaves has their buffers, rate buckets, budgets and outstanding invocations released
+  on `PlayerRemoving`.
+
+None of this needs an option. The limits it uses have defaults you can change, below.
+
+## The checklist
+
+<Steps>
+
+1. **Rate-limit every inbound event and function.**
+
+   Rate limiting is off unless you ask for it. Give each event or function the client sends a `Rate`
+   (events per second, per player) and optionally a `Burst` (how many may arrive at once; defaults to
+   `Rate` rounded up). Then set `option RequireRates`, so that a new event without one fails the build
+   instead of shipping unlimited.
+
+   ```blink title="Game.blink"
+   option RequireRates = true
+
+   event Chat {
+       From: Client,
+       Type: Reliable,
+       Call: SingleAsync,
+       Rate: 2,
+       Burst: 5,
+       Data: string(1..200)
+   }
+
+   event Aim {
+       From: Client,
+       Type: OrderedUnreliable,
+       Call: SingleSync,
+       Rate: 60,
+       Data: (Pitch: f32(-90..90), Yaw: f32(-180..180))
+   }
+
+   function BuyItem {
+       Yield: Coroutine,
+       Rate: 1,
+       Burst: 3,
+       Data: u16(1..500),
+       Return: boolean
+   }
+   ```
+
+   `option DefaultRate` supplies a rate to every inbound declaration that does not name its own, and
+   it satisfies `RequireRates`. Use it as a floor for a large schema, and still set a tighter `Rate` on
+   anything that costs the server real work -- a purchase, a datastore write, a raycast.
+
+   A rate on a `From: Server` event or function does nothing and warns (`W3020`): only inbound
+   traffic is limited. A `Burst` with no `Rate` behind it is an error (`E3020`).
+
+   The check runs after the event is decoded and before it is dispatched, so it protects your
+   listener and the game logic behind it. A refused function call is still answered, with a failure,
+   so the caller raises at once instead of waiting out the timeout. See
+   [`Rate`, `Burst`](/BlinkBlox/language/events/#rate-burst) and
+   [`DefaultRate`, `RequireRates`](/BlinkBlox/language/options/#defaultrate-requirerates).
+
+2. **Bound every variable-length field and every number the game relies on.**
+
+   A range is checked on the receiving side, before your listener sees the value. Write the range you
+   actually mean:
+
+   | Instead of | Write | Why |
+   |---|---|---|
+   | `string` | `string(1..200)` | An unbounded string may be up to 65535 bytes. |
+   | `u8[]` | `u8[..16]` | An unbounded array may hold up to 65535 elements. |
+   | `f32` | `f32(0..100)` | The range is checked, and a ranged float refuses NaN. |
+   | `vector` | `vector(0..1)` | A vector's range bounds its magnitude. |
+   | `Instance` | `Instance(BasePart)` | The class is checked with `IsA` on receipt. |
+   | `map { [string]: u8 }` | `struct { Key: string(1..32), Value: u8 }[..32]` | A map cannot be bounded: its count is always a `u16`. |
+
+   The bound also sizes the length prefix, so a tighter range is usually a smaller packet as well; see
+   [Bandwidth](/BlinkBlox/guides/bandwidth/). Lengths are checked on send too, whatever
+   `WriteValidations` says: a value longer than its bound makes `Fire` throw rather than put a corrupt
+   packet on the wire.
+
+   <Aside type="caution">
+   A range on a number does not make it smaller on the wire. `u32(0..10)` still costs four bytes; pick
+   the narrowest type that holds the range, and write the range as well.
+   </Aside>
+
+3. **Check the packet limits and the inbound budget against your real traffic.**
+
+   | Option | Default | Bounds |
+   |---|---|---|
+   | `MaxPacketSize` | `8192` | Bytes in one packet. |
+   | `MaxEventsPerPacket` | `64` | Events decoded from one packet. |
+   | `MaxInstancesPerPacket` | `256` | Instance and `unknown` values carried by one packet. |
+   | `InboundBytesPerSecond` | `8 * MaxPacketSize` (65536) | Bytes a second each player's packets may cost. |
+   | `InboundBurst` | the larger of the two above (65536) | The most budget a player may bank. |
+
+   A client's reliable events for one frame travel as one packet, so the per-packet limits are
+   per-frame limits for reliable traffic: a client that fires more than 64 reliable events in a frame
+   loses the rest of that frame's events. Every unreliable `Fire` is a packet of its own and costs at
+   least 128 bytes of budget, so at the default a client can send about 500 small unreliable packets
+   a second -- roughly seven a frame at 60 FPS, alongside its reliable traffic. Raise
+   `InboundBytesPerSecond` if your game genuinely sends more.
+
+   Whatever you allow a real client, you also allow an attacker. Raise a limit only as far as your
+   traffic needs. `InboundBurst` may not be below `MaxPacketSize` (`E2003`), or the largest packet could
+   never be afforded. See
+   [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket)
+   and [`InboundBytesPerSecond`](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst).
+
+4. **Install the two handlers.**
+
+   The server warns about refused traffic, once a second per player. To act on it -- log it, flag the
+   account, kick -- give it a handler. Nothing is kicked automatically: a false positive under server
+   lag would eject a legitimate player, and whether that is the right response is the game's call.
+
+   ```luau title="Security.server.luau"
+   local Net = require(ServerScriptService.Network.Server)
+
+   -- Event is nil when whole packets were refused over the inbound byte budget.
+   -- Refused counts the refusals this call stands for, since the last one.
+   Net.SetRateLimitHandler(function(Player: Player, Event: string?, Refused: number)
+       Analytics:Record(Player, "RateLimited", Event, Refused)
+   end)
+
+   -- Event is the event the packet claimed to carry, or nil if its index named none.
+   Net.SetDecodeErrorHandler(function(Player: Player, Event: string?, Failure: string)
+       Analytics:Record(Player, "DecodeFailure", Event, Failure)
+   end)
+   ```
+
+   Both handlers are called on a thread of their own, at most once a second per player (and per
+   event), so a handler that yields or throws does not disturb decoding. Without a decode-error handler
+   the server says nothing about packets that fail to decode, so that a client sending garbage every
+   frame cannot fill the output. See
+   [Packets that cannot be decoded](/BlinkBlox/language/events/#packets-that-cannot-be-decoded).
+
+5. **Keep Sync listeners from yielding.**
+
+   A `SingleSync` or `ManySync` listener runs on the decode thread. If it yields, the rest of the
+   packet it arrived in is stuck behind it; with
+   [`SyncValidation`](/BlinkBlox/language/options/#syncvalidation) on (the default), the next packet
+   notices, warns and discards what was left. Use `SingleAsync` or `ManyAsync` for any listener that
+   may yield -- a datastore call, a `task.wait`, a remote round trip.
+
+   An error thrown by a Sync listener is caught and raised on a thread of its own; it is not reported
+   as the sender's decode failure, and the rest of the packet is still delivered.
+
+6. **Keep debug remotes out of release builds.**
+
+   An admin command or a "give me money" test event left in a shipped schema is an entry point any
+   client can reach. Mark it with a [profile](/BlinkBlox/language/profiles/):
+
+   ```blink title="Game.blink"
+   @profile("dev")
+   event GiveCurrency {
+       From: Client,
+       Type: Reliable,
+       Call: SingleAsync,
+       Data: u32
+   }
+   ```
+
+   A build without a profile is `release`, so forgetting the flag leaves `GiveCurrency` out rather
+   than shipping it. A compiled declaration that refers to one marked `dev` is refused (`E3027`), so
+   an excluded type cannot leak into the build through a reference. Build client and server with the
+   same profile -- their schema signatures differ otherwise.
+
+7. **Know what a function call can cost you.**
+
+   Each side can have at most 32 invocations waiting for an answer at once -- per client, and per
+   player on the server. Past that, `Invoke` errors. An unanswered call fails after
+   [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) (10 seconds) and gives its
+   slot back; calls to a player who leaves fail at once. A reply is accepted only from the player the
+   call went to, and only for the function it was made to.
+
+   A [`From: Server`](/BlinkBlox/language/functions/#from) function asks a client a question. Its
+   answer is client data like any other: range-check what you can in the schema, validate the rest in
+   code, and do not hold a lock or a queue slot across the call.
+
+8. **Build both modules from the same schema and the same compiler.**
+
+   The client checks the server's [schema signature](/BlinkBlox/language/options/#schema-signatures)
+   when it loads and refuses to run against a different one. That turns a stale client -- one that
+   would decode event 7 as whatever event 7 used to be -- into an error at startup. See
+   [Wire compatibility](/BlinkBlox/reference/wire-compatibility/).
+
+</Steps>
+
+## Queues a client can fill
+
+Two queues on the server hold what a client sent before anything consumed it. Both are capped, so a
+client cannot grow server memory by sending an event the game never handles.
+
+| Queue | Cap | Past the cap |
+|---|---|---|
+| A reliable event with no listener connected yet | 256 events per event | Dropped without a warning. |
+| An invocation with no listener connected yet | 256 calls per function | Answered with a failure, so the caller raises. |
+| A [polled](/BlinkBlox/language/events/#iterating-an-event-polling) event nobody has iterated | 256 x `Players.MaxPlayers` rows per event | Dropped without a warning. |
+
+Unreliable events are never queued: one that arrives with no listener is dropped. On the client the
+listener queue warns past 256 instead of dropping, because there it usually means a listener
+somebody forgot.
+
+## What BlinkBlox does not protect you from
+
+BlinkBlox guarantees that what reaches your listener is **well-formed**: the declared types, within the
+declared ranges, at no more than the declared rate. It cannot know whether it is **legitimate**.
+
+- **Game logic.** A `BuyItem(42)` inside `u16(1..500)` is a valid packet whether or not the player can
+  afford item 42. A `Teleport` position inside `vector(0..5000)` is valid even if it is inside a wall.
+  Every value a client sends is a claim; check it against the server's own state.
+- **What a client already knows.** Everything the server sends a client is readable by that client,
+  and so is its copy of the generated module. The buffer encoding is compact, not encrypted. Do not
+  send what a player should not see.
+- **A modified client.** The client module is the attacker's to edit. The schema signature catches a
+  stale build, not a tampered one; the server's checks are the only ones that count.
+- **`unknown`.** An `unknown` value travels through Roblox's own serialisation and is not validated at
+  all -- it can be any type the remote can carry. Avoid it in anything the client sends.
+- **Instances.** `Instance(Class)` checks the class, not ownership: a client can name any instance it
+  can see, including another player's character.
+- **Traffic that is not BlinkBlox's.** Other remotes in your game, Roblox's own replication and
+  anything that happens before a packet reaches the generated handler are outside it.
+- **The server's own sends.** The client trusts the server, and nothing limits what the server sends.
+  With `WriteValidations` off (the default) the server checks lengths on send but not types or
+  ranges, so a bug in server code can still send a client a value outside its range -- which the
+  client then refuses.

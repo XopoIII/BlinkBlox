@@ -1,0 +1,48 @@
+---
+// The floating "Error" window the plugin opens when a file fails to generate
+// (plugin/src/Error.rbxmx): the compiler's diagnostic as it renders inside Roblox, from its first
+// `<font` tag on -- the plugin cuts off the script-position prefix `error()` puts in front of it.
+import PluginWindow from './PluginWindow.astro';
+import { toHtml } from './rich';
+
+interface Props {
+	/** The diagnostic as the compiler renders it inside Roblox (rich text). */
+	rendered: string;
+	label: string;
+	caption?: string;
+}
+
+const { rendered, label, caption } = Astro.props;
+const start = rendered.indexOf('<font');
+const text = toHtml(rendered.slice(start === -1 ? 0 : start)).replace(/\n+$/, '');
+---
+
+<PluginWindow title="Error" width={500} floating label={label} caption={caption}>
+	<div class="bbp-error-body"><pre class="bbp-error-text" set:html={text} /></div>
+</PluginWindow>
+
+<style is:global>
+	.bbp-error-body {
+		min-height: 240px;
+		box-sizing: border-box;
+		padding: 8px;
+		background: #282828;
+		overflow-x: auto;
+		scrollbar-color: #555 transparent;
+		scrollbar-width: thin;
+	}
+
+	.bbp-error-text {
+		margin: 0;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: #ffffff;
+		font-family: 'Roboto Mono', 'Source Code Pro', ui-monospace, Menlo, Consolas, monospace;
+		font-size: 16px;
+		line-height: 18px;
+		white-space: pre;
+		tab-size: 4;
+		overflow: visible;
+	}
+</style>

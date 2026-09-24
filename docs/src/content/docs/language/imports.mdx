@@ -1,0 +1,149 @@
+---
+title: Imports
+description: Split a schema across several .blink files, each imported as a scope.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+An import pulls the declarations of another `.blink` file into this one, inside a
+[scope](/BlinkBlox/language/scopes/). Use imports to keep one file per feature, or to share a set of
+types between schemas.
+
+## Importing a file
+
+Write `import` and the path of the file, in quotes. The imported file's declarations land in a
+scope named after the file:
+
+```blink title="shared/Inventory.blink"
+type ItemId = u16
+
+struct Item {
+    Id: ItemId,
+    Count: u8,
+}
+
+event ItemAdded {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: Item
+}
+```
+
+```blink title="net.blink" fragment
+import "./shared/Inventory"
+
+event Equip {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Rate: 5,
+    Data: Inventory.ItemId
+}
+```
+
+`Inventory.ItemId` works exactly as it would if `net.blink` had declared `scope Inventory { ... }`
+itself.
+
+**The path is relative to the file that writes the import**, not to the directory you run the
+compiler from. Absolute paths work too. As on the [command line](/BlinkBlox/getting-started/cli/#compiling),
+the extension is optional: the compiler tries the path as written, then with `.txt`, then with
+`.blink`.
+
+An import is a declaration, so it goes after the file's options, among its other declarations.
+
+## Naming the scope
+
+The scope takes the file's name without its extension. To choose another, add `as` and a name:
+
+```blink fragment
+import "./shared/Inventory" as Items
+
+struct Loadout {
+    Primary: Items.Item,
+}
+```
+
+The name after `as` is an identifier, written without quotes. `as "Items"` is refused.
+
+An import's scope name follows the same rules as any other declaration's: it must not collide with
+a name already in use. Importing two files that are both called `Types.blink`, from different
+directories, needs `as` on at least one of them.
+
+## Every import is its own copy
+
+An import is not deduplicated. Each `import` statement parses its file afresh into its own scope,
+and everything in that scope is compiled -- **events and functions included**. If `net.blink`
+imports `shared/Inventory.blink` under two names, or imports two files that each import it, the
+generated modules contain `ItemAdded` twice, as two separate events with their own ids and their own
+listeners.
+
+For types this costs little: two identical type aliases. For events it is almost never what you
+want. Keep events in files that are imported exactly once, and put what several files share in a
+file that holds only types.
+
+## Cyclic imports
+
+Two files that import each other -- directly, or through a chain -- are refused:
+
+```text
+[E3015] Error: Cyclic import
+    ╭─[./b:1:3]
+    │
+001 │ import "./a"
+    ┆        ──┬──
+    ┆          │
+    ┆          ╰── "./a" is already being imported, so this would never finish
+    │
+────╯
+```
+
+The diagnostic points at the import that closes the cycle. Importing the same file twice through
+different routes, as described above, is not a cycle, and is allowed.
+
+A path that does not resolve to a file is refused with `E3014`, "Unknown require".
+
+## Options in an imported file
+
+Options belong to the file you compile. An imported file may contain its own `option` lines --
+so that it can also be compiled on its own -- but they do not change the build that imports it:
+the output paths, limits and defaults all come from the entry file.
+
+<Aside type="caution" title="Imported files are checked against their own options">
+The compile-time checks that depend on options -- [`RequireRates`](/BlinkBlox/language/options/#defaultrate-requirerates)
+refusing an inbound event with no rate, and the unreliable size limit refusing an event that cannot
+fit -- run on each file with that file's options. An inbound event in an imported file is not
+refused under the entry file's `option RequireRates = true`. Until that changes, set
+`RequireRates` in every file you import as well.
+
+`DefaultRate` is not affected: the entry file's default does apply to events from imported files.
+</Aside>
+
+## In the Studio plugin
+
+The [Studio plugin](/BlinkBlox/getting-started/studio-plugin/) keeps each schema as a separate file
+with a name and no directory. An import there names another file saved in the plugin:
+
+```blink fragment
+import "Inventory"
+import "Inventory" as Items
+```
+
+A path with `./` or a directory in it does not resolve in the plugin. If a schema has to compile
+in both, keep the imported files next to it on disk and write their names without `./`:
+`import "Inventory"` means the sibling file `Inventory.blink` to the compiler, and the file saved
+as `Inventory` to the plugin.
+
+## In the generated modules
+
+Imports act as scopes, so the same rules apply to them: the imported file's events and functions
+sit in a nested table, and its types are exported with the scope's name as a prefix.
+
+```luau title="Server.luau"
+local Net = require(path.to.Server)
+
+Net.Inventory.ItemAdded.Fire(Player, { Id = 12, Count = 1 })
+
+local Id: Net.Inventory_ItemId = 12
+local Item: Net.Items_Item = { Id = 12, Count = 1 }
+```

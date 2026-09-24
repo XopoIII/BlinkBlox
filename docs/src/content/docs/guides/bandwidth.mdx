@@ -1,0 +1,250 @@
+---
+title: Bandwidth
+description: How BlinkBlox lays out bytes on the wire, and how to choose types, ranges and reliabilities that send fewer of them.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every byte a schema sends is decided by its types. This page explains how those bytes are laid out,
+with worked counts, so you can see what a change to the schema will cost before you make it.
+
+The counts here come from the compiler's own size analysis, which the test suite checks against the
+bytes the generated serialisers actually write.
+
+## How a packet is put together
+
+**Reliable traffic is batched.** Every reliable event and function call fired during a frame is
+written into one buffer per recipient -- one per player on the server, one on the client -- and the
+buffer is sent once, on `Heartbeat`. With [`ManualReplication`](/BlinkBlox/language/options/#manualreplication)
+you choose when that happens by calling `StepReplication` yourself. The flush keeps its buffer for the
+next frame rather than growing one again from 64 bytes.
+
+**Unreliable traffic is not.** Each unreliable `Fire` is written into a fresh buffer and sent at once,
+as a packet of its own.
+
+Inside a packet, each item carries a small header in front of its payload:
+
+| Item | Header |
+|---|---|
+| Reliable or `Unreliable` event | 1 byte: the event's index |
+| `OrderedUnreliable` event | 3 bytes: the index and a 2-byte sequence number |
+| Function call | 2 bytes: the index and the call's id |
+| Function reply | 3 bytes: the index, the call's id and a success flag; a failed call's reply is those 3 bytes alone |
+
+`Instance` and `unknown` values do not go into the buffer at all. They travel beside it, in the
+remote's second argument, and are serialised by Roblox. They cost no buffer bytes, but they are not
+free, and they count against [`MaxInstancesPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket).
+
+## Booleans and optionals share bytes
+
+A `boolean` is one bit, not one byte. So is the presence flag of an optional (`T?`). Every boolean and
+every presence flag in the same block of the payload is packed into a shared bitfield, eight to a
+byte. A struct is not a block of its own: its fields share the bitfield of whatever contains them.
+
+```blink title="Flags.blink"
+struct Stance {
+    Crouching: boolean,
+    Sprinting: boolean,
+    Aiming: boolean,
+    Target: u8?,
+    Weapon: u8?
+}
+```
+
+Three booleans and two presence flags are five bits, so `Stance` is one byte of flags plus whichever
+of the two `u8`s are present: **1 to 3 bytes**. Before 0.21.0 each of those five took a byte of its
+own.
+
+A new block starts where the generated code branches or loops, and bits do not cross into it:
+
+- each element of an array is a block, so booleans inside an array element share a byte per element;
+- an optional's payload is a block, so the optional costs one bit in its parent and its own bits
+  start fresh inside;
+- each variant of a tagged enum is a block;
+- a map's key and value share one block per entry.
+
+### Arrays of booleans
+
+A plain `boolean[]` is packed eight elements to a byte after its length, rather than one bit-byte per
+element:
+
+| Type | Bytes |
+|---|---|
+| `boolean[1000]` | 125 |
+| `boolean[..1000]` | 2 to 127 (a 2-byte length, then 1 byte per 8 elements) |
+| `boolean?[..1000]` | 2 to 2002 -- not packed, since each element carries a presence bit as well as its value |
+
+## Lengths are sized by their range
+
+A string, a buffer or an array carries its length in front of its contents. The length is written
+**relative to the declared minimum**, in the smallest unsigned integer that holds the span between
+the two bounds. An exact length needs no prefix at all, since the reader already knows it.
+
+| Type | Length prefix | Total bytes |
+|---|---|---|
+| `string` | 2 (the default ceiling is 65535) | 2 to 65537 |
+| `string(0..64)` | 1 | 1 to 65 |
+| `string(0..400)` | 2 | 2 to 402 |
+| `string(300..400)` | 1 (the span is 100) | 301 to 401 |
+| `string(36)` | none | 36 |
+| `u8[]` | 2 | 2 to 65537 |
+| `u8[..16]` | 1 | 1 to 17 |
+| `u8[4]` | none | 4 |
+| `map { [u8]: u8 }` | 2, always | 2 and up |
+
+So bounding a field does two things: it lets the receiver refuse a value outside the bound before
+reading it (see [Securing the server](/BlinkBlox/guides/securing-the-server/)), and it usually
+shaves a byte off every send. A bound above 65535 (`string(0..100000)`) takes a 4-byte prefix.
+
+A map's count is always a `u16` and a map cannot be bounded; a bounded array of key-value structs
+costs the same per entry and states its ceiling.
+
+## Pick the width, then the range
+
+A range on a number is a check, not an encoding: `u32(0..10)` still takes four bytes, and the
+receiver refuses anything outside `0..10`. Choose the narrowest type that holds every value you
+send, then add the range you mean.
+
+| Type | Bytes | Holds |
+|---|---|---|
+| `u8`, `i8` | 1 | 0 to 255, -128 to 127 |
+| `u16`, `i16` | 2 | 0 to 65535, -32768 to 32767 |
+| `u32`, `i32` | 4 | 0 to about 4.29 billion, about +-2.1 billion |
+| `f16` | 2 | about +-65504, with 11 significant bits |
+| `f32` | 4 | Luau's `Vector3` precision |
+| `f64` | 8 | a Luau number, exactly |
+| `enum { ... }` | 1 | up to 256 values |
+| `set { ... }` | 1, 2 or 4 per 32 flags | 1 byte up to 8 flags, 2 up to 16, 4 up to 32 |
+| `boolean` | 1 bit | |
+
+**`f16`** is half the size of `f32` and loses precision fast as the magnitude grows. Every integer up
+to 2048 is exact; between 512 and 1024 the step is 0.5, between 1024 and 2048 it is 1, and near the
+top of its range it is 32. It suits directions, normalised values, small offsets and velocities. It
+does not suit world positions, where a character a thousand studs from the origin would move in
+half-stud steps.
+
+An `enum` costs one byte however long its names are. A state sent as `string` costs its length plus
+a prefix every time.
+
+### Vectors and CFrames
+
+A vector's component type sets its size, and a CFrame has one component type for its rotation (the
+first) and one for its position (the last):
+
+| Type | Bytes | Notes |
+|---|---|---|
+| `vector` | 12 | three `f32` |
+| `vector<f16>` | 6 | see `f16` above |
+| `vector<i16>` | 6 | whole numbers only, each within -32768..32767 |
+| `CFrame` | 24 | `f32` position, three `f32` Euler angles |
+| `CFrame<f16, f32>` | 18 | `f16` rotation, `f32` position |
+| `CFrame<quat>` | 19 | `f32` position, 7-byte quaternion rotation |
+| `CFrame<quat, f16>` | 13 | `f16` position, 7-byte quaternion rotation |
+
+`CFrame<quat>` encodes the rotation as the three smallest components of a unit quaternion, in 7 bytes
+instead of 12, to within about 0.002 degrees. It is opt-in because it is lossy: it suits characters,
+projectiles and cameras, not anything that compares rotations for equality. An integer rotation type
+keeps only whole radians and is almost never what you want. See
+[CFrames](/BlinkBlox/language/types/#cframes).
+
+## A worked example
+
+The same player state, written twice:
+
+```blink title="PlayerState.blink"
+struct Naive {
+    Health: f64,
+    Stamina: f64,
+    Crouching: boolean,
+    Sprinting: boolean,
+    Weapon: string?,
+    Pose: CFrame
+}
+
+struct Tuned {
+    Health: u8(0..100),
+    Stamina: u8(0..100),
+    Crouching: boolean,
+    Sprinting: boolean,
+    Weapon: enum { Pistol, Rifle, Knife }?,
+    Pose: CFrame<quat>
+}
+```
+
+| Field | `Naive` | `Tuned` |
+|---|---|---|
+| `Health`, `Stamina` | 16 | 2 |
+| `Crouching`, `Sprinting`, `Weapon`'s presence | 1 (three bits) | 1 (three bits) |
+| `Weapon` = `"Rifle"` | 7 (2-byte prefix and 5 characters) | 1 |
+| `Pose` | 24 | 19 |
+| **Total** | **48** | **23** |
+
+Sent as a reliable event, add one byte for the index. At twenty updates a second to thirty players,
+that difference is about 15 KB a second of server upload.
+
+## Unreliable events have a size limit
+
+Roblox drops an `UnreliableRemoteEvent` payload past roughly 900 bytes, silently and only under the
+conditions that produce a large packet. The compiler measures every `Unreliable` and
+`OrderedUnreliable` event, header included, against
+[`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) (900 by default):
+
+- an event whose **smallest** possible payload is over the limit is an error, `E3018`;
+- an event whose **largest** possible payload is over the limit is a warning, `W3019`, which names
+  the field that has no upper bound.
+
+At runtime every unreliable send is measured again, and one that has grown past the limit is dropped
+with a warning naming the event, rather than vanishing.
+
+```blink title="Snapshot.blink"
+event Snapshot {
+    From: Server,
+    Type: Unreliable,
+    Call: SingleSync,
+    Data: struct {
+        Tick: u32,
+        Players: struct { Id: u8, Position: vector<f16>, Crouching: boolean }[..64]
+    }
+}
+```
+
+`Snapshot` is at most 518 bytes: the index, 4 for `Tick`, a 1-byte count, and 64 players of 8 bytes
+each (`Id`, three `f16`, and a byte holding `Crouching`'s bit). Write `[]` instead of `[..64]` and it
+compiles with `W3019`, because the array could then hold 65535 players. A fixed payload that can
+never fit is refused:
+
+```blink error title="Refused"
+event Blob {
+    From: Server,
+    Type: Unreliable,
+    Call: SingleAsync,
+    Data: u8[1000]
+}
+```
+
+`OrderedUnreliable` costs two bytes more than `Unreliable` per packet, for the sequence number that
+lets the receiver discard a packet older than one it has already seen. Use it for state -- a
+position, an aim direction -- where a stale packet would make something visibly snap back, and plain
+`Unreliable` for independent signals.
+
+## Checklist
+
+- Bound every string, buffer and array. It is a smaller prefix and a check the server gets for free.
+- Use `u8`/`u16` and a range for counts, health, ammo and ids; `f64` only for values that need it.
+- Use an `enum` for anything that is one of a known set of names.
+- Group booleans and optionals in one struct; they share bytes.
+- Use `vector<f16>` for directions, `CFrame<quat>` for poses that do not need to be exact.
+- Keep unreliable payloads bounded well under 900 bytes.
+- Prefer one event with a struct over several events fired together: each event costs an index byte.
+
+## Benchmarks
+
+[`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md)
+compares frame rate and bandwidth against plain remotes, zap and ByteNet.
+
+<Aside type="caution">
+Those numbers were measured on upstream Blink v0.17.1, before the fork, and have not been re-run
+since. Every wire-format change on this page -- the shared bitfield, offset-encoded lengths, packed
+boolean arrays, `CFrame<quat>` -- came after them, as did the inbound checks, which cost the server
+some CPU per packet. Treat them as indicative of the approach, not as a measurement of this compiler.
+</Aside>

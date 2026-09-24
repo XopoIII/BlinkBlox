@@ -1,0 +1,171 @@
+---
+title: Quick start
+description: Write a schema with an event each way and a function, compile it, and call the generated modules from a server and a client script.
+---
+
+import { Aside, Steps, LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+This walk-through builds a small chat: the client asks the server to post a message, the server
+tells every client about it, and the client can ask the server how many coins it has. It uses the
+command-line compiler; in the [Studio plugin](/BlinkBlox/getting-started/studio-plugin/) the schema
+is the same and generating is a button.
+
+It assumes a Rojo-style project where `src/server` syncs to `ServerScriptService`, `src/client` to
+`StarterPlayerScripts` and `src/shared` to `ReplicatedStorage.Shared`. Adjust the paths to your
+own layout.
+
+<Steps>
+
+1. **Write the schema.**
+
+   Create `net.blink` at the root of your project:
+
+   ```blink title="net.blink"
+   -- Where the generated modules go, relative to this file.
+   option ServerOutput = "src/server/Net.luau"
+   option ClientOutput = "src/shared/Net.luau"
+
+   struct Message {
+       Author: string(1..20),
+       Text: string(1..200),
+   }
+
+   -- The server tells clients that someone spoke.
+   event MessagePosted {
+       From: Server,
+       Type: Reliable,
+       Call: SingleSync,
+       Data: Message
+   }
+
+   -- A client asks to say something: two a second, up to five at once.
+   event SendMessage {
+       From: Client,
+       Type: Reliable,
+       Call: SingleSync,
+       Rate: 2,
+       Burst: 5,
+       Data: string(1..200)
+   }
+
+   -- A client asks how many coins it has, at most once a second.
+   function GetCoins {
+       Yield: Coroutine,
+       Rate: 1,
+       Return: u32
+   }
+   ```
+
+   Each declaration says who sends it (`From`), how (`Type`, `Call`) and what it carries (`Data`).
+   The ranges are part of the contract: `string(1..200)` means the server refuses an empty string
+   or one longer than 200 bytes *before* your code sees it. `Rate` and `Burst` put a per-player
+   token bucket in front of `SendMessage` and `GetCoins`, so a client that spams them is refused
+   rather than served. [Events](/BlinkBlox/language/events/) and
+   [functions](/BlinkBlox/language/functions/) explain every field.
+
+2. **Compile it.**
+
+   From the same directory:
+
+   ```sh
+   blinkblox net
+   ```
+
+   ```text
+   BlinkBlox 0.29.0
+   Reading source from net.blink...
+   Parsing source into AST...
+   Generating output files...
+   Network files generated!
+   ```
+
+   You now have `src/server/Net.luau` and `src/shared/Net.luau`. Both are plain Luau with no
+   dependencies. Do not edit them by hand; change the schema and compile again, or run
+   `blinkblox net --watch` to recompile on every save.
+
+   If the schema has a mistake, the compiler points at it and writes nothing. The
+   [command-line page](/BlinkBlox/getting-started/cli/#diagnostics) shows what that looks like.
+
+3. **Use it on the server.**
+
+   Requiring the server module creates the remotes, so require it early -- from a script that runs
+   when the server starts, not lazily from the first handler that needs it.
+
+   ```luau title="src/server/Chat.server.luau"
+   local Net = require(script.Parent.Net)
+
+   local Coins: { [Player]: number } = {}
+
+   -- Text has already been checked against string(1..200) and against the rate limit.
+   Net.SendMessage.On(function(Player: Player, Text: string)
+       Net.MessagePosted.FireAll({
+           Author = Player.Name,
+           Text = Text,
+       })
+   end)
+
+   -- Whatever the listener returns is the caller's answer.
+   Net.GetCoins.On(function(Player: Player)
+       return Coins[Player] or 0
+   end)
+   ```
+
+   The server fires to one player with `Fire(Player, ...)`, to everyone with `FireAll(...)`, to a
+   list with `FireList(Players, ...)` and to everyone but one with `FireExcept(Player, ...)`.
+   Its listeners always receive the sending `Player` first.
+
+4. **Use it on the client.**
+
+   ```luau title="src/client/Chat.client.luau"
+   local ReplicatedStorage = game:GetService("ReplicatedStorage")
+   local Net = require(ReplicatedStorage.Shared.Net)
+
+   Net.MessagePosted.On(function(Message)
+       print(`{Message.Author}: {Message.Text}`)
+   end)
+
+   Net.SendMessage.Fire("Hello!")
+
+   -- Invoke yields until the server answers, and raises if the call fails.
+   local Ok, Coins = pcall(Net.GetCoins.Invoke)
+   if Ok then
+       print(`I have {Coins} coins`)
+   end
+   ```
+
+   `Invoke` raises when the call cannot be answered: the server refused it under the rate limit,
+   its listener threw, or no answer came within the
+   [invocation timeout](/BlinkBlox/language/options/#invocationtimeout). Wrap it in `pcall`
+   wherever a failure is possible, which on a network is everywhere.
+
+</Steps>
+
+## What you just got
+
+- **Batching.** Calls made during a frame are written into buffers and sent together once per
+  frame, on `Heartbeat`, instead of one remote call each.
+- **Types end to end.** Both modules export Luau types for your declarations (`Net.Message` here),
+  and every `Fire`, `On` and `Invoke` is typed from the schema.
+- **A server that checks its input.** Before `SendMessage`'s listener runs, the server has checked
+  the packet's size, the string's length and the player's rate. A client that sends garbage loses
+  its own packet and nobody else's.
+- **A shared signature.** The two modules carry a signature of the schema they were built from. A
+  client module built from a different schema than the server's raises when it is required,
+  instead of decoding one event as another -- so always ship both modules from the same compile.
+
+`On` for an event returns a function that disconnects the listener. `SendMessage` is `SingleSync`,
+which keeps one listener; a second `On` replaces the first and warns. Use `ManySync` or `ManyAsync`
+when several scripts need to listen.
+
+<CardGrid>
+	<LinkCard
+		title="The schema language"
+		description="Types, events, functions, scopes and imports, one page each."
+		href="/BlinkBlox/language/types/"
+	/>
+	<LinkCard
+		title="Securing the server"
+		description="Rate limits, inbound budgets and what to do about a client that misbehaves."
+		href="/BlinkBlox/guides/securing-the-server/"
+	/>
+</CardGrid>

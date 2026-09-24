@@ -1,0 +1,157 @@
+---
+title: Diagnostics
+description: Every error and warning code the compiler emits, what each means and what to do about it, and the messages the generated modules print at runtime.
+---
+
+The compiler reports problems as numbered diagnostics. An **error** (`E`) stops the compile and
+writes nothing; a **warning** (`W`) is printed and the modules are still generated. The same codes
+appear in the Studio plugin's editor as you type.
+
+Codes are banded by the stage that raises them -- `1xxx` reading characters, `2xxx` parsing, `3xxx`
+checking what was parsed -- and never renumbered, so the gaps are codes that were retired. A code is
+shown as `E` or `W` by severity; `3020` can be either.
+
+## Reading a diagnostic
+
+```blink title="Game.blink"
+event Snapshot {
+    From: Server,
+    Type: Unreliable,
+    Call: SingleSync,
+    Data: struct { Names: string[], Tick: u32 }
+}
+```
+
+```txt
+[W3019] Warning: Unreliable event "Snapshot" may exceed the packet limit
+    ╭─[Game.blink:1:7]
+    │
+001 │ event Snapshot {
+    ┆       ────┬────
+    ┆           │
+    ┆           ╰── Unbounded, and the limit is 900 bytes
+005 │     Data: struct { Names: string[], Tick: u32 }
+    ┆                           ───┬───
+    ┆                              │
+    ┆                              ╰── This has no upper bound
+    │ = note: Bound the variable-length fields -- `string(0..64)`, `u8[..16]` -- or send it reliably.
+    │
+────╯
+```
+
+The first line is the code, the severity and the message. Below it, each labelled line of the schema
+with its line number: the primary label under what is wrong, secondary labels under what explains
+it, and `note` lines with the fix. With `--compact` the CLI prints one line instead:
+
+```txt
+[W3019] [L001:L001] [Game.blink] Warning: Unreliable event "Snapshot" may exceed the packet limit
+```
+
+## Errors and warnings
+
+### Reading and parsing
+
+| Code | Message | What to do |
+|---|---|---|
+| `E1001` | Unexpected token | A character that begins no token of the language. Remove it, or check for a stray symbol or an unclosed string. |
+| `E2001` | Unexpected end of file | A declaration or list was left open. Close the brace, bracket or parenthesis. |
+| `E2002` | Unexpected token | The grammar expected something else here; the label says what. Often a missing comma, `:` or `=`. |
+| `E2003` | Unknown option "X" | An `option` name that does not exist, or an event or function field that does not. The label lists the valid ones. |
+| `E2003` | Invalid value for option "X" | A numeric option that is not a positive whole number, a `Casing` other than `Pascal`, `Camel` or `Snake`, or an `InboundBurst` below `MaxPacketSize`. |
+| `E2003` | Unknown option "X" (on a field's value) | A `From`, `Type`, `Call` or `Yield` value that is not one of the allowed words. |
+| `E2003` | Invalid value for "Rate" / "Burst" | `Rate` must be above zero; `Burst` must be at least 1, since each event spends a whole token. |
+| `E2005` | Field "X" is missing | An event needs `From`, `Type` and `Call`; a function needs `Yield`. Add the field. |
+
+### Declarations and types
+
+| Code | Message | What to do |
+|---|---|---|
+| `E3001` | Cannot cast "X" to "Y" | A reference to a declaration of the wrong kind, such as a `map` name where a struct is expected. |
+| `E3001` | Expected a struct to merge | `..Name` inside a struct must name a struct. |
+| `E3001` | A map cannot be keyed by ... | A struct, tagged enum, map, set, array or type pack decodes to a fresh table that nothing can look up. Key by a string, number, boolean or enum. |
+| `E3002` | Invalid optional type | A map's key or value may not be optional. |
+| `E3002` | Type cannot be optional | `unknown` and `quat` have no way to encode absence. |
+| `E3004` | Field "X" was already specified | An event or function field given twice. |
+| `E3004` | Duplicate field / flag / value / variant / element | A name repeated inside a struct, set, enum, tagged enum or type pack. |
+| `E3004` | Merged struct contains a duplicate field | Two merged structs, or a merge and a field, share a field name. |
+| `E3005` | Reserved identifier | `StepReplication`, `SetRateLimitHandler` and `SetDecodeErrorHandler` name module members. Rename the declaration. |
+| `E3005` | "X" cannot name a type pack element | A named element becomes a parameter: it must be a Luau identifier, not a keyword, and not a name the generated function already uses, such as `Player`. |
+| `E3005` | Enum tag used as field in variant | A tagged enum's tag field may not also be a field of a variant. |
+| `E3007` | Unknown reference | The name is not declared, or not declared yet: a declaration is in scope only after it closes. |
+| `E3008` | Type doesn't accept a range | Only numbers, `string`, `buffer`, `vector` and arrays take a range. |
+| `E3009` | Malformed range / Expected an integer / Range outside bounds | Fix the range: integer types and lengths need whole numbers, and the range must fit the type (an array holds at most 65535). |
+| `E3010` | Duplicate declaration | Two declarations, scopes or imports share a name in one scope, including across profiles. |
+| `E3012` | Unit enums don't support generics | Only structs, maps and tagged enums are generic. |
+| `E3013` | ... is not exportable / Generic types can't be exported / Types containing an Instance or unknown can't be exported | `export` applies to non-generic types whose values travel entirely in the buffer. |
+| `E3022` | Recursive type | A type cannot contain itself: references are inlined where they appear. |
+| `E3023` | Type doesn't accept components / Too many components / Unknown or invalid primitive used as component | Components go on `vector` (one) and `CFrame` (two), and must be number types or `quat`. |
+| `E3023` | `quat` is not a type on its own / Only a CFrame's rotation can be a quaternion / A CFrame has one rotation | `quat` is valid only as one component of a `CFrame`. |
+| `E3029` | Too many values / variants, or Empty enum | An enum travels as one byte: it holds 1 to 256 values or variants. |
+
+### Files, options and profiles
+
+| Code | Message | What to do |
+|---|---|---|
+| `E3014` | Unknown require | The imported file was not found. Check the path, relative to the importing file. |
+| `E3015` | Cyclic import | Two files import each other, directly or through others. Move what they share into a third file. |
+| `E3016` | Option set after start of file | Move every `option` above the first declaration. |
+| `W3017` | Option "UseColon" is deprecated | It has no effect. Delete the line. |
+| `W3017` | Field "Poll" is deprecated | Write `Call: Polling` and delete `Poll`. The `Call` value beside `Poll: true` was being ignored. |
+| `E3024` | Duplicate option | An option set twice where one build would apply both. Each profile may set it once; set without a profile, it may not also be set with one. |
+| `E3025` | Unknown attribute | The only attribute is `@profile`. |
+| `E3026` | Unknown profile | Profiles are `dev`, `debug`, `test` and `release`. |
+| `E3027` | Reference to an excluded declaration | A compiled declaration uses one this build's profile leaves out. Give both the same profile, or neither. |
+| `E3028` | Duplicate attribute / Attribute without a statement | A statement takes one `@profile`, and it must be followed by a declaration, import or option. |
+
+### Network safety
+
+| Code | Message | What to do |
+|---|---|---|
+| `E3018` | Unreliable event "X" cannot fit in one packet | Its smallest payload is over [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize). Send it `Reliable`, or shrink it. |
+| `W3019` | Unreliable event "X" may exceed the packet limit | Its largest payload is over the limit. Bound the field the secondary label names, or send it reliably. |
+| `W3020` | Rate limiting a Server event / function has no effect | Rates limit inbound traffic only. Remove `Rate` and `Burst`. |
+| `E3020` | "Burst" was set without a "Rate" | Add a `Rate` (or `option DefaultRate`), or remove the `Burst`. |
+| `E3020` | Inbound "X" has no rate limit | `option RequireRates` is set. Give it a `Rate`, or set `option DefaultRate`. |
+| `E3021` | Array / Map of a type that costs nothing to decode | An unbounded repetition of elements that read no bytes gives a hostile count nothing to run out of. Bound it (`[..16]`) or give the element a sent field. |
+
+## Errors without a code
+
+A few problems are reported as plain errors rather than diagnostics:
+
+| Message | Cause |
+|---|---|
+| `A client output path must be defined.` / `A server output path must be defined.` | The CLI needs `ClientOutput` and `ServerOutput`. |
+| `Cannot use yield type: "Future", without providing a path to the future library.` | A `Yield: Future` function needs `option FutureLibrary`; `Promise` likewise needs `PromiseLibrary`. |
+
+## Runtime messages
+
+The generated modules report problems through `warn` and `error`, prefixed `[BlinkBlox]`. Warnings the
+server prints about a client's traffic are limited to one a second per player and kind.
+
+| Message | Side | Meaning |
+|---|---|---|
+| `Dropped a malformed packet from X.` | server | The remote was called with arguments that are not a buffer and a table. |
+| `Dropped an oversized packet from X.` | server | Over `MaxPacketSize`. |
+| `Dropped a packet with too many instances from X.` | server | Over `MaxInstancesPerPacket`. |
+| `Dropped the rest of a packet from X, too many events.` | server | `MaxEventsPerPacket` events were decoded; the rest was dropped. |
+| `Dropped packets from X over the inbound budget of N bytes a second, N refused.` | server | The player's `InboundBytesPerSecond` budget ran out. |
+| `Rate limited event "E" from X, N refused.` | server | The event's `Rate` refused it. |
+| `Dropped a packet that could not be decoded, at event "E": ...` | client | A packet from the server failed to decode and no decode-error handler is installed. |
+| `Event queue of "E" exceeded 256, did you forget to implement a listener?` | client | Reliable events are queuing for a listener that never connected. |
+| `"E" already has a listener. ... keeps only the newest one, and the replaced listener's disconnect stops working.` | both | A second `On` on a `Single` event. |
+| `Event "E" yielded in a Sync call, so the rest of the packet it arrived in was discarded. ...` | both | A Sync listener yielded; see [`SyncValidation`](/BlinkBlox/language/options/#syncvalidation). |
+| `Dropped unreliable event "E", N bytes exceeds the N byte limit.` | both | An unreliable send grew past `MaxUnreliableSize` and was not sent. |
+| `"F" was never answered and has been failed after N seconds.` | both | An `Invoke` timed out; on the server the message names the player. |
+| `"F" encountered an error, ...` | both | A function's listener errored or returned a value that failed to serialise; the caller is failed. |
+| `There was an exception while processing "F".` | both | Raised by a `Coroutine` `Invoke` whose call failed. |
+| `32 calls are already awaiting a response, this call has been dropped.` | both | Raised by the 33rd outstanding `Invoke`. |
+| `Cannot invoke X, they are no longer in the game.` | server | Raised by `Invoke` on a player who has left. |
+| `This client was built from a different schema than the server (client ..., server ...).` | client | Raised on require; see [Wire compatibility](/BlinkBlox/reference/wire-compatibility/). |
+| `The server did not publish a schema signature. ...` | client | Raised on require: the server is a build from before signatures, or not BlinkBlox. |
+| `The reliable remote is not a RemoteEvent.` / `The unreliable remote is not an UnreliableRemoteEvent.` | both | Something else holds the remote's name in `ReplicatedStorage`. |
+| `An instance of BlinkBlox is already running with the remote scope "S". ...` | both | Two modules with the same `RemoteScope` were required in one Luau environment. |
+
+A decode failure passed to `SetDecodeErrorHandler` carries the error that stopped the decode: a range
+or length check (`Expected "Value" to be smaller than or equal to 100, got 250 instead.`), a length the
+packet cannot back, `Unknown event index.` for an index no event has, or
+`This channel receives no events.` for traffic on a channel this side never listens to.

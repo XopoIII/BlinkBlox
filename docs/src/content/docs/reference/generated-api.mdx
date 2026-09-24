@@ -1,0 +1,251 @@
+---
+title: Generated API
+description: Every function and field of the generated server, client and types modules, with signatures, casing variants, edit-mode stubs and limits.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A schema compiles to a server module, a client module and, with
+[`TypesOutput`](/BlinkBlox/language/options/#serveroutput-clientoutput-typesoutput), a shared types
+module. This page lists everything they expose. Names are shown in the default `Pascal`
+[casing](#casing).
+
+In the signatures below, `...Data` stands for an event's or function's `Data` as parameters: one
+parameter named `Value` for a single type, or one per element of a
+[type pack](/BlinkBlox/language/events/#type-packs), named as the schema names them or `Value1`,
+`Value2`... when it does not. `...Return` is a function's `Return` the same way. An event with no
+`Data` takes a single `nil` parameter.
+
+## Requiring the modules
+
+```luau title="Server.server.luau"
+local Net = require(ServerScriptService.Network.Server)
+```
+
+```luau title="Client.client.luau"
+local Net = require(ReplicatedStorage.Network.Client)
+```
+
+| Module | Requirable from | When it loads |
+|---|---|---|
+| Server | the server only; errors elsewhere | Creates the two remotes if they are missing, publishes the schema signature, and checks both remotes' classes. |
+| Client | a client only; errors elsewhere | Waits for the two remotes, checks their classes, then checks the [schema signature](/BlinkBlox/reference/wire-compatibility/) and errors on a mismatch. May yield. |
+| Types | anywhere | Nothing: it holds types and exported `Read`/`Write` pairs. |
+
+Requiring a second server or client module with the same [`RemoteScope`](/BlinkBlox/language/options/#remotescope)
+in the same Luau environment errors: `An instance of BlinkBlox is already running with the remote scope "BLINK"`.
+
+## Module members
+
+| Member | Server | Client |
+|---|---|---|
+| `StepReplication()` | Sends every player's queued reliable traffic. | Sends the client's queued reliable traffic. |
+| `SetRateLimitHandler(Handler?)` | `Handler: (Player: Player, Event: string?, Refused: number) -> ()` | Accepted and ignored: the client does not rate-limit. |
+| `SetDecodeErrorHandler(Handler?)` | `Handler: (Player: Player, Event: string?, Failure: string) -> ()` | `Handler: (Event: string?, Failure: string) -> ()` |
+
+- `StepReplication` is connected to `RunService.Heartbeat` unless
+  [`ManualReplication`](/BlinkBlox/language/options/#manualreplication) is set, in which case you call
+  it.
+- The rate-limit handler is called at most once a second per player and event, with `Refused` the
+  number of refusals since the last call. `Event` is `nil` when whole packets were refused over the
+  [inbound byte budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst).
+- The decode-error handler receives the event the packet claimed to carry, or `nil` if its index
+  named none. On the server it is called at most once a second per player, channel and event, and
+  without one the server is silent. On the client, without one, each failure is a warning.
+- Both handlers run on a thread of their own. Pass `nil` to remove one.
+
+## Events
+
+Which members an event has depends on the side and on its [`From`](/BlinkBlox/language/events/#from):
+
+| Event | Server module | Client module |
+|---|---|---|
+| `From: Server` | `Fire`, `FireAll`, `FireList`, `FireExcept` | `On` and `Predict`, or `Iter` when polled |
+| `From: Client` | `On` and `Predict`, or `Iter` when polled | `Fire` |
+
+`Predict` exists only with [`option Predict`](/BlinkBlox/language/options/#predict). An event is
+polled when it is declared `Call: Polling` or [`UsePolling`](/BlinkBlox/language/options/#usepolling)
+is set.
+
+### Sending
+
+| Member | Side | Signature | Sends to |
+|---|---|---|---|
+| `Fire` | server | `(Player: Player, ...Data) -> ()` | one player |
+| `FireAll` | server | `(...Data) -> ()` | every player |
+| `FireList` | server | `(List: {Player}, ...Data) -> ()` | each player in `List` |
+| `FireExcept` | server | `(Except: Player, ...Data) -> ()` | every player but `Except` |
+| `Fire` | client | `(...Data) -> ()` | the server |
+
+- A **reliable** send is written into the recipient's batch and sent on the next `StepReplication`.
+- An **unreliable** send is sent at once, as its own packet. One larger than
+  [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) is dropped with a warning.
+- A send throws if a value fails validation: always for a string, buffer or array longer than its
+  bound, and for types, ranges and classes with
+  [`WriteValidations`](/BlinkBlox/language/options/#writevalidations). Whatever the throw had already
+  written is taken back out, so the rest of the batch is unaffected.
+
+### Receiving
+
+| Member | Side | Signature |
+|---|---|---|
+| `On` | server | `(Listener: (Player: Player, ...Data) -> ()) -> (() -> ())` |
+| `On` | client | `(Listener: (...Data) -> ()) -> (() -> ())` |
+| `Predict` | server | `(Player: Player, ...Data) -> ()` |
+| `Predict` | client | `(...Data) -> ()` |
+| `Iter` | server | `() -> iterator of (Index: number, Player: Player, ...Data)` |
+| `Iter` | client | `() -> iterator of (Index: number, ...Data)` |
+| `Next` | both | Deprecated alias of `Iter`, the same function. |
+
+- `On` returns a function that disconnects the listener.
+- A `Single` event keeps one listener. A second `On` replaces the first and warns, and the first
+  listener's disconnect function stops doing anything. A `Many` event keeps them all.
+- A `Sync` listener is called on the decode thread and must not yield; an `Async` one runs on a thread
+  of its own. See [`Call`](/BlinkBlox/language/events/#call).
+- A **reliable** event that arrives with no listener is queued and replayed to the first listener
+  that connects. The server keeps at most 256 per event and drops the rest silently; the client warns
+  past 256. An **unreliable** event with no listener is dropped.
+- `Predict` delivers to this side's own listeners, exactly as an arriving event would be delivered,
+  queue included. It sends nothing.
+- `Iter` takes rows out of the event's queue as it goes, so each row is seen once:
+
+  ```luau
+  for Index, Player, Value in Net.Jump.Iter() do
+      -- ...
+  end
+  ```
+
+  On the server a polled queue holds at most 256 x `Players.MaxPlayers` rows; the rest are dropped.
+
+## Functions
+
+| Function | Server module | Client module |
+|---|---|---|
+| `From: Client` (the default) | `On` | `Invoke` |
+| `From: Server` | `Invoke` | `On` |
+
+| Member | Side | Signature |
+|---|---|---|
+| `Invoke` | client | `(...Data) -> (...Return)`, or a Future or Promise |
+| `Invoke` | server | `(Player: Player, ...Data) -> (...Return)`, or a Future or Promise |
+| `On` | server | `(Listener: (Player: Player, ...Data) -> (...Return)) -> ()` |
+| `On` | client | `(Listener: (...Data) -> (...Return)) -> ()` |
+
+What `Invoke` returns depends on the function's [`Yield`](/BlinkBlox/language/functions/#yield):
+
+| `Yield` | `Invoke` returns | On failure |
+|---|---|---|
+| `Coroutine` | the return values, after yielding | throws `There was an exception while processing "Name".` |
+| `Future` | `Future.Try(...)`: a future of `(Success, ...Return)` | the future's success is `false` |
+| `Promise` | `Promise.new(...)` resolving with the return values | the promise rejects; cancelling it releases the call |
+
+- A call fails when the listener errors, when its return value fails to serialise, when a rate limit
+  refuses it, when the call is not answered within
+  [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) (10 seconds), and, on the
+  server, when the player leaves or has already left.
+- At most **32** calls may be outstanding at once: per client, and per player on the server. The 33rd
+  `Invoke` errors at once.
+- `On` keeps one listener and returns nothing; a second `On` replaces the first. Calls that arrive
+  before it connects are queued and run when it does -- on the server up to 256, past which each is
+  answered with a failure.
+- The listener's return values are the reply. An error in the listener is warned on the listening
+  side and fails the caller.
+
+## Exported types
+
+A type declared with `export` gets a `Read`/`Write` pair in all three modules, under its name:
+
+| Member | Signature |
+|---|---|
+| `Name.Read` | `(Buffer: buffer) -> Name` |
+| `Name.Write` | `(Value: Name) -> buffer` |
+
+They serialise one value into a buffer of exactly its size and back, with the same encoding and the
+same receive-side checks the events use. They work in edit mode too. A type containing an `Instance`
+or `unknown` cannot be exported (`E3013`). See [Exports](/BlinkBlox/language/types/#exports).
+
+## Types and scopes
+
+Every named type in the schema is declared in each module as a Luau `export type`, so
+`Net.Name` works in a type annotation. A [scope](/BlinkBlox/language/scopes/) becomes a nested table:
+`Net.Combat.Hit.Fire(...)`. A type inside a scope is exported as `Scope_Name`, for example
+`Net.Combat_Damage`.
+
+## Casing
+
+[`option Casing`](/BlinkBlox/language/options/#casing) renames the generated members. The names of
+your own declarations are never changed.
+
+| `Pascal` (default) | `Camel` | `Snake` |
+|---|---|---|
+| `Fire` | `fire` | `fire` |
+| `FireAll` | `fireAll` | `fire_all` |
+| `FireList` | `fireList` | `fire_list` |
+| `FireExcept` | `fireExcept` | `fire_except` |
+| `On` | `on` | `on` |
+| `Iter` | `iter` | `iter` |
+| `Next` | `next` | `next` |
+| `Predict` | `predict` | `predict` |
+| `Invoke` | `invoke` | `invoke` |
+| `Read` | `read` | `read` |
+| `Write` | `write` | `write` |
+| `StepReplication` | `stepReplication` | `step_replication` |
+| `SetRateLimitHandler` | `setRateLimitHandler` | `set_rate_limit_handler` |
+| `SetDecodeErrorHandler` | `setDecodeErrorHandler` | `set_decode_error_handler` |
+
+## Edit mode
+
+When `RunService:IsRunning()` is false -- in edit mode, and in Roblox stories (Hoarcekat, UI Labs,
+Flipbook) -- no remotes exist, and both modules return stubs that keep the real API's shape:
+
+| Member | Stub |
+|---|---|
+| `Fire`, `FireAll`, `FireList`, `FireExcept` | does nothing |
+| `On` (events and functions) | does nothing and returns a disconnect function that does nothing |
+| `Iter`, `Next` | returns an iterator that ends at once, so a `for` loop runs zero times |
+| `Predict` | does nothing |
+| `Invoke` | does nothing and returns `nil` |
+| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler` | do nothing |
+| exported `Read`, `Write` | work normally |
+
+The stub is returned before the module checks which side it is on, so a story can require either
+module -- but not both. The `RemoteScope` guard above runs first, in edit mode too, and the server
+and client modules of one schema share a scope, so the second one required errors.
+
+<Aside type="caution">
+In edit mode `Invoke` returns `nil` even for a `Future` or `Promise` function, so code that chains on
+its result (`:andThen(...)`) errors in a story. Guard it with `RunService:IsRunning()`.
+</Aside>
+
+## Reserved names
+
+| Name | Why |
+|---|---|
+| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler` | Module members. A top-level declaration may not take these names (`E3005`). |
+| Luau keywords (`end`, `local`, ...) | A named type-pack element becomes a parameter, so it must be a Luau identifier (`E3005`). Struct fields, flags and tags may be keywords; they are quoted. |
+| `Player`, `Buffer`, `Load`, `Size`, `Success` and other names the generated functions use | Refused as type-pack element names, which would shadow them (`E3005`); the diagnostic names the clash. |
+| A tagged enum's tag | May not also be a field of one of its variants (`E3005`). |
+
+<Aside type="caution">
+The reserved check compares the `Pascal` spelling only. Under `Camel` or `Snake` casing, a top-level
+declaration named `stepReplication` or `step_replication` compiles and replaces the module member of
+that name. Avoid those names.
+</Aside>
+
+## Limits
+
+| Limit | Value |
+|---|---|
+| Outstanding invocations | 32 per client; 32 per player on the server |
+| Invocation timeout | `InvocationTimeout`, 10 seconds by default |
+| Queued reliable events with no listener | 256 per event (server drops, client warns) |
+| Queued calls with no listener | 256 per function on the server, then answered with a failure |
+| Polled queue on the server | 256 x `Players.MaxPlayers` rows per event |
+| Enum values or tagged-enum variants | 256 |
+| Unbounded string, buffer or array | 65535 bytes or elements |
+
+<Aside type="caution">
+Events are numbered with a one-byte index per channel: reliable events and functions share one
+channel, `Unreliable` and `OrderedUnreliable` events the other. Keep each channel to 256
+declarations. The compiler does not refuse more yet, and the 257th would be sent as the first.
+</Aside>

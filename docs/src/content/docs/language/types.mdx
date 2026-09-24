@@ -1,0 +1,700 @@
+---
+title: Types
+description: Every type the schema language supports, how to bound it, and exactly what it costs on the wire.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+This page covers every type BlinkBlox supports: what it becomes in Luau, how to constrain it, and how
+many bytes it costs to send. If anything is missing or wrong, please
+[open an issue](https://github.com/XopoIII/BlinkBlox/issues).
+
+## Size on the wire
+
+Every type below is written into a buffer, except `Instance` and `unknown`, which travel beside it in
+the remote's instance list. The compiler measures these sizes itself -- it is how it refuses an
+unreliable event that cannot fit in
+[`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize).
+
+| Type | Bytes |
+|---|---|
+| `u8`, `i8` | 1 |
+| `u16`, `i16`, `f16` | 2 |
+| `u32`, `i32`, `f32` | 4 |
+| `f64` | 8 |
+| `boolean` | 1 **bit**, [shared](#booleans-and-optionals-share-a-bitfield) with neighbouring booleans |
+| `T?` | 1 bit, plus `T` when present. `Instance?` costs nothing extra |
+| `string(N)`, `buffer(N)` | `N` -- an exact length has no prefix |
+| `string`, `buffer` | [length prefix](#lengths-are-offset-encoded) (1, 2 or 4) + the bytes |
+| `T[N]` | `N` elements -- no prefix |
+| `T[]`, `T[A..B]` | length prefix + each element |
+| `boolean[]` | length prefix + one byte per eight elements |
+| `map` | 2 (the entry count) + each key and value |
+| `set` | 1 for up to 8 flags, 2 for up to 16, 4 for up to 32; another group per further 32 |
+| `enum` | 1 |
+| tagged `enum` | 1 + the variant's fields |
+| `struct`, type pack | the sum of the fields |
+| `vector` | 3 components: 12 as `f32` (the default) |
+| `CFrame` | 3 position + 3 rotation components: 24 by default |
+| `CFrame<quat>` | 3 position components + 7: 19 by default |
+| `Color3` | 3 |
+| `BrickColor` | 2 |
+| `DateTime`, `DateTimeMillis` | 8 |
+| `Instance`, `unknown` | 0, and one slot in the instance list |
+
+Each event adds one byte for its id, and an `OrderedUnreliable` event two more for its sequence number.
+A function call adds the same id byte and one more naming the call; its answer carries both and a
+success flag.
+The [bandwidth guide](/BlinkBlox/guides/bandwidth/) covers how to spend fewer of them.
+
+### Booleans and optionals share a bitfield
+
+A `boolean`, and the presence flag of an optional (`T?`), cost one **bit**. Consecutive ones in the
+same block share a byte, eight to a byte: a struct with eight boolean fields costs one byte, and an
+event whose type pack is `(boolean, u8?, boolean)` spends one byte on its three bits, followed by the
+`u8` when it is present.
+
+A block here is one run of generated code. The fields of a struct share the block they sit in, as do
+the elements of a type pack. A new block begins inside each array element, each map entry, each
+tagged-enum variant and the payload of each optional, so bits never share a byte across those
+boundaries. That is why `boolean?` costs a bit and then a whole byte when it is present: the value
+sits in the optional's payload, not beside its flag. Arrays of plain booleans are the exception --
+they are [packed](#arrays-of-booleans) eight elements to a byte.
+
+### Lengths are offset-encoded
+
+A variable length -- of a string, a buffer or an array -- is sent as a prefix, in the smallest
+unsigned integer that holds the **span** of its range, and **relative to its minimum**:
+
+| Span (`max - min`) | Prefix |
+|---|---|
+| 0 (an exact length) | none |
+| up to 255 | 1 byte |
+| up to 65535 | 2 bytes |
+| more | 4 bytes |
+
+So `string(300..400)` spends one byte on its hundred possible lengths rather than the two that 400
+alone would need, and a length below the minimum cannot be written at all. An unbounded `string`,
+`buffer` or array is treated as `0..65535`: a 2-byte prefix, and a value longer than 65535 is
+refused on send. A map's entry count is always a 2-byte `u16`.
+
+A half-open length runs to the limit of the type. For an array that is 65535, but for a string or a
+buffer it is 4294967295, so `string(1..)` takes a 4-byte prefix where a bare `string` takes two. Give
+lengths an upper bound.
+
+On receipt, a length is checked against its range, and against the bytes left in the packet, before
+anything is read or allocated for it -- so a hostile length prefix buys neither.
+
+## Ranges
+Ranges can be used with [numbers](#numbers), [strings](#strings), [buffers](#buffers),
+[vectors](#vectors) and [arrays](#arrays) to limit the values they can represent.
+
+### Full Ranges
+A full range has both a minimum and a maximum: `0..100`.
+
+### Half Ranges
+A half range gives only one side: `0..` or `..100`. The open side is the limit of the type -- `255`
+for a `u8`, unbounded for a float.
+
+### Exact Ranges
+An exact range has a single value, such as `0` or `100`. On a length it means exactly that length.
+
+### Examples
+|Range|Min|Max|
+|-----|---|---|
+|`0..100`|`0`|`100`|
+|`0..`|`0`|the type's maximum|
+|`..100`|the type's minimum|`100`|
+|`0`|`0`|`0`|
+|`100`|`100`|`100`|
+
+A range must fit its type (`u8(0..300)` is refused), and a range on an integer, or on a length, must
+use whole numbers. Floats accept negative and fractional bounds: `f32(-0.5..0.5)`.
+
+The **receiving** side always checks a value against its range, and abandons the packet at that
+event if it fails; a ranged float refuses `NaN` too. The sending side checks only under
+[`WriteValidations`](/BlinkBlox/language/options/#writevalidations) -- except for lengths, where a
+value outside the range would corrupt the packet, so those are always checked.
+
+## Numbers
+BlinkBlox supports every number type the buffer library implements, plus a half-precision float.
+
+Number types start with a prefix -- `u`, `i` or `f` -- followed by the number of bits used to represent
+the number. The number of bits is also what it costs to send.
+
+### Unsigned Integers
+Whole numbers greater than or equal to zero.
+
+|Name|Size|Min|Max|
+|----|----|---|---|
+|`u8`|`1 byte`|`0`|`255`|
+|`u16`|`2 bytes`|`0`|`65,535`|
+|`u32`|`4 bytes`|`0`|`4,294,967,295`|
+
+### Signed Integers
+Whole numbers, positive or negative.
+
+|Name|Size|Min|Max|
+|----|----|---|---|
+|`i8`|`1 byte`|`-128`|`127`|
+|`i16`|`2 bytes`|`-32,768`|`32,767`|
+|`i32`|`4 bytes`|`-2,147,483,648`|`2,147,483,647`|
+
+<Aside type="caution">
+An integer type without a range does not check its value on send unless
+[`WriteValidations`](/BlinkBlox/language/options/#writevalidations) is on. A fraction is truncated
+towards zero, and a value outside the type wraps: `300` sent as a `u8` arrives as `44`, and `-1` as
+`255`. Give an integer a range when its limits matter -- the receiver then refuses anything outside it.
+</Aside>
+
+### Floating points
+Floating points represent numbers with a fractional part.
+
+The bit size of a float does not set a hard limit on its value so much as its precision. The table
+lists the largest integer each type represents exactly.
+
+|Name|Size|Exact integers up to|Largest value|
+|----|----|---|---|
+|`f16`|`2 bytes`|`2,048`|`65,504`|
+|`f32`|`4 bytes`|`16,777,216`|about `3.4e38`|
+|`f64`|`8 bytes`|`9,007,199,254,740,992`|about `1.8e308`|
+
+A range on a float may go past the exact-integer limit, and an open side of one, as in `f32(0..)`, is
+not bounded at all. A value past `65,504` sent as an `f16` arrives as infinity.
+
+<Aside>
+Luau stores every number as an `f64`, so `f64` is lossless and the smaller floats round.
+
+The `f16` type is not natively supported by the buffer library, which makes it slower to read and
+write than the other number types.
+</Aside>
+
+### Bounding Numbers
+
+Bound a number by placing [a range](#ranges) in parentheses after the type.
+
+```blink
+type Health = u8(0..100)
+type Damage = u8(..100)
+type Aim = f32(-1..1)
+type UserId = f64
+```
+
+## Strings
+Luau's text container, declared as `string`.
+
+### Bounding Strings
+Bound a string's length, in bytes, by placing [a range](#ranges) in parentheses after the type.
+
+```blink
+type UUID = string(36)
+type Username = string(3..20)
+```
+
+`string(36)` is exactly 36 bytes and sends no length at all. A bounded length takes the prefix
+[described above](#lengths-are-offset-encoded) -- one byte for `3..20` -- and an unbounded `string`
+takes two and refuses anything past 65535 bytes.
+
+<Aside type="caution">
+An exact length is checked on send only under
+[`WriteValidations`](/BlinkBlox/language/options/#writevalidations). Without it, a longer string is cut
+to the declared length and a shorter one fails to write.
+</Aside>
+
+## Booleans
+`true` or `false`, declared as `boolean`. A boolean costs one bit; see
+[the bitfield](#booleans-and-optionals-share-a-bitfield).
+
+```blink
+type Success = boolean
+```
+
+## Buffers
+Declared as `buffer`. A buffer lets you pass your own serialised data while still taking advantage of
+BlinkBlox's batching.
+
+### Bounding Buffers
+Bound a buffer's size, in bytes, by placing [a range](#ranges) in parentheses after the type. Sizes are
+sent like string lengths.
+
+```blink
+type BinaryBlob = buffer
+type Chunk = buffer(..800)
+```
+
+## Vectors
+A vector in 3D space, most often a position. Declared as `vector`, it is a `Vector3` in Luau.
+
+### Bounding Vectors
+Bound a vector's length (magnitude) by placing [a range](#ranges) in parentheses after the type. For
+example, a direction whose length is between `0` and `1`:
+
+```blink
+type Direction = vector(0..1)
+```
+
+A magnitude is never negative, so the range cannot be either.
+
+### Specifying Encoding
+Pass a [number type](#numbers) in angle brackets to choose how each of the three components is sent.
+The default is `f32`, 12 bytes; `vector<i16>` is 6.
+
+```blink
+type Position = vector
+type GridCell = vector<i16>
+type CompactOffset = vector<f16>
+```
+
+<Aside type="caution">
+Luau stores vectors as three `f32`s internally, so an encoding larger than `f32` (such as `f64`) adds
+bytes and no precision. An integer encoding truncates each component and wraps outside its range, as
+[integers do](#signed-integers).
+</Aside>
+
+## Optionals
+Make a type optional by appending `?` after the **entire type**:
+
+```blink
+type Username = string(3..20)?
+type MaybeTarget = Instance(Player)?
+```
+
+An absent value costs one bit; a present one costs that bit plus the value. An optional `Instance`
+costs nothing extra: its absence is read from the instance list itself.
+
+`unknown` cannot be optional -- it has no way to encode absence -- and neither can the key or the value
+of a [map](#maps).
+
+## Arrays
+A list of values of one type, written as the type followed by square brackets. An array of strings:
+
+```blink
+type Names = string[]
+```
+
+### Bounding Arrays
+Bound an array's length by placing [a range](#ranges) inside the brackets:
+
+```blink
+type Party = string(3..20)[1..8]
+type RecentIds = f64[..50]
+type Corners = vector[4]
+```
+
+`[4]` is exactly four elements and sends no length. A variable length is sent like a string's, and an
+array holds at most 65535 elements. Before allocating, the receiver checks the length against what the
+rest of the packet can hold, so a length prefix of 65535 on a two-byte packet buys nothing.
+
+In an array of optionals, an absent element arrives in its own place: `u8?[]` sent as `{1, nil, 3}`
+arrives as `{1, nil, 3}`, not closed up.
+
+### Arrays of booleans
+An array of plain booleans is packed eight elements to a byte, after its length: `boolean[1000]` costs
+125 bytes rather than 1000. An array of optional booleans, `boolean?[]`, is not packed, since each
+element carries a presence flag of its own as well as its value.
+
+### Elements that cost nothing
+An array whose elements send no bytes and no instances -- an empty struct, say -- gives the decoder
+nothing to run out of, so a two-byte count would buy 65535 iterations. Such an array must have a
+range; without one it is refused (`E3021`). The same holds for a map whose keys and values both cost
+nothing.
+
+## Maps
+Key-value tables, with keys of one type and values of the same or another type. Declared with the
+`map` keyword. A map of `string` keys to `f64` values:
+
+```blink
+map StringToNumber = { [string]: f64 }
+map UserIdToUsername = { [f64]: string }
+```
+
+### What can be a key
+A key has to survive the round trip **as a key**. `string`, the number types, `boolean` and a plain
+`enum` all decode to the same value the sender had, so any of them works.
+
+A struct, a tagged enum, another map, a set, an array or a type pack does not. Each decodes to a
+**fresh table** for every entry, and in Luau a table is its own identity, so the receiving side ends up
+holding `[Table(0x...)] = value` -- entries it can reach only by iterating, never by looking anything
+up. Every byte round-trips correctly, which is what makes it so easy to miss.
+
+BlinkBlox refuses those keys at compile time (`E3001`):
+
+```blink error title="Refused"
+-- Each decoded key is a table nothing can match.
+map Grid = { [struct { X: u8, Y: u8 }]: u8 }
+```
+
+If you need a composite key, put the parts in the value and key the map by something simple:
+
+```blink
+map Grid = { [u16]: struct { X: u8, Y: u8, Tile: u8 } }
+```
+
+<Aside>
+This applies after generics are substituted, so `Map<u8[], f64>` is refused for the same reason even
+though `Map<K, V>` itself is fine.
+</Aside>
+
+### Maps cannot be bounded
+Unlike [arrays](#bounding-arrays), a map takes no range. Its entry count is written as an unconditional
+`u16`, so every map is unbounded by construction -- up to 65535 entries -- and a decoder will loop over
+whatever count the packet names.
+
+For an inbound event whose size you need to reason about, prefer a bounded array of key-value
+structs. It costs the same bytes, states its ceiling in the schema, and the decoder checks the length
+before it allocates.
+
+### Generics
+Maps support generics, which are a tool for reuse. A map template:
+
+```blink
+map Map<K, V> = { [K]: V }
+map StringToNumber = Map<string, f64>
+```
+
+## Sets
+A fixed set of named flags, each `true` or `false`. Declared with the `set` keyword:
+
+```blink
+set Flags = {
+    FeatureA,
+    FeatureB,
+    FeatureC
+}
+```
+
+In Luau a set is a table with every flag as a key: `{ FeatureA: boolean, FeatureB: boolean, ... }`.
+On the wire the flags are packed into groups of up to 32 -- one byte for up to 8 flags, two for up to
+16, four for up to 32 -- so the three flags above cost one byte.
+
+## Enums
+BlinkBlox supports two kinds of enum: unit enums and tagged enums.
+
+Either kind travels as a one-byte index, so an enum holds between 1 and 256 values or variants. An empty
+one, or one past 256, is refused at compile time (`E3029`), as is a repeated value or variant.
+
+### Unit Enums
+A set of possible values, declared with the `enum` keyword. The state of a character:
+
+```blink
+enum CharacterStatus = { Idling, Walking, Running, Jumping, Falling }
+```
+
+In Luau each value is a string: `"Idling" | "Walking" | ...`. Unit enums do not take generics.
+
+### Tagged Enums
+A set of variants, each with data attached. Declare one with `enum`, then a string naming the tag
+field, then the variants. Each variant is a name followed by the fields of a struct:
+
+```blink
+enum MouseEvent = "Type" {
+    Move {
+        Delta: vector,
+        Position: vector,
+    },
+    Drag {
+        Delta: vector,
+        Position: vector,
+    },
+    Click {
+        Button: enum { Left, Right, Middle },
+        Position: vector
+    }
+}
+```
+
+A variant may not have a field named after the tag (`E3005`).
+
+BlinkBlox has no union type; a tagged enum is how you write one:
+
+```blink
+enum Union = "Type" {
+    Number {
+        Value: f64
+    },
+    String {
+        Value: string
+    }
+}
+```
+
+This results in the following Luau type:
+
+```luau
+type Union =
+    | { Type: "Number", Value: number }
+    | { Type: "String", Value: string }
+```
+
+#### Generics
+Like [maps](#maps), tagged enums support generics. A tagged union template:
+
+```blink
+enum Union<A, B> = "Type" {
+    A {
+        Value: A
+    },
+    B {
+        Value: B
+    },
+}
+
+enum NumberStringUnion = Union<f64, string>
+```
+
+## Structs
+A fixed set of named fields. Declared with the `struct` keyword, with no `=` before the braces. A
+theoretical game entity:
+
+```blink
+struct Entity {
+    Health: u8(0..100),
+    Position: vector,
+    Rotation: u8,
+    Animations: struct {
+        First: u8?,
+        Second: u8,
+        Third: u8
+    }
+}
+```
+
+A field name that is not an identifier can be quoted: `["Display Name"]: string`. Fields are sent in
+order with no names on the wire, so a struct costs exactly the sum of its fields.
+
+### Merging
+A struct can merge the fields of other structs into itself, the equivalent of a table union in Luau.
+A merge is two dots followed by the struct's name:
+
+```blink
+struct foo {
+    foo: u8
+}
+
+struct bar {
+    bar: string
+}
+
+struct foo_bar {
+    ..foo,
+    ..bar
+}
+```
+
+The resulting Luau type for `foo_bar`:
+
+```luau
+type foo_bar = { foo: number, bar: string }
+```
+
+A merge that would repeat a field is refused.
+
+### Generics
+Structs, like [maps](#maps) and [tagged enums](#tagged-enums), support generics. A packet fragment
+typed with a generic struct:
+
+```blink
+struct Entity {
+    Health: u8(0..100),
+    Position: vector
+}
+
+struct Fragment<T> {
+    Index: u8,
+    Sequence: u16,
+    Fragments: u8,
+    Data: T
+}
+
+struct EntitiesFragment {
+    ..Fragment<Entity[..32]>
+}
+
+event Replicate {
+    From: Server,
+    Type: Reliable,
+    Call: ManyAsync,
+    Data: Fragment<Entity[..32]>
+}
+```
+
+A generic struct is used where a type is expected, as in the event above, or merged into a named one.
+
+## Naming types
+Each composite keyword -- `struct`, `map`, `set`, `enum` -- declares a named type of its kind, and
+`map` and `enum` may also name an instance of a generic of their kind. The `type` keyword names
+anything built from a primitive: a number, string, `vector`, `CFrame` and so on, with its range,
+optional mark and array brackets.
+
+```blink
+struct Item {
+    Id: u16
+}
+
+type Coins = u32(..1000000)
+type Inventory = Coins[..64]
+```
+
+`type` cannot name a struct, map, set or enum, even as an array: `type Items = Item[]` is refused
+(`E3001`). Write `Item[]` where it is used instead, or wrap it in a struct.
+
+## Unknowns
+The `unknown` type holds any value that cannot be known until runtime. For unions, use
+[tagged enums](#tagged-enums) instead.
+
+```blink
+event Debug {
+    From: Server,
+    Type: Reliable,
+    Call: ManyAsync,
+    Data: unknown
+}
+```
+
+<Aside>
+An `unknown` is not written into the buffer. It travels beside it in the remote's instance list, and
+is serialised by Roblox itself -- which negates most of the benefits of BlinkBlox, so use it sparingly.
+Each one counts towards
+[`MaxInstancesPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket).
+It cannot be optional or exported.
+</Aside>
+
+## Instances
+Roblox instances, declared as `Instance`. Like `unknown`, an instance costs no buffer bytes: it
+travels in the remote's instance list, and counts towards `MaxInstancesPerPacket`.
+
+```blink
+type AnInstance = Instance
+```
+
+<Aside type="danger">
+If a non-optional instance is `nil` on the receiving side, the packet fails to decode and the rest of
+it is dropped. An instance can turn `nil` for many reasons: instance streaming, an instance that only
+exists on the sender's side, one destroyed while the packet was in flight.
+
+If you send instances that might not exist on the other side, mark them [optional](#optionals).
+</Aside>
+
+### Specifying Class
+Narrow an instance to a class by naming it in parentheses:
+
+```blink
+type Player = Instance(Player)
+type Part = Instance(BasePart)
+```
+
+The receiver checks the class with `IsA`, so subclasses are accepted: an Instance typed as `BasePart`
+also accepts a `Part`. An instance of the wrong class fails the packet like any other bad value.
+
+## CFrames
+A position and a rotation about it in 3D space. Declared as `CFrame`.
+
+```blink
+type Location = CFrame
+```
+
+By default a CFrame is 24 bytes: the position as three `f32`s, and the rotation as three Euler angles,
+also `f32`.
+
+### Specifying Encoding
+Pass up to two [number types](#numbers) in angle brackets. The **first** is used for the rotation and
+the **last** for the position, so a single type is used for both. A CFrame with an `f16` rotation and
+an `f32` position:
+
+```blink
+type MyCFrame = CFrame<f16, f32>
+type SmallCFrame = CFrame<f16>
+```
+
+The first is 18 bytes, the second 12.
+
+<Aside type="caution">
+The precision limits of [vectors](#specifying-encoding) apply to CFrames too. An
+[integer type](#unsigned-integers) as the rotation's encoding keeps only whole radians of each angle,
+and an unsigned one wraps a negative angle round: -1.57 is sent as 255 in a `u8`. Use a float, or
+`quat`, for a rotation.
+</Aside>
+
+### Quaternion Rotation
+Writing `quat` as one of the components encodes the rotation as a unit quaternion instead of three
+Euler angles, in 7 bytes rather than 12: a byte naming the largest of its four components, and the
+other three as `i16`. The other component, if there is one, is the position's type, whichever order
+the two are written in:
+
+```blink
+type Pose = CFrame<quat>
+type SmallPose = CFrame<quat, f16>
+```
+
+`Pose` is 19 bytes (an `f32` position and the quaternion), `SmallPose` 13.
+
+The rotation is quantised, so it comes back within about 0.002 degrees of what was sent rather than
+exactly. That suits characters, projectiles and cameras. It does not suit anything that compares
+rotations for equality or snaps to a grid, which is why it is not the default.
+
+`quat` is only a CFrame component. It is refused anywhere else -- on its own, in a `vector`, or twice
+in one CFrame (`E3023`).
+
+## Other Roblox Types
+
+| Type | Bytes | Encoding |
+|---|---|---|
+| `Color3` | 3 | One byte per channel. Each is rounded to the nearest of 256 steps and clamped. |
+| `BrickColor` | 2 | The colour's `Number`, as a `u16`. |
+| `DateTime` | 8 | `UnixTimestamp` as an `f64`: whole seconds. |
+| `DateTimeMillis` | 8 | `UnixTimestampMillis` as an `f64`: milliseconds. Decodes to a `DateTime`. |
+
+```blink
+struct Appearance {
+    Tint: Color3,
+    Team: BrickColor,
+    JoinedAt: DateTime,
+    LastSeen: DateTimeMillis
+}
+```
+
+<Aside type="caution">
+`Color3` carries the 0 to 1 range and nothing outside it. An HDR channel above 1 -- `Highlight` and
+neon colours use them -- arrives as 1, and a negative one as 0. Use a `vector<f16>`, or three floats,
+if you need to send one intact.
+</Aside>
+
+## Exports
+An exported type gets its own `Read` and `Write` functions, which turn a value into a buffer and back
+without an event. Exports are a way to reuse schema types elsewhere: saving to a datastore, or
+replicating ECS components by hand. Prefix a type's declaration with `export`:
+
+```blink
+export struct MyInterface {
+    field: u8,
+}
+```
+
+<Aside>
+Generic types cannot be exported, nor can a type that contains an `Instance` or an `unknown` -- those
+travel beside the buffer, and an exported `Write` produces only the buffer (`E3013`). Events and
+functions are not types and cannot be exported either.
+</Aside>
+
+### Usage in Luau
+Exports appear in the server and client modules and, when
+[`TypesOutput`](/BlinkBlox/language/options/#serveroutput-clientoutput-typesoutput) is set, in the
+types module. Their shape:
+
+```luau
+type MyInterfaceExport = {
+    Read: (buffer) -> MyInterface,
+    Write: (MyInterface) -> buffer,
+}
+```
+
+```luau title="Example.luau"
+local Net = require(path.to.Client)
+
+local Serialized = Net.MyInterface.Write({ field = 5 })
+local Deserialized = Net.MyInterface.Read(Serialized)
+```
+
+`Write` returns a buffer of exactly the value's size, and `Read` decodes from the start of the buffer
+it is given. Either throws if it fails, and leaves the module's own outgoing batch and incoming packet
+untouched when it does.

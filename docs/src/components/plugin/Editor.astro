@@ -1,0 +1,215 @@
+---
+// The editor widget's contents (plugin/src/Widget.rbxmx): the collapsed side menu, the line-number
+// gutter, the highlighted source and the two quick-action buttons.
+//
+// Lines are Roblox rich text straight from the plugin's highlighter (see samples.ts). A diagnostic is
+// drawn the way plugin/src/Editor/Spans.luau draws it: a row of carets under where the primary span
+// starts, on that line only -- red for an error, the theme's warning colour for a warning.
+import Icon from './Icon.astro';
+import { insert, toHtml, type Insertion } from './rich';
+
+interface Props {
+	lines: string[];
+	/** Rows of height to show; defaults to the source plus two. */
+	rows?: number;
+	/** The line holding the cursor, drawn white in the gutter. */
+	activeLine?: number;
+	cursor?: { line: number; column: number };
+	underline?: { line: number; start: number; end: number; severity: 'Error' | 'Warning' };
+}
+
+const { lines, rows = lines.length + 2, activeLine, cursor, underline } = Astro.props;
+
+// Slots rendered to strings, so they can be placed inside a line at a column. A popup placed there is
+// absolutely positioned without offsets, so it opens where the cursor or the diagnostic is, whatever
+// width the reader's fallback font gives the text before it.
+const completion = Astro.slots.has('completion') ? await Astro.slots.render('completion') : '';
+const diagnostic = Astro.slots.has('diagnostic') ? await Astro.slots.render('diagnostic') : '';
+
+const rendered = lines.map((line, index) => {
+	const number = index + 1;
+	const marks: Insertion[] = [];
+
+	if (underline && underline.line === number) {
+		const kind = underline.severity === 'Warning' ? 'bbp-underline bbp-underline-warning' : 'bbp-underline';
+		const carets = '^'.repeat(Math.max(1, underline.end - underline.start));
+		marks.push({ column: underline.start, side: 'open', html: `<span class="${kind}">` });
+		marks.push({
+			column: underline.end,
+			side: 'close',
+			html: `<span class="bbp-carets">${carets}</span></span>${diagnostic}`,
+		});
+	}
+
+	if (cursor && cursor.line === number) {
+		marks.push({ column: cursor.column, side: 'close', html: `<span class="bbp-cursor"></span>${completion}` });
+	}
+
+	return toHtml(insert(line, marks)) || ' ';
+});
+
+const height = rows * 20 + 16;
+const hasOverlay = Astro.slots.has('overlay');
+---
+
+<div class="bbp-widget" style={`height:${height}px`}>
+	<div class="bbp-strip">
+		<span class="bbp-expand"><Icon name="menu" size={22} /></span>
+	</div>
+	<div class="bbp-gutter">
+		{
+			Array.from({ length: Math.max(lines.length, 1) }, (_, index) => (
+				<div class:list={['bbp-line-number', { 'bbp-line-number-active': index + 1 === activeLine }]}>{index + 1}</div>
+			))
+		}
+	</div>
+	<div class="bbp-code">
+		<div class="bbp-code-inner">
+			{rendered.map((line) => <div class="bbp-code-line" set:html={line} />)}
+		</div>
+	</div>
+	<div class="bbp-quick">
+		<span class="bbp-quick-button" title="Clear"><Icon name="clear" size={16} /></span>
+		<span class="bbp-quick-button" title="Save"><Icon name="save" size={16} /></span>
+	</div>
+	{hasOverlay && <slot name="overlay" />}
+</div>
+
+<style is:global>
+	.bbp-widget {
+		position: relative;
+		display: grid;
+		grid-template-columns: 42px 42px minmax(0, 1fr);
+		background: #282828;
+		overflow: hidden;
+	}
+
+	.bbp-strip {
+		position: relative;
+		background: #2d2d2d;
+		z-index: 1;
+	}
+
+	.bbp-strip::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 100%;
+		width: 8px;
+		background: linear-gradient(to right, rgb(0 0 0 / 0.3), transparent);
+	}
+
+	.bbp-expand {
+		position: absolute;
+		top: 10px;
+		right: 10px;
+		width: 22px;
+		height: 22px;
+		color: #ffffff;
+	}
+
+	.bbp-gutter {
+		background: #232323;
+		padding: 8px 4px;
+	}
+
+	.bbp-line-number {
+		height: 20px;
+		line-height: 20px;
+		text-align: right;
+		color: #787878;
+		font-family: 'Gotham SSm', Montserrat, 'Segoe UI', system-ui, sans-serif;
+		font-size: 14px;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.bbp-line-number-active {
+		color: #ffffff;
+	}
+
+	/* Above the quick-action buttons, as the plugin's popups are (ZIndex 5 and 6 against 1). */
+	.bbp-code {
+		position: relative;
+		z-index: 1;
+		overflow-x: auto;
+		overflow-y: hidden;
+		padding: 8px;
+		scrollbar-color: #555 transparent;
+		scrollbar-width: thin;
+	}
+
+	.bbp-code-inner {
+		width: max-content;
+		min-width: 100%;
+		padding-right: 36px;
+		box-sizing: border-box;
+	}
+
+	.bbp-code-line {
+		height: 20px;
+		line-height: 20px;
+		font-size: 16px;
+		white-space: pre;
+		tab-size: 4;
+		-moz-tab-size: 4;
+		color: #ffffff;
+	}
+
+	.bbp-cursor {
+		display: inline-block;
+		width: 0;
+		height: 16px;
+		vertical-align: -2px;
+		border-left: 2px solid #ffffff;
+		margin-left: -1px;
+	}
+
+	.bbp-underline {
+		position: relative;
+		display: inline-block;
+		color: inherit;
+	}
+
+	.bbp-carets {
+		position: absolute;
+		left: 0;
+		top: 15px;
+		width: 100%;
+		height: 14px;
+		overflow: hidden;
+		color: #aa0000;
+		font-size: 14px;
+		font-weight: 300;
+		line-height: 14px;
+		letter-spacing: 0;
+		white-space: nowrap;
+		pointer-events: none;
+	}
+
+	.bbp-underline-warning > .bbp-carets {
+		color: #d7ba7d;
+	}
+
+	.bbp-quick {
+		position: absolute;
+		right: 8px;
+		bottom: 8px;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.bbp-quick-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		box-sizing: border-box;
+		border: 1px solid #a0a0a0;
+		border-radius: 4px;
+		background: #1e1e1e;
+		color: #ffffff;
+	}
+</style>
