@@ -237,7 +237,9 @@ local function OnSearch(PressedEnter: boolean)
 			continue
 		end
 
-		Frame.Visible = (string.find(Frame.Name, Query) ~= nil)
+		--> Plain, not a pattern: typing `(`, `[` or `%` into the box raised "malformed pattern" from
+		--> inside the handler, and `.` or `-` matched names that do not contain them.
+		Frame.Visible = (string.find(Frame.Name, Query, 1, true) ~= nil)
 	end
 end
 
