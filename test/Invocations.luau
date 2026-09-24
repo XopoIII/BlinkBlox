@@ -204,4 +204,127 @@ do
 	OkPrint(`Test "{Name}" passed!`)
 end
 
+do
+	--> Ids used to be handed out lowest free first, so the id a reply had just released was the next
+	--> one claimed, and a sequential caller claimed it from the same thread. Its timer identified the
+	--> call by exactly that pair, so call 1's timer, firing at call 1's deadline, failed call 2 -- a
+	--> call still well inside its own timeout, with the other side busy answering it.
+	local Name = "A call's timer cannot fail a later call from the same thread"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	Server.RemoteFunction.On(function(_Player, Value: number): number
+		if Value == 2 then
+			task.wait(TIMEOUT - 0.5)
+		end
+
+		return Value
+	end)
+
+	Shared.DrainWarnings()
+
+	--> Call 1 is answered at once; call 2 starts a second later and is answered at TIMEOUT + 0.5,
+	--> half a second after call 1's timer comes due.
+	local Ok, Result = Await(function()
+		Client.RemoteFunction.Invoke(1)
+		task.wait(1)
+		return Client.RemoteFunction.Invoke(2)
+	end, TIMEOUT + 2)
+
+	if Ok ~= true or Result ~= 2 then
+		ErrorPrint(`Failed "{Name}": the second call ended with {tostring(Result)}, expected its answer, 2.`)
+		return {}
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end
+
+--> Reads the id out of the next call a client sends: the packet is [function index][id][argument].
+--> It reaches the server only when `Deliver` says so; otherwise the call stays outstanding.
+local function CaptureCall(Call: () -> (), Deliver: boolean?): (number?, number?)
+	local Remote = require("./Client").Instances.BLINK_RELIABLE_REMOTE
+	local Original = Remote.FireServer
+	local Sent: buffer?
+	Remote.FireServer = function(self, Buffer: buffer, ...)
+		Sent = Buffer
+		if Deliver then
+			Original(self, Buffer, ...)
+		end
+	end
+
+	task.spawn(Call)
+	task.wait(1 / 30)
+	Remote.FireServer = Original
+
+	if not Sent or buffer.len(Sent) < 2 then
+		return nil, nil
+	end
+
+	return buffer.readu8(Sent, 0), buffer.readu8(Sent, 1)
+end
+
+--> Hands the client a reply as if the server had sent it: [function index][id][1][u8 value].
+local function Reply(Index: number, Identifier: number, Value: number)
+	local Packet = buffer.create(4)
+	buffer.writeu8(Packet, 0, Index)
+	buffer.writeu8(Packet, 1, Identifier)
+	buffer.writeu8(Packet, 2, 1)
+	buffer.writeu8(Packet, 3, Value)
+	require("./Client").Instances.BLINK_RELIABLE_REMOTE.OnClientEvent:Fire(Packet, {})
+end
+
+do
+	--> Two ways a reply used to reach a caller it was not for. Every function shares one set of ids,
+	--> and the reply branch checked only that the id was outstanding -- not that it was outstanding
+	--> for the function the reply belongs to, so a caller typed one way could be resumed with
+	--> another function's values. And a reply arriving after its call had timed out found the same id
+	--> already handed to the next call, since the lowest free one went first.
+	local Name = "A reply resumes only the call it answers"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	--> An index belonging to a function other than NeverAnswered, taken from a real call to it, which
+	--> is answered and so leaves nothing outstanding: the second half depends on which ids are free.
+	local OtherIndex = CaptureCall(function()
+		pcall(Client.RemoteFunction.Invoke, 1)
+	end, true)
+	task.wait(0.2)
+
+	local First: { Ok: boolean?, Result: any } = {}
+	local Index, FirstIdentifier = CaptureCall(function()
+		First.Ok, First.Result = pcall(Client.NeverAnswered.Invoke, 1)
+	end)
+
+	if not OtherIndex or not Index or not FirstIdentifier then
+		ErrorPrint(`Failed "{Name}": could not capture the calls to answer.`)
+		return {}
+	end
+
+	--> Another function's reply, carrying the pending call's id.
+	Reply(OtherIndex, FirstIdentifier, 5)
+	task.wait(1 / 30)
+	if First.Ok ~= nil then
+		ErrorPrint(`Failed "{Name}": another function's reply resumed the call, with {tostring(First.Result)}.`)
+		return {}
+	end
+
+	--> Let the first call time out, then make a second and answer the FIRST one late.
+	task.wait(TIMEOUT + 0.2)
+	local Second: { Ok: boolean?, Result: any } = {}
+	CaptureCall(function()
+		Second.Ok, Second.Result = pcall(Client.NeverAnswered.Invoke, 1)
+	end)
+
+	Reply(Index, FirstIdentifier, 9)
+	task.wait(1 / 30)
+	Shared.DrainWarnings()
+
+	if Second.Ok ~= nil then
+		ErrorPrint(
+			`Failed "{Name}": a late reply to the first call resumed the second, with {tostring(Second.Result)}.`
+		)
+		return {}
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end
+
 return {}

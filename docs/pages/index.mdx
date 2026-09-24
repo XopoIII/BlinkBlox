@@ -51,8 +51,10 @@ closed as out of scope. This fork fixes them and continues from there:
 - **Remote arguments are checked before they are trusted.** A client can call `FireServer` with
   anything; the generated handler establishes the argument types before reading them, stops decoding
   for a player who has left, and refuses a remote of the wrong class planted under the right name.
-- **Invocation slots are recycled.** Outstanding calls take slots from a bitset and give them back
-  when answered, instead of a counter that wrapped and refused legitimate calls.
+- **An answer reaches only the call it answers.** A call is known by its id and by its function, ids
+  go round the whole u8 before one is reused, and each call's timer is cancelled once it is settled --
+  so a late answer, an answer meant for another function, or an earlier call's timer cannot resume or
+  fail a newer call. At most thirty-two calls wait at once.
 
 ## Performance
 

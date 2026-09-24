@@ -60,20 +60,18 @@ function Declarations.Function(Declaration: Parser.Function)
 	--> sends back and one shared id space would let a client answer a call made to somebody else. See
 	--> Templates/Server.luau.
 	local ServerCalls = OnServer and IsCaller
-	local ClaimSlot = if ServerCalls then "InvokePlayer(Player)" else "Invoke()"
-	local ReleaseSlot = if ServerCalls
-		then "ReleasePlayerInvocation(Player, InvocationIdentifier)"
-		else "ReleaseInvocation(InvocationIdentifier)"
-	local ParkCaller = if ServerCalls
-		then "ParkInvocation(Player, InvocationIdentifier, coroutine.running())"
-		else "Calls[InvocationIdentifier] = coroutine.running()"
-	local TakeCaller = if ServerCalls
-		then "TakeInvocation(Player, InvocationIdentifier)"
-		else "Calls[InvocationIdentifier]"
-	local ForgetCaller = if ServerCalls then "" else "Calls[InvocationIdentifier] = nil"
+	--> The set of outstanding calls this one is claimed in: the target player's on the server, the
+	--> module's own on a client. See Templates/Base.luau for why a call is known by its id AND its
+	--> function index.
+	local Owner = if ServerCalls then "PlayerInvocations[Player]" else "Invocations"
+	local Timeout = State.Options.InvocationTimeout or DEFAULT_INVOCATION_TIMEOUT
+	local ClaimSlot = if ServerCalls then `InvokePlayer(Player, {Index})` else `ClaimInvocation(Invocations, {Index})`
+	local ReleaseSlot = `ReleaseInvocation({Owner}, InvocationIdentifier)`
+	local ParkCaller = `ParkInvocation({Owner}, InvocationIdentifier, coroutine.running())`
+	local TakeCaller = `TakeInvocation({Owner}, InvocationIdentifier, {Index})`
 	local ArmTimeout = if ServerCalls
-		then `TimeoutPlayerInvocation(Player, InvocationIdentifier, {State.Options.InvocationTimeout or DEFAULT_INVOCATION_TIMEOUT}, "{Name}")`
-		else `TimeoutInvocation(InvocationIdentifier, {State.Options.InvocationTimeout or DEFAULT_INVOCATION_TIMEOUT}, "{Name}")`
+		then `TimeoutPlayerInvocation(Player, InvocationIdentifier, {Timeout}, "{Name}")`
+		else `TimeoutInvocation(Invocations, InvocationIdentifier, {Timeout}, '"{Name}" was never answered')`
 
 	--> Data and return body
 	local DataTypes, DataValues, _, DataArguments = "nil", "Value: nil", nil, "Value"
@@ -222,19 +220,17 @@ function Declarations.Function(Declaration: Parser.Function)
 		Types.u8.Read("InvocationIdentifier", Block)
 		Types.u8.Read("Answered", Block)
 		Block:Lines(Deserialize.Content, Block.Indent + 1)
-		--> The slot is freed before the thread is resumed, so a caller that immediately invokes again
-		--> from inside its own continuation gets a slot rather than an exhaustion error.
+		--> Taking the caller settles the call -- its id goes back, its timer is cancelled -- before the
+		--> thread is resumed, so a caller that immediately invokes again from inside its own
+		--> continuation gets an id rather than an exhaustion error. It yields nothing when the id is
+		--> not outstanding for THIS function. A server looks the reply up in the REPLYING PLAYER's own
+		--> set, so an id belonging to a call made to somebody else simply is not there.
 		-->
-		--> The status check is not paranoia: a Promise that was cancelled, or a Future that already
-		--> completed, leaves a thread that is dead or running. `task.spawn` on either of those throws
-		--> from inside the remote handler, where no user pcall can reach it.
-		--> A server looks the reply up in the REPLYING PLAYER's own table, so an id belonging to a call
-		--> made to somebody else simply is not there. That is the check, and it is structural.
-		local Forget = if ForgetCaller ~= "" then { ForgetCaller } else {}
-		Block:Compare(TakeCaller, "nil", "Not")
-			:Line(`local Thread = {TakeCaller}`)
-			:Lines(Forget, 0)
-			:Line(ReleaseSlot)
+		--> The status check is not paranoia: a Future that already completed leaves a thread that is
+		--> dead or running. `task.spawn` on either of those throws from inside the remote handler,
+		--> where no user pcall can reach it.
+		Block:Line(`local Thread = {TakeCaller}`)
+			:Compare("Thread", "nil", "Not")
 			:Compare("coroutine.status(Thread)", `"suspended"`, "Equals")
 			:Line(`task.spawn(Thread, Success, {ReturnArguments})`)
 			:End()
@@ -257,7 +253,7 @@ function Declarations.Function(Declaration: Parser.Function)
 			--> Releasing the slot when the ARGUMENTS fail to serialise.
 			-->
 			--> The slot is claimed before the write and the caller is parked after it, so a throw in
-			--> between used to strand the slot with nothing outstanding: no entry in `Calls`, so
+			--> between used to strand the slot with nothing outstanding: no parked caller, so
 			--> nothing for the timeout to find and reclaim. Thirty-two rejected calls -- the same wrong
 			--> argument thirty-two times -- and every later invocation fails for the lifetime of the
 			--> session. This is the one leak the timeout cannot cover, because it is armed after it.
@@ -296,12 +292,7 @@ function Declarations.Function(Declaration: Parser.Function)
 		elseif IsPromise then
 			--> A cancelled promise gives its slot back too, otherwise cancelling enough calls would
 			--> exhaust the bitset with nothing outstanding.
-			local Cancel = Blocks.Function("", "")
-			if ForgetCaller ~= "" then
-				Cancel:Line(ForgetCaller)
-			end
-
-			local OnCancel = Cancel:Line(ReleaseSlot):End():Wrap("OnCancel(", ")")
+			local OnCancel = Blocks.Function("", ""):Line(ReleaseSlot):End():Wrap("OnCancel(", ")")
 
 			local Promise = SendCall(Blocks.Function("", "Resolve, Reject, OnCancel"))
 				:Line(ParkCaller)

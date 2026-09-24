@@ -233,7 +233,9 @@ slot back. Thirty-two of those and every later `Invoke` in that session is refus
 
 When the timeout fires, the caller is failed the same way an errored handler fails it -- so a `pcall`
 around `Invoke`, or a rejected promise, catches it -- the slot is returned, and BlinkBlox warns naming
-the function.
+the function. The timer belongs to that one call: a call answered in time cancels it, so it can never
+fail a later call, and an answer that arrives after the timeout is ignored rather than handed to
+whichever call came next.
 
 ```blink copy
 option InvocationTimeout = 30
