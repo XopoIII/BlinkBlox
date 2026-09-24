@@ -39,10 +39,12 @@ local function MockRequire(Path: string, Environment)
 	--> Records what the module warns about before passing it on, so a spec can assert on it. The
 	--> generated code reports several things through `warn` and nothing else, and none of that was
 	--> checkable before.
-	Environment.warn = function(...)
-		table.insert(Shared.Warnings, table.concat({ ... }, " "))
-		warn(...)
-	end
+	--> A spec that feeds a module thousands of bad packets on purpose passes a `warn` of its own.
+	Environment.warn = Environment.warn
+		or function(...)
+			table.insert(Shared.Warnings, table.concat({ ... }, " "))
+			warn(...)
+		end
 	Environment.require = function()
 		error("require is not supported")
 	end

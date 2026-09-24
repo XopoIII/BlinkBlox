@@ -221,6 +221,13 @@ function RateLimitedCall {
     Return: u8,
 }
 
+function ConcurrentCall {
+    Yield: Coroutine,
+    Concurrency: 2,
+    Data: u8,
+    Return: u8,
+}
+
 enum States = { A, B, C, D }
 
 set Flags8 = {F1, F2, F3, F4, F5, F6, F7, F8}

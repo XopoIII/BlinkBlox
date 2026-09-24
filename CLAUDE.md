@@ -228,6 +228,22 @@ analyses `test/Golden` as a third contour, so it stays at zero. Reading the 0.31
 added one test: `test/HalfFloats.luau` checks all 65536 f16 patterns against an independent decoder
 and every midpoint between neighbours; the 0.29 carry and the 0.31 signed zero, put back, each fail it.
 
+0.33.0 took the three ideas from reading those papers in full that were worth building. One was a
+feature: `Concurrency: N` on a function. `Rate` bounds how many calls start a second, not how many are
+still running, and a listener that waits -- a DataStore save, an invocation back to the client --
+turns calls at an allowed rate into a pile of suspended threads. A client writing its own packets is
+not held to the 32 calls an honest module keeps outstanding. The count is taken after the rate check
+and before dispatch, so a queued call counts. It is given back where the reply is written, on the
+failure path as well, and at the full-queue refusal. Refusals go through the rate-limit handler.
+The other two were tests. `test/Composition.luau` checks events side by side in one packet, where
+the worst recent bugs were. Its checks are a sequence round trip, the packet as its events'
+standalone packets end to end, a refused fire leaving the packet unchanged, and a cut packet
+delivering what precedes the cut and reporting once. `test/EventIndices.luau` sends all 256 index
+bytes to every test schema's server, deny by default checked by running it rather than by grepping
+the emitted text. Each fails when the bug it is about is put back: the 0.24 phantom event, the 0.29
+closed-up holes, the 0.26 channel with no refusal. `test/Isolated.luau` builds a server and client
+from a spec's own schema on remotes nothing else shares, for any spec that needs the bytes.
+
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of

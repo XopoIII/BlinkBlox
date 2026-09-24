@@ -93,6 +93,7 @@ hashes `WIRE_VERSION`, a number the compiler bumps by hand whenever a type's byt
 | 0.30.0 | No change to the format. | 0.27.0 onward. |
 | 0.31.0 | `f16` writes -0 as `0x8000` instead of `0x0000`. An older reader decodes it as 0, so builds either side agree on everything but the sign of a zero. | 0.27.0 onward. |
 | 0.32.0 | No change to the format. | 0.27.0 onward. |
+| 0.33.0 | No change to the format. | 0.27.0 onward. |
 
 Modules from different releases with the same `WIRE_VERSION` interoperate, but a fix to how a value is
 read or handled applies only on the side built by the release that has it. Ship both sides from one

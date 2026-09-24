@@ -158,6 +158,8 @@ export type Function = Node<
 		Return: (TypeNode | Tuple)?,
 		Rate: number?,
 		Burst: number?,
+		--> Calls from one player the server runs at once; see Grammar.FUNCTION.
+		Concurrency: number?,
 	},
 	{
 		Identifier: Token,

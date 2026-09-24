@@ -49,7 +49,7 @@ local function RateLimits(Source: string, File: string?, Declarations: { Declara
 		local Inbound = Value.From == "Client"
 
 		if not Inbound then
-			if Value.Rate or Value.Burst then
+			if Value.Rate or Value.Burst or Value.Concurrency then
 				Error.new(
 					Error.AnalyzeMissingRateLimit,
 					Source,
@@ -58,7 +58,7 @@ local function RateLimits(Source: string, File: string?, Declarations: { Declara
 					"Warning"
 				)
 					:Primary(Identifier, `This {string.lower(Declaration.Type)} is sent BY the server, not to it`)
-					:Note("Rate limits apply to inbound traffic only. Remove the field.")
+					:Note("Rate and concurrency limits apply to inbound traffic only. Remove the field.")
 					:Warn()
 			end
 

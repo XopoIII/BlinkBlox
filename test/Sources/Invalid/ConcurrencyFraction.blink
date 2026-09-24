@@ -1,0 +1,10 @@
+-- expect E2003
+-- Concurrency counts calls, so a fraction of one has nothing to round towards.
+option ClientOutput = "../../Network/ConcurrencyFractionClient.luau"
+option ServerOutput = "../../Network/ConcurrencyFractionServer.luau"
+
+function Save {
+    Yield: Coroutine,
+    Concurrency: 1.5,
+    Data: u8
+}

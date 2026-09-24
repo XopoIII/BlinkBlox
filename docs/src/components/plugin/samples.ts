@@ -94,6 +94,6 @@ export const warning = {
 		label: "This event is sent BY the server, not to it",
 		line: 3,
 		/** The whole diagnostic as the compiler renders it inside Roblox (rich text). */
-		rendered: "<font color=\"rgb(255, 255, 0)\">[W3020] Warning</font>: Rate limiting a Server event has no effect\n    ╭-[input.blink:1:9]\n    |\n003 | event HealthChanged {\n            <font color=\"rgb(255, 255, 0)\">------</font><font color=\"rgb(255, 255, 0)\">-</font><font color=\"rgb(255, 255, 0)\">------</font>\n                  <font color=\"rgb(255, 255, 0)\">|</font>\n                  <font color=\"rgb(255, 255, 0)\">╰--</font> <font color=\"rgb(255, 255, 0)\">This event is sent BY the server, not to it</font>\n    | = note: Rate limits apply to inbound traffic only. Remove the field.\n    |\n----╯\n",
+		rendered: "<font color=\"rgb(255, 255, 0)\">[W3020] Warning</font>: Rate limiting a Server event has no effect\n    ╭-[input.blink:1:9]\n    |\n003 | event HealthChanged {\n            <font color=\"rgb(255, 255, 0)\">------</font><font color=\"rgb(255, 255, 0)\">-</font><font color=\"rgb(255, 255, 0)\">------</font>\n                  <font color=\"rgb(255, 255, 0)\">|</font>\n                  <font color=\"rgb(255, 255, 0)\">╰--</font> <font color=\"rgb(255, 255, 0)\">This event is sent BY the server, not to it</font>\n    | = note: Rate and concurrency limits apply to inbound traffic only. Remove the field.\n    |\n----╯\n",
 	},
 };
