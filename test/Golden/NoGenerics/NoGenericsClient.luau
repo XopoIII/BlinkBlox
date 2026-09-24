@@ -1129,6 +1129,7 @@ function SerdesFunctions.WriteEVENT_Booleans(Value: { boolean }): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 14)
 	-- Value: Booleans
 	-- START ARRAY
+	if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
 	buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value)
 	do
 		local PACKED_LENGTH = #Value
@@ -2337,6 +2338,7 @@ if not RunService:IsRunning() then
 					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
 				end
 				local Length = #Key_1
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				local OFFSET_0 = Allocate(2)
 				buffer.writeu16(SendBuffer, OFFSET_0, Length)
 				Allocate(Length)
@@ -2351,6 +2353,7 @@ if not RunService:IsRunning() then
 						error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.`)
 					end
 					local Length = #Key_2
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					local OFFSET_0 = Allocate(2)
 					buffer.writeu16(SendBuffer, OFFSET_0, Length)
 					Allocate(Length)
@@ -2362,8 +2365,10 @@ if not RunService:IsRunning() then
 					local OFFSET_1 = Allocate(1)
 					buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
 				end
+				if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
 				buffer.writeu16(SendBuffer, OFFSET_1, Elements_2)
 			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -2479,6 +2484,7 @@ if not RunService:IsRunning() then
 					error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
 				end
 				local Length = #Value.Event.Name
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
 				Allocate(Length)
 				buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
@@ -2502,6 +2508,7 @@ if not RunService:IsRunning() then
 					error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
 				end
 				local Length = #Value.Event.Message
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
 				Allocate(Length)
 				buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
@@ -2524,6 +2531,7 @@ if not RunService:IsRunning() then
 				error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
 			end
 			local Length = #Value.Nested.Four
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 			buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
@@ -2532,6 +2540,7 @@ if not RunService:IsRunning() then
 				error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
 			end
 			local Length = #Value.Nested.Five
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 			buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
@@ -3565,6 +3574,7 @@ local Returns = table.freeze({
 					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
 				end
 				local Length = #Key_1
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				local OFFSET_0 = Allocate(2)
 				buffer.writeu16(SendBuffer, OFFSET_0, Length)
 				Allocate(Length)
@@ -3579,6 +3589,7 @@ local Returns = table.freeze({
 						error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.`)
 					end
 					local Length = #Key_2
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					local OFFSET_0 = Allocate(2)
 					buffer.writeu16(SendBuffer, OFFSET_0, Length)
 					Allocate(Length)
@@ -3590,8 +3601,10 @@ local Returns = table.freeze({
 					local OFFSET_1 = Allocate(1)
 					buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
 				end
+				if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
 				buffer.writeu16(SendBuffer, OFFSET_1, Elements_2)
 			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -3707,6 +3720,7 @@ local Returns = table.freeze({
 					error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
 				end
 				local Length = #Value.Event.Name
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
 				Allocate(Length)
 				buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
@@ -3730,6 +3744,7 @@ local Returns = table.freeze({
 					error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
 				end
 				local Length = #Value.Event.Message
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
 				Allocate(Length)
 				buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
@@ -3752,6 +3767,7 @@ local Returns = table.freeze({
 				error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
 			end
 			local Length = #Value.Nested.Four
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 			buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
@@ -3760,6 +3776,7 @@ local Returns = table.freeze({
 				error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
 			end
 			local Length = #Value.Nested.Five
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 			buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)

@@ -486,6 +486,7 @@ require("./SyncValidation")
 require("./Highlighting")
 require("./WireFormat")
 require("./Encodings")
+require("./WriteBounds")
 require("./Decoding")
 require("./BufferIntegrity")
 

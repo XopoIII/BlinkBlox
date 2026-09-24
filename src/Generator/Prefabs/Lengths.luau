@@ -18,6 +18,7 @@ local SEND_BUFFER = Common.SEND_BUFFER
 local RECIEVE_BUFFER = Common.RECIEVE_BUFFER
 local SEND_POSITION = Common.SEND_POSITION
 local Asserts = AssertsModule.Asserts
+local EmitLengthGuard = AssertsModule.EmitLengthGuard
 local GenerateSpaceGuard = AssertsModule.GenerateSpaceGuard
 
 --> String
@@ -70,14 +71,9 @@ do
 			local LengthType = GetTypeToUse(Upper - Lower)
 
 			Block:Line(`local Length = #{Value}`)
+			EmitLengthGuard(Block, Lower, Upper)
 
 			if Lower > 0 then
-				--> Checked on send, unconditionally: a string shorter than the minimum would encode as
-				--> a negative offset, wrap to a large unsigned value, and fail on the receiver as a
-				--> length violation that names neither the field nor the sender.
-				local Assert = Asserts.number("Length", Lower, Upper)
-				Block:Line(Assert.Lower)
-				Block:Line(Assert.Upper)
 				Block:Line(`local LengthOffset = Length - {Lower}`)
 				LengthType.Write("LengthOffset", Block)
 			else
@@ -144,11 +140,9 @@ do
 			local LengthType = GetTypeToUse(Upper - Lower)
 
 			Block:Line(`local Length = buffer.len({Value})`)
+			EmitLengthGuard(Block, Lower, Upper)
 
 			if Lower > 0 then
-				local Assert = Asserts.number("Length", Lower, Upper)
-				Block:Line(Assert.Lower)
-				Block:Line(Assert.Upper)
 				Block:Line(`local LengthOffset = Length - {Lower}`)
 				LengthType.Write("LengthOffset", Block)
 			else

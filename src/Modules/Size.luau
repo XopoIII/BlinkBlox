@@ -455,5 +455,6 @@ return {
 	RangeWritten = RangeWritten,
 	TokenOf = TokenOf,
 	DefaultLength = DEFAULT_LENGTH,
+	MapLength = MAP_LENGTH,
 	OrderingBytes = ORDERING_BYTES,
 }

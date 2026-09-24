@@ -627,6 +627,7 @@ return {
 					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
 				end
 				local Length = #Key_1
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				local OFFSET_0 = Allocate(2)
 				buffer.writeu16(SendBuffer, OFFSET_0, Length)
 				Allocate(Length)
@@ -641,6 +642,7 @@ return {
 						error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.`)
 					end
 					local Length = #Key_2
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					local OFFSET_0 = Allocate(2)
 					buffer.writeu16(SendBuffer, OFFSET_0, Length)
 					Allocate(Length)
@@ -652,8 +654,10 @@ return {
 					local OFFSET_1 = Allocate(1)
 					buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
 				end
+				if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
 				buffer.writeu16(SendBuffer, OFFSET_1, Elements_2)
 			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -769,6 +773,7 @@ return {
 					error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
 				end
 				local Length = #Value.Event.Name
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
 				Allocate(Length)
 				buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
@@ -792,6 +797,7 @@ return {
 					error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
 				end
 				local Length = #Value.Event.Message
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
 				Allocate(Length)
 				buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
@@ -814,6 +820,7 @@ return {
 				error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
 			end
 			local Length = #Value.Nested.Four
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 			buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
@@ -822,6 +829,7 @@ return {
 				error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
 			end
 			local Length = #Value.Nested.Five
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 			buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)

@@ -20,6 +20,7 @@ return {
 	Types = Common.Types,
 	Asserts = AssertsModule.Asserts,
 	EmitCapacityGuard = AssertsModule.EmitCapacityGuard,
+	EmitLengthGuard = AssertsModule.EmitLengthGuard,
 	Primitives = Common.Primitives,
 	Required = Common.Required,
 	GetTypeToUse = Common.GetTypeToUse,

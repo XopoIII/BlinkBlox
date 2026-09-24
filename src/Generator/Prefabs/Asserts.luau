@@ -116,8 +116,25 @@ local function EmitCapacityGuard(Block: Block, Length: string, Variable: string,
 	end
 end
 
+--- Emits the send-side check on a variable length, before the length is written. Unconditional,
+--- whatever WriteValidations says, because the alternative is not a missed check but a corrupt
+--- packet: the prefix is the smallest numeral that holds the span, so a value outside the bounds
+--- does not fit it. One shorter than a nonzero minimum encodes as a negative offset; one longer than
+--- the maximum overflows the numeral -- `writeu8` keeps the low byte, so 300 goes out as 44 with all
+--- 300 bytes behind it, and the receiver reads a shorter value and then the rest of the packet from
+--- the wrong offset. A minimum of zero cannot be undercut, so only the maximum is checked there.
+local function EmitLengthGuard(Block: Block, Lower: number, Upper: number, Length: string?)
+	local Assert = Asserts.number(Length or "Length", Lower, Upper)
+	if Lower > 0 then
+		Block:Line(Assert.Lower)
+	end
+
+	Block:Line(Assert.Upper)
+end
+
 return {
 	Asserts = Asserts,
+	EmitLengthGuard = EmitLengthGuard,
 	GenerateSpaceGuard = GenerateSpaceGuard,
 	EmitCapacityGuard = EmitCapacityGuard,
 }

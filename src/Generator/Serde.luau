@@ -159,6 +159,9 @@ function Serde.Map(Declaration: Parser.Map, Read: Blocks.Block, Write: Blocks.Bl
 	WriteLoop:End()
 	ReadLoop:End()
 
+	--> The count is a u16 and nothing bounds a map in the schema, so one past 65535 entries would go
+	--> out as its low sixteen bits in front of every entry. See Prefabs.EmitLengthGuard.
+	Prefabs.EmitLengthGuard(Write, 0, Size.MapLength, ElementsVariable)
 	Write:Line(`buffer.writeu16(SendBuffer, {ElementsAllocation}, {ElementsVariable})`)
 end
 
@@ -301,13 +304,10 @@ function Serde.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Block
 		Read:Line(Assert.Lower)
 		Read:Line(Assert.Upper)
 
+		--> Checked on the SEND side too, and unconditionally; see Prefabs.EmitLengthGuard.
+		Prefabs.EmitLengthGuard(Write, Lower, Upper, `#{Variable}`)
+
 		if Lower > 0 then
-			--> Checked on the SEND side too, and unconditionally. An array shorter than the minimum
-			--> would otherwise encode as a negative offset, wrap to a large unsigned value, and fail
-			--> on the receiver as a length violation that names neither the array nor the sender.
-			local WriteAssert = Prefabs.Asserts.number(`#{Variable}`, Lower, Upper)
-			Write:Line(WriteAssert.Lower)
-			Write:Line(WriteAssert.Upper)
 			Write:Line(`local LengthOffset = #{Variable} - {Lower}`)
 			LengthType.Write("LengthOffset", Write)
 		else
