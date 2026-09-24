@@ -153,22 +153,13 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> `Decoding` carries the index out of the pcall, so a failure can name the event it happened in.
 	local function OpenDecode(Channel: Blocks.Block)
 		Channel:Line("local Decoding = -1")
-		Channel:Line("local Parsed, Failure = pcall(function()")
+		Channel:Line("local Parsed: boolean, Failure: any = pcall(function()")
 		Types.u8.Read("Index", Channel)
 		Channel:Line("Decoding = Index")
 	end
 
 	OpenDecode(State.Reliables)
 	OpenDecode(State.Unreliables)
-
-	--> Import async libraries
-	if State.Options.FutureLibrary then
-		Imports.Push(`local Future = require({State.Options.FutureLibrary})`)
-	end
-
-	if State.Options.PromiseLibrary then
-		Imports.Push(`local Promise = require({State.Options.PromiseLibrary})`)
-	end
 
 	--> Replication
 	local Replication = Builder.new()
@@ -188,6 +179,17 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 
 	--> Parse declarations
 	Generators.AbstractSyntaxTree(AbstractSyntaxTree.Value.Declarations)
+
+	--> Import async libraries, once the declarations have said whether this side calls into them.
+	--> Function.luau refuses a Future or Promise function when the path is missing or empty, so a
+	--> flag set here always has a path to require.
+	if State.UsesFuture then
+		Imports.Push(`local Future = require({State.Options.FutureLibrary})`)
+	end
+
+	if State.UsesPromise then
+		Imports.Push(`local Promise = require({State.Options.PromiseLibrary})`)
+	end
 
 	--> Generate context source
 	local Source = Sources[State.Context]

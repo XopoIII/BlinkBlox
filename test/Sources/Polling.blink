@@ -3,7 +3,7 @@ option UsePolling = true
 option ClientOutput = "../../Network/PollingClient.luau"
 option ServerOutput = "../../Network/PollingServer.luau"
 
-type number = u8
+type Number = u8
 
 struct a {
     foo: u8

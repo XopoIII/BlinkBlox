@@ -1,0 +1,6 @@
+-- expect E3005
+-- A declared type is exported under its own name, and Luau refuses to redefine its built-in types.
+option ClientOutput = "../../Network/LuauTypeNameClient.luau"
+option ServerOutput = "../../Network/LuauTypeNameServer.luau"
+
+type number = u8

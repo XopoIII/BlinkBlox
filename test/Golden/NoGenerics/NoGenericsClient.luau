@@ -1997,13 +1997,13 @@ function SerdesFunctions.WriteFUNCTION_DATA_TupleFunction(Value1: number, Value2
 		buffer.writeu16(SendBuffer, BLOCK_START + 0, Value3)
 	end
 	-- Value4: TupleFunction
-	if Value4 ~= nil then
+	if (Value4 :: any) ~= nil then
 		if typeof(Value4) ~= "Instance" then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
 	end
 	table.insert(SendInstances, Value4 or Null)
 	-- Value5: TupleFunction
 	-- Value5: TupleFunction
-	if Value5 ~= nil then
+	if (Value5 :: any) ~= nil then
 		if typeof(Value5) ~= "Instance" then error(`Expected an Instance, got {typeof(Value5)} instead.`) end
 	end
 	table.insert(SendInstances, Value5 or Null)
@@ -2115,7 +2115,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Color
 		end,
 		Write = function(Value: Color): (buffer)
 			local Previous = Save()
@@ -2163,7 +2163,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ExactRange
 		end,
 		Write = function(Value: ExactRange): (buffer)
 			local Previous = Save()
@@ -2210,7 +2210,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DecimalRange
 		end,
 		Write = function(Value: DecimalRange): (buffer)
 			local Previous = Save()
@@ -2258,7 +2258,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: NegativeRange
 		end,
 		Write = function(Value: NegativeRange): (buffer)
 			local Previous = Save()
@@ -2305,7 +2305,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundUpper
 		end,
 		Write = function(Value: UnboundUpper): (buffer)
 			local Previous = Save()
@@ -2351,7 +2351,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundLower
 		end,
 		Write = function(Value: UnboundLower): (buffer)
 			local Previous = Save()
@@ -2420,7 +2420,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: MapNested
 		end,
 		Write = function(Value: MapNested): (buffer)
 			local Previous = Save()
@@ -2554,7 +2554,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Standalone
 		end,
 		Write = function(Value: Standalone): (buffer)
 			local Previous = Save()
@@ -2926,7 +2926,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 2 then
@@ -3336,7 +3336,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 2 then
@@ -3442,7 +3442,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Color
 		end,
 		Write = function(Value: Color): (buffer)
 			local Previous = Save()
@@ -3490,7 +3490,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ExactRange
 		end,
 		Write = function(Value: ExactRange): (buffer)
 			local Previous = Save()
@@ -3537,7 +3537,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DecimalRange
 		end,
 		Write = function(Value: DecimalRange): (buffer)
 			local Previous = Save()
@@ -3585,7 +3585,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: NegativeRange
 		end,
 		Write = function(Value: NegativeRange): (buffer)
 			local Previous = Save()
@@ -3632,7 +3632,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundUpper
 		end,
 		Write = function(Value: UnboundUpper): (buffer)
 			local Previous = Save()
@@ -3678,7 +3678,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundLower
 		end,
 		Write = function(Value: UnboundLower): (buffer)
 			local Previous = Save()
@@ -3747,7 +3747,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: MapNested
 		end,
 		Write = function(Value: MapNested): (buffer)
 			local Previous = Save()
@@ -3881,7 +3881,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Standalone
 		end,
 		Write = function(Value: Standalone): (buffer)
 			local Previous = Save()
@@ -3990,7 +3990,7 @@ local Returns = table.freeze({
 	ClientPollEvent = {
 		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientPollEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientPollEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4001,7 +4001,7 @@ local Returns = table.freeze({
 		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 			local Previous = Save()
 			Load()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent, Value)
 			if Sent and CheckUnreliableSize("ClientUnreliablePollEvent") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
@@ -4016,7 +4016,7 @@ local Returns = table.freeze({
 	ClientEmptyPollEvent = {
 		Fire = function(Value: nil): ()
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientEmptyPollEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyPollEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4027,7 +4027,7 @@ local Returns = table.freeze({
 		Fire = function(Value: nil): ()
 			local Previous = Save()
 			Load()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent, Value)
 			if Sent and CheckUnreliableSize("ClientEmptyUnreliablePollEvent") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
@@ -4049,7 +4049,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -4062,7 +4062,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any
 			end
 		end
 	},
@@ -4076,7 +4076,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -4089,7 +4089,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any
 			end
 		end
 	},
@@ -4103,7 +4103,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -4116,7 +4116,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any
 			end
 		end
 	},
@@ -4130,7 +4130,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -4143,14 +4143,14 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any
 			end
 		end
 	},
 	ClientEmptyEvent = {
 		Fire = function(Value: nil): ()
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientEmptyEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4161,7 +4161,7 @@ local Returns = table.freeze({
 		Fire = function(Value: nil): ()
 			local Previous = Save()
 			Load()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent, Value)
 			if Sent and CheckUnreliableSize("ClientEmptyUnreliableEvent") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
@@ -4207,7 +4207,7 @@ local Returns = table.freeze({
 		Invoke = function(Value: nil): (nil)
 			local InvocationIdentifier = ClaimInvocation(Invocations, 6)
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteFUNCTION_DATA_EmptyFunction, Value, InvocationIdentifier)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_EmptyFunction, Value, InvocationIdentifier)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				ReleaseInvocation(Invocations, InvocationIdentifier)
@@ -4344,7 +4344,7 @@ local Returns = table.freeze({
 	Booleans = {
 		Fire = function(Value: { boolean }): ()
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Booleans, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Booleans, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4567,7 +4567,7 @@ local Returns = table.freeze({
 	ReliableClient = {
 		Fire = function(Value: number): ()
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ReliableClient, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReliableClient, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4604,7 +4604,7 @@ local Returns = table.freeze({
 		Fire = function(Value: number): ()
 			local Previous = Save()
 			Load()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_UnreliableClient, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_UnreliableClient, Value)
 			if Sent and CheckUnreliableSize("UnreliableClient") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
@@ -4722,7 +4722,7 @@ local Returns = table.freeze({
 		Invoke = function(Value: number): (number)
 			local InvocationIdentifier = ClaimInvocation(Invocations, 31)
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteFUNCTION_DATA_RemoteFunction, Value, InvocationIdentifier)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_RemoteFunction, Value, InvocationIdentifier)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				ReleaseInvocation(Invocations, InvocationIdentifier)
@@ -4771,7 +4771,7 @@ local Returns = table.freeze({
 		Invoke = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): (Instance?, Instance, number?, ("A" | "B" | "C" | "D"), number)
 			local InvocationIdentifier = ClaimInvocation(Invocations, 33)
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteFUNCTION_DATA_TupleFunction, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_TupleFunction, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				ReleaseInvocation(Invocations, InvocationIdentifier)

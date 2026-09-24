@@ -209,7 +209,9 @@ function Generators.Export(Declaration: Type)
 
 	Read:Compare("Success", "true", "Not"):Line("error(Result, 0)"):End()
 	Write:Compare("Success", "true", "Not"):Line("error(Result, 0)"):End()
-	Read:Return("Result")
+	--> A cast, because pcall widens what it passes through: an enum read returns its literal, and
+	--> strict mode sees the result as `string` rather than the enum's union of literals.
+	Read:Return(`Result :: {Export}`)
 	Write:Return("Result")
 
 	Read:End():Wrap("", ",")

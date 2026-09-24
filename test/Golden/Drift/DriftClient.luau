@@ -486,7 +486,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -538,7 +538,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")

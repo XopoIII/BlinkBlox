@@ -139,7 +139,7 @@ function Declarations.Event(Declaration: Parser.Event)
 	--> Writes into a batch that is kept, undoing whatever a write that throws had already added.
 	local function WriteKept(Target: Blocks.Block)
 		Target:Line("local Cursor, Instances = Mark()")
-		Target:Line(`local Sent, Failure = {TryWriteEvent}`)
+		Target:Line(`local Sent: boolean, Failure: any = {TryWriteEvent}`)
 		Target:Compare("Sent", "true", "Not"):Line("Rollback(Cursor, Instances)"):Line("error(Failure, 0)"):End()
 	end
 
@@ -381,7 +381,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			:Compare("arguments", "nil", "Not")
 			:Return("index, unpack(arguments, 1, arguments.n)")
 			:End()
-			:Return("")
+			:Return(Util.ExhaustedValues(Value.Data :: any, State.Context))
 			:End()
 			:Wrap("return ", "")
 
@@ -413,7 +413,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		else
 			Fire:Line(`local Previous = Save()`)
 			Fire:Line(`Load()`)
-			Fire:Line(`local Sent, Failure = {TryWriteEvent}`)
+			Fire:Line(`local Sent: boolean, Failure: any = {TryWriteEvent}`)
 			--> Wrapped rather than returned out of: the saved buffer has to be restored either way,
 			--> and an early return here would leave the caller's outgoing state swapped out.
 			-->

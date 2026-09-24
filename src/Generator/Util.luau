@@ -140,7 +140,18 @@ local function GenericsHeader(Generics: { List: { string } }?): string
 	return `<{table.concat(Generics.List, ",")}>`
 end
 
+--- The values a polled event's iterator returns once its queue is empty: one nil, typed `any`, for
+--- each it returns otherwise -- the index, the sender on the server, then the data. A bare `return`
+--- is refused by strict mode from a function declared to return values, and declaring them optional
+--- instead would make them optional inside every `for` loop over it too.
+local function ExhaustedValues(Data: Parser.Declaration?, Context: string): string
+	local Tuple = if Data and Data.Type == "Tuple" then (Data :: any).Value.Values else nil
+	local Count = 1 + (if Context == "Server" then 1 else 0) + (if Tuple then math.max(#Tuple, 1) else 1)
+	return table.concat(table.create(Count, "nil :: any"), ", ")
+end
+
 return {
+	ExhaustedValues = ExhaustedValues,
 	SetType = SetType,
 	TagEnumType = TagEnumType,
 	StructType = StructType,

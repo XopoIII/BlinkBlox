@@ -1,13 +1,14 @@
 #!/usr/bin/env sh
 # Full Luau type-check. Run by hand with:  sh scripts/type-check.sh
 #
-# TWO CONTOURS, AND THE SPLIT IS THE WHOLE POINT. This repository is not one target:
+# THREE CONTOURS, AND THE SPLIT IS THE WHOLE POINT. This repository is not one target:
 #
 #   src/     the compiler — runs on Lune (the CLI), but ALSO inside Roblox, because the Studio
 #            plugin requires the lexer, parser and error modules through the `@compiler` alias.
 #            Those modules branch at runtime (`task ~= nil`, `game ~= nil`), so they are analysed
 #            with the Roblox type defs present even though Lune is the primary host.
 #   plugin/  Roblox only, and it needs a Rojo sourcemap to resolve requires across the DataModel.
+#   test/Golden  what the compiler emits: strict modules that run in a game, checked as one would.
 #
 # `globalTypes.d.luau` is the Roblox API dump. It is downloaded once and git-ignored, so runs after
 # the first are offline.
@@ -49,5 +50,12 @@ luau-lsp analyze --defs globalTypes.d.luau src
 echo "type-check: Studio plugin (plugin/src)"
 rojo sourcemap default.project.json --output build/sourcemap.json >/dev/null
 luau-lsp analyze --sourcemap build/sourcemap.json --defs globalTypes.d.luau plugin/src
+
+# The compiler's OUTPUT, as a game's editor sees it. Every generated module declares `--!strict`, and
+# until 0.32.0 the test schemas' modules carried about 190 strict errors between them -- invisible
+# here, since only the compiler's own source was analysed. test/Golden is the committed output of
+# every test schema, so an emitter change that breaks strict mode fails here instead of in a game.
+echo "type-check: generated modules (test/Golden)"
+luau-lsp analyze --defs globalTypes.d.luau test/Golden
 
 echo "type-check: clean"

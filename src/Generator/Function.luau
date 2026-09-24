@@ -36,11 +36,11 @@ function Declarations.Function(Declaration: Parser.Function)
 	local IsFuture = (Yield == "Future")
 	local IsPromise = (Yield == "Promise")
 
-	if IsFuture and not State.Options.FutureLibrary then
+	if IsFuture and (State.Options.FutureLibrary or "") == "" then
 		error(`Cannot use yield type: "Future", without providing a path to the future library.`)
 	end
 
-	if IsPromise and not State.Options.PromiseLibrary then
+	if IsPromise and (State.Options.PromiseLibrary or "") == "" then
 		error(`Cannot use yield type: "Promise", without providing a path to the promise library.`)
 	end
 
@@ -264,7 +264,7 @@ function Declarations.Function(Declaration: Parser.Function)
 			--> session. This is the one leak the timeout cannot cover, because it is armed after it.
 			Target:Line("local Cursor, Instances = Mark()")
 			Target:Line(
-				`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, State.Scope)}, {PublicArguments}, InvocationIdentifier)`
+				`local Sent: boolean, Failure: any = pcall({Util.GetPath(DataIdentifier, true, State.Scope)}, {PublicArguments}, InvocationIdentifier)`
 			)
 			Target:Compare("Sent", "true", "Not")
 				:Line("Rollback(Cursor, Instances)")
@@ -290,11 +290,14 @@ function Declarations.Function(Declaration: Parser.Function)
 
 		local Invoke
 		if IsFuture then
+			State.UsesFuture = true
 			local Wrapper = Blocks.Function("", ""):Lines(Contents):End():Wrap("return Future.Try(", ")")
 
 			Invoke = Blocks.Function(State.Casing.Invoke, InvokeValues, `Future.Future<boolean, {ReturnTypes}>`, true)
 			Invoke:Lines(Wrapper.Content, 1)
 		elseif IsPromise then
+			State.UsesPromise = true
+
 			--> A cancelled promise gives its slot back too, otherwise cancelling enough calls would
 			--> exhaust the bitset with nothing outstanding.
 			local OnCancel = Blocks.Function("", ""):Line(ReleaseSlot):End():Wrap("OnCancel(", ")")

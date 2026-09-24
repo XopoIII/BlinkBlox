@@ -177,6 +177,20 @@ Grammar.RESERVED = {
 	SetDecodeErrorHandler = true,
 }
 
+--- Luau's built-in type names. A declared type becomes an exported Luau type of the same name, and
+--- Luau refuses to redefine these: `type number = u8` emitted `export type number = number`, a type
+--- error in the strict module. (`nil` and `typeof` are words the lexer never passes as a name.)
+Grammar.LUAU_TYPES = {
+	any = true,
+	boolean = true,
+	buffer = true,
+	never = true,
+	number = true,
+	string = true,
+	thread = true,
+	unknown = true,
+}
+
 --- Luau's reserved words. A named type-pack element becomes a LOCAL VARIABLE in the generated
 --- module -- unlike a struct field, which becomes a table key and is quoted by FormatKey -- so one
 --- of these as a name would emit code that does not compile.

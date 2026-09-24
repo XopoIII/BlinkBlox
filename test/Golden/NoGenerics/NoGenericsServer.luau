@@ -1518,7 +1518,7 @@ function SerdesFunctions.WriteEVENT_InstanceAny(Value: Instance): ()
 	-- EVENT_InstanceAny (25)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 25)
 	-- Value: InstanceAny
-	if Value ~= nil then
+	if (Value :: any) ~= nil then
 		if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
 	end
 	table.insert(SendInstances, Value or Null)
@@ -1530,7 +1530,7 @@ function SerdesFunctions.WriteEVENT_InstanceOfType(Value: Sound): ()
 	-- EVENT_InstanceOfType (26)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 26)
 	-- Value: InstanceOfType
-	if Value ~= nil then
+	if (Value :: any) ~= nil then
 		if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
 		if not Value:IsA("Sound") then error(`Expected an Instance of type "Sound", got "{Value.ClassName}" instead.`) end
 	end
@@ -1544,7 +1544,7 @@ function SerdesFunctions.WriteEVENT_InstanceOptional(Value: Instance?): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 27)
 	-- Value: InstanceOptional
 	-- Value: InstanceOptional
-	if Value ~= nil then
+	if (Value :: any) ~= nil then
 		if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
 	end
 	table.insert(SendInstances, Value or Null)
@@ -1969,13 +1969,13 @@ function SerdesFunctions.WriteEVENT_Tuple(Value1: number, Value2: ("A" | "B" | "
 		buffer.writeu16(SendBuffer, BLOCK_START + 0, Value3)
 	end
 	-- Value4: Tuple
-	if Value4 ~= nil then
+	if (Value4 :: any) ~= nil then
 		if typeof(Value4) ~= "Instance" then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
 	end
 	table.insert(SendInstances, Value4 or Null)
 	-- Value5: Tuple
 	-- Value5: Tuple
-	if Value5 ~= nil then
+	if (Value5 :: any) ~= nil then
 		if typeof(Value5) ~= "Instance" then error(`Expected an Instance, got {typeof(Value5)} instead.`) end
 	end
 	table.insert(SendInstances, Value5 or Null)
@@ -2035,13 +2035,13 @@ function SerdesFunctions.WriteEVENT_TupleUnreliable(Value1: number, Value2: ("A"
 		buffer.writeu16(SendBuffer, BLOCK_START + 0, Value3)
 	end
 	-- Value4: TupleUnreliable
-	if Value4 ~= nil then
+	if (Value4 :: any) ~= nil then
 		if typeof(Value4) ~= "Instance" then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
 	end
 	table.insert(SendInstances, Value4 or Null)
 	-- Value5: TupleUnreliable
 	-- Value5: TupleUnreliable
-	if Value5 ~= nil then
+	if (Value5 :: any) ~= nil then
 		if typeof(Value5) ~= "Instance" then error(`Expected an Instance, got {typeof(Value5)} instead.`) end
 	end
 	table.insert(SendInstances, Value5 or Null)
@@ -2104,12 +2104,12 @@ function SerdesFunctions.WriteFUNCTION_RETURN_TupleFunction(Value1: Instance?, V
 	-- Value: TupleFunction
 	-- Value1: TupleFunction
 	-- Value1: TupleFunction
-	if Value1 ~= nil then
+	if (Value1 :: any) ~= nil then
 		if typeof(Value1) ~= "Instance" then error(`Expected an Instance, got {typeof(Value1)} instead.`) end
 	end
 	table.insert(SendInstances, Value1 or Null)
 	-- Value2: TupleFunction
-	if Value2 ~= nil then
+	if (Value2 :: any) ~= nil then
 		if typeof(Value2) ~= "Instance" then error(`Expected an Instance, got {typeof(Value2)} instead.`) end
 	end
 	table.insert(SendInstances, Value2 or Null)
@@ -2216,7 +2216,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Color
 		end,
 		Write = function(Value: Color): (buffer)
 			local Previous = Save()
@@ -2264,7 +2264,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ExactRange
 		end,
 		Write = function(Value: ExactRange): (buffer)
 			local Previous = Save()
@@ -2311,7 +2311,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DecimalRange
 		end,
 		Write = function(Value: DecimalRange): (buffer)
 			local Previous = Save()
@@ -2359,7 +2359,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: NegativeRange
 		end,
 		Write = function(Value: NegativeRange): (buffer)
 			local Previous = Save()
@@ -2406,7 +2406,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundUpper
 		end,
 		Write = function(Value: UnboundUpper): (buffer)
 			local Previous = Save()
@@ -2452,7 +2452,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundLower
 		end,
 		Write = function(Value: UnboundLower): (buffer)
 			local Previous = Save()
@@ -2521,7 +2521,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: MapNested
 		end,
 		Write = function(Value: MapNested): (buffer)
 			local Previous = Save()
@@ -2655,7 +2655,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Standalone
 		end,
 		Write = function(Value: Standalone): (buffer)
 			local Previous = Save()
@@ -3424,7 +3424,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			break
 		end
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -3571,7 +3571,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			break
 		end
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -3645,7 +3645,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Color
 		end,
 		Write = function(Value: Color): (buffer)
 			local Previous = Save()
@@ -3693,7 +3693,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ExactRange
 		end,
 		Write = function(Value: ExactRange): (buffer)
 			local Previous = Save()
@@ -3740,7 +3740,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DecimalRange
 		end,
 		Write = function(Value: DecimalRange): (buffer)
 			local Previous = Save()
@@ -3788,7 +3788,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: NegativeRange
 		end,
 		Write = function(Value: NegativeRange): (buffer)
 			local Previous = Save()
@@ -3835,7 +3835,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundUpper
 		end,
 		Write = function(Value: UnboundUpper): (buffer)
 			local Previous = Save()
@@ -3881,7 +3881,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundLower
 		end,
 		Write = function(Value: UnboundLower): (buffer)
 			local Previous = Save()
@@ -3950,7 +3950,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: MapNested
 		end,
 		Write = function(Value: MapNested): (buffer)
 			local Previous = Save()
@@ -4084,7 +4084,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Standalone
 		end,
 		Write = function(Value: Standalone): (buffer)
 			local Previous = Save()
@@ -4200,7 +4200,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -4213,7 +4213,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end
 	},
@@ -4227,7 +4227,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -4240,7 +4240,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end
 	},
@@ -4254,7 +4254,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -4267,7 +4267,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end
 	},
@@ -4281,7 +4281,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -4294,7 +4294,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end
 	},
@@ -4302,7 +4302,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ServerPollEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ServerPollEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4394,7 +4394,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: nil): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ServerEmptyPollEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ServerEmptyPollEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4516,7 +4516,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: nil): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_EmptyEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_EmptyEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4641,7 +4641,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Flags8, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags8, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4692,7 +4692,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Flags16, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags16, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4743,7 +4743,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Flags32, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags32, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4794,7 +4794,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Flags33, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags33, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4845,7 +4845,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_DynamicMap, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_DynamicMap, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4896,7 +4896,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { { Static: number, Dynamic: buffer } }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_DynamicArray, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_DynamicArray, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -4947,7 +4947,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_PlayerEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_PlayerEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5015,7 +5015,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: any): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Unknown, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Unknown, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5066,7 +5066,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {[string]: number}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_MapEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5117,7 +5117,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Map: {[string]: number} }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_MapStructEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapStructEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5168,7 +5168,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {[string]: { number }}): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_MapComplexEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapComplexEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5219,7 +5219,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_MapReferenceEvent, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapReferenceEvent, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5352,7 +5352,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ManyReliableSync, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ManyReliableSync, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5403,7 +5403,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ManyReliableAsync, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ManyReliableAsync, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5536,7 +5536,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ReliableServer, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReliableServer, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5587,7 +5587,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ReliableServerAsync, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReliableServerAsync, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5750,7 +5750,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: Instance): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_InstanceAny, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceAny, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5801,7 +5801,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: Sound): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_InstanceOfType, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOfType, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5852,7 +5852,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: Instance?): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_InstanceOptional, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOptional, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5903,7 +5903,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Reference, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Reference, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -5954,7 +5954,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ReferenceArray, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReferenceArray, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -6005,7 +6005,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_ReferenceOptional, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReferenceOptional, Value)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -6089,7 +6089,7 @@ local Returns = table.freeze({
 		Fire = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
 			Load(PlayersMap[Player])
 			local Cursor, Instances = Mark()
-			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_Tuple, Value1, Value2, Value3, Value4, Value5, Value6)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Tuple, Value1, Value2, Value3, Value4, Value5, Value6)
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
@@ -6215,7 +6215,7 @@ local Returns = table.freeze({
 			Fire = function(Player: Player, Value: number): ()
 				Load(PlayersMap[Player])
 				local Cursor, Instances = Mark()
-				local Sent, Failure = pcall(SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent, Value)
+				local Sent: boolean, Failure: any = pcall(SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent, Value)
 				if Sent ~= true then
 					Rollback(Cursor, Instances)
 					error(Failure, 0)
@@ -6267,7 +6267,7 @@ local Returns = table.freeze({
 				Fire = function(Player: Player, Value: number): ()
 					Load(PlayersMap[Player])
 					local Cursor, Instances = Mark()
-					local Sent, Failure = pcall(SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent, Value)
+					local Sent: boolean, Failure: any = pcall(SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent, Value)
 					if Sent ~= true then
 						Rollback(Cursor, Instances)
 						error(Failure, 0)
@@ -6321,7 +6321,7 @@ local Returns = table.freeze({
 			Fire = function(Player: Player, Value: number): ()
 				Load(PlayersMap[Player])
 				local Cursor, Instances = Mark()
-				local Sent, Failure = pcall(SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent, Value)
+				local Sent: boolean, Failure: any = pcall(SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent, Value)
 				if Sent ~= true then
 					Rollback(Cursor, Instances)
 					error(Failure, 0)

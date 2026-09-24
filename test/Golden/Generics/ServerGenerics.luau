@@ -17,8 +17,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local Future = require()
-local Promise = require()
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
 local SCHEMA_SIGNATURE = "c0528652a9ca2dd8"
@@ -468,7 +466,7 @@ if not RunService:IsRunning() then
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Entity
 		end,
 		Write = function(Value: Entity): (buffer)
 			local Previous = Save()
@@ -883,7 +881,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			break
 		end
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
@@ -930,7 +928,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			break
 		end
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -988,7 +986,7 @@ local Returns = table.freeze({
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Entity
 		end,
 		Write = function(Value: Entity): (buffer)
 			local Previous = Save()

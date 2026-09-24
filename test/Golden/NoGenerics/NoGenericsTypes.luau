@@ -416,7 +416,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Color
 		end,
 		Write = function(Value: Color): (buffer)
 			local Previous = Save()
@@ -464,7 +464,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ExactRange
 		end,
 		Write = function(Value: ExactRange): (buffer)
 			local Previous = Save()
@@ -511,7 +511,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DecimalRange
 		end,
 		Write = function(Value: DecimalRange): (buffer)
 			local Previous = Save()
@@ -559,7 +559,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: NegativeRange
 		end,
 		Write = function(Value: NegativeRange): (buffer)
 			local Previous = Save()
@@ -606,7 +606,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundUpper
 		end,
 		Write = function(Value: UnboundUpper): (buffer)
 			local Previous = Save()
@@ -652,7 +652,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundLower
 		end,
 		Write = function(Value: UnboundLower): (buffer)
 			local Previous = Save()
@@ -721,7 +721,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: MapNested
 		end,
 		Write = function(Value: MapNested): (buffer)
 			local Previous = Save()
@@ -855,7 +855,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Standalone
 		end,
 		Write = function(Value: Standalone): (buffer)
 			local Previous = Save()

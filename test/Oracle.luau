@@ -3,6 +3,11 @@
 --- schema alone, never from the generated code, so a serialiser that disagrees with the schema
 --- disagrees with this. Properties.luau judges what the generated modules return by it; Generate.luau
 --- draws values it admits.
+---
+--- Two judgements are borrowed from the compiler rather than made independently, and a bug shared
+--- with it would pass them: which f16 values a range admits comes from `Narrow`, which copies the
+--- generator's f16 arithmetic, and the byte bounds in property 2 come from `Size`. f16 itself is
+--- checked independently and exhaustively in HalfFloats.luau.
 local Narrow = require("@compiler/Generator/Prefabs/Narrow")
 local Settings = require("@compiler/Settings")
 

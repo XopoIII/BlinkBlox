@@ -534,7 +534,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Byte
 		end,
 		Write = function(Value: Byte): (buffer)
 			local Previous = Save()
@@ -578,7 +578,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Color
 		end,
 		Write = function(Value: Color): (buffer)
 			local Previous = Save()
@@ -647,7 +647,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ColorArray
 		end,
 		Write = function(Value: ColorArray): (buffer)
 			local Previous = Save()
@@ -713,7 +713,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DateSeconds
 		end,
 		Write = function(Value: DateSeconds): (buffer)
 			local Previous = Save()
@@ -758,7 +758,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DateMilliseconds
 		end,
 		Write = function(Value: DateMilliseconds): (buffer)
 			local Previous = Save()
@@ -803,7 +803,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BrickkColor
 		end,
 		Write = function(Value: BrickkColor): (buffer)
 			local Previous = Save()
@@ -849,7 +849,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ExactRange
 		end,
 		Write = function(Value: ExactRange): (buffer)
 			local Previous = Save()
@@ -896,7 +896,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: DecimalRange
 		end,
 		Write = function(Value: DecimalRange): (buffer)
 			local Previous = Save()
@@ -944,7 +944,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: NegativeRange
 		end,
 		Write = function(Value: NegativeRange): (buffer)
 			local Previous = Save()
@@ -991,7 +991,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundUpper
 		end,
 		Write = function(Value: UnboundUpper): (buffer)
 			local Previous = Save()
@@ -1037,7 +1037,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: UnboundLower
 		end,
 		Write = function(Value: UnboundLower): (buffer)
 			local Previous = Save()
@@ -1087,7 +1087,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: RangedVector
 		end,
 		Write = function(Value: RangedVector): (buffer)
 			local Previous = Save()
@@ -1139,7 +1139,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Buffer
 		end,
 		Write = function(Value: Buffer): (buffer)
 			local Previous = Save()
@@ -1189,7 +1189,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: ExactBuffer
 		end,
 		Write = function(Value: ExactBuffer): (buffer)
 			local Previous = Save()
@@ -1239,7 +1239,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BoundedBuffer
 		end,
 		Write = function(Value: BoundedBuffer): (buffer)
 			local Previous = Save()
@@ -1296,7 +1296,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PlainCFrame
 		end,
 		Write = function(Value: PlainCFrame): (buffer)
 			local Previous = Save()
@@ -1354,7 +1354,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatCFrame
 		end,
 		Write = function(Value: QuatCFrame): (buffer)
 			local Previous = Save()
@@ -1485,7 +1485,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatHalfCFrame
 		end,
 		Write = function(Value: QuatHalfCFrame): (buffer)
 			local Previous = Save()
@@ -1679,7 +1679,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatFirstCFrame
 		end,
 		Write = function(Value: QuatFirstCFrame): (buffer)
 			local Previous = Save()
@@ -1835,7 +1835,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: QuatCFrames
 		end,
 		Write = function(Value: QuatCFrames): (buffer)
 			local Previous = Save()
@@ -1966,7 +1966,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: MultiDimensionalArray
 		end,
 		Write = function(Value: MultiDimensionalArray): (buffer)
 			local Previous = Save()
@@ -2049,7 +2049,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeByte
 		end,
 		Write = function(Value: SizeByte): (buffer)
 			local Previous = Save()
@@ -2094,7 +2094,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeFixedString
 		end,
 		Write = function(Value: SizeFixedString): (buffer)
 			local Previous = Save()
@@ -2143,7 +2143,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeBoundedString
 		end,
 		Write = function(Value: SizeBoundedString): (buffer)
 			local Previous = Save()
@@ -2204,7 +2204,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeFixedArray
 		end,
 		Write = function(Value: SizeFixedArray): (buffer)
 			local Previous = Save()
@@ -2274,7 +2274,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeBoundedArray
 		end,
 		Write = function(Value: SizeBoundedArray): (buffer)
 			local Previous = Save()
@@ -2338,7 +2338,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeOptionalByte
 		end,
 		Write = function(Value: SizeOptionalByte): (buffer)
 			local Previous = Save()
@@ -2393,7 +2393,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeVector
 		end,
 		Write = function(Value: SizeVector): (buffer)
 			local Previous = Save()
@@ -2447,7 +2447,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeStruct
 		end,
 		Write = function(Value: SizeStruct): (buffer)
 			local Previous = Save()
@@ -2514,7 +2514,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeEnum
 		end,
 		Write = function(Value: SizeEnum): (buffer)
 			local Previous = Save()
@@ -2567,7 +2567,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeFlags
 		end,
 		Write = function(Value: SizeFlags): (buffer)
 			local Previous = Save()
@@ -2622,7 +2622,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: SizeMap
 		end,
 		Write = function(Value: SizeMap): (buffer)
 			local Previous = Save()
@@ -2697,7 +2697,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OffsetArray
 		end,
 		Write = function(Value: OffsetArray): (buffer)
 			local Previous = Save()
@@ -2761,7 +2761,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OffsetString
 		end,
 		Write = function(Value: OffsetString): (buffer)
 			local Previous = Save()
@@ -2819,7 +2819,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OffsetBuffer
 		end,
 		Write = function(Value: OffsetBuffer): (buffer)
 			local Previous = Save()
@@ -2874,7 +2874,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsOne
 		end,
 		Write = function(Value: BitsOne): (buffer)
 			local Previous = Save()
@@ -2936,7 +2936,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsSeven
 		end,
 		Write = function(Value: BitsSeven): (buffer)
 			local Previous = Save()
@@ -3030,7 +3030,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsEight
 		end,
 		Write = function(Value: BitsEight): (buffer)
 			local Previous = Save()
@@ -3132,7 +3132,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsNine
 		end,
 		Write = function(Value: BitsNine): (buffer)
 			local Previous = Save()
@@ -3258,7 +3258,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsSeventeen
 		end,
 		Write = function(Value: BitsSeventeen): (buffer)
 			local Previous = Save()
@@ -3408,7 +3408,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: BitsMixed
 		end,
 		Write = function(Value: BitsMixed): (buffer)
 			local Previous = Save()
@@ -3498,7 +3498,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedBooleans
 		end,
 		Write = function(Value: PackedBooleans): (buffer)
 			local Previous = Save()
@@ -3574,7 +3574,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedFixed
 		end,
 		Write = function(Value: PackedFixed): (buffer)
 			local Previous = Save()
@@ -3653,7 +3653,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedRanged
 		end,
 		Write = function(Value: PackedRanged): (buffer)
 			local Previous = Save()
@@ -3750,7 +3750,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedNested
 		end,
 		Write = function(Value: PackedNested): (buffer)
 			local Previous = Save()
@@ -3842,7 +3842,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedThroughAlias
 		end,
 		Write = function(Value: PackedThroughAlias): (buffer)
 			local Previous = Save()
@@ -3945,7 +3945,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedBeside
 		end,
 		Write = function(Value: PackedBeside): (buffer)
 			local Previous = Save()
@@ -4077,7 +4077,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedMap
 		end,
 		Write = function(Value: PackedMap): (buffer)
 			local Previous = Save()
@@ -4182,7 +4182,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: PackedOptional
 		end,
 		Write = function(Value: PackedOptional): (buffer)
 			local Previous = Save()
@@ -4273,7 +4273,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: MapNested
 		end,
 		Write = function(Value: MapNested): (buffer)
 			local Previous = Save()
@@ -4407,7 +4407,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: Standalone
 		end,
 		Write = function(Value: Standalone): (buffer)
 			local Previous = Save()
@@ -4559,7 +4559,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: OptionalHoles
 		end,
 		Write = function(Value: OptionalHoles): (buffer)
 			local Previous = Save()
@@ -4645,7 +4645,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: HalfFloat
 		end,
 		Write = function(Value: HalfFloat): (buffer)
 			local Previous = Save()
@@ -4729,7 +4729,7 @@ return {
 			if Success ~= true then
 				error(Result, 0)
 			end
-			return Result
+			return Result :: FlagCarrier
 		end,
 		Write = function(Value: FlagCarrier): (buffer)
 			local Previous = Save()

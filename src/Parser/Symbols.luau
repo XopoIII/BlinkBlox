@@ -78,6 +78,16 @@ function Parser.SetReference(self: Parser, Bucket: Bucket, Identifier: Token, De
 			:Emit()
 	end
 
+	--> Events and functions share the bucket but become table keys, not types, so only a type is held
+	--> to it.
+	local Kind = Declaration.Type
+	if Bucket == "Types" and Kind ~= "Event" and Kind ~= "Function" and Grammar.LUAU_TYPES[Name] then
+		self:Diagnostic(Error.AnalyzeReservedIdentifier, `Reserved identifier`)
+			:Primary(Identifier, `"{Name}" is a Luau type, and a declared type is exported under its own name`)
+			:Note("Luau refuses to redefine its built-in types. Rename the declaration.")
+			:Emit()
+	end
+
 	self.Symbols[Name] = true
 	self.Scope.Symbols[Bucket][Name] = {
 		To = Declaration,

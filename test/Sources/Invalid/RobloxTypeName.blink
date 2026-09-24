@@ -1,0 +1,6 @@
+-- expect E3005
+-- A declared type is exported under its own name, so one named after a class it narrows to refers to itself.
+option ClientOutput = "../../Network/RobloxTypeNameClient.luau"
+option ServerOutput = "../../Network/RobloxTypeNameServer.luau"
+
+type Player = Instance(Player)

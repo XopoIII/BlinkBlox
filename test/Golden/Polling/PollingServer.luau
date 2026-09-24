@@ -356,7 +356,7 @@ Queue.Reliable[0] = CreateQueue()
 EventNames.Reliable[0] = "PollingEvent"
 Queue.Reliable[1] = CreateQueue()
 EventNames.Reliable[1] = "ImplicitPollingEvent"
-export type number = number
+export type Number = number
 export type a = { foo: number }
 export type b = { bar: number }
 export type c<A,B,C> = { a: A, B: { bar: number }, C: C }
@@ -767,7 +767,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			break
 		end
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -826,7 +826,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			break
 		end
 		local Decoding = -1
-		local Parsed, Failure = pcall(function()
+		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
@@ -856,7 +856,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -869,7 +869,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end
 	},
@@ -883,7 +883,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end,
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
@@ -896,7 +896,7 @@ local Returns = table.freeze({
 				if arguments ~= nil then
 					return index, unpack(arguments, 1, arguments.n)
 				end
-				return 
+				return nil :: any, nil :: any, nil :: any
 			end
 		end
 	},

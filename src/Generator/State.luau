@@ -39,6 +39,12 @@ export type State = {
 	--- bookkeeping is emitted only where something uses it.
 	UsesOrdering: boolean,
 
+	--- Set when this side's module invokes a function whose Yield is Future or Promise -- only the
+	--- invoking side does -- so the library is required only by a module that calls into it. A
+	--- require nothing used was a lint warning in every listening module.
+	UsesFuture: boolean,
+	UsesPromise: boolean,
+
 	--- One entry per rate-limited event or function, in the order they were generated. Each takes
 	--- four consecutive numbers in the per-player bucket, so the entry at index N starts at slot
 	--- (N - 1) * 4 + 1.
@@ -66,6 +72,8 @@ local State: State = {
 	Unreliables = nil :: any,
 
 	UsesOrdering = false,
+	UsesFuture = false,
+	UsesPromise = false,
 	RateSlots = {},
 	Channels = {
 		Reliable = { Count = 0, Listening = false },
@@ -85,6 +93,8 @@ function State.Reset()
 	table.clear(State.RateSlots)
 	table.clear(Prefabs.Required)
 	State.UsesOrdering = false
+	State.UsesFuture = false
+	State.UsesPromise = false
 
 	for _, Channel in State.Channels do
 		Channel.Count = 0
