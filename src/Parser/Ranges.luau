@@ -147,6 +147,12 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 		end
 
 		self:Consume("Comma")
+
+		--> A trailing comma, as every other list in the language accepts.
+		if self:TryConsume("CloseChevrons") then
+			Closed = true
+			break
+		end
 	end
 
 	if not Closed then

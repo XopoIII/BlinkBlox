@@ -156,6 +156,9 @@ function Parser.ReplaceGenerics(self: Parser, Of: TypeNode): TypeNode
 		end
 	end
 
+	--> A trailing comma, as every other list in the language accepts. The count is still exact: one
+	--> argument short fails at the comma above, one too many at the closing chevron below.
+	self:TryConsume("Comma")
 	self:Consume("CloseChevrons")
 
 	--> hack to find lost references
