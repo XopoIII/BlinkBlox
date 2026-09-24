@@ -77,10 +77,13 @@ local function StepReplication()
     buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
     Reliable:FireServer(Buffer, SendInstances)
 
-    SendSize = 64
+    --> Kept for the next frame, as the server keeps each player's; see its StepReplication.
     SendCursor = 0
     SendOffset = 0
-    SendBuffer = buffer.create(64)
+    if SendSize > 4096 then
+        SendSize = 64
+        SendBuffer = buffer.create(64)
+    end
     table.clear(SendInstances)
 end
 ]]

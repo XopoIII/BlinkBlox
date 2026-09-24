@@ -83,6 +83,9 @@ local function Load(Save: BufferSave?)
         return
     end
 
+    --> A fresh buffer, never a shared scratch one, although StepReplication now keeps its buffers:
+    --> `Load(PlayersMap[Player])` lands here for a player with no entry yet, and the Save that
+    --> follows stores this buffer as theirs. Two players handed one buffer would write into each other.
     SendSize = 64
     SendCursor = 0
     SendOffset = 0
@@ -2780,10 +2783,13 @@ local function StepReplication()
     buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
     Reliable:FireServer(Buffer, SendInstances)
 
-    SendSize = 64
+    --> Kept for the next frame, as the server keeps each player's; see its StepReplication.
     SendCursor = 0
     SendOffset = 0
-    SendBuffer = buffer.create(64)
+    if SendSize > 4096 then
+        SendSize = 64
+        SendBuffer = buffer.create(64)
+    end
     table.clear(SendInstances)
 end
 RunService.Heartbeat:Connect(StepReplication)

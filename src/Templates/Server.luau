@@ -327,9 +327,15 @@ local function StepReplication()
         buffer.copy(Buffer, 0, Send.Buffer, 0, Send.Cursor)
         Reliable:FireClient(Player, Buffer, Send.Instances)
 
-        Send.Size = 64
+        --> The buffer this player's writes grew is kept for the next frame rather than regrown from
+        --> 64 bytes every Heartbeat: only the exact-size copy above goes on the wire, and every writer
+        --> writes whole bytes, so what is left past the cursor is never read. One that a burst grew
+        --> past 4 KB is let go, so a single large frame is not held for the rest of the session.
         Send.Cursor = 0
-        Send.Buffer = buffer.create(64)
+        if Send.Size > 4096 then
+            Send.Size = 64
+            Send.Buffer = buffer.create(64)
+        end
         table.clear(Send.Instances)
     end
 end
