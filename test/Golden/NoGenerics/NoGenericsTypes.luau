@@ -72,6 +72,9 @@ local function Load(Save: BufferSave?)
         return
     end
 
+    --> A fresh buffer, never a shared scratch one, although StepReplication now keeps its buffers:
+    --> `Load(PlayersMap[Player])` lands here for a player with no entry yet, and the Save that
+    --> follows stores this buffer as theirs. Two players handed one buffer would write into each other.
     SendSize = 64
     SendCursor = 0
     SendOffset = 0

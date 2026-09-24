@@ -242,4 +242,43 @@ do
 	OkPrint(`Test "{Name}" passed!`)
 end
 
+--> A flush keeps the buffer it grew, so the next frame writes over whatever the last one left past
+--> the cursor. Only the exact-size copy goes out; a frame after a large one must carry its own
+--> bytes and nothing of its predecessor's.
+do
+	local Name = "A frame after a larger one carries none of its bytes"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	local Remote = require("./Client").Instances.BLINK_RELIABLE_REMOTE
+	local Original = Remote.FireServer
+	local Sent: { buffer } = {}
+	Remote.FireServer = function(_self, Buffer)
+		table.insert(Sent, Buffer)
+	end
+
+	task.wait(FLUSH)
+	table.clear(Sent)
+
+	for Value = 1, 40 do
+		Client.ReliableClient.Fire(Value)
+	end
+	task.wait(FLUSH)
+	Client.ReliableClient.Fire(7)
+	task.wait(FLUSH)
+	Remote.FireServer = Original
+
+	local Large, Small = Sent[1], Sent[2]
+	if #Sent ~= 2 or not Large or not Small then
+		ErrorPrint(`Failed "{Name}": {#Sent} packet(s) sent over two frames, expected 2.`)
+		return {}
+	end
+
+	--> One event is its index and its u8: the second packet is exactly one fortieth of the first.
+	if buffer.len(Small) * 40 ~= buffer.len(Large) or buffer.readu8(Small, buffer.len(Small) - 1) ~= 7 then
+		ErrorPrint(`Failed "{Name}": the second frame was {buffer.len(Small)} bytes after {buffer.len(Large)}.`)
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end
+
 return {}
