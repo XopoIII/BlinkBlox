@@ -175,11 +175,12 @@ The same gates run in CI (`.github/workflows/checks.yaml`) and before each commi
 **The tree is at zero.** No lint warnings, no type errors, no formatting drift. Keep it there — a
 warning that is tolerated once stops being read.
 
-The version is recorded in three files -- `build/.darklua.json`, `plugin/.darklua.json` and
-`pesde.toml` -- and `lune run bump <version>` writes all three. `scripts/check-versions.sh` fails the
-build if they disagree, which they did: the plugin's copy sat five minor releases behind the
-compiler's, so everything the Studio plugin generated went out stamped with a version Blink had not
-been for a year. Never edit the three by hand.
+The version is recorded in two files -- `build/.darklua.json` and `pesde.toml` -- and
+`lune run bump <version>` writes both. `scripts/check-versions.sh` fails the build if they disagree.
+The plugin used to have a third copy in `plugin/.darklua.json`, which sat five minor releases behind
+the compiler's, so everything the Studio plugin generated went out stamped with a version Blink had
+not been for a year. The plugin now bundles with `build/.darklua.json` like the CLI, and that file is
+gone. Never edit the version by hand.
 
 Luau files are capped at 500 lines by `scripts/check-file-size.sh`. The files already past that are
 recorded at their current size: they may shrink, never grow. A recorded number makes every addition to
