@@ -2,6 +2,7 @@
 --!native
 --!optimize 2
 
+local AST = require("./AST")
 local Analysis = require("./Analysis")
 local AttributeParser = require("./Modules/Attributes")
 local Error = require("./Modules/Error")
@@ -15,186 +16,38 @@ local Table = require("./Modules/Table")
 
 local Settings = require("./Settings")
 
----- Globals ----
-
---> Shared with Settings and the generator so all three mean the same table, not Roblox's userdata.
-export type NumberRange = Settings.NumberRange
-local NumberRange = {
-	new = function(Min: number, Max: number?): NumberRange
-		return {
-			Min = Min,
-			Max = Max or Min,
-		}
-	end,
-}
-
 ---- Types ----
 
-type Token = Lexer.Token
+--> Defined in AST.luau, which the read-only stages can require without a cycle. Re-exported here so
+--> `Parser.TypeNode` and the rest keep resolving for everything that already requires the parser.
+type Token = AST.Token
+type Generics = AST.Generics
+type Reference = AST.Reference
+type EventOption = AST.EventOption
+type Attributes = AST.Attributes
+type AttributesTokens = AST.AttributesTokens
+type Declarations = AST.Declarations
 
-type Type = "Type" | "Event" | "Scope"
-type Node<Type, Body, Tokens> = {
-	Type: Type,
-	Name: string,
-	Value: Body,
-	Tokens: Tokens,
-}
-
-type Generics = {
-	Span: Error.Span,
-	List: { string },
-	Keys: { [string]: { Generic } },
-}
-
-type Reference = {
-	Name: Token,
-	To: TypeNode,
-}
-
-export type Scope = {
-	Name: Token,
-	Parent: Scope?,
-	Symbols: {
-		Types: { [string]: Reference },
-		Scopes: { [string]: Scope },
-	},
-}
-
-type EventOption = Grammar.EventOption
-
-type Attributes = {
-	Scope: Scope?,
-	Range: NumberRange?,
-	Export: boolean?,
-	Generics: Generics?,
-	Parameters: { TypeNode }?,
-	Components: { string }?,
-}
-
-type AttributesTokens = {
-	Range: Token?,
-}
-
-export type Options = Grammar.Options
-
-export type Body = Node<"Body", {
-	Options: Options,
-	Symbols: { [string]: true },
-	Declarations: { Declaration },
-}, {}>
-
-type Declarations = Grammar.Declarations
-export type TypeNode = | Map | Set | Enum | TagEnum | Tuple | Struct | Primitive | Generic | Array | Optional
-
-export type Declaration = Node<Declarations, {
-	[any]: any,
-}, {
-	[any]: any,
-}>
-
-export type Array = Node<"Array", {
-	Of: TypeNode,
-} & Attributes, AttributesTokens>
-
-export type Optional = Node<"Optional", {
-	Of: TypeNode,
-} & Attributes, AttributesTokens>
-
-export type Set = Node<"Set", {
-	Values: { string },
-} & Attributes, AttributesTokens>
-
-export type Map = Node<"Map", {
-	Values: { TypeNode },
-} & Attributes, AttributesTokens>
-
-export type Enum = Node<"Enum", {
-	Values: { string },
-} & Attributes, AttributesTokens>
-
-export type TagEnum = Node<"TagEnum", {
-	Tag: string,
-	Values: { Struct },
-} & Attributes, AttributesTokens>
-
-export type Struct = Node<"Struct", {
-	Values: { TypeNode },
-} & Attributes, AttributesTokens>
-
-export type Primitive = Node<"Primitive", {
-	Class: string?,
-	Primitive: Settings.Primitive,
-} & Attributes, {
-	Primitive: Token,
-} & AttributesTokens>
-
-export type Generic = Node<"Generic", {
-	Generic: string,
-} & Attributes, AttributesTokens>
-
---- `Names` is sparse and indexed alongside `Values`: an element may be named, as in
---- `(chefId: f64, dish: string)`, and one that is not has no entry. Naming is for the reader and for
---- the generated signature only -- a type pack is serialised positionally with no field tags, so it
---- never reaches the wire.
-export type Tuple = Node<"Tuple", {
-	Values: { TypeNode },
-	Names: { [number]: string },
-} & Attributes, AttributesTokens>
-
---- The listening API generated for an event. Named so `Parser.Event` can annotate its local without
---- restating the union (it used to reach for it through `index<index<Event, "Value">, "Call">`, which
---- this Luau version does not parse).
-export type EventCall = "SingleSync" | "SingleAsync" | "ManySync" | "ManyAsync" | "Polling"
-
-export type Event = Node<
-	"Event",
-	{
-		From: "Client" | "Server",
-		--> OrderedUnreliable is Unreliable plus a sequence number: delivery is still not guaranteed,
-		--> but a packet arriving after a newer one is discarded rather than applied out of order.
-		Type: "Reliable" | "Unreliable" | "OrderedUnreliable",
-		Call: EventCall,
-		Data: (TypeNode | Tuple)?,
-		--> Sustained events per second accepted from one player, and the bucket capacity that lets a
-		--> burst through. Absent means unlimited -- see the generator's rate limiting.
-		Rate: number?,
-		Burst: number?,
-	},
-	{
-		Identifier: Token,
-	}
->
-
-export type Function = Node<
-	"Function",
-	{
-		--> Which side INVOKES. The other side listens, exactly as with an event's From -- except that a
-		--> function's default is Client, since that was the only direction the language used to have.
-		From: "Client" | "Server",
-		Yield: "Future" | "Promise" | "Coroutine",
-		Data: (TypeNode | Tuple)?,
-		Return: (TypeNode | Tuple)?,
-		Rate: number?,
-		Burst: number?,
-	},
-	{
-		Identifier: Token,
-	}
->
-
-export type ScopeNode = Node<
-	"Scope",
-	{
-		Scope: Scope,
-		Values: { Declaration },
-		--- Set when the scope came from an `import` rather than a `scope` block in this file. Its
-		--- declarations carry spans into the IMPORTED source, so any diagnostic about them has to be
-		--- raised by the parse of that file -- pointing at those offsets in this one underlines
-		--- whatever text happens to sit there.
-		Imported: boolean?,
-	},
-	{}
->
+export type NumberRange = AST.NumberRange
+export type Scope = AST.Scope
+export type Options = AST.Options
+export type Body = AST.Body
+export type TypeNode = AST.TypeNode
+export type Declaration = AST.Declaration
+export type Array = AST.Array
+export type Optional = AST.Optional
+export type Set = AST.Set
+export type Map = AST.Map
+export type Enum = AST.Enum
+export type TagEnum = AST.TagEnum
+export type Struct = AST.Struct
+export type Primitive = AST.Primitive
+export type Generic = AST.Generic
+export type Tuple = AST.Tuple
+export type EventCall = AST.EventCall
+export type Event = AST.Event
+export type Function = AST.Function
+export type ScopeNode = AST.ScopeNode
 
 ---- Settings ----
 
@@ -210,7 +63,7 @@ local LUAU_KEYWORDS = Grammar.LUAU_KEYWORDS
 local GENERICS_TYPES = Grammar.GENERICS_TYPES
 
 local PRIMITIVES = Settings.Primtives
-local ARRAY_BOUNDS = NumberRange.new(0, (PRIMITIVES.u16.Bounds :: NumberRange).Max)
+local ARRAY_BOUNDS = Settings.NumberRange.new(0, (PRIMITIVES.u16.Bounds :: NumberRange).Max)
 local DOUBLE_BOUNDS = PRIMITIVES.f64.Bounds :: NumberRange
 
 ---- Main ----
@@ -490,23 +343,23 @@ function Parser.NumberRange(self: Parser, Token: Lexer.Token, Bounds: NumberRang
 	local function ParseRange(): NumberRange
 		local Single = tonumber(string.match(Value, `^(%-?%d*%.?%d+)$`))
 		if Single then
-			return NumberRange.new(Single)
+			return Settings.NumberRange.new(Single)
 		end
 
 		local LowerBounds = tonumber(string.match(Value, `^(%-?%d*%.?%d+)%.%.$`))
 		if LowerBounds then
-			return NumberRange.new(LowerBounds, Bounds.Max)
+			return Settings.NumberRange.new(LowerBounds, Bounds.Max)
 		end
 
 		local UpperBounds = tonumber(string.match(Value, `^%.%.(%-?%d*%.?%d+)$`))
 		if UpperBounds then
-			return NumberRange.new(Bounds.Min, UpperBounds)
+			return Settings.NumberRange.new(Bounds.Min, UpperBounds)
 		end
 
 		local Lower, Upper = string.match(Value, `^(%-?%d*%.?%d+)%.%.(%-?%d*%.?%d+)$`)
 		local Minimum, Maximum = tonumber(Lower), tonumber(Upper)
 		if Minimum and Maximum then
-			return NumberRange.new(Minimum, Maximum)
+			return Settings.NumberRange.new(Minimum, Maximum)
 		end
 
 		Error.new(Error.AnalyzeInvalidRange, self.Source, "Malformed range", self.File)
@@ -822,12 +675,12 @@ function Parser.Import(self: Parser): ScopeNode
 		)
 	end
 
-	local AST: Body
+	local Imported: Body
 	local ImportParser = Parser.new(ImportDirectory, ImportPath, self.Importing, self.Attributes)
 
 	self.Importing[Key] = true
 	local Success, ErrorText = pcall(function()
-		AST = ImportParser:Parse(ImportSource, Scope)
+		Imported = ImportParser:Parse(ImportSource, Scope)
 	end)
 	self.Importing[Key] = nil
 
@@ -847,7 +700,7 @@ function Parser.Import(self: Parser): ScopeNode
 		Name = Name,
 		Value = {
 			Scope = Scope,
-			Values = AST.Value.Declarations,
+			Values = Imported.Value.Declarations,
 			Imported = true,
 		},
 		Tokens = {},

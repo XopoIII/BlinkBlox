@@ -251,6 +251,9 @@ local Primitives: { [string]: Primitive } = {
 }
 
 return {
+	--> The parser builds its ranges through this too, so there is one constructor for the one type.
+	NumberRange = NumberRange,
+
 	Keywords = {
 		map = true,
 		set = true,

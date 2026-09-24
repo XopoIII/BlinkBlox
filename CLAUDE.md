@@ -199,7 +199,8 @@ all ran that way while the type gate reported the tree as clean.
 src/CLI/init.luau          argument parsing, help, watch mode
 src/CLI/Utility/Compile    the pipeline: read -> parse -> generate -> write
 src/Lexer.luau             tokeniser, pattern table + transformers
-src/Parser.luau            recursive descent, semantic analysis, AST (types live here)
+src/AST.luau               the AST's node types, re-exported by Parser
+src/Parser.luau            recursive descent, semantic analysis, building the AST
 src/Generator/init.luau    the Luau emitter
 src/Generator/Blocks.luau  code-emitting DSL (Block / Function / Connection)
 src/Generator/Prefabs.luau read/write prefabs per primitive, plus range and type asserts
@@ -220,8 +221,8 @@ Consequences worth remembering:
 - `selene.toml` sets `std = "luau+roblox"` at the root; `plugin/selene.toml` sets `std = "roblox"`.
 - `scripts/type-check.sh` analyses the compiler and the plugin as two separate contours.
 - The compiler's range type is `Settings.NumberRange` (a plain `{ Min, Max }` table), deliberately
-  **not** Roblox's `NumberRange` userdata, which does not exist on Lune. All three of Settings,
-  Parser and Prefabs refer to the one definition.
+  **not** Roblox's `NumberRange` userdata, which does not exist on Lune. Settings, AST, Parser and
+  Prefabs all refer to the one definition, and `Settings.NumberRange.new` is its one constructor.
 
 ### Things that look wrong and are not
 
