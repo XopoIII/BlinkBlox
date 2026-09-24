@@ -28,7 +28,7 @@ local function WriteModuleScript(Name: string, Source: string, Parent: Instance)
 		--> Something of another class is sitting on the name. Replacing it is the only way forward,
 		--> but it is worth saying so rather than silently destroying whatever it was.
 		if Existing then
-			warn(`[BLINK]: Replacing a {Existing.ClassName} named "{Name}" in the Blink folder.`)
+			warn(`[BlinkBlox]: Replacing a {Existing.ClassName} named "{Name}" in the Blink folder.`)
 			Existing:Destroy()
 		end
 
@@ -86,7 +86,7 @@ function Output.Generate(File: StringValue, Directory: Instance, Probe: Instance
 
 	if not RequestScriptPermissions(Probe) then
 		Report("File generation failed, plugin doesn't have script inject permissions.")
-		warn("[BLINK]: File generation failed, plugin doesn't have script inject permissions.")
+		warn("[BlinkBlox]: File generation failed, plugin doesn't have script inject permissions.")
 		return
 	end
 
@@ -94,6 +94,8 @@ function Output.Generate(File: StringValue, Directory: Instance, Probe: Instance
 	local ClientSource = Generator.Generate("Client", AbstractSyntaxTree)
 	local TypesSource = Generator.GenerateShared(AbstractSyntaxTree)
 
+	--> Named `Blink` from before the rename to BlinkBlox, and kept: games require the modules through
+	--> it, and a new name would leave a second folder beside the one their code points at.
 	local BlinkFolder: Folder = Directory:FindFirstChild("Blink") :: Folder
 	if not BlinkFolder then
 		local Folder = Instance.new("Folder")
@@ -106,7 +108,7 @@ function Output.Generate(File: StringValue, Directory: Instance, Probe: Instance
 	-->
 	--> This used to be `BlinkFolder:ClearAllChildren()`, which deleted whatever else the user had put
 	--> there -- a wrapper module, a configuration script, anything -- with no warning and no undo
-	--> beyond Ctrl+Z. Blink owns these three names; it does not own the folder.
+	--> beyond Ctrl+Z. BlinkBlox owns these three names; it does not own the folder.
 	WriteModuleScript("Types", TypesSource, BlinkFolder)
 	WriteModuleScript("Server", ServerSource, BlinkFolder)
 	WriteModuleScript("Client", ClientSource, BlinkFolder)

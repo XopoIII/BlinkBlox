@@ -71,6 +71,11 @@ end
 ---
 --- Routed through here rather than written inline because Generator/init.luau was over its size
 --- limit when this was added. Nothing else about it wants to be separate.
+---
+--- The remotes are still named `BLINK_*` after the rename to BlinkBlox, and must stay so: the client
+--- finds them by name, so a server and a client built by versions either side of a rename would never
+--- meet -- the client would wait on a remote that does not exist, before the signature check that
+--- would otherwise say what is wrong.
 local function Constants(RemoteScope: string?, Tree: any): { string }
 	local Scope = if RemoteScope then RemoteScope .. "_" else ""
 	return {

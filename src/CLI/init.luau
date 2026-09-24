@@ -72,7 +72,7 @@ end
 
 local function PrintHelpMessage()
 	print(Color(Style("USAGE:", "bold"), "yellow"))
-	print("\tblink.exe [CONFIG] [OPTIONS]")
+	print("\tblinkblox.exe [CONFIG] [OPTIONS]")
 	print(Color(Style("OPTIONS:", "bold"), "yellow"))
 
 	local Sorted: { Argument } = {}
@@ -149,7 +149,7 @@ end
 --> The banner is decoration, and it used to be the FIRST statement in this file -- printed before
 --> the flags that should have governed it were even looked at, so `--quiet` never suppressed it.
 if not Arguments.Silent then
-	print(`{Color("Blink", "green")} {Version}`)
+	print(`{Color("BlinkBlox", "green")} {Version}`)
 end
 
 if Arguments.Help or #RawArguments < 1 then
@@ -162,7 +162,7 @@ end
 --> reason a version ever appeared was the unconditional banner it happened to fall through.
 if Arguments.Version then
 	if Arguments.Silent then
-		print(`{Color("Blink", "green")} {Version}`)
+		print(`{Color("BlinkBlox", "green")} {Version}`)
 	end
 
 	return nil

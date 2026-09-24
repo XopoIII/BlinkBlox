@@ -39,7 +39,7 @@ function Diagnostics.Message(Diagnostic: Error.Class, Source: string, Theme: { E
 	local SeverityLabel = `<font color="#{SeverityColor:ToHex()}">{IsWarning and "Warning" or "Error"}</font>`
 
 	local Message =
-		`{SeverityLabel} {Error.GetNameFromCode(Diagnostic.Code)}: {Diagnostic.RawMessage} <font transparency="0.5"><i>Blink({Diagnostic.Code})</i></font>`
+		`{SeverityLabel} {Error.GetNameFromCode(Diagnostic.Code)}: {Diagnostic.RawMessage} <font transparency="0.5"><i>BlinkBlox({Diagnostic.Code})</i></font>`
 	for _, Label in Diagnostic.Labels do
 		local Line = Utility.GetCurrentLine(Source, Label.Span.Start)
 		Message ..= `\n{Label.Text} [L{Line}]`

@@ -83,7 +83,7 @@ function Utility.Watch(Path: string, Profile: string?)
 
 		if OldImports ~= #Imports then
 			print(
-				`Blink is watching for changes:\n\tEntry: {Color("yellow", FilePath)}\n\tImports: {Color(
+				`BlinkBlox is watching for changes:\n\tEntry: {Color("yellow", FilePath)}\n\tImports: {Color(
 					"yellow",
 					tostring(#Imports - 1)
 				)}`

@@ -103,7 +103,7 @@ local function Invoke(): number
     --> countrz of zero is 32: every slot taken. Thirty-two calls from one side with none answered is
     --> already pathological, and failing here beats handing out an id that belongs to someone else.
     if Slot == 32 then
-        error("[Blink]: 32 calls are already awaiting a response, this call has been dropped.")
+        error("[BlinkBlox]: 32 calls are already awaiting a response, this call has been dropped.")
     end
 
     InvocationSlots = bit32.bxor(InvocationSlots, bit32.lshift(1, Slot))
@@ -232,7 +232,7 @@ local function TimeoutInvocation(Identifier: number, Seconds: number, Name: stri
         ReleaseInvocation(Identifier)
 
         if coroutine.status(Thread) == "suspended" then
-            warn(`[Blink]: "{Name}" was never answered and has been failed after {Seconds} seconds.`)
+            warn(`[BlinkBlox]: "{Name}" was never answered and has been failed after {Seconds} seconds.`)
             task.spawn(Thread, false)
         end
     end)
