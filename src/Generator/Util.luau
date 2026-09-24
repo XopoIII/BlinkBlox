@@ -69,8 +69,8 @@ end
 --- The two constants the generated module opens with: the remote's name, and the signature of the
 --- schema it was built from.
 ---
---- Routed through here rather than written inline because Generator/init.luau is on the size ratchet
---- in scripts/check-file-size.sh and this file is not. Nothing else about it wants to be separate.
+--- Routed through here rather than written inline because Generator/init.luau was over its size
+--- limit when this was added. Nothing else about it wants to be separate.
 local function Constants(RemoteScope: string?, Tree: any): { string }
 	local Scope = if RemoteScope then RemoteScope .. "_" else ""
 	return {

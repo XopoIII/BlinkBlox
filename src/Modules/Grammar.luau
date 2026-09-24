@@ -1,8 +1,8 @@
 --!strict
 --- The tables that describe the shape of the language rather than how it is parsed: which options a
 --- file accepts, which fields an `event` or a `function` declares, which keywords open a
---- declaration. They were extracted from Parser.luau, which is on the size ratchet in
---- scripts/check-file-size.sh and had no room to grow.
+--- declaration. They were extracted from the parser when it was over its size limit and had no room
+--- to grow.
 ---
 --- Data only, so this module requires nothing but the lexer's token types. Everything that reads a
 --- token or raises a diagnostic stays in src/Parser/ -- put behaviour here and the cycle comes back.

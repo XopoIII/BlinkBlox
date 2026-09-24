@@ -5,8 +5,8 @@
 --- positionally, with no field tags, so a named pack has to round-trip byte for byte the way the
 --- unnamed packs in Test.luau do. That is what these assert.
 ---
---- They live apart from Test.luau, like Decoding.luau, because that file is on the size ratchet in
---- scripts/check-file-size.sh and new specs belong in new files rather than on the end of it.
+--- They live apart from Test.luau, like Decoding.luau, because new specs belong in new files rather
+--- than on the end of it; see Specs.luau.
 local Assertions = require("./Assertions")
 local Modules = require("./Modules")
 

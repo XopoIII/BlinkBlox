@@ -2,7 +2,7 @@
 --- How each kind of type is read from and written to a buffer. One function per node the parser can
 --- produce, each emitting into a Read block and a Write block.
 ---
---- Split out of Generator/init.luau, which is on the size ratchet in scripts/check-file-size.sh.
+--- Split out of Generator/init.luau when that file was over its size limit.
 --- These were the obvious piece to move: of everything in that file they reach for the least of its
 --- state. Two things they do need are injected rather than required, because the dependency runs
 --- both ways -- the generator dispatches into these, and a struct or an array has to dispatch back

@@ -182,11 +182,12 @@ the compiler's, so everything the Studio plugin generated went out stamped with 
 not been for a year. The plugin now bundles with `build/.darklua.json` like the CLI, and that file is
 gone. Never edit the version by hand.
 
-Luau files are capped at 500 lines by `scripts/check-file-size.sh`. The files already past that are
-recorded at their current size: they may shrink, never grow. A recorded number makes every addition to
-a long file a deliberate decision, where a plain exclusion list would just become permission. The cap
-was 900 until the long files turned out to hold the same logic in several copies; every recorded file
-is scheduled to be split, and its entry goes in the commit that splits it.
+Luau files are capped at 500 lines by `scripts/check-file-size.sh`, with no exceptions. The cap was
+900, with three files past it on a recorded-size ratchet; it came down to 500 once the long files
+turned out to hold the same logic in several copies, and every one of them was split -- the parser
+into `src/Parser/`, the generator into `Event`, `Function`, `Generators` and `Prefabs/`, the plugin
+editor into `Completion`, `Spans`, `Gutter` and the rest. A file that reaches the cap is split the
+same way, not exempted.
 
 Every `.luau` file declares its type-checking mode on line 1, and `scripts/check-strict.sh` enforces
 it. This is not cosmetic: Luau defaults to `nonstrict`, so a file without a directive is *unchecked*

@@ -1,8 +1,8 @@
 --!strict
 --- Parses the `option` block at the top of a schema.
 ---
---- Extracted from Parser.luau, which is on the size ratchet in scripts/check-file-size.sh and has no
---- room to grow. It pairs with Modules/Grammar, which already held the table of which options exist
+--- Extracted from the parser when it was over its size limit and had no room to grow. It pairs with
+--- Modules/Grammar, which already held the table of which options exist
 --- and what each one's value must lex as -- the shape was there and the code that reads it was not.
 ---
 --- It takes a structural Reader rather than the Parser type, which is what keeps this out of a

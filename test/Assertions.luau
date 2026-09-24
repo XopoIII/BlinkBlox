@@ -1,7 +1,7 @@
 --!strict
 --- The assertions the behavioural suite is written in: fire an event one way, wait a replication
---- step, compare what arrived. They were extracted from Test.luau, which sat exactly on the size
---- ratchet in scripts/check-file-size.sh and so had no room left for a single new test.
+--- step, compare what arrived. They were extracted from Test.luau when it sat exactly on its size
+--- limit and had no room left for a single new test.
 ---
 --- Everything here is a helper, never a spec. The specs are in Test.luau and the files Specs.luau
 --- lists; the value comparison these rest on is in Equals.luau.
