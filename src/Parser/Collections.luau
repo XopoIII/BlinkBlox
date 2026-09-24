@@ -1,0 +1,358 @@
+--!strict
+--!native
+--!optimize 2
+
+--- The composite types: sets, maps, enums, tagged enums, type packs and structs.
+---
+--- Part of the parser: every file in src/Parser/ adds methods to the one class in Class.luau,
+--- so a method here calls any other through `self` as if they shared a file.
+
+local Error = require("../Modules/Error")
+local Grammar = require("../Modules/Grammar")
+local ParserClass = require("./Class")
+
+type Parser = ParserClass.Parser
+type Token = ParserClass.Token
+type TypeNode = ParserClass.TypeNode
+type Declaration = ParserClass.Declaration
+type Optional = ParserClass.Optional
+type Set = ParserClass.Set
+type Map = ParserClass.Map
+type Enum = ParserClass.Enum
+type TagEnum = ParserClass.TagEnum
+type Struct = ParserClass.Struct
+type Tuple = ParserClass.Tuple
+
+local LUAU_KEYWORDS = Grammar.LUAU_KEYWORDS
+
+local Parser = ParserClass.Class
+
+function Parser.Set(self: Parser, Name: Token): Set
+	self:Consume("OpenBraces")
+
+	local Values: { string } = {}
+	while true do
+		if self:TryConsume("CloseBraces") then
+			break
+		end
+
+		local Token = self:ConsumeText(true, true)
+		table.insert(Values, Token.Value)
+
+		if self:TryConsume("CloseBraces") then
+			break
+		end
+
+		self:Consume("Comma")
+	end
+
+	return {
+		Type = "Set",
+		Name = Name.Value,
+		Value = {
+			Values = Values,
+		},
+		Tokens = {},
+	} :: Set
+end
+
+function Parser.Map(self: Parser, Name: Token): Map
+	self:ConsumeAll("OpenBraces", "OpenBrackets")
+
+	--> Errors
+	local function ParseElement(): (TypeNode, Token)
+		local Token = self:Peek()
+		local Declaration = self:Type(Name)
+		if Declaration.Type == "Optional" then
+			Error.new(Error.AnalyzeInvalidOptionalType, self.Source, "Invalid optional type", self.File)
+				:Primary(Token, `Maps cannot have optionals as keys or values`)
+				:Emit()
+		end
+
+		return Declaration, Token
+	end
+
+	--> Parse key and value
+	local Key, KeyToken = ParseElement()
+	self:Consume("CloseBrackets")
+	self:Consume("FieldAssign")
+
+	local Value = ParseElement()
+	self:Consume("CloseBraces")
+
+	return {
+		Type = "Map",
+		Name = Name.Value,
+		Value = {
+			Values = { Key, Value },
+		},
+		--> Kept so a diagnostic about the key can underline the key rather than the declaration. A
+		--> composite key is a node with no token of its own, and Analysis runs after generics are
+		--> substituted, by which point there is nothing left to point at without this.
+		Tokens = { Key = KeyToken },
+	}
+end
+
+function Parser.Enum(self: Parser, Name: Token): Enum | TagEnum
+	local Values: { string } = {}
+
+	--> Is it a tagged enum?
+	local Tag = self:TryConsume("String")
+	if Tag then
+		return self:TagEnum(Tag, Name)
+	end
+
+	self:Consume("OpenBraces")
+
+	while true do
+		if self:TryConsume("CloseBraces") then
+			break
+		end
+
+		local Token = self:ConsumeText(true, true)
+		table.insert(Values, Token.Value)
+
+		if self:TryConsume("CloseBraces") then
+			break
+		end
+
+		self:Consume("Comma")
+	end
+
+	return {
+		Type = "Enum",
+		Name = Name.Value,
+		Value = { Values = Values } :: any,
+		Tokens = {},
+	}
+end
+
+function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
+	local Values: { Struct } = {}
+	self:Consume("OpenBraces")
+
+	while true do
+		if self:TryConsume("CloseBraces") then
+			break
+		end
+
+		local Token: Token
+
+		if self:Peek().Type == "OpenBrackets" then
+			self:Consume("OpenBrackets")
+			Token = self:Consume("String")
+			self:Consume("CloseBrackets")
+		else
+			Token = self:ConsumeText(true)
+		end
+
+		local Struct = self:Struct(Token)
+		local Fields = Struct.Value.Values
+
+		--> Don't allow tag field to be set
+		for _, Field: TypeNode in Fields do
+			if Field.Name == Tag.Value then
+				Error.new(Error.AnalyzeReservedIdentifier, self.Source, `Enum tag used as field in variant`, self.File)
+					:Secondary(Token, `Used in variant`)
+					:Primary(Tag, `Enum tag`)
+					:Emit()
+			end
+		end
+
+		table.insert(Values, Struct)
+
+		if self:TryConsume("CloseBraces") then
+			break
+		end
+
+		self:Consume("Comma")
+	end
+
+	return {
+		Type = "TagEnum",
+		Name = Name.Value,
+		Value = {
+			Tag = Tag.Value,
+			Values = Values,
+		},
+		Tokens = {},
+	}
+end
+
+function Parser.Tuple(self: Parser, Name: Token): Tuple
+	local Names: { [number]: string } = {}
+	local Taken: { [string]: true } = {}
+	local Values: { TypeNode } = {}
+	self:Consume("OpenParentheses")
+
+	--> An element may carry a name: `(chefId: f64, dish: string)`. Deciding that needs one token of
+	--> lookahead past the candidate -- `(u8)` and `(x: u8)` are indistinguishable where the element
+	--> starts, since a bare type is itself a perfectly good element. `self.LookAhead` is the element's
+	--> first token and the lexer sits just past it, so a non-advancing GetNextToken is the token after.
+	local function TryConsumeName(): Token?
+		if self.Lexer:GetNextToken(true).Type ~= "FieldAssign" then
+			return nil
+		end
+
+		local Text = self:ConsumeText(true)
+		self:Consume("FieldAssign")
+		return Text
+	end
+
+	while true do
+		if self:TryConsume("CloseParentheses") then
+			break
+		end
+
+		local Text = TryConsumeName()
+		if Text then
+			--> Unlike a struct field, which becomes a table key and is quoted on the way out, this name
+			--> becomes a local variable in the generated module. A Luau keyword, or anything that is not
+			--> an identifier, would emit code that does not compile -- so it is refused here, where the
+			--> author can see which name did it, rather than by luau-analyze over generated output.
+			if LUAU_KEYWORDS[Text.Value] or not string.match(Text.Value, "^[%a_][%w_]*$") then
+				error(
+					Error.new(
+						Error.AnalyzeReservedIdentifier,
+						self.Source,
+						`"{Text.Value}" cannot name a type pack element`,
+						self.File
+					)
+						:Primary(Text, "Not usable as a variable name")
+						:Note(
+							"A named element becomes a parameter in the generated code, so it has to be a Luau identifier."
+						)
+						:Emit()
+				)
+			end
+
+			if Taken[Text.Value] then
+				error(
+					Error.new(Error.AnalyzeDuplicateField, self.Source, `Duplicate element "{Text.Value}"`, self.File)
+						:Primary(Text, `Duplicate element`)
+						:Note("Each named element of a type pack becomes a parameter, so the names must differ.")
+						:Emit()
+				)
+			end
+		end
+
+		--> The pack's own token goes through even for a named element. The name is recorded beside the
+		--> value instead of replacing the node's, so a named and an unnamed element are described
+		--> identically -- a diagnostic inside either still points at the declaration, and the
+		--> generated comment still reads `chefId: NamedTuple` rather than `chefId: chefId`.
+		local Value = self:Type(Name)
+		table.insert(Values, Value)
+
+		if Text then
+			Taken[Text.Value] = true
+			Names[#Values] = Text.Value
+		end
+
+		if self:TryConsume("CloseParentheses") then
+			break
+		end
+
+		self:Consume("Comma")
+	end
+
+	return {
+		Type = "Tuple",
+		Name = Name.Value,
+		Value = {
+			Values = Values,
+			Names = Names,
+		},
+		Tokens = {},
+	}
+end
+
+function Parser.Struct(self: Parser, Name: Token): Struct
+	local Fields: { [string]: true } = {}
+	local Values: { TypeNode } = {}
+	self:Consume("OpenBraces")
+
+	while true do
+		if self:TryConsume("CloseBraces") then
+			break
+		end
+
+		--> struct merging
+		if self:TryConsume("Merge") then
+			local Text = self:Peek()
+			local Declaration = self:Declaration(Name)
+			if Declaration.Type ~= "Struct" then
+				error(
+					Error.new(
+						Error.AnalyzeReferenceInvalidType,
+						self.Source,
+						`Expected a struct to merge, got "{Declaration.Type}" instead`,
+						self.File
+					)
+						:Primary(Text, `Expected a "Struct", got "{Declaration.Type}" instead`)
+						:Emit()
+				)
+			end
+
+			local Struct: Struct = Declaration :: Struct
+			local StructValues = Struct.Value.Values
+			for _, Field in StructValues do
+				local FieldIdentifier = Field.Name
+				if Fields[FieldIdentifier] then
+					error(
+						Error.new(
+							Error.AnalyzeDuplicateField,
+							self.Source,
+							`Merged struct contains a duplicate field`,
+							self.File
+						)
+							:Primary(Text, `Field "{FieldIdentifier}" already exists in struct`)
+							:Emit()
+					)
+				end
+
+				table.insert(Values, Field)
+				Fields[FieldIdentifier] = true
+			end
+		else --> fields
+			local Text: Token
+
+			if self:Peek().Type == "OpenBrackets" then
+				self:Consume("OpenBrackets")
+				Text = self:Consume("String")
+				self:Consume("CloseBrackets")
+			else
+				Text = self:ConsumeText(true)
+			end
+
+			if Fields[Text.Value] then
+				error(
+					Error.new(Error.AnalyzeDuplicateField, self.Source, `Duplicate field "{Text.Value}"`, self.File)
+						:Primary(Text, `Duplicate field`)
+						:Emit()
+				)
+			end
+
+			self:Consume("FieldAssign")
+
+			Fields[Text.Value] = true
+			table.insert(Values, self:Type(Text))
+		end
+
+		if self:TryConsume("CloseBraces") then
+			break
+		end
+
+		self:Consume("Comma")
+	end
+
+	return {
+		Type = "Struct",
+		Name = Name.Value,
+		Value = {
+			Values = Values,
+		},
+		Tokens = {},
+	}
+end
+
+return Parser

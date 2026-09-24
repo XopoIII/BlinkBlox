@@ -11,8 +11,8 @@
 --- not -- references are inlined at parse time, and an unchecked one would quietly carry the excluded
 --- type into the build. Two declarations therefore cannot share a name across profiles.
 ---
---- Extracted from Parser.luau for the same reason as Modules/Options: the parser is on the size
---- ratchet in scripts/check-file-size.sh. It takes the same structural Reader, for the same reason.
+--- Extracted from the parser for the same reason as Modules/Options: it was over its size limit. It
+--- takes the same structural Reader, for the same reason.
 
 ---- Imports ----
 

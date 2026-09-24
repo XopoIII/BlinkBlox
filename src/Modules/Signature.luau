@@ -23,7 +23,7 @@
 --- client owns its copy of the module and can edit the constant out. This detects drift between two
 --- builds, never tampering by someone who has both.
 
---- Bumped BY HAND whenever Generator/Prefabs.luau changes what bytes a type occupies.
+--- Bumped BY HAND whenever Generator/Prefabs/ changes what bytes a type occupies.
 ---
 --- An AST hash cannot see that. 0.21.0 packed booleans into a shared bitfield and started encoding
 --- lengths relative to their declared minimum; both changed every packet on the wire and neither

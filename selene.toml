@@ -4,7 +4,7 @@
 # `std = "luau+roblox"` because `src/` is DUAL-TARGET, which is not obvious from the directory
 # layout: the same lexer, parser and error modules run on Lune for the CLI *and* inside Roblox for
 # the Studio plugin, which requires them through the `@compiler` alias in `.luaurc`. They branch on
-# the environment at runtime — `src/Parser.luau:344` tests `task ~= nil`, `src/Modules/Error.luau:4`
+# the environment at runtime — `src/Parser/Document.luau` tests `task ~= nil`, `src/Modules/Error.luau:4`
 # tests `game ~= nil` — so a Lune-only standard library reports those five references as undefined
 # variables when they are deliberate.
 std = "luau+roblox"

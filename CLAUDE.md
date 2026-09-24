@@ -175,16 +175,19 @@ The same gates run in CI (`.github/workflows/checks.yaml`) and before each commi
 **The tree is at zero.** No lint warnings, no type errors, no formatting drift. Keep it there — a
 warning that is tolerated once stops being read.
 
-The version is recorded in three files -- `build/.darklua.json`, `plugin/.darklua.json` and
-`pesde.toml` -- and `lune run bump <version>` writes all three. `scripts/check-versions.sh` fails the
-build if they disagree, which they did: the plugin's copy sat five minor releases behind the
-compiler's, so everything the Studio plugin generated went out stamped with a version Blink had not
-been for a year. Never edit the three by hand.
+The version is recorded in two files -- `build/.darklua.json` and `pesde.toml` -- and
+`lune run bump <version>` writes both. `scripts/check-versions.sh` fails the build if they disagree.
+The plugin used to have a third copy in `plugin/.darklua.json`, which sat five minor releases behind
+the compiler's, so everything the Studio plugin generated went out stamped with a version Blink had
+not been for a year. The plugin now bundles with `build/.darklua.json` like the CLI, and that file is
+gone. Never edit the version by hand.
 
-Luau files are capped at 900 lines by `scripts/check-file-size.sh`. Three files are already past that
-and are recorded at their current size: they may shrink, never grow. A recorded number makes every
-addition to a long file a deliberate decision, where a plain exclusion list would just become
-permission.
+Luau files are capped at 500 lines by `scripts/check-file-size.sh`, with no exceptions. The cap was
+900, with three files past it on a recorded-size ratchet; it came down to 500 once the long files
+turned out to hold the same logic in several copies, and every one of them was split -- the parser
+into `src/Parser/`, the generator into `Event`, `Function`, `Generators` and `Prefabs/`, the plugin
+editor into `Completion`, `Spans`, `Gutter` and the rest. A file that reaches the cap is split the
+same way, not exempted.
 
 Every `.luau` file declares its type-checking mode on line 1, and `scripts/check-strict.sh` enforces
 it. This is not cosmetic: Luau defaults to `nonstrict`, so a file without a directive is *unchecked*
@@ -197,10 +200,15 @@ all ran that way while the type gate reported the tree as clean.
 src/CLI/init.luau          argument parsing, help, watch mode
 src/CLI/Utility/Compile    the pipeline: read -> parse -> generate -> write
 src/Lexer.luau             tokeniser, pattern table + transformers
-src/Parser.luau            recursive descent, semantic analysis, AST (types live here)
-src/Generator/init.luau    the Luau emitter
+src/AST.luau               the AST's node types, re-exported by Parser
+src/Parser/                recursive descent and semantic analysis, one class across files:
+                           Class.luau declares the state and every method, the rest add them
+src/Generator/init.luau    the Luau emitter: assembles one module from the parts below
+src/Generator/State.luau   everything one generation run builds up, shared by the files here
+src/Generator/Generators   Luau types and serialisers for declarations, and the declaration walk
+src/Generator/Event.luau   one `event`; Function.luau one `function`; Decode.luau their guards
 src/Generator/Blocks.luau  code-emitting DSL (Block / Function / Connection)
-src/Generator/Prefabs.luau read/write prefabs per primitive, plus range and type asserts
+src/Generator/Prefabs/     read/write prefabs per primitive, plus range and type asserts
 src/Templates/*.luau       runtime fragments spliced into generated output
 plugin/src/                the Studio plugin: editor, syntax highlighting, autocomplete
 ```
@@ -211,15 +219,15 @@ There is no separate IR — the generator walks the AST directly.
 
 The same lexer, parser and error modules run **on Lune** for the CLI *and* **inside Roblox** for the
 Studio plugin, which requires them through the `@compiler` alias in `.luaurc`. They branch at
-runtime: `src/Parser.luau` tests `task ~= nil`, `src/Modules/Error.luau` tests `game ~= nil`.
+runtime: `src/Parser/Document.luau` tests `task ~= nil`, `src/Modules/Error.luau` tests `game ~= nil`.
 
 Consequences worth remembering:
 
 - `selene.toml` sets `std = "luau+roblox"` at the root; `plugin/selene.toml` sets `std = "roblox"`.
 - `scripts/type-check.sh` analyses the compiler and the plugin as two separate contours.
 - The compiler's range type is `Settings.NumberRange` (a plain `{ Min, Max }` table), deliberately
-  **not** Roblox's `NumberRange` userdata, which does not exist on Lune. All three of Settings,
-  Parser and Prefabs refer to the one definition.
+  **not** Roblox's `NumberRange` userdata, which does not exist on Lune. Settings, AST, Parser and
+  Prefabs all refer to the one definition, and `Settings.NumberRange.new` is its one constructor.
 
 ### Things that look wrong and are not
 
@@ -232,6 +240,10 @@ Consequences worth remembering:
 - **`Token.Value` is typed `string`, but `true`/`false` arrive as real booleans.** `Parser.Options`
   depends on that when storing a boolean option. The widening is confined to `TokenTransformer` and
   one cast in `Lexer.GetNextToken`.
+- **A parser method is declared twice.** Its signature goes in `Methods` in `src/Parser/Class.luau`,
+  its body in whichever file of `src/Parser/` it belongs to. The methods call each other through
+  `self` across files, and the declaration is what lets the type checker see them there; a body
+  with no declaration fails the type gate, and one that disagrees with it does too.
 - **`Blocks.Emittable` is `string | number` on purpose.** Callers pass identifiers *and* numeric
   literals into the generated text; both interpolate identically.
 

@@ -41,15 +41,14 @@ pre-commit:
 
     file-size:
       glob: "*.luau"
-      # A ratchet, not a rule about tomorrow: files already over the limit are recorded at their
-      # current size and may shrink but not grow.
+      # 500 lines, no exceptions: a file that reaches it is split into modules, not listed.
       run: sh scripts/check-file-size.sh {staged_files}
 
     versions:
-      # The version is recorded in three files and read by three different mechanisms. The plugin's
-      # copy drifted five minor releases behind and nothing said so, which is exactly the kind of
-      # thing a person never thinks to look at and a script never forgets to.
-      glob: "{pesde.toml,build/.darklua.json,plugin/.darklua.json}"
+      # The version is recorded in two files and read by two different mechanisms. The plugin once
+      # had a third copy, which drifted five minor releases behind and nothing said so -- exactly
+      # the kind of thing a person never thinks to look at and a script never forgets to.
+      glob: "{pesde.toml,build/.darklua.json}"
       run: sh scripts/check-versions.sh
 
     english-only:

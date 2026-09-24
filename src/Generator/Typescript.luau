@@ -34,16 +34,8 @@ local function GetPrefix(Indent: number): string
 	return Indent == 0 and "declare " or ""
 end
 
-local function IsValidIdentifier(Identifier: string): boolean
-	return Identifier:match("%a%w*") == Identifier
-end
-
-local function FormatKey(Key: string): string
-	if IsValidIdentifier(Key) then
-		return Key
-	end
-	return `["{Key}"]`
-end
+--> The same decision the Luau output makes about a key, so the two agree on every name.
+local FormatKey = Util.FormatKey
 
 local function GetTypescriptType(State: State, Declaration: Type): (string, string)
 	local Type = ""

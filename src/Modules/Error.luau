@@ -135,7 +135,8 @@ export type Class = typeof(setmetatable(
 --- (see the editor's `OnErrorEmitted`). Declared here rather than in the table literal above because
 --- it refers to `Class`, and a field initialised to `nil` in the literal types as exactly `nil` —
 --- which made every assignment to it a type error.
-export type EmitHandler = (Error: Class) -> ()
+--- Returning true from it for a warning says the handler has shown it, so it is not also printed.
+export type EmitHandler = (Error: Class) -> boolean?
 Error.OnEmit = nil :: EmitHandler?
 
 local Symbols = IS_ROBLOX and SpecialSymbols.ROBLOX or SpecialSymbols.CLI
@@ -297,9 +298,9 @@ end
 function Error.Warn(self: Class)
 	Finalize(self)
 
-	local OnEmit: ((Class) -> ())? = Error.OnEmit
-	if OnEmit then
-		OnEmit(self)
+	local OnEmit: EmitHandler? = Error.OnEmit
+	if OnEmit and OnEmit(self) == true then
+		return
 	end
 
 	if IS_ROBLOX then
@@ -340,7 +341,7 @@ function Error.Emit(self: Class): never
 	Finalize(self)
 
 	if IS_ROBLOX or _G.RELEASE == nil then
-		local OnEmit: ((Class) -> ())? = Error.OnEmit
+		local OnEmit: EmitHandler? = Error.OnEmit
 		if OnEmit then
 			OnEmit(self)
 		end

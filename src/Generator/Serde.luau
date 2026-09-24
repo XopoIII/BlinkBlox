@@ -2,16 +2,17 @@
 --- How each kind of type is read from and written to a buffer. One function per node the parser can
 --- produce, each emitting into a Read block and a Write block.
 ---
---- Split out of Generator/init.luau, which is on the size ratchet in scripts/check-file-size.sh.
+--- Split out of Generator/init.luau when that file was over its size limit.
 --- These were the obvious piece to move: of everything in that file they reach for the least of its
 --- state. Two things they do need are injected rather than required, because the dependency runs
 --- both ways -- the generator dispatches into these, and a struct or an array has to dispatch back
---- out to whatever its fields are.
+--- out to whatever its fields are. The options the run is under are read from State.luau.
 local Parser = require("../Parser")
 local Size = require("../Modules/Size")
 
 local Blocks = require("./Blocks")
 local Prefabs = require("./Prefabs")
+local State = require("./State")
 local Util = require("./Util")
 
 local Types = Prefabs.Types
@@ -30,11 +31,6 @@ local Serde = {}
 --- instead would be a cycle: that function's whole job is to dispatch into this table.
 Serde.Emit = (nil :: any) :: (Declaration: Type, Read: Blocks.Block, Write: Blocks.Block, Variable: string?) -> ()
 
---- The options the current generate is running under, set by the generator before it walks the tree.
---- Only WriteValidations is read here, but it is read per primitive, so it has to be the live table
---- rather than a value captured at load.
-Serde.Options = (nil :: any) :: Parser.Options
-
 --- The two the generator defines on this table rather than here. An event or a function is not a
 --- type on the wire -- emitting one needs scopes, builders, casing and the channel counters, all of
 --- which are that file's state. Declared so the table is not sealed against them.
@@ -45,7 +41,7 @@ function Serde.Primitive(Declaration: Parser.Primitive, Read: Blocks.Block, Writ
 	local Tokens = Declaration.Tokens
 	local Primitive = Tokens.Primitive.Value
 	local Generator = Primitives[Primitive]
-	Generator.Generate(Declaration, Variable, Read, Write, Serde.Options.WriteValidations)
+	Generator.Generate(Declaration, Variable, Read, Write, State.Options.WriteValidations)
 end
 
 function Serde.Set(Declaration: Parser.Set, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
@@ -163,6 +159,9 @@ function Serde.Map(Declaration: Parser.Map, Read: Blocks.Block, Write: Blocks.Bl
 	WriteLoop:End()
 	ReadLoop:End()
 
+	--> The count is a u16 and nothing bounds a map in the schema, so one past 65535 entries would go
+	--> out as its low sixteen bits in front of every entry. See Prefabs.EmitLengthGuard.
+	Prefabs.EmitLengthGuard(Write, 0, Size.MapLength, ElementsVariable)
 	Write:Line(`buffer.writeu16(SendBuffer, {ElementsAllocation}, {ElementsVariable})`)
 end
 
@@ -253,7 +252,7 @@ function Serde.PackedBooleans(Read: Blocks.Block, Write: Blocks.Block, Variable:
 	Write:Line("\tlocal PACKED_BITS = 0")
 	Write:Line("\tfor Index = 0, PACKED_LENGTH - 1 do")
 	Write:Line(`\t\tlocal PACKED_ITEM = {Variable}[Index + 1]`)
-	if Serde.Options.WriteValidations then
+	if State.Options.WriteValidations then
 		Write:Line(
 			`\t\tif typeof(PACKED_ITEM) ~= "boolean" then error(\`Expected {Variable}[\{Index + 1}] to be of type boolean, got \{type(PACKED_ITEM)} instead.\`) end`
 		)
@@ -305,13 +304,10 @@ function Serde.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Block
 		Read:Line(Assert.Lower)
 		Read:Line(Assert.Upper)
 
+		--> Checked on the SEND side too, and unconditionally; see Prefabs.EmitLengthGuard.
+		Prefabs.EmitLengthGuard(Write, Lower, Upper, `#{Variable}`)
+
 		if Lower > 0 then
-			--> Checked on the SEND side too, and unconditionally. An array shorter than the minimum
-			--> would otherwise encode as a negative offset, wrap to a large unsigned value, and fail
-			--> on the receiver as a length violation that names neither the array nor the sender.
-			local WriteAssert = Prefabs.Asserts.number(`#{Variable}`, Lower, Upper)
-			Write:Line(WriteAssert.Lower)
-			Write:Line(WriteAssert.Upper)
 			Write:Line(`local LengthOffset = #{Variable} - {Lower}`)
 			LengthType.Write("LengthOffset", Write)
 		else
