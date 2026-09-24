@@ -22,6 +22,7 @@ local Profiler = require("@self/Profiler")
 local State = require("@self/State")
 
 local FileStore = require("@self/Files")
+local Instances = require("@self/Instances")
 local Output = require("@self/Output")
 
 ---- Settings ----
@@ -148,14 +149,6 @@ local function PlayTweens(Collection: { [string]: Tween })
 	end
 end
 
-local function ClearChildrenWhichAre(Parent: Instance, Class: string)
-	for _, Child in Parent:GetChildren() do
-		if Child:IsA(Class) then
-			Child:Destroy()
-		end
-	end
-end
-
 local function LoadFile(File: StringValue)
 	Expanded:Set(false)
 	Editing = File.Name
@@ -165,7 +158,7 @@ end
 local function LoadFiles()
 	--> Remove previous files
 	Generating:Set()
-	ClearChildrenWhichAre(Files, "Frame")
+	Instances.ClearChildrenWhichAre(Files, "Frame")
 
 	--> Load new files
 	local FileInstances = FileStore.Folder():GetChildren()
@@ -366,8 +359,8 @@ Generating:OnChange(function(File: StringValue?)
 end)
 
 Selection.SelectionChanged:Connect(function()
-	local Instances = Selection:Get()
-	Selected:Set(Instances[1])
+	local Chosen = Selection:Get()
+	Selected:Set(Chosen[1])
 end)
 
 Generate.MouseButton1Click:Connect(function()
