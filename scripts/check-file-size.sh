@@ -22,7 +22,6 @@ LIMIT=500
 
 # path:maximum-lines
 GRANDFATHERED="plugin/src/Editor/init.luau:921
-test/Test.luau:777
 src/Generator/Prefabs.luau:788
 test/Guards.luau:721
 plugin/src/init.server.luau:579
