@@ -1,13 +1,12 @@
 # Builds the CLI binaries and the Studio plugin, and attaches them to a published release.
 #
-# ⚠️ THIS FORK DOES NOT PUBLISH TO PESDE, AND THAT IS DELIBERATE. Upstream's workflow ended with
-# `pesde publish`, which pushes to the `1axen/blink` scope — a scope this fork cannot write to, and
-# should not: publishing there would put fork builds in front of everyone who installs the upstream
-# package. The step needed a PESDE_TOKEN secret that does not exist here either, so every release
-# would have failed on its last step regardless.
+# Publishing to pesde is not part of this workflow. Upstream's ended with `pesde publish` into the
+# `1axen/blink` scope, which this fork must never write to: it would put fork builds in front of
+# everyone who installs the upstream package. The fork is published under its own scope,
+# `xopoiii/blinkblox` (see pesde.toml), by hand, after the release artifacts below exist.
 #
-# Install this fork from the release artifacts instead, for example through rokit:
-#     rokit add XopoIII/BlinkBlox@0.22.0
+# Rokit installs straight from these artifacts:
+#     rokit add XopoIII/BlinkBlox blinkblox
 name: Release
 
 on:

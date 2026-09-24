@@ -1,102 +1,94 @@
 <div align="center">
-  <img src="./docs/public/bb_logo.jpg" alt="BlinkBlox" class="center">
-</div>
+  <img src="./docs/src/assets/bb_logo.jpg" alt="BlinkBlox" width="640">
+
+# BlinkBlox
+
+**An IDL compiler for Roblox buffer networking whose generated server is safe to point at the open internet.**
 
 [![License](https://img.shields.io/github/license/XopoIII/BlinkBlox?style=flat-square&color=%23a350af)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/XopoIII/BlinkBlox?style=flat-square&color=%23a350af)](https://github.com/XopoIII/BlinkBlox/releases/latest)
+[![Docs](https://img.shields.io/badge/docs-xopoiii.github.io-a350af?style=flat-square)](https://xopoiii.github.io/BlinkBlox/)
 
-An IDL compiler written in Luau for ROBLOX buffer networking.
+[Documentation](https://xopoiii.github.io/BlinkBlox/) ·
+[Quick start](https://xopoiii.github.io/BlinkBlox/getting-started/quick-start/) ·
+[Changelog](CHANGELOG.md)
 
-You describe your events and the shape of their data in a `.blink` schema; the compiler generates
-server, client and shared Luau modules that pack them into buffers, validate what arrives, and batch
-what leaves.
-
-# This fork
-
-BlinkBlox was called Blink until 0.28.0, and some things keep that name on purpose, because games and
-places depend on them: schemas are still `.blink` files, the remotes are still
-`BLINK_RELIABLE_REMOTE` and `BLINK_UNRELIABLE_REMOTE`, and the Studio plugin still generates into a
-`Blink` folder and keeps schemas in `ServerStorage.BLINK_CONFIGURATION_FILES`. A server and a client
-built before and after the rename still talk to each other.
-
-This is a maintained fork. Upstream stopped taking changes on this line of the compiler and moved to
-a rewrite, leaving reported defects — including an unbounded parse of hostile client input — closed
-as out of scope. This fork fixes them and continues from there.
-
-**Hardened**
-
-- **Inbound packets are bounded.** A client used to be able to send `buffer.create(1000000)` and make
-  the server decode up to a million events inside one remote callback. Packet size, decoded-event
-  count and instance references are now capped, an unrecognised event id stops the parse, and a
-  truncated packet — which is *smaller* than a legitimate one, so no size limit catches it — is
-  contained rather than raising out of the remote handler. Tunable per schema.
-- **No more resurrected players.** A remote function whose listener yielded while its player left
-  wrote that player back into the replication map, where nothing removed them again: the server then
-  allocated a buffer and fired a remote at someone who had gone, every Heartbeat, forever. Fixed on
-  all three write paths, with a second line of defence that heals a stale entry on the next frame.
-
-**Fixed**
-
-- Instance classes containing a digit (`Instance(Vector3Value)`, `Instance(Motor6D)`) now parse.
-- Edit-mode stubs keep the shape of the real API, so Roblox stories no longer raise on `On` returning
-  nil, on `Iter` returning nil, or on a missing `StepReplication`.
-- The CLI works from scripts: the schema path is the first non-flag argument in any order, and a
-  missing output directory is created rather than blocking on a prompt no one can answer.
-- `TypesOutput` resolves against the output path rather than the schema's, so an absolute schema path
-  no longer scatters the types module into the working directory.
-- Documentation code blocks are readable in light mode.
-
-**Added**
-
-- `Predict` delivers an event to the listening side's own handlers without touching a remote — for
-  tests, and for stories where remotes do not exist. It mirrors the receive path, queue included.
-- Inbound limit options: `MaxPacketSize`, `MaxEventsPerPacket`, `MaxInstancesPerPacket`.
-
-**Kept honest**
-
-Zero lint warnings and zero type errors across the tree, enforced by CI and git hooks that run
-formatting, linting, whole-project type-checking and the test suite. None of these gates existed
-before: pull requests ran no checks at all, and the test suite could not run unattended because it
-aborted on an interactive prompt.
-
-# Performance
-
-BlinkBlox aims to generate the most performant and bandwidth-efficient code for your specific experience.
-Lower bandwidth usage translates directly into **lower ping\*** for players, and the generated
-serialisers cost **less CPU** than a generalised networking library.
-
-Benchmarks are available [here](./benchmark/Benchmarks.md).
-
-*\* Compared to standard ROBLOX networking. Not guaranteed in every case, but it should never make
-ping worse.*
-
-# Security
-
-Two things work against bad actors:
-
-1. Data sent by clients is **validated** on the receiving side before it reaches game code, and the
-   volume of that data is now **bounded** before any of it is parsed.
-2. Compression makes traffic **considerably harder to snoop on** than plain remotes.
-
-# Getting started
-
-```sh
-rokit add XopoIII/BlinkBlox blinkblox
-```
-
-Then head to the [documentation](https://xopoiii.github.io/BlinkBlox/getting-started/1-installation).
-
-<div align="center">
-  <img src="./docs/public/bb_end.jpg" alt="BlinkBlox at work" class="center">
 </div>
 
-# Credits
+You describe your events and functions, and what they carry, in a `.blink` schema. The compiler
+generates a server module and a client module in plain Luau. They pack every call into one buffer
+per frame, check everything a client sends before your code sees it, and keep working when a client
+is hostile.
 
-Originally written by [Axen](https://github.com/1Axen); this fork continues from v0.18.8 and remains
+```blink
+event Damage {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Rate: 10,
+	Data: struct { Target: Instance(Humanoid), Amount: u8(1..100) }
+}
+```
+
+```luau
+-- Server: the listener runs only after the rate limit has passed and Amount is 1..100.
+Net.Damage.On(function(Player, Hit)
+	Combat.Apply(Player, Hit.Target, Hit.Amount)
+end)
+
+-- Client
+Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
+```
+
+## Why BlinkBlox
+
+- **Bounded inbound traffic.** Packet size, the number of events in a packet and the number of
+  instance references are capped before anything is parsed. Each player also gets a byte budget.
+- **Rate limits per player and per event.** Set `Rate` and `Burst` on an event, or a default for
+  the whole schema. Refused events go to a handler you provide, and nobody is kicked automatically.
+- **Hostile input costs the attacker, not the server.** Every length is checked before the read and
+  the allocation it pays for. A malformed event drops only itself.
+- **Mismatched builds refuse each other.** A client and a server built from different schemas stop
+  at startup instead of decoding one event as another.
+- **Small on the wire.** Booleans and optional flags share a bitfield, and `boolean[]` packs eight
+  to a byte. A length is sent relative to its range, and `CFrame<quat>` fits a rotation in 7 bytes.
+  An unreliable event that cannot fit is refused at compile time.
+- **Tooling.** The CLI has watch mode and `@profile` builds that keep debug remotes out of release.
+  You also get TypeScript definitions and a Studio plugin with live diagnostics.
+
+BlinkBlox is a maintained fork of [Blink](https://github.com/1Axen/blink). Upstream froze this line
+of the compiler and began a rewrite. It left reported defects open, including an unbounded parse of
+a hostile client buffer. This fork fixes them and continues from `v0.18.8`. See
+[Migrating from Blink](https://xopoiii.github.io/BlinkBlox/guides/migrating-from-blink/).
+
+## Install
+
+```sh
+rokit add XopoIII/BlinkBlox blinkblox   # CLI through Rokit
+pesde add xopoiii/blinkblox             # or through pesde
+```
+
+Binaries for every platform, and the Studio plugin (`blinkblox-plugin.rbxm`), are attached to each
+[release](https://github.com/XopoIII/BlinkBlox/releases/latest). The plugin is also on the Creator
+Store as **BlinkBlox Editor**. See [Installation](https://xopoiii.github.io/BlinkBlox/getting-started/installation/).
+
+## Contributing
+
+```sh
+rokit install              # toolchain
+sh scripts/run-tests.sh    # test suite
+cd docs && npm install && npm run dev   # documentation site
+```
+
+`CLAUDE.md` describes the architecture and the gates that CI and the git hooks run.
+
+## Credits
+
+Originally written by [Axen](https://github.com/1Axen). This fork continues from v0.18.8 and remains
 MIT licensed.
 
-Credits to [Zap](https://zap.redblox.dev/) for the range and array syntax.
-Credits to [ArvidSilverlock](https://github.com/ArvidSilverlock) for the float16 implementation.
-Studio plugin auto completion icons are sourced from [Microsoft](https://github.com/microsoft/vscode-icons)
-and are under the [CC BY 4.0](https://github.com/microsoft/vscode-icons/blob/main/LICENSE) license.
-<a href="https://www.flaticon.com/free-icons/speed" title="speed icons">Speed icons created by alkhalifi design - Flaticon</a>
+- [Zap](https://zap.redblox.dev/), for the range and array syntax.
+- [ArvidSilverlock](https://github.com/ArvidSilverlock), for the float16 implementation.
+- The Studio plugin's autocomplete icons come from [Microsoft](https://github.com/microsoft/vscode-icons),
+  under the [CC BY 4.0](https://github.com/microsoft/vscode-icons/blob/main/LICENSE) license.
+- <a href="https://www.flaticon.com/free-icons/speed" title="speed icons">Speed icons created by alkhalifi design - Flaticon</a>

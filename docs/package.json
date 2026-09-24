@@ -1,24 +1,20 @@
 {
   "name": "blinkblox-docs",
   "version": "0.0.1",
-  "description": "Documentation site for the Blink IDL compiler",
+  "description": "Documentation site for the BlinkBlox IDL compiler",
   "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  },
+  "type": "module",
   "license": "MIT",
-  "dependencies": {
-    "next": "^14.2.21",
-    "nextra": "^2.13.4",
-    "nextra-theme-docs": "^2.13.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "shiki": "^0.14.7"
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
   },
-  "devDependencies": {
-    "@types/node": "18.11.10",
-    "typescript": "^4.9.3"
+  "dependencies": {
+    "@astrojs/starlight": "^0.42.3",
+    "astro": "^7.3.5",
+    "sharp": "^0.35.4",
+    "starlight-links-validator": "^0.26.0",
+    "starlight-llms-txt": "^0.12.0"
   }
 }

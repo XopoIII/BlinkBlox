@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Deploy docs to GitHub Pages
 
 # Publishes on every push to main rather than on a release, for two reasons.
 #
@@ -9,6 +9,9 @@ name: Deploy to GitHub Pages
 # "Tag v0.19.0 is not allowed to deploy to github-pages due to environment protection rules". The
 # environment allows protected branches, so main is the source it expects. Loosening that protection
 # to admit tags would be the wrong half of the problem to fix.
+#
+# The site is Astro Starlight in `docs/`; it replaced Nextra 2, whose pinned highlighter could not
+# give code blocks a light theme. Pull requests build it in checks.yaml without deploying.
 on:
   push:
     branches: [main]
@@ -30,20 +33,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Starlight's "last updated" date comes from git history.
+          fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: "18.17.0"
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-        with:
-          static_site_generator: next
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
 
       - name: Install dependencies
         working-directory: ./docs
-        run: npm install
+        run: npm ci
 
       - name: Build
         working-directory: ./docs
@@ -52,7 +55,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./docs/out
+          path: ./docs/dist
 
   deploy:
     name: "Deploy"
