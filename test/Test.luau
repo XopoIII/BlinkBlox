@@ -467,33 +467,8 @@ RunClosure("Queue up and poll", function()
 	end
 end)
 
---> These live apart, but they run as part of the same suite. New specs go in files like these rather
---> than on the end of this one.
-require("./Ranges")
-require("./Buffers")
-require("./Listeners")
-require("./SizeAnalysis")
-require("./Guards")
-require("./Predict")
-require("./InboundBudget")
-require("./Invocations")
-require("./Signature")
-require("./Profiles")
-require("./SchemaDrift")
-require("./TypePacks")
-require("./ClientDecoding")
-require("./SyncValidation")
-require("./Highlighting")
-require("./WireFormat")
-require("./Encodings")
-require("./SharedModules")
-require("./Decoding")
-require("./BufferIntegrity")
-
---> LAST, and deliberately so: the CLI specs delete ../Network to prove the compiler recreates a
---> missing output directory, and then recompile only Test.blink. Everything generated from the other
---> schemas is gone afterwards, so any spec that reads a generated FILE has to have run already.
-require("./CommandLine")
+--> Every other spec file, in order. See Specs.luau.
+require("./Specs")
 
 PrettyPrint("green", `All tests passed successfully!`)
 
