@@ -341,8 +341,10 @@ end
 function Error.Emit(self: Class): never
 	Finalize(self)
 
-	if IS_ROBLOX or _G.RELEASE == nil then
-		local OnEmit: EmitHandler? = Error.OnEmit
+	--> A handler takes the error in every build, the released CLI included -- `--json` collects its
+	--> diagnostics through one. Only with none installed does a release print and exit.
+	local OnEmit: EmitHandler? = Error.OnEmit
+	if IS_ROBLOX or _G.RELEASE == nil or OnEmit then
 		if OnEmit then
 			OnEmit(self)
 		end
