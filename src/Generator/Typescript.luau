@@ -121,20 +121,6 @@ local function GetTypescriptType(State: State, Declaration: Type): (string, stri
 		Type = `{GetTypescriptType(State, Value.Of)} | undefined`
 	end
 
-	local Value = Declaration.Value
-	if Value.Parameters then
-		local Parameters = {}
-
-		--> Generate luau types for parameters
-		for _, Parameter in Value.Parameters do
-			local ParameterType = GetTypescriptType(State, Parameter)
-			table.insert(Parameters, ParameterType)
-		end
-
-		--> Wrap in chevrons
-		Type = `{Type}<{table.concat(Parameters, ",")}>`
-	end
-
 	--> Generalized type generation, works for everything except tuples
 	if Declaration.Type ~= "Tuple" then
 		Values = `Value: {Type}`

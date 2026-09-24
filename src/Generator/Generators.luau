@@ -150,21 +150,6 @@ function Generators.LuauType(
 		Type = `{Generators.LuauType(Value.Of)}?`
 	end
 
-	local Value = Declaration.Value
-
-	if Value.Parameters then
-		local Parameters = {}
-
-		--> Generate luau types for parameters
-		for _, Parameter in Value.Parameters do
-			local ParameterType = Generators.LuauType(Parameter)
-			table.insert(Parameters, ParameterType)
-		end
-
-		--> Wrap in chevrons
-		Type = `{Type}<{table.concat(Parameters, ",")}>`
-	end
-
 	--> Generalized type generation, works for everything except tuples
 	if Declaration.Type ~= "Tuple" then
 		Values = `{Prefix}Value: {UseTypeAsValue and Type or Export}`
