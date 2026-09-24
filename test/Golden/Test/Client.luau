@@ -695,14 +695,10 @@ function SerdesFunctions.WriteFUNCTION_DATA_RateLimitedCall(Value: number, Invoc
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_RateLimitedCall(): (number)
-	-- Read BLOCK: 2 bytes
-	local BLOCK_START = Read(2)
-	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Success ~= 1 then
-		error("Server encountered an error.")
-	end
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
 	-- Value: RateLimitedCall
-	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
 end
 
@@ -1518,12 +1514,6 @@ function SerdesFunctions.WriteFUNCTION_DATA_EmptyFunction(Value: nil, Invocation
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_EmptyFunction(): (nil)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
-	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Success ~= 1 then
-		error("Server encountered an error.")
-	end
 	return nil
 end
 
@@ -1537,12 +1527,6 @@ function SerdesFunctions.WriteFUNCTION_DATA_UnitFunction(Value: nil, InvocationI
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_UnitFunction(): (nil)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
-	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Success ~= 1 then
-		error("Server encountered an error.")
-	end
 	-- Value: UnitFunction
 	return Value
 end
@@ -2548,14 +2532,10 @@ function SerdesFunctions.WriteFUNCTION_DATA_RemoteFunction(Value: number, Invoca
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_RemoteFunction(): (number)
-	-- Read BLOCK: 2 bytes
-	local BLOCK_START = Read(2)
-	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Success ~= 1 then
-		error("Server encountered an error.")
-	end
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
 	-- Value: RemoteFunction
-	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
 end
 
@@ -2717,12 +2697,8 @@ function SerdesFunctions.WriteFUNCTION_DATA_TupleFunction(Value1: number, Value2
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction(): (Instance?, Instance, number?, ("A" | "B" | "C" | "D"), number)
-	-- Read BLOCK: 4 bytes
-	local BLOCK_START = Read(4)
-	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Success ~= 1 then
-		error("Server encountered an error.")
-	end
+	-- Read BLOCK: 3 bytes
+	local BLOCK_START = Read(3)
 	-- Value: TupleFunction
 	-- Value1: TupleFunction
 	local Value1
@@ -2740,7 +2716,7 @@ function SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction(): (Instance?, Instan
 	if typeof(Value2) ~= "Instance" then error(`Expected an Instance, got {typeof(Value2)} instead.`) end
 	-- Value3: TupleFunction
 	local Value3
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
@@ -2749,7 +2725,7 @@ function SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction(): (Instance?, Instan
 	end
 	-- Value4: TupleFunction
 	local Value4 = true :: any
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 	if Index == 0 then
 		Value4 = "A"
 	elseif Index == 1 then
@@ -2762,7 +2738,7 @@ function SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction(): (Instance?, Instan
 		error(`Unexpected enum: {Index}`)
 	end
 	-- Value5: TupleFunction
-	local Value5 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+	local Value5 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 	return Value1, Value2, Value3, Value4, Value5
 end
 
@@ -2906,17 +2882,13 @@ function SerdesFunctions.WriteFUNCTION_DATA_NamedTupleFunction(id: number, label
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_NamedTupleFunction(): (number, string)
-	-- Read BLOCK: 5 bytes
-	local BLOCK_START = Read(5)
-	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Success ~= 1 then
-		error("Server encountered an error.")
-	end
+	-- Read BLOCK: 4 bytes
+	local BLOCK_START = Read(4)
 	-- Value: NamedTupleFunction
 	-- id: NamedTupleFunction
-	local id = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+	local id = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	-- label: NamedTupleFunction
-	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
+	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
 	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "label" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 	local label = buffer.readstring(RecieveBuffer, Read(Length), Length)
 	return id, label
@@ -2951,14 +2923,10 @@ function SerdesFunctions.WriteFUNCTION_DATA_NeverAnswered(Value: number, Invocat
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_NeverAnswered(): (number)
-	-- Read BLOCK: 2 bytes
-	local BLOCK_START = Read(2)
-	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Success ~= 1 then
-		error("Server encountered an error.")
-	end
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
 	-- Value: NeverAnswered
-	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
 end
 
@@ -3043,14 +3011,10 @@ function SerdesFunctions.WriteFUNCTION_DATA_BadlyAnswered(Value: number, Invocat
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_BadlyAnswered(): (number)
-	-- Read BLOCK: 2 bytes
-	local BLOCK_START = Read(2)
-	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Success ~= 1 then
-		error("Server encountered an error.")
-	end
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
 	-- Value: BadlyAnswered
-	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
 end
 
@@ -3082,12 +3046,6 @@ function SerdesFunctions.WriteFUNCTION_DATA_Unanswered(Value: nil, InvocationIde
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_Unanswered(): (nil)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
-	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Success ~= 1 then
-		error("Server encountered an error.")
-	end
 	return nil
 end
 
@@ -7194,10 +7152,14 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 2 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				local Success, ReturnValue = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
 					return SerdesFunctions.ReadFUNCTION_RETURN_RateLimitedCall()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
@@ -7207,6 +7169,7 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 					task.spawn(Thread, Success, ReturnValue)
 				end
 			end
+			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 		elseif Index == 3 then
 			local Value: Vector3 = SerdesFunctions.ReadEVENT_SendOccupiedCell()
 			if Events.Reliable[3] ~= nil then
@@ -7234,10 +7197,14 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				table.insert(Queue.Reliable[9], {Value} :: {any})
 			end
 		elseif Index == 10 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				local Success, ReturnValue = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
 					return SerdesFunctions.ReadFUNCTION_RETURN_EmptyFunction()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
@@ -7247,11 +7214,16 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 					task.spawn(Thread, Success, ReturnValue)
 				end
 			end
+			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 		elseif Index == 11 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				local Success, Value = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
 					return SerdesFunctions.ReadFUNCTION_RETURN_UnitFunction()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
@@ -7261,6 +7233,7 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 					task.spawn(Thread, Success, Value)
 				end
 			end
+			if Answered == 1 and Success ~= true then error(Value, 0) end
 		elseif Index == 12 then
 			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,} = SerdesFunctions.ReadEVENT_Flags8()
 			if Events.Reliable[12] ~= nil then
@@ -7539,10 +7512,14 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				table.insert(Queue.Reliable[38], {Value} :: {any})
 			end
 		elseif Index == 39 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				local Success, ReturnValue = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
 					return SerdesFunctions.ReadFUNCTION_RETURN_RemoteFunction()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
@@ -7552,6 +7529,7 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 					task.spawn(Thread, Success, ReturnValue)
 				end
 			end
+			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 		elseif Index == 40 then
 			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number } = SerdesFunctions.ReadEVENT_Tuple()
 			if Events.Reliable[40] ~= nil then
@@ -7564,10 +7542,14 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				table.insert(Queue.Reliable[40], {Value1, Value2, Value3, Value4, Value5, Value6} :: {any})
 			end
 		elseif Index == 41 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				local Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5 = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
 					return SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
@@ -7577,6 +7559,7 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 					task.spawn(Thread, Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5)
 				end
 			end
+			if Answered == 1 and Success ~= true then error(ReturnValue1, 0) end
 		elseif Index == 42 then
 			local Value: number = SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent()
 			if Events.Reliable[42] ~= nil then
@@ -7633,10 +7616,14 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				table.insert(Queue.Reliable[47], {chefId, dish, portions} :: {any})
 			end
 		elseif Index == 48 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				local Success, Returnid, Returnlabel = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
 					return SerdesFunctions.ReadFUNCTION_RETURN_NamedTupleFunction()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
@@ -7646,6 +7633,7 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 					task.spawn(Thread, Success, Returnid, Returnlabel)
 				end
 			end
+			if Answered == 1 and Success ~= true then error(Returnid, 0) end
 		elseif Index == 49 then
 			local Value1: number, named: string, Value3: number = SerdesFunctions.ReadEVENT_PartiallyNamedTuple()
 			if Events.Reliable[49] ~= nil then
@@ -7658,10 +7646,14 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				table.insert(Queue.Reliable[49], {Value1, named, Value3} :: {any})
 			end
 		elseif Index == 50 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				local Success, ReturnValue = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
 					return SerdesFunctions.ReadFUNCTION_RETURN_NeverAnswered()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
@@ -7671,6 +7663,7 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 					task.spawn(Thread, Success, ReturnValue)
 				end
 			end
+			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 		elseif Index == 51 then
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
@@ -7685,10 +7678,14 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 				table.insert(Queue.Reliable[51], {Value, InvocationIdentifier} :: {any})
 			end
 		elseif Index == 54 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				local Success, ReturnValue = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
 					return SerdesFunctions.ReadFUNCTION_RETURN_BadlyAnswered()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
@@ -7698,11 +7695,16 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 					task.spawn(Thread, Success, ReturnValue)
 				end
 			end
+			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 		elseif Index == 57 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				local Success, ReturnValue = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
 					return SerdesFunctions.ReadFUNCTION_RETURN_Unanswered()
 				end)
 			if Calls[InvocationIdentifier] ~= nil then
@@ -7712,6 +7714,7 @@ Calls[InvocationIdentifier] = nil				ReleaseInvocation(InvocationIdentifier)
 					task.spawn(Thread, Success, ReturnValue)
 				end
 			end
+			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 		else
 			error("[BlinkBlox]: Unknown event index.")
 		end

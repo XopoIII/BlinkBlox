@@ -143,4 +143,65 @@ do
 	OkPrint(`Test "{Name}" passed!`)
 end
 
+do
+	--> A failure reply is three bytes -- index, id, a zero flag -- where a success carries its payload
+	--> after the flag. The reader used to take the flag inside the payload's block, so on a failure it
+	--> had already stepped the payload's size forward before it learnt there was none, and its error
+	--> was swallowed by the pcall around the read. The decode loop carried on from inside the NEXT
+	--> event, and whatever the server had batched behind a refusal was lost or misread.
+	local Name = "A failure reply leaves the events batched after it intact"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	local Reliable = require("./Client").Instances.BLINK_RELIABLE_REMOTE
+
+	--> Real bytes for both halves: a failure reply from a listener that returns the wrong type, and
+	--> an ordinary event. Captured on the way to the client rather than written by hand.
+	Server.BadlyAnswered.On(function(_Player, _Value: number): number
+		return "not a number" :: any
+	end)
+
+	local Packets: { buffer } = {}
+	local Spy = Reliable.OnClientEvent:Connect(function(Buffer: buffer)
+		table.insert(Packets, Buffer)
+	end)
+
+	Await(function()
+		return Client.BadlyAnswered.Invoke(1)
+	end, 1.5)
+	local Reply = Packets[#Packets]
+
+	Server.ReliableServer.FireAll(1)
+	task.wait(1 / 30)
+	local Event = Packets[#Packets]
+	Spy:Disconnect()
+	Shared.DrainWarnings()
+
+	if not Reply or buffer.len(Reply) ~= 3 or not Event or buffer.len(Event) ~= 2 then
+		ErrorPrint(`Failed "{Name}": could not capture a failure reply and an event to combine.`)
+		return {}
+	end
+
+	--> [failure reply][ReliableServer 77], as one flush would carry them.
+	local Combined = buffer.create(5)
+	buffer.copy(Combined, 0, Reply, 0, 3)
+	buffer.writeu8(Combined, 3, buffer.readu8(Event, 0))
+	buffer.writeu8(Combined, 4, 77)
+
+	local Seen: number?
+	local Disconnect = Client.ReliableServer.On(function(Value: number)
+		Seen = Value
+	end)
+
+	Reliable.OnClientEvent:Fire(Combined, {})
+	task.wait(1 / 30)
+	Disconnect()
+
+	if Seen ~= 77 then
+		ErrorPrint(`Failed "{Name}": the event after the failure reply arrived as {tostring(Seen)}, expected 77.`)
+		return {}
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end
+
 return {}

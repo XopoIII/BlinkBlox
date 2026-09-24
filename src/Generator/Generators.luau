@@ -252,12 +252,14 @@ function Generators.Event(
 		Write:Line(`OrderOut[{Index}] = OrderIdentifier`)
 		Types.u16.Write("OrderIdentifier", Write)
 	end
+	--> A reply carries a flag after its id: 1 when the payload follows, 0 when the call failed and
+	--> nothing does. The flag is read by the reply branch, not here -- a failure reply is three bytes
+	--> long, and a reader that took the flag inside the payload's block had already skipped past the
+	--> payload's size before it learnt there was none, landing in the middle of the next event.
 	if Function then
 		Types.u8.Write("InvocationIdentifier", Write)
 		if Function == "Return" then
 			Types.u8.Write("1", Write)
-			Types.u8.Read("Success", Read)
-			Read:Compare("Success", "1", "Not"):Line('error("Server encountered an error.")'):End()
 		end
 	end
 

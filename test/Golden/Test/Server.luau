@@ -3086,14 +3086,10 @@ function SerdesFunctions.WriteFUNCTION_DATA_AskClient(Value: number, InvocationI
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_AskClient(): (number)
-	-- Read BLOCK: 2 bytes
-	local BLOCK_START = Read(2)
-	local Success = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Success ~= 1 then
-		error("Server encountered an error.")
-	end
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
 	-- Value: AskClient
-	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
 end
 
@@ -7868,10 +7864,14 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				table.insert(Queue.Reliable[50], {Player, Value, InvocationIdentifier} :: {any})
 			end
 		elseif Index == 51 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				local Success, ReturnValue = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
 					return SerdesFunctions.ReadFUNCTION_RETURN_AskClient()
 				end)
 			if TakeInvocation(Player, InvocationIdentifier) ~= nil then
@@ -7881,6 +7881,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					task.spawn(Thread, Success, ReturnValue)
 				end
 			end
+			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 		elseif Index == 52 then
 			local Value: number = SerdesFunctions.ReadEVENT_RangedFromClient()
 			if Events.Reliable[52] ~= nil then

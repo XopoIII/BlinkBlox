@@ -207,13 +207,20 @@ function Declarations.Function(Declaration: Parser.Function)
 		State.Noop.Push(`{State.Casing.On} = NOOP_RETURNING`, 0, Indent + 1)
 		Body.PushLines(Listener.Content, 0, 2)
 	else
-		--> Return recieve body
+		--> Return recieve body. The flag after the id says whether a payload follows at all: a failure
+		--> reply stops there. The payload is only read when it is there, and a read that fails leaves
+		--> the cursor inside it -- so after the caller has been told, the failure is raised again, and
+		--> the packet stops and is reported like any other that cannot be decoded.
 		local Deserialize = Blocks.Function("", "")
+			:Compare("Answered", "1", "Not")
+			:Line(`error("The call failed on the side that answered it.")`)
+			:End()
 			:Return(`{Util.GetPath(ReturnIdentifier, false, State.Scope)}()`)
 			:End()
 			:Wrap(`local Success, {ReturnArguments} = pcall(`, ")")
 
 		Types.u8.Read("InvocationIdentifier", Block)
+		Types.u8.Read("Answered", Block)
 		Block:Lines(Deserialize.Content, Block.Indent + 1)
 		--> The slot is freed before the thread is resumed, so a caller that immediately invokes again
 		--> from inside its own continuation gets a slot rather than an exhaustion error.
@@ -232,6 +239,9 @@ function Declarations.Function(Declaration: Parser.Function)
 			:Line(`task.spawn(Thread, Success, {ReturnArguments})`)
 			:End()
 			:End()
+
+		local Failure = string.split(ReturnArguments, ",")[1]
+		Block:Line(`if Answered == 1 and Success ~= true then error({Failure}, 0) end`)
 
 		local Error = `"There was an exception while processing \\"{Name}\\"."`
 		--> A server invoking has to say WHICH client it is asking.
