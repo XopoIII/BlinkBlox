@@ -14,6 +14,8 @@ local GenerateTypescript = require("@self/Typescript")
 local Prefabs = require("@self/Prefabs")
 local Queues = require("@self/Queue")
 local Serde = require("@self/Serde")
+--> Everything one generation run builds up, shared with the generator's other files. See State.luau.
+local State = require("@self/State")
 local Util = require("@self/Util")
 
 local EVENTS_TYPE = Fragments.EVENTS_TYPE
@@ -39,21 +41,9 @@ local Sources = {
 
 type Type = Parser.TypeNode
 type Scope = Parser.Scope
-type Context = "Client" | "Server" | "Shared"
+type Context = State.Context
 --> One definition shared with Settings, Parser and Prefabs, not Roblox NumberRange userdata.
 type NumberRange = Parser.NumberRange
-
-local Scope: Scope
-local Context: Context
-local Casing: Settings.Cases
-local Noop: Builder.Builder
-local Events: Builder.Builder
-local UserTypes: Builder.Builder
-local LuauTypes: Builder.Builder
-local Reliables: Blocks.Block
-local Unreliables: Blocks.Block
-local Return: Builder.Builder
-local Options: Parser.Options
 
 local Generators = {}
 
@@ -61,19 +51,6 @@ local Generators = {}
 --> Serde.luau, and the rest of this file adds to the same table. What stays here is the half that
 --> needs the generator's own state: events, functions, and the API surface around them.
 local Declarations = Serde
-
---> Set when the schema declares at least one OrderedUnreliable event, so the sequence bookkeeping
---> is emitted only where something uses it.
-local UsesOrdering = false
-
---> One entry per rate-limited event or function, in the order they were generated. Each takes three
---> consecutive numbers in the per-player bucket, so the entry at index N starts at slot (N - 1) * 3 + 1.
-local RateSlots: { { Rate: number, Burst: number } } = {}
-
-local Channels: { [string]: { Count: number, Listening: boolean } } = {
-	Reliable = { Count = 0, Listening = false },
-	Unreliable = { Count = 0, Listening = false },
-}
 
 local FormatKey = Util.FormatKey
 
@@ -86,11 +63,11 @@ local Primitives = Prefabs.Primitives
 ---
 --- Server-only: the client trusts the server, and the bucket state lives in the server template.
 local function RateGuardExpression(Value: { Rate: number?, Burst: number? }, Name: string): string?
-	if Context ~= "Server" then
+	if State.Context ~= "Server" then
 		return nil
 	end
 
-	local Rate = Value.Rate or Options.DefaultRate
+	local Rate = Value.Rate or State.Options.DefaultRate
 	if not Rate then
 		return nil
 	end
@@ -99,8 +76,8 @@ local function RateGuardExpression(Value: { Rate: number?, Burst: number? }, Nam
 	--> its budget, so the floor is one whole token.
 	local Burst = Value.Burst or math.max(math.ceil(Rate), 1)
 
-	table.insert(RateSlots, { Rate = Rate, Burst = Burst })
-	local Slot = ((#RateSlots - 1) * 4) + 1
+	table.insert(State.RateSlots, { Rate = Rate, Burst = Burst })
+	local Slot = ((#State.RateSlots - 1) * 4) + 1
 
 	return `RateAccept(Player, {Slot}, {Rate}, {Burst}, "{Name}")`
 end
@@ -115,7 +92,7 @@ local function OrderGuardExpression(IsOrdered: boolean, Index: number): string?
 		return nil
 	end
 
-	if Context == "Server" then
+	if State.Context == "Server" then
 		return `OrderAccept(Player, {Index}, OrderIdentifier)`
 	end
 
@@ -136,13 +113,13 @@ function Declarations.Event(Declaration: Parser.Event)
 	local IsUnreliable = (Reliability == "Unreliable" or IsOrdered)
 
 	if IsOrdered then
-		UsesOrdering = true
+		State.UsesOrdering = true
 	end
-	local IsPolling = (Value.Call == "Polling" or Options.UsePolling)
-	local IsSameContext = Value.From == Context
+	local IsPolling = (Value.Call == "Polling" or State.Options.UsePolling)
+	local IsSameContext = Value.From == State.Context
 
-	local Block = IsUnreliable and Unreliables or Reliables
-	local Channel = IsUnreliable and Channels.Unreliable or Channels.Reliable
+	local Block = IsUnreliable and State.Unreliables or State.Reliables
+	local Channel = IsUnreliable and State.Channels.Unreliable or State.Channels.Reliable
 
 	local Index = Channel.Count
 	--> Ordered events ride the unreliable channel, so they share its queue and listener tables --
@@ -160,24 +137,24 @@ function Declarations.Event(Declaration: Parser.Event)
 	end
 
 	if IsSameContext then
-		UserTypes.PushLines(Write, 1, 0)
+		State.UserTypes.PushLines(Write, 1, 0)
 	else
-		UserTypes.PushLines(Read, 1, 0)
+		State.UserTypes.PushLines(Read, 1, 0)
 	end
 
 	--> Return body
 	local Body = Builder.new()
-	local Indent = Util.GetScopeIndent(Scope)
-	local WriteEvent = `{Util.GetPath(Identifier, true, Scope)}({Arguments})`
+	local Indent = Util.GetScopeIndent(State.Scope)
+	local WriteEvent = `{Util.GetPath(Identifier, true, State.Scope)}({Arguments})`
 	--> The same call, protected. Only the CLIENT needs it: every server fire begins with its own
 	--> `Load`, so a write that throws is confined to scratch state the next `Load` replaces, while
 	--> the client writes straight into the batch it is still accumulating.
-	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, Scope)}, {Arguments})`
+	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, State.Scope)}, {Arguments})`
 
 	Body.Push(`{Declaration.Name} = \{`, 0, Indent)
-	Noop.Push(`{Declaration.Name} = \{`, 0, Indent)
+	State.Noop.Push(`{Declaration.Name} = \{`, 0, Indent)
 
-	if Value.From ~= Context and IsPolling ~= true then
+	if Value.From ~= State.Context and IsPolling ~= true then
 		local IsSync = (Value.Call == "SingleSync" or Value.Call == "ManySync")
 		local IsSingle = (Value.Call == "SingleSync" or Value.Call == "SingleAsync")
 
@@ -202,19 +179,19 @@ function Declarations.Event(Declaration: Parser.Event)
 
 		--> Create queue and event branch
 		if not IsSingle then
-			Events.Push(`{Connection} = \{}`)
+			State.Events.Push(`{Connection} = \{}`)
 		end
 
-		Events.Push(`{Queue} = table.create(256)`)
-		Events.Push(`EventNames.{ChannelName}[{Index}] = "{Declaration.Name}"`)
+		State.Events.Push(`{Queue} = table.create(256)`)
+		State.Events.Push(`EventNames.{ChannelName}[{Index}] = "{Declaration.Name}"`)
 		Block = (Channel.Listening == false) and Block:Compare("Index", Index, "Equals")
 			or Block:Branch("Conditional", "Index", Index, "Equals")
 
 		--> Update event block to branch block
 		if IsUnreliable then
-			Unreliables = Block
+			State.Unreliables = Block
 		else
-			Reliables = Block
+			State.Reliables = Block
 		end
 
 		--> Update channel status
@@ -222,12 +199,12 @@ function Declarations.Event(Declaration: Parser.Event)
 
 		--> Event recieve body
 		local Listener: Blocks.Block
-		local ContextArguments = `Listener: ({Context == "Server" and "Player: Player, " or ""}{Values}) -> ()`
-		local ListenerArguments = `{Context == "Server" and "Player, " or ""}{Arguments}`
+		local ContextArguments = `Listener: ({State.Context == "Server" and "Player: Player, " or ""}{Values}) -> ()`
+		local ListenerArguments = `{State.Context == "Server" and "Player, " or ""}{Arguments}`
 
 		local CallListener = Blocks.Block()
 		do
-			if IsSync and Options.SyncValidation then
+			if IsSync and State.Options.SyncValidation then
 				CallListener = CallListener:Line(`SerdesEvent = "{Declaration.Name}"`)
 			end
 
@@ -243,7 +220,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Types.u16.Read("OrderIdentifier", Block)
 		end
 
-		Block:Line(`local {Values} = {Util.GetPath(Identifier, false, Scope)}()`)
+		Block:Line(`local {Values} = {Util.GetPath(Identifier, false, State.Scope)}()`)
 
 		--> The decode above has to happen either way: payloads are variable length, so skipping an
 		--> event without reading it would leave the cursor mid-event and turn the rest of the packet
@@ -279,9 +256,10 @@ function Declarations.Event(Declaration: Parser.Event)
 					:End()
 			end
 
-			Queues.Enqueue(ListenerBound:Branch("Default"), Context, Queue, ListenerArguments, Declaration.Name):End()
+			Queues.Enqueue(ListenerBound:Branch("Default"), State.Context, Queue, ListenerArguments, Declaration.Name)
+				:End()
 
-			Listener = BindListener(Blocks.Function(Casing.On, ContextArguments, `() -> ()`, true))
+			Listener = BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true))
 				:Iterator("Index", "Arguments", Queue)
 				:Line(IsSync and `Listener(table.unpack(Arguments))` or `Spawn(Listener, table.unpack(Arguments))`)
 				:End()
@@ -295,7 +273,7 @@ function Declarations.Event(Declaration: Parser.Event)
 				Block:Iterator("_", "Listener", Connection):Lines(CallListener.Content, Block.Indent):End()
 			end
 
-			Listener = BindListener(Blocks.Function(Casing.On, ContextArguments, `() -> ()`, true))
+			Listener = BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true))
 				:Lines(Disconnect.Content, 1)
 				:End()
 		end
@@ -314,9 +292,9 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> story can drive receiving code directly. It mirrors the receive path deliberately, queue
 		--> included: a Predict that skipped the queue would behave differently from the network
 		--> whenever no listener is attached yet, which is exactly the case tests hit most.
-		if Options.Predict then
-			local PredictArguments = `{Context == "Server" and "Player: Player, " or ""}{Values}`
-			local Predict = Blocks.Function(Casing.Predict, PredictArguments, "()", true)
+		if State.Options.Predict then
+			local PredictArguments = `{State.Context == "Server" and "Player: Player, " or ""}{Values}`
+			local Predict = Blocks.Function(State.Casing.Predict, PredictArguments, "()", true)
 
 			if IsSingle then
 				local Bound = Predict:Compare(Connection, "nil", "Not"):Lines(CallListener.Content, Predict.Indent)
@@ -331,24 +309,24 @@ function Declarations.Event(Declaration: Parser.Event)
 
 			Predict:End()
 
-			Noop.Push(`{Casing.On} = NOOP_RETURNING,`, 0, Indent + 1)
-			Noop.Push(`{Casing.Predict} = NOOP`, 0, Indent + 1)
+			State.Noop.Push(`{State.Casing.On} = NOOP_RETURNING,`, 0, Indent + 1)
+			State.Noop.Push(`{State.Casing.Predict} = NOOP`, 0, Indent + 1)
 			Body.PushLines(Listener:Wrap("", ",").Content, 0, Indent + 1)
 			Body.PushLines(Predict.Content, 0, Indent + 1)
 		else
-			Noop.Push(`{Casing.On} = NOOP_RETURNING`, 0, Indent + 1)
+			State.Noop.Push(`{State.Casing.On} = NOOP_RETURNING`, 0, Indent + 1)
 			Body.PushLines(Listener.Content, 0, Indent + 1)
 		end
-	elseif Value.From ~= Context and IsPolling then
-		Events.Push(`{Queue} = CreateQueue()`)
-		Events.Push(`EventNames.{ChannelName}[{Index}] = "{Declaration.Name}"`)
+	elseif Value.From ~= State.Context and IsPolling then
+		State.Events.Push(`{Queue} = CreateQueue()`)
+		State.Events.Push(`EventNames.{ChannelName}[{Index}] = "{Declaration.Name}"`)
 		Block = (Channel.Listening == false) and Block:Compare("Index", Index, "Equals")
 			or Block:Branch("Conditional", "Index", Index, "Equals")
 
 		if IsUnreliable then
-			Unreliables = Block
+			State.Unreliables = Block
 		else
-			Reliables = Block
+			State.Reliables = Block
 		end
 
 		Channel.Listening = true
@@ -357,8 +335,11 @@ function Declarations.Event(Declaration: Parser.Event)
 			Types.u16.Read("OrderIdentifier", Block)
 		end
 
-		local PollArguments =
-			`table.pack({Context == "Server" and "Player, " or ""}{Util.GetPath(Identifier, false, Scope)}())`
+		local PollArguments = `table.pack({State.Context == "Server" and "Player, " or ""}{Util.GetPath(
+			Identifier,
+			false,
+			State.Scope
+		)}())`
 		local PollOrderGuard = OrderGuardExpression(IsOrdered, Index)
 		local PollRateGuard = RateGuardExpression(Value, Declaration.Name)
 
@@ -380,7 +361,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Block:Line(`Push({Queue}, {PollArguments})`)
 		end
 
-		local IterTypes = `number, {Context == "Server" and "Player, " or ""}{DataTypes}`
+		local IterTypes = `number, {State.Context == "Server" and "Player, " or ""}{DataTypes}`
 
 		local Next = Blocks.Function("", "", `({IterTypes})`)
 			:Line("index += 1")
@@ -392,27 +373,27 @@ function Declarations.Event(Declaration: Parser.Event)
 			:End()
 			:Wrap("return ", "")
 
-		local Deprecated = Blocks.Function(Casing.Next, "", `() -> ({IterTypes})`, true)
+		local Deprecated = Blocks.Function(State.Casing.Next, "", `() -> ({IterTypes})`, true)
 			:Line(`local index = 0`)
 			:Line(`local queue = {Queue}`)
 			:Lines(Next.Content, 1)
 			:End()
 
-		local Iter = Blocks.Function(Casing.Iter, "", `() -> ({IterTypes})`, true)
+		local Iter = Blocks.Function(State.Casing.Iter, "", `() -> ({IterTypes})`, true)
 			:Line(`local index = 0`)
 			:Line(`local queue = {Queue}`)
 			:Lines(Next.Content, 1)
 			:End()
 			:Wrap("", ",")
 
-		Noop.Push(`{Casing.Iter} = NOOP_RETURNING,`, 0, Indent + 1)
-		Noop.Push(`{Casing.Next} = NOOP_RETURNING`, 0, Indent + 1)
+		State.Noop.Push(`{State.Casing.Iter} = NOOP_RETURNING,`, 0, Indent + 1)
+		State.Noop.Push(`{State.Casing.Next} = NOOP_RETURNING`, 0, Indent + 1)
 
 		Body.PushLines(Iter.Content, 0, Indent + 1)
 		Body.Push("--- @deprecated v0.14.1 -- Use `Iter` instead.", 0, Indent + 1)
 		Body.PushLines(Deprecated.Content, 0, Indent + 1)
-	elseif Context == "Client" then
-		local Fire = Blocks.Function(Casing.Fire, Values, "()", true)
+	elseif State.Context == "Client" then
+		local Fire = Blocks.Function(State.Casing.Fire, Values, "()", true)
 		if IsReliable then
 			--> Rolled back rather than left, because this write lands in the batch every other event
 			--> is queued in. Half an event in there is not one bad send: the receiver reads the
@@ -440,10 +421,10 @@ function Declarations.Event(Declaration: Parser.Event)
 		end
 		Fire:End()
 
-		Noop.Push(`{Casing.Fire} = NOOP`, 0, Indent + 1)
+		State.Noop.Push(`{State.Casing.Fire} = NOOP`, 0, Indent + 1)
 		Body.PushLines(Fire.Content, 0, Indent + 1)
 	else
-		local Fire = Blocks.Function(Casing.Fire, `Player: Player, {Values}`, "()", true)
+		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 		if IsReliable then
 			Fire:Line("Load(PlayersMap[Player])")
 			Fire:Line(WriteEvent)
@@ -457,7 +438,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		end
 		Fire:End()
 
-		local FireAll = Blocks.Function(Casing.FireAll, Values, "()", true)
+		local FireAll = Blocks.Function(State.Casing.FireAll, Values, "()", true)
 		if IsReliable then
 			FireAll:Line("Load()")
 			FireAll:Line(WriteEvent)
@@ -472,7 +453,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		end
 		FireAll:End()
 
-		local FireList = Blocks.Function(Casing.FireList, `List: \{Player\}, {Values}`, "()", true)
+		local FireList = Blocks.Function(State.Casing.FireList, `List: \{Player\}, {Values}`, "()", true)
 		if IsReliable then
 			FireList:Line("Load()")
 			FireList:Line(WriteEvent)
@@ -487,7 +468,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		end
 		FireList:End()
 
-		local FireExcept = Blocks.Function(Casing.FireExcept, `Except: Player, {Values}`, "()", true)
+		local FireExcept = Blocks.Function(State.Casing.FireExcept, `Except: Player, {Values}`, "()", true)
 		if IsReliable then
 			FireExcept:Line("Load()")
 			FireExcept:Line(WriteEvent)
@@ -512,11 +493,11 @@ function Declarations.Event(Declaration: Parser.Event)
 		end
 		FireExcept:End()
 
-		Noop.PushLines({
-			`{Casing.Fire} = NOOP,\n`,
-			`{Casing.FireAll} = NOOP,\n`,
-			`{Casing.FireList} = NOOP,\n`,
-			`{Casing.FireExcept} = NOOP\n`,
+		State.Noop.PushLines({
+			`{State.Casing.Fire} = NOOP,\n`,
+			`{State.Casing.FireAll} = NOOP,\n`,
+			`{State.Casing.FireList} = NOOP,\n`,
+			`{State.Casing.FireExcept} = NOOP\n`,
 		}, 0, Indent + 1)
 
 		Body.PushLines(Fire:Wrap("", ",").Content, 0, Indent + 1)
@@ -528,8 +509,8 @@ function Declarations.Event(Declaration: Parser.Event)
 	Channel.Count += 1
 
 	Body.Push(`\},`, 0, Indent)
-	Noop.Push(`\},`, 0, Indent)
-	Return.PushLines(Body.DumpLines(), 0)
+	State.Noop.Push(`\},`, 0, Indent)
+	State.Return.PushLines(Body.DumpLines(), 0)
 end
 
 function Declarations.Function(Declaration: Parser.Function)
@@ -543,16 +524,16 @@ function Declarations.Function(Declaration: Parser.Function)
 	local IsFuture = (Yield == "Future")
 	local IsPromise = (Yield == "Promise")
 
-	if IsFuture and not Options.FutureLibrary then
+	if IsFuture and not State.Options.FutureLibrary then
 		error(`Cannot use yield type: "Future", without providing a path to the future library.`)
 	end
 
-	if IsPromise and not Options.PromiseLibrary then
+	if IsPromise and not State.Options.PromiseLibrary then
 		error(`Cannot use yield type: "Promise", without providing a path to the promise library.`)
 	end
 
-	local Block = Reliables
-	local Channel = Channels.Reliable
+	local Block = State.Reliables
+	local Channel = State.Channels.Reliable
 
 	local Index = Channel.Count
 	local Queue = `Queue.Reliable[{Index}]`
@@ -561,8 +542,8 @@ function Declarations.Function(Declaration: Parser.Function)
 	--> WHICH SIDE IS WHICH. `From` names the side that INVOKES; the other side listens. Until this
 	--> existed the answer was always "the client invokes", and the fork below was written as
 	--> `Context == "Server"` -- true only because that meant the same thing.
-	local IsCaller = (Value.From == Context)
-	local OnServer = (Context == "Server")
+	local IsCaller = (Value.From == State.Context)
+	local OnServer = (State.Context == "Server")
 
 	--> A server calling a client needs per-player invocation state, because the id is a u8 the client
 	--> sends back and one shared id space would let a client answer a call made to somebody else. See
@@ -580,8 +561,8 @@ function Declarations.Function(Declaration: Parser.Function)
 		else "Calls[InvocationIdentifier]"
 	local ForgetCaller = if ServerCalls then "" else "Calls[InvocationIdentifier] = nil"
 	local ArmTimeout = if ServerCalls
-		then `TimeoutPlayerInvocation(Player, InvocationIdentifier, {Options.InvocationTimeout or DEFAULT_INVOCATION_TIMEOUT}, "{Name}")`
-		else `TimeoutInvocation(InvocationIdentifier, {Options.InvocationTimeout or DEFAULT_INVOCATION_TIMEOUT}, "{Name}")`
+		then `TimeoutPlayerInvocation(Player, InvocationIdentifier, {State.Options.InvocationTimeout or DEFAULT_INVOCATION_TIMEOUT}, "{Name}")`
+		else `TimeoutInvocation(InvocationIdentifier, {State.Options.InvocationTimeout or DEFAULT_INVOCATION_TIMEOUT}, "{Name}")`
 
 	--> Data and return body
 	local DataTypes, DataValues, _, DataArguments = "nil", "Value: nil", nil, "Value"
@@ -603,34 +584,34 @@ function Declarations.Function(Declaration: Parser.Function)
 		--> listener reads the arguments and writes the answer. Keying this on `Context == "Client"`
 		--> was correct only while the client was always the caller.
 		if IsCaller then
-			UserTypes.PushLines(DataWrite, 1, 0)
-			UserTypes.PushLines(ReturnRead, 1, 0)
+			State.UserTypes.PushLines(DataWrite, 1, 0)
+			State.UserTypes.PushLines(ReturnRead, 1, 0)
 		else
-			UserTypes.PushLines(DataRead, 1, 0)
-			UserTypes.PushLines(ReturnWrite, 1, 0)
+			State.UserTypes.PushLines(DataRead, 1, 0)
+			State.UserTypes.PushLines(ReturnWrite, 1, 0)
 		end
 	end
 
 	--> Main
 	local Body = Builder.new()
-	local Indent = Util.GetScopeIndent(Scope)
+	local Indent = Util.GetScopeIndent(State.Scope)
 
-	Noop.Push(`{Name} = \{`, 0, Indent)
+	State.Noop.Push(`{Name} = \{`, 0, Indent)
 	Body.Push(`{Name} = \{`, 0, Indent)
 
 	--> Create queue and event branch
-	Events.Push(`{Queue} = table.create(256)`)
-	Events.Push(`EventNames.Reliable[{Index}] = "{Name}"`)
+	State.Events.Push(`{Queue} = table.create(256)`)
+	State.Events.Push(`EventNames.Reliable[{Index}] = "{Name}"`)
 	Block = (Channel.Listening == false) and Block:Compare("Index", Index, "Equals")
 		or Block:Branch("Conditional", "Index", Index, "Equals")
 
 	--> Update event block to branch block
-	Reliables = Block
+	State.Reliables = Block
 
 	if not IsCaller then
 		--> Data recieve body
 		Types.u8.Read("InvocationIdentifier", Block)
-		Block:Line(`local {DataValues} = {Util.GetPath(DataIdentifier, false, Scope)}()`)
+		Block:Line(`local {DataValues} = {Util.GetPath(DataIdentifier, false, State.Scope)}()`)
 
 		--> A refused invocation still has to be ANSWERED; see Queue.Refuse.
 		local RateGuard = RateGuardExpression(Value, Name)
@@ -644,7 +625,7 @@ function Declarations.Function(Declaration: Parser.Function)
 		local Queued = Block:Compare(Connection, "nil", "Not")
 			:Line(`Spawn({Connection}, {Caller}{DataArguments}, InvocationIdentifier)`)
 			:Branch("Default")
-		Queues.Enqueue(Queued, Context, Queue, `{Caller}{DataArguments}, InvocationIdentifier`, Name, Index):End()
+		Queues.Enqueue(Queued, State.Context, Queue, `{Caller}{DataArguments}, InvocationIdentifier`, Name, Index):End()
 
 		--> Data listener body
 		local FlushQueue = Blocks.Function("", "", "()")
@@ -689,7 +670,7 @@ function Declarations.Function(Declaration: Parser.Function)
 		TrueListener:Compare("Success", "true", "Equals")
 			:Line("local Cursor, Instances = Mark()")
 			:Line(
-				`Success, Error = pcall({Util.GetPath(ReturnIdentifier, true, Scope)}, {ReturnArguments}, InvocationIdentifier)`
+				`Success, Error = pcall({Util.GetPath(ReturnIdentifier, true, State.Scope)}, {ReturnArguments}, InvocationIdentifier)`
 			)
 			:Compare("Success", "true", "Not")
 			:Line("Rollback(Cursor, Instances)")
@@ -711,17 +692,17 @@ function Declarations.Function(Declaration: Parser.Function)
 		TrueListener:End()
 
 		local ListenerSignature = `Listener: ({if OnServer then "Player, " else ""}{DataTypes}) -> ({ReturnTypes})`
-		local Listener = Blocks.Function(Casing.On, ListenerSignature, "()", true)
+		local Listener = Blocks.Function(State.Casing.On, ListenerSignature, "()", true)
 			:Lines(TrueListener.Content, 1)
 			:Lines(FlushQueue.Content, 1)
 			:End()
 
-		Noop.Push(`{Casing.On} = NOOP_RETURNING`, 0, Indent + 1)
+		State.Noop.Push(`{State.Casing.On} = NOOP_RETURNING`, 0, Indent + 1)
 		Body.PushLines(Listener.Content, 0, 2)
 	else
 		--> Return recieve body
 		local Deserialize = Blocks.Function("", "")
-			:Return(`{Util.GetPath(ReturnIdentifier, false, Scope)}()`)
+			:Return(`{Util.GetPath(ReturnIdentifier, false, State.Scope)}()`)
 			:End()
 			:Wrap(`local Success, {ReturnArguments} = pcall(`, ")")
 
@@ -763,7 +744,7 @@ function Declarations.Function(Declaration: Parser.Function)
 		--> This is the one leak the timeout cannot cover, because the timeout is armed after it.
 		Send:Line("local Cursor, Instances = Mark()")
 		Send:Line(
-			`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, Scope)}, {DataArguments}, InvocationIdentifier)`
+			`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, State.Scope)}, {DataArguments}, InvocationIdentifier)`
 		)
 		Send:Compare("Sent", "true", "Not")
 			:Line("Rollback(Cursor, Instances)")
@@ -787,7 +768,7 @@ function Declarations.Function(Declaration: Parser.Function)
 		if IsFuture then
 			local Wrapper = Blocks.Function("", ""):Lines(Contents):End():Wrap("return Future.Try(", ")")
 
-			Invoke = Blocks.Function(Casing.Invoke, InvokeValues, `Future.Future<boolean, {ReturnTypes}>`, true)
+			Invoke = Blocks.Function(State.Casing.Invoke, InvokeValues, `Future.Future<boolean, {ReturnTypes}>`, true)
 			Invoke:Lines(Wrapper.Content, 1)
 		elseif IsPromise then
 			--> A cancelled promise gives its slot back too, otherwise cancelling enough calls would
@@ -807,7 +788,7 @@ function Declarations.Function(Declaration: Parser.Function)
 
 			Promise:Line("local Cursor, Instances = Mark()")
 			Promise:Line(
-				`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, Scope)}, {DataArguments}, InvocationIdentifier)`
+				`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, State.Scope)}, {DataArguments}, InvocationIdentifier)`
 			)
 			Promise:Compare("Sent", "true", "Not")
 				:Line("Rollback(Cursor, Instances)")
@@ -831,24 +812,24 @@ function Declarations.Function(Declaration: Parser.Function)
 				:End()
 				:Wrap(`return Promise.new(`, ")")
 
-			Invoke = Blocks.Function(Casing.Invoke, InvokeValues, nil, true)
+			Invoke = Blocks.Function(State.Casing.Invoke, InvokeValues, nil, true)
 			Invoke:Lines(Promise.Content, 1)
 		else
-			Invoke = Blocks.Function(Casing.Invoke, InvokeValues, `({ReturnTypes})`, true)
+			Invoke = Blocks.Function(State.Casing.Invoke, InvokeValues, `({ReturnTypes})`, true)
 			Invoke:Lines(Contents, 0)
 		end
 
 		Invoke:End()
-		Noop.Push(`{Casing.Invoke} = NOOP`, 0, Indent + 1)
+		State.Noop.Push(`{State.Casing.Invoke} = NOOP`, 0, Indent + 1)
 		Body.PushLines(Invoke.Content, 0, Indent + 1)
 	end
 
 	Channel.Count += 1
 	Channel.Listening = true
 
-	Noop.Push(`\},`, 0, Indent)
+	State.Noop.Push(`\},`, 0, Indent)
 	Body.Push(`\},`, 0, Indent)
-	Return.PushLines(Body.DumpLines(), 0)
+	State.Return.PushLines(Body.DumpLines(), 0)
 end
 
 --> Generator functions
@@ -898,7 +879,7 @@ function Generators.LuauType(
 
 	local Type = "nil"
 	local Values = "Value: nil"
-	local Export = Util.GetExportName(Declaration.Name, Scope)
+	local Export = Util.GetExportName(Declaration.Name, State.Scope)
 	local Returns = `{Prefix}Value`
 
 	if Declaration.Type == "Primitive" then
@@ -1017,18 +998,18 @@ function Generators.Type(Declaration: Type)
 	end
 
 	--> Write luau export
-	LuauTypes.PushMultiline(`export type {Export}{Generics} = {Type}`, 1, 0)
+	State.LuauTypes.PushMultiline(`export type {Export}{Generics} = {Type}`, 1, 0)
 end
 
 function Generators.Export(Declaration: Type)
 	local Name = Declaration.Name
 	local _, Values, Export, Returns = Generators.LuauType(Declaration)
 
-	local Read = Blocks.Function(Casing.Read, "Buffer: buffer", `({Export})`, true)
-	local Write = Blocks.Function(Casing.Write, `{Values}`, `(buffer)`, true)
+	local Read = Blocks.Function(State.Casing.Read, "Buffer: buffer", `({Export})`, true)
+	local Write = Blocks.Function(State.Casing.Write, `{Values}`, `(buffer)`, true)
 
 	local Body = Builder.new()
-	local Indent = Util.GetScopeIndent(Scope)
+	local Indent = Util.GetScopeIndent(State.Scope)
 	Body.Push(`{Name} = \{`, 0, Indent)
 
 	--> Overwrite buffer
@@ -1091,8 +1072,8 @@ function Generators.Export(Declaration: Type)
 
 	local BodyLines = Body.DumpLines()
 
-	Noop.PushLines(table.clone(BodyLines), 0, 0)
-	Return.PushLines(BodyLines, 0, 0)
+	State.Noop.PushLines(table.clone(BodyLines), 0, 0)
+	State.Return.PushLines(BodyLines, 0, 0)
 end
 
 function Generators.Event(
@@ -1108,8 +1089,8 @@ function Generators.Event(
 	end
 
 	local Arguments = `{Values}{Function and ", InvocationIdentifier: number" or ""}`
-	local Read = Blocks.Function(Util.GetPath(Identifier, false, Scope), "", `({Type})`)
-	local Write = Blocks.Function(Util.GetPath(Identifier, true, Scope), Arguments, "()")
+	local Read = Blocks.Function(Util.GetPath(Identifier, false, State.Scope), "", `({Type})`)
+	local Write = Blocks.Function(Util.GetPath(Identifier, true, State.Scope), Arguments, "()")
 
 	if not _G.RELEASE then
 		Write:Comment(`{Identifier} ({Index})`)
@@ -1148,27 +1129,27 @@ function Generators.Scope(Declaration: Parser.ScopeNode)
 	local Name = Declaration.Name
 	local Value = Declaration.Value
 
-	local Parent = Scope
+	local Parent = State.Scope
 	local NewScope = Value.Scope
 
-	local Path = Util.GetScopePrefix(NewScope, true, Scope)
+	local Path = Util.GetScopePrefix(NewScope, true, State.Scope)
 	local Indent = (#string.split(Path, ".") - 1)
 	Path = string.sub(Path, 1, #Path - 1)
 
-	Scope = NewScope
-	Noop.Push(`{Name} = \{`, 0, Indent)
-	Return.Push(`{Name} = \{`, 0, Indent)
+	State.Scope = NewScope
+	State.Noop.Push(`{Name} = \{`, 0, Indent)
+	State.Return.Push(`{Name} = \{`, 0, Indent)
 
 	Generators.AbstractSyntaxTree(Value.Values)
 
-	Noop.Push(`},`, 0, Indent)
-	Return.Push(`},`, 0, Indent)
-	Scope = Parent
+	State.Noop.Push(`},`, 0, Indent)
+	State.Return.Push(`},`, 0, Indent)
+	State.Scope = Parent
 end
 
 function Generators.AbstractSyntaxTree(Tree: { Parser.Declaration })
 	for _, Declaration in Tree do
-		if Context == "Shared" and IGNORED_TYPES_IN_SHARED[Declaration.Type] then
+		if State.Context == "Shared" and IGNORED_TYPES_IN_SHARED[Declaration.Type] then
 			continue
 		end
 
@@ -1191,32 +1172,16 @@ end
 local Generator = {}
 
 function Generator.Reset()
-	--> Setup new builders
-	Noop = Builder.new()
-	Events = Builder.new()
-	UserTypes = Builder.new()
-	LuauTypes = Builder.new()
-	Return = Builder.new()
-
-	table.clear(RateSlots)
-	table.clear(Prefabs.Required)
-	UsesOrdering = false
-
-	--> Reset channels
-	Channels.Reliable.Count = 0
-	Channels.Unreliable.Count = 0
-	Channels.Reliable.Listening = false
-	Channels.Unreliable.Listening = false
+	State.Reset()
 end
 
 function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Body): string
 	local Imports = Builder.new()
 
 	Generator.Reset()
-	Context = FileContext
-	Options = AbstractSyntaxTree.Value.Options
-	Serde.Options = Options
-	Casing = Settings.GetCasing((Options.Casing :: Settings.Case) or "Pascal")
+	State.Context = FileContext
+	State.Options = AbstractSyntaxTree.Value.Options
+	State.Casing = Settings.GetCasing((State.Options.Casing :: Settings.Case) or "Pascal")
 
 	--> Setup noop
 	-->
@@ -1230,53 +1195,54 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> `Iter` returned nil, so `for _ in Net.Foo.Iter() do` raised instead of iterating zero times;
 	--> and `StepReplication` was missing altogether, so it was nil under ManualReplication -- while
 	--> the real Returns table has always carried it.
-	Noop.Push(`if not RunService:IsRunning() then`)
-	Noop.Push(`local NOOP = function() end`, 0, 1)
-	Noop.Push(`local NOOP_RETURNING = function() return NOOP end`, 0, 1)
-	Noop.Push(`local Returns = table.freeze(\{`, 0, 1)
+	State.Noop.Push(`if not RunService:IsRunning() then`)
+	State.Noop.Push(`local NOOP = function() end`, 0, 1)
+	State.Noop.Push(`local NOOP_RETURNING = function() return NOOP end`, 0, 1)
+	State.Noop.Push(`local Returns = table.freeze(\{`, 0, 1)
 
 	--> Setup remote events
-	local Signal = Context == "Client" and "OnClientEvent" or "OnServerEvent"
-	local Arguments = (Context == "Server" and "Player: Player, " or "") .. "Buffer: buffer, Instances: {Instance}"
+	local Signal = State.Context == "Client" and "OnClientEvent" or "OnServerEvent"
+	local Arguments = (State.Context == "Server" and "Player: Player, " or "")
+		.. "Buffer: buffer, Instances: {Instance}"
 
-	Reliables = Blocks.Connection(`Reliable.{Signal}`, Arguments)
-	Unreliables = Blocks.Connection(`Unreliable.{Signal}`, Arguments)
+	State.Reliables = Blocks.Connection(`Reliable.{Signal}`, Arguments)
+	State.Unreliables = Blocks.Connection(`Unreliable.{Signal}`, Arguments)
 
 	--> Reject a hostile packet before any of it is parsed; see Fragments.InboundGuard.
-	if Context == "Server" then
-		local Guard = Fragments.InboundGuard(Options)
-		Reliables:Lines(Guard, 1)
-		Unreliables:Lines(Guard, 1)
+	if State.Context == "Server" then
+		local Guard = Fragments.InboundGuard(State.Options)
+		State.Reliables:Lines(Guard, 1)
+		State.Unreliables:Lines(Guard, 1)
 	end
 
-	Reliables:Lines(EVENT_BODY, 1)
-	Unreliables:Lines(EVENT_BODY, 1)
+	State.Reliables:Lines(EVENT_BODY, 1)
+	State.Unreliables:Lines(EVENT_BODY, 1)
 
-	if Options.SyncValidation then
-		Reliables:Lines(EVENT_SYNC_VALIDATION, 1)
-		Unreliables:Lines(EVENT_SYNC_VALIDATION, 1)
+	if State.Options.SyncValidation then
+		State.Reliables:Lines(EVENT_SYNC_VALIDATION, 1)
+		State.Unreliables:Lines(EVENT_SYNC_VALIDATION, 1)
 	end
 
 	--> The size cap alone does not bound the work: a packet of single-byte event tags decodes one
 	--> event per byte, so an 8 KB packet still means thousands of listener dispatches. Counting the
 	--> decoded events bounds that directly.
-	local MaxEvents = Options.MaxEventsPerPacket or DEFAULT_MAX_EVENTS_PER_PACKET
-	if Context == "Server" then
-		Reliables:Line("local DecodedEvents = 0", 1)
-		Unreliables:Line("local DecodedEvents = 0", 1)
+	local MaxEvents = State.Options.MaxEventsPerPacket or DEFAULT_MAX_EVENTS_PER_PACKET
+	if State.Context == "Server" then
+		State.Reliables:Line("local DecodedEvents = 0", 1)
+		State.Unreliables:Line("local DecodedEvents = 0", 1)
 	end
 
 	--> A player who leaves mid-packet is not worth decoding the rest for: every listener that runs
 	--> from here on receives a Player already detached from the DataModel, and anything they do with
 	--> it -- a leaderstats write, a save -- is work aimed at nobody.
-	local Condition = if Context == "Server"
+	local Condition = if State.Context == "Server"
 		then "RecieveCursor < Size and Player.Parent ~= nil"
 		else "RecieveCursor < Size"
 
-	Reliables = Reliables:While(Condition)
-	Unreliables = Unreliables:While(Condition)
+	State.Reliables = State.Reliables:While(Condition)
+	State.Unreliables = State.Unreliables:While(Condition)
 
-	if Context == "Server" then
+	if State.Context == "Server" then
 		local function EmitEventCap(Channel: Blocks.Block)
 			Channel:Line("DecodedEvents += 1")
 			Channel:Line(`if DecodedEvents > {MaxEvents} then`)
@@ -1285,8 +1251,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 			Channel:Line("end")
 		end
 
-		EmitEventCap(Reliables)
-		EmitEventCap(Unreliables)
+		EmitEventCap(State.Reliables)
+		EmitEventCap(State.Unreliables)
 	end
 
 	--> A TRUNCATED packet defeats every limit above, because it is SMALLER than a legitimate one: two
@@ -1312,31 +1278,31 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Channel:Line("Decoding = Index")
 	end
 
-	OpenDecode(Reliables)
-	OpenDecode(Unreliables)
+	OpenDecode(State.Reliables)
+	OpenDecode(State.Unreliables)
 
 	--> Import async libraries
-	if Options.FutureLibrary then
-		Imports.Push(`local Future = require({Options.FutureLibrary})`)
+	if State.Options.FutureLibrary then
+		Imports.Push(`local Future = require({State.Options.FutureLibrary})`)
 	end
 
-	if Options.PromiseLibrary then
-		Imports.Push(`local Promise = require({Options.PromiseLibrary})`)
+	if State.Options.PromiseLibrary then
+		Imports.Push(`local Promise = require({State.Options.PromiseLibrary})`)
 	end
 
 	--> Replication
 	local Replication = Builder.new()
-	Return.Push(`{Casing.StepReplication} = StepReplication,`, 1, 1)
+	State.Return.Push(`{State.Casing.StepReplication} = StepReplication,`, 1, 1)
 	--> The stub table has to expose it too. Under ManualReplication a story calls StepReplication
 	--> itself, and its absence here made that a nil call rather than a no-op.
-	Noop.Push(`{Casing.StepReplication} = NOOP,`, 0, 2)
+	State.Noop.Push(`{State.Casing.StepReplication} = NOOP,`, 0, 2)
 
-	Return.Push(`{Casing.SetRateLimitHandler} = SetRateLimitHandler,`, 1, 1)
-	Noop.Push(`{Casing.SetRateLimitHandler} = NOOP,`, 0, 2)
-	Return.Push(`{Casing.SetDecodeErrorHandler} = SetDecodeErrorHandler,`, 1, 1)
-	Noop.Push(`{Casing.SetDecodeErrorHandler} = NOOP,`, 0, 2)
+	State.Return.Push(`{State.Casing.SetRateLimitHandler} = SetRateLimitHandler,`, 1, 1)
+	State.Noop.Push(`{State.Casing.SetRateLimitHandler} = NOOP,`, 0, 2)
+	State.Return.Push(`{State.Casing.SetDecodeErrorHandler} = SetDecodeErrorHandler,`, 1, 1)
+	State.Noop.Push(`{State.Casing.SetDecodeErrorHandler} = NOOP,`, 0, 2)
 
-	if not Options.ManualReplication then
+	if not State.Options.ManualReplication then
 		Replication.Push("RunService.Heartbeat:Connect(StepReplication)")
 	end
 
@@ -1344,7 +1310,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	Generators.AbstractSyntaxTree(AbstractSyntaxTree.Value.Declarations)
 
 	--> Generate context source
-	local Source = Sources[Context]
+	local Source = Sources[State.Context]
 
 	--> An unknown event index means the packet is not what it claims to be: the byte came from a
 	--> client, and the cursor is no longer at an event boundary, so nothing after it can be trusted.
@@ -1366,13 +1332,13 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		return Channel:Branch("Default"):Line(UNKNOWN_EVENT):End()
 	end
 
-	Reliables = CloseIndex(Reliables, Channels.Reliable.Listening)
-	Unreliables = CloseIndex(Unreliables, Channels.Unreliable.Listening)
+	State.Reliables = CloseIndex(State.Reliables, State.Channels.Reliable.Listening)
+	State.Unreliables = CloseIndex(State.Unreliables, State.Channels.Unreliable.Listening)
 
 	--> Close the decode function opened above and act on its result. What is said about it, and to
 	--> whom, is ReportDecodeFailure's business: the server is silent unless the game installed a
 	--> handler, the client warns. See the two templates.
-	local Sender = if Context == "Server" then "Player, " else ""
+	local Sender = if State.Context == "Server" then "Player, " else ""
 	local function CloseDecode(Channel: Blocks.Block, Name: string)
 		Channel:Line("end)")
 		Channel:Line("if not Parsed then")
@@ -1381,22 +1347,22 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Channel:Line("end")
 	end
 
-	CloseDecode(Reliables, "Reliable")
-	CloseDecode(Unreliables, "Unreliable")
+	CloseDecode(State.Reliables, "Reliable")
+	CloseDecode(State.Unreliables, "Unreliable")
 
-	Reliables = Reliables:End():End()
-	Unreliables = Unreliables:End():End()
+	State.Reliables = State.Reliables:End():End()
+	State.Unreliables = State.Unreliables:End():End()
 
-	Noop.Push(`\})`, 0, 1)
-	Noop.Push(`return Returns :: {EVENTS_TYPE}`, 0, 1)
-	Noop.Push(`end`, 0, 0)
+	State.Noop.Push(`\})`, 0, 1)
+	State.Noop.Push(`return Returns :: {EVENTS_TYPE}`, 0, 1)
+	State.Noop.Push(`end`, 0, 0)
 
-	Return.PushFront(`\nlocal Returns = table.freeze(\{`)
-	Return.Push(`})`)
+	State.Return.PushFront(`\nlocal Returns = table.freeze(\{`)
+	State.Return.Push(`})`)
 
 	local ScopeValidationBody = {}
-	if Context ~= "Shared" then
-		local RemoteScope = Options.RemoteScope or "BLINK"
+	if State.Context ~= "Shared" then
+		local RemoteScope = State.Options.RemoteScope or "BLINK"
 		ScopeValidationBody = {
 			"_G._BLINK = _G._BLINK or {}\n",
 			`if _G._BLINK["{RemoteScope}"] then\n`,
@@ -1411,14 +1377,14 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> Outgoing is a counter per event; incoming is the last sequence seen per event, per SOURCE --
 	--> which on the server means per player, since sixty clients each have their own sequence.
 	local OrderingBody = {}
-	if UsesOrdering then
+	if State.UsesOrdering then
 		local Shared = {
 			"\n",
 			"--> Sequence numbers for ordered unreliable events, one counter per event.\n",
 			"local OrderOut: { number } = {}\n",
 		}
 
-		if Context == "Server" then
+		if State.Context == "Server" then
 			table.move({
 				"local OrderIn: { [Player]: { number } } = {}\n",
 				"\n",
@@ -1465,8 +1431,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> Emitted only when the schema actually has unreliable events -- most do not, and a helper
 	--> nothing calls is noise in a file people read when debugging their own traffic.
 	local UnreliableGuardBody = {}
-	if Channels.Unreliable.Count > 0 then
-		local MaxUnreliableSize = Options.MaxUnreliableSize or DEFAULT_MAX_UNRELIABLE_SIZE
+	if State.Channels.Unreliable.Count > 0 then
+		local MaxUnreliableSize = State.Options.MaxUnreliableSize or DEFAULT_MAX_UNRELIABLE_SIZE
 		UnreliableGuardBody = {
 			"\n",
 			"--> Roblox drops an unreliable payload past this size and tells nobody. The compiler\n",
@@ -1488,9 +1454,9 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> that report, per limited declaration. Cloned per player on first use, so one allocation per player per session rather
 	--> than a table per event.
 	local RateTemplateBody = {}
-	if Context == "Server" then
+	if State.Context == "Server" then
 		local Entries = {}
-		for _, Slot in RateSlots do
+		for _, Slot in State.RateSlots do
 			table.insert(Entries, `{Slot.Burst}, 0, 0, 0`)
 		end
 
@@ -1504,22 +1470,22 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		string.split(Source[1], "\r"),
 		Imports.DumpLines(),
 		{ "local SerdesFunctions = {}\n" },
-		Util.Constants(Options.RemoteScope, AbstractSyntaxTree),
+		Util.Constants(State.Options.RemoteScope, AbstractSyntaxTree),
 		string.split(Sources.Base, "\r"),
 		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
 		RateTemplateBody,
 		OrderingBody,
 		UnreliableGuardBody,
-		(if Options.SyncValidation then SYNC_VALIDATION_BODY else {}),
-		Events.DumpLines(),
-		LuauTypes.DumpLines(),
-		UserTypes.DumpLines(),
-		Noop.DumpLines(),
+		(if State.Options.SyncValidation then SYNC_VALIDATION_BODY else {}),
+		State.Events.DumpLines(),
+		State.LuauTypes.DumpLines(),
+		State.UserTypes.DumpLines(),
+		State.Noop.DumpLines(),
 		string.split(Source[2], "\r"),
 		Replication.DumpLines(),
-		Reliables.Content,
-		Unreliables.Content,
-		Return.DumpLines(),
+		State.Reliables.Content,
+		State.Unreliables.Content,
+		State.Return.DumpLines(),
 		{ `type {EVENTS_TYPE} = typeof(Returns)\n`, `return Returns :: {EVENTS_TYPE}` }
 	)
 
@@ -1528,29 +1494,28 @@ end
 
 function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 	Generator.Reset()
-	Context = "Shared"
-	Options = AbstractSyntaxTree.Value.Options
-	Serde.Options = Options
-	Casing = Settings.GetCasing((Options.Casing :: Settings.Case) or "Pascal")
+	State.Context = "Shared"
+	State.Options = AbstractSyntaxTree.Value.Options
+	State.Casing = Settings.GetCasing((State.Options.Casing :: Settings.Case) or "Pascal")
 
 	--> Parse declarations
 	Generators.AbstractSyntaxTree(AbstractSyntaxTree.Value.Declarations)
 
 	--> Generate context source
-	local Source = Sources[Context]
+	local Source = Sources[State.Context]
 	local MergedOutput = Table.Merge(
 		DIRECTIVES,
 		VERSION_HEADER,
 		string.split(Source[1], "\r"),
 		string.split(Sources.Base, "\r"),
 		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
-		LuauTypes.DumpLines(),
+		State.LuauTypes.DumpLines(),
 		{ "\n" },
-		UserTypes.DumpLines(),
+		State.UserTypes.DumpLines(),
 		string.split(Source[2], "\r"),
 		{ "\n" },
 		{ `\nreturn \{\n` },
-		Return.DumpLines(),
+		State.Return.DumpLines(),
 		{ "\n}" }
 	)
 

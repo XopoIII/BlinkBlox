@@ -6,12 +6,13 @@
 --- These were the obvious piece to move: of everything in that file they reach for the least of its
 --- state. Two things they do need are injected rather than required, because the dependency runs
 --- both ways -- the generator dispatches into these, and a struct or an array has to dispatch back
---- out to whatever its fields are.
+--- out to whatever its fields are. The options the run is under are read from State.luau.
 local Parser = require("../Parser")
 local Size = require("../Modules/Size")
 
 local Blocks = require("./Blocks")
 local Prefabs = require("./Prefabs")
+local State = require("./State")
 local Util = require("./Util")
 
 local Types = Prefabs.Types
@@ -30,11 +31,6 @@ local Serde = {}
 --- instead would be a cycle: that function's whole job is to dispatch into this table.
 Serde.Emit = (nil :: any) :: (Declaration: Type, Read: Blocks.Block, Write: Blocks.Block, Variable: string?) -> ()
 
---- The options the current generate is running under, set by the generator before it walks the tree.
---- Only WriteValidations is read here, but it is read per primitive, so it has to be the live table
---- rather than a value captured at load.
-Serde.Options = (nil :: any) :: Parser.Options
-
 --- The two the generator defines on this table rather than here. An event or a function is not a
 --- type on the wire -- emitting one needs scopes, builders, casing and the channel counters, all of
 --- which are that file's state. Declared so the table is not sealed against them.
@@ -45,7 +41,7 @@ function Serde.Primitive(Declaration: Parser.Primitive, Read: Blocks.Block, Writ
 	local Tokens = Declaration.Tokens
 	local Primitive = Tokens.Primitive.Value
 	local Generator = Primitives[Primitive]
-	Generator.Generate(Declaration, Variable, Read, Write, Serde.Options.WriteValidations)
+	Generator.Generate(Declaration, Variable, Read, Write, State.Options.WriteValidations)
 end
 
 function Serde.Set(Declaration: Parser.Set, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
@@ -253,7 +249,7 @@ function Serde.PackedBooleans(Read: Blocks.Block, Write: Blocks.Block, Variable:
 	Write:Line("\tlocal PACKED_BITS = 0")
 	Write:Line("\tfor Index = 0, PACKED_LENGTH - 1 do")
 	Write:Line(`\t\tlocal PACKED_ITEM = {Variable}[Index + 1]`)
-	if Serde.Options.WriteValidations then
+	if State.Options.WriteValidations then
 		Write:Line(
 			`\t\tif typeof(PACKED_ITEM) ~= "boolean" then error(\`Expected {Variable}[\{Index + 1}] to be of type boolean, got \{type(PACKED_ITEM)} instead.\`) end`
 		)
