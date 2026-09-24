@@ -129,6 +129,23 @@ handler threads. Both now share the once-a-second schedule, and the handler take
 `(Player, Event, Refused)`, with `Refused` the refusals that call stands for -- a fourth number per
 rate-bucket entry.
 
+0.27.0 came out of reading three neighbouring libraries -- ByteNet-Max, Warp and satset -- for
+anything worth taking. Almost everything in them this fork already did, and did more carefully; their
+bugs read like this fork's changelog run backwards (an allocation sized by a client's length prefix, an
+invocation reply any client can forge, a rate limit enforced on the client). Two ideas were worth
+having. Each server connection now charges a per-player token bucket before it decodes anything,
+`option InboundBytesPerSecond` and `option InboundBurst`, a packet costing its size and never less than
+128 bytes: every earlier limit was per packet or per event, so a client firing hundreds of well-formed
+packets a frame passed all of them. The burst is a whole second, because after a hitch Roblox delivers
+the backlog at once and a refused reliable packet takes every event in it along. Refusals share the
+rate-limit handler with `Event` nil, which is why its type widened to `string?`. The other idea was
+bandwidth: `boolean[]` is packed eight to a byte where every element had been one, and the capacity
+guard had to learn that or it would have refused honest arrays -- `WIRE_VERSION` went to 2 because no
+schema changed. `CFrame<quat>` encodes a rotation in 7 bytes instead of 12, opt-in because it is lossy;
+writing it turned up that the docs had described CFrame's two components backwards since upstream.
+Color3 wrapped HDR channels (2.0 arrived as 254/255), and each flush threw away the buffer it had just
+grown -- keeping it measured 35 to 52 percent off the flush path, so it was kept.
+
 Still deferred, and deliberately: delta compression. It would require blink to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of
@@ -164,7 +181,7 @@ build if they disagree, which they did: the plugin's copy sat five minor release
 compiler's, so everything the Studio plugin generated went out stamped with a version Blink had not
 been for a year. Never edit the three by hand.
 
-Luau files are capped at 900 lines by `scripts/check-file-size.sh`. Four files are already past that
+Luau files are capped at 900 lines by `scripts/check-file-size.sh`. Three files are already past that
 and are recorded at their current size: they may shrink, never grow. A recorded number makes every
 addition to a long file a deliberate decision, where a plain exclusion list would just become
 permission.
