@@ -2930,7 +2930,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[5] > 256 then
 					warn("[BlinkBlox]: Event queue of \"EmptyEvent\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[5], {Value} :: {any})
+				table.insert(Queue.Reliable[5], table.pack(Value))
 			end
 		elseif Index == 6 then
 			-- Read BLOCK: 2 bytes
@@ -2959,7 +2959,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[7] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Flags8\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[7], {Value} :: {any})
+				table.insert(Queue.Reliable[7], table.pack(Value))
 			end
 		elseif Index == 8 then
 			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,} = SerdesFunctions.ReadEVENT_Flags16()
@@ -2970,7 +2970,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[8] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Flags16\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[8], {Value} :: {any})
+				table.insert(Queue.Reliable[8], table.pack(Value))
 			end
 		elseif Index == 9 then
 			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,} = SerdesFunctions.ReadEVENT_Flags32()
@@ -2981,7 +2981,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[9] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Flags32\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[9], {Value} :: {any})
+				table.insert(Queue.Reliable[9], table.pack(Value))
 			end
 		elseif Index == 10 then
 			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,} = SerdesFunctions.ReadEVENT_Flags33()
@@ -2992,7 +2992,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[10] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Flags33\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[10], {Value} :: {any})
+				table.insert(Queue.Reliable[10], table.pack(Value))
 			end
 		elseif Index == 11 then
 			local Value: {[number]: { Static: number, Dynamic: buffer }} = SerdesFunctions.ReadEVENT_DynamicMap()
@@ -3003,7 +3003,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[11] > 256 then
 					warn("[BlinkBlox]: Event queue of \"DynamicMap\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[11], {Value} :: {any})
+				table.insert(Queue.Reliable[11], table.pack(Value))
 			end
 		elseif Index == 12 then
 			local Value: { { Static: number, Dynamic: buffer } } = SerdesFunctions.ReadEVENT_DynamicArray()
@@ -3014,7 +3014,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[12] > 256 then
 					warn("[BlinkBlox]: Event queue of \"DynamicArray\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[12], {Value} :: {any})
+				table.insert(Queue.Reliable[12], table.pack(Value))
 			end
 		elseif Index == 13 then
 			local Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number } = SerdesFunctions.ReadEVENT_PlayerEvent()
@@ -3025,7 +3025,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[13] > 256 then
 					warn("[BlinkBlox]: Event queue of \"PlayerEvent\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[13], {Value} :: {any})
+				table.insert(Queue.Reliable[13], table.pack(Value))
 			end
 		elseif Index == 15 then
 			local Value: any = SerdesFunctions.ReadEVENT_Unknown()
@@ -3036,7 +3036,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[15] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Unknown\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[15], {Value} :: {any})
+				table.insert(Queue.Reliable[15], table.pack(Value))
 			end
 		elseif Index == 16 then
 			local Value: {[string]: number} = SerdesFunctions.ReadEVENT_MapEvent()
@@ -3047,7 +3047,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[16] > 256 then
 					warn("[BlinkBlox]: Event queue of \"MapEvent\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[16], {Value} :: {any})
+				table.insert(Queue.Reliable[16], table.pack(Value))
 			end
 		elseif Index == 17 then
 			local Value: { Map: {[string]: number} } = SerdesFunctions.ReadEVENT_MapStructEvent()
@@ -3058,7 +3058,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[17] > 256 then
 					warn("[BlinkBlox]: Event queue of \"MapStructEvent\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[17], {Value} :: {any})
+				table.insert(Queue.Reliable[17], table.pack(Value))
 			end
 		elseif Index == 18 then
 			local Value: {[string]: { number }} = SerdesFunctions.ReadEVENT_MapComplexEvent()
@@ -3069,7 +3069,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[18] > 256 then
 					warn("[BlinkBlox]: Event queue of \"MapComplexEvent\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[18], {Value} :: {any})
+				table.insert(Queue.Reliable[18], table.pack(Value))
 			end
 		elseif Index == 19 then
 			local Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}? = SerdesFunctions.ReadEVENT_MapReferenceEvent()
@@ -3080,7 +3080,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[19] > 256 then
 					warn("[BlinkBlox]: Event queue of \"MapReferenceEvent\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[19], {Value} :: {any})
+				table.insert(Queue.Reliable[19], table.pack(Value))
 			end
 		elseif Index == 20 then
 			local Value: number = SerdesFunctions.ReadEVENT_ManyReliableSync()
@@ -3093,7 +3093,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[20] > 256 then
 					warn("[BlinkBlox]: Event queue of \"ManyReliableSync\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[20], {Value} :: {any})
+				table.insert(Queue.Reliable[20], table.pack(Value))
 			end
 		elseif Index == 21 then
 			local Value: number = SerdesFunctions.ReadEVENT_ManyReliableAsync()
@@ -3105,7 +3105,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[21] > 256 then
 					warn("[BlinkBlox]: Event queue of \"ManyReliableAsync\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[21], {Value} :: {any})
+				table.insert(Queue.Reliable[21], table.pack(Value))
 			end
 		elseif Index == 22 then
 			local Value: number = SerdesFunctions.ReadEVENT_ReliableServer()
@@ -3116,7 +3116,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[22] > 256 then
 					warn("[BlinkBlox]: Event queue of \"ReliableServer\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[22], {Value} :: {any})
+				table.insert(Queue.Reliable[22], table.pack(Value))
 			end
 		elseif Index == 23 then
 			local Value: number = SerdesFunctions.ReadEVENT_ReliableServerAsync()
@@ -3126,7 +3126,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[23] > 256 then
 					warn("[BlinkBlox]: Event queue of \"ReliableServerAsync\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[23], {Value} :: {any})
+				table.insert(Queue.Reliable[23], table.pack(Value))
 			end
 		elseif Index == 25 then
 			local Value: Instance = SerdesFunctions.ReadEVENT_InstanceAny()
@@ -3137,7 +3137,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[25] > 256 then
 					warn("[BlinkBlox]: Event queue of \"InstanceAny\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[25], {Value} :: {any})
+				table.insert(Queue.Reliable[25], table.pack(Value))
 			end
 		elseif Index == 26 then
 			local Value: Sound = SerdesFunctions.ReadEVENT_InstanceOfType()
@@ -3148,7 +3148,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[26] > 256 then
 					warn("[BlinkBlox]: Event queue of \"InstanceOfType\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[26], {Value} :: {any})
+				table.insert(Queue.Reliable[26], table.pack(Value))
 			end
 		elseif Index == 27 then
 			local Value: Instance? = SerdesFunctions.ReadEVENT_InstanceOptional()
@@ -3159,7 +3159,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[27] > 256 then
 					warn("[BlinkBlox]: Event queue of \"InstanceOptional\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[27], {Value} :: {any})
+				table.insert(Queue.Reliable[27], table.pack(Value))
 			end
 		elseif Index == 28 then
 			local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_Reference()
@@ -3170,7 +3170,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[28] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Reference\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[28], {Value} :: {any})
+				table.insert(Queue.Reliable[28], table.pack(Value))
 			end
 		elseif Index == 29 then
 			local Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } } = SerdesFunctions.ReadEVENT_ReferenceArray()
@@ -3181,7 +3181,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[29] > 256 then
 					warn("[BlinkBlox]: Event queue of \"ReferenceArray\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[29], {Value} :: {any})
+				table.insert(Queue.Reliable[29], table.pack(Value))
 			end
 		elseif Index == 30 then
 			local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_ReferenceOptional()
@@ -3192,7 +3192,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[30] > 256 then
 					warn("[BlinkBlox]: Event queue of \"ReferenceOptional\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[30], {Value} :: {any})
+				table.insert(Queue.Reliable[30], table.pack(Value))
 			end
 		elseif Index == 31 then
 			-- Read BLOCK: 2 bytes
@@ -3221,7 +3221,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[32] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Tuple\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[32], {Value1, Value2, Value3, Value4, Value5, Value6} :: {any})
+				table.insert(Queue.Reliable[32], table.pack(Value1, Value2, Value3, Value4, Value5, Value6))
 			end
 		elseif Index == 33 then
 			-- Read BLOCK: 2 bytes
@@ -3250,7 +3250,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[34] > 256 then
 					warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[34], {Value} :: {any})
+				table.insert(Queue.Reliable[34], table.pack(Value))
 			end
 		elseif Index == 35 then
 			local Value: number = SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_ReadEVENT_InAnotherScopeEvent()
@@ -3261,7 +3261,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[35] > 256 then
 					warn("[BlinkBlox]: Event queue of \"InAnotherScopeEvent\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[35], {Value} :: {any})
+				table.insert(Queue.Reliable[35], table.pack(Value))
 			end
 		elseif Index == 36 then
 			local Value: number = SerdesFunctions.ExampleScope_ReadEVENT_InScopeEvent()
@@ -3272,7 +3272,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[36] > 256 then
 					warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[36], {Value} :: {any})
+				table.insert(Queue.Reliable[36], table.pack(Value))
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -4137,7 +4137,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[5] = Listener
 			for Index, Arguments in Queue.Reliable[5] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[5] = {}
 			return function (): ()
@@ -4186,7 +4186,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[7] = Listener
 			for Index, Arguments in Queue.Reliable[7] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[7] = {}
 			return function (): ()
@@ -4203,7 +4203,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[8] = Listener
 			for Index, Arguments in Queue.Reliable[8] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[8] = {}
 			return function (): ()
@@ -4220,7 +4220,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[9] = Listener
 			for Index, Arguments in Queue.Reliable[9] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[9] = {}
 			return function (): ()
@@ -4237,7 +4237,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[10] = Listener
 			for Index, Arguments in Queue.Reliable[10] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[10] = {}
 			return function (): ()
@@ -4254,7 +4254,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[11] = Listener
 			for Index, Arguments in Queue.Reliable[11] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[11] = {}
 			return function (): ()
@@ -4271,7 +4271,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[12] = Listener
 			for Index, Arguments in Queue.Reliable[12] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[12] = {}
 			return function (): ()
@@ -4288,7 +4288,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[13] = Listener
 			for Index, Arguments in Queue.Reliable[13] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[13] = {}
 			return function (): ()
@@ -4315,7 +4315,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[15] = Listener
 			for Index, Arguments in Queue.Reliable[15] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[15] = {}
 			return function (): ()
@@ -4332,7 +4332,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[16] = Listener
 			for Index, Arguments in Queue.Reliable[16] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[16] = {}
 			return function (): ()
@@ -4349,7 +4349,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[17] = Listener
 			for Index, Arguments in Queue.Reliable[17] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[17] = {}
 			return function (): ()
@@ -4366,7 +4366,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[18] = Listener
 			for Index, Arguments in Queue.Reliable[18] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[18] = {}
 			return function (): ()
@@ -4383,7 +4383,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[19] = Listener
 			for Index, Arguments in Queue.Reliable[19] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[19] = {}
 			return function (): ()
@@ -4423,7 +4423,7 @@ local Returns = table.freeze({
 		On = function(Listener: (Value: number) -> ()): () -> ()
 			table.insert(Events.Reliable[20], Listener)
 			for Index, Arguments in Queue.Reliable[20] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[20] = {}
 			return function (): ()
@@ -4438,7 +4438,7 @@ local Returns = table.freeze({
 		On = function(Listener: (Value: number) -> ()): () -> ()
 			table.insert(Events.Reliable[21], Listener)
 			for Index, Arguments in Queue.Reliable[21] do
-				Spawn(Listener, table.unpack(Arguments))
+				Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[21] = {}
 			return function (): ()
@@ -4478,7 +4478,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[22] = Listener
 			for Index, Arguments in Queue.Reliable[22] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[22] = {}
 			return function (): ()
@@ -4495,7 +4495,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[23] = Listener
 			for Index, Arguments in Queue.Reliable[23] do
-				Spawn(Listener, table.unpack(Arguments))
+				Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[23] = {}
 			return function (): ()
@@ -4564,7 +4564,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[25] = Listener
 			for Index, Arguments in Queue.Reliable[25] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[25] = {}
 			return function (): ()
@@ -4581,7 +4581,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[26] = Listener
 			for Index, Arguments in Queue.Reliable[26] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[26] = {}
 			return function (): ()
@@ -4598,7 +4598,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[27] = Listener
 			for Index, Arguments in Queue.Reliable[27] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[27] = {}
 			return function (): ()
@@ -4615,7 +4615,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[28] = Listener
 			for Index, Arguments in Queue.Reliable[28] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[28] = {}
 			return function (): ()
@@ -4632,7 +4632,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[29] = Listener
 			for Index, Arguments in Queue.Reliable[29] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[29] = {}
 			return function (): ()
@@ -4649,7 +4649,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[30] = Listener
 			for Index, Arguments in Queue.Reliable[30] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[30] = {}
 			return function (): ()
@@ -4685,7 +4685,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[32] = Listener
 			for Index, Arguments in Queue.Reliable[32] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[32] = {}
 			return function (): ()
@@ -4735,7 +4735,7 @@ local Returns = table.freeze({
 				end
 				Events.Reliable[34] = Listener
 				for Index, Arguments in Queue.Reliable[34] do
-					Listener(table.unpack(Arguments))
+					Listener(table.unpack(Arguments, 1, Arguments.n))
 				end
 				Queue.Reliable[34] = {}
 				return function (): ()
@@ -4753,7 +4753,7 @@ local Returns = table.freeze({
 					end
 					Events.Reliable[35] = Listener
 					for Index, Arguments in Queue.Reliable[35] do
-						Listener(table.unpack(Arguments))
+						Listener(table.unpack(Arguments, 1, Arguments.n))
 					end
 					Queue.Reliable[35] = {}
 					return function (): ()
@@ -4773,7 +4773,7 @@ local Returns = table.freeze({
 				end
 				Events.Reliable[36] = Listener
 				for Index, Arguments in Queue.Reliable[36] do
-					Listener(table.unpack(Arguments))
+					Listener(table.unpack(Arguments, 1, Arguments.n))
 				end
 				Queue.Reliable[36] = {}
 				return function (): ()

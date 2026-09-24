@@ -880,3 +880,12 @@ scope DevOnlyDebug {
         Call: SingleSync
     }
 }
+
+--> A tuple that ends on a nil, arriving before its listener. The queue used to store it as a table
+--> literal and replay it with `table.unpack`, which stops at the first border `#` finds -- here 1.
+event QueuedHoles {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: (u8, u8?, u8?, u8, u8?)
+}

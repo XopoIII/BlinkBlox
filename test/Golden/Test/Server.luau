@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "42674156de7aee7c"
+local SCHEMA_SIGNATURE = "e87edeedffdcc6cf"
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -3234,6 +3234,59 @@ function SerdesFunctions.WriteFUNCTION_RETURN_Unanswered(Value: nil, InvocationI
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 57)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
 	buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
+end
+
+function SerdesFunctions.WriteEVENT_QueuedHoles(Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
+	-- EVENT_QueuedHoles (58)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 58)
+	-- Value: QueuedHoles
+	-- Value1: QueuedHoles
+	if typeof(Value1) ~= "number" then
+		error(`Expected Value1 to be of type number, got {type(Value1)} instead.`)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value1)
+	-- Value2: QueuedHoles
+	local BITFIELD_0 = 0
+	if Value2 ~= nil then BITFIELD_0 += 0x01 end
+	if Value2 ~= nil then
+		-- Allocate BLOCK: 1 bytes
+		local BLOCK_START = Allocate(1)
+		-- Value2: QueuedHoles
+		if typeof(Value2) ~= "number" then
+			error(`Expected Value2 to be of type number, got {type(Value2)} instead.`)
+		end
+		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value2)
+	end
+	-- Value3: QueuedHoles
+	if Value3 ~= nil then BITFIELD_0 += 0x02 end
+	if Value3 ~= nil then
+		-- Allocate BLOCK: 1 bytes
+		local BLOCK_START = Allocate(1)
+		-- Value3: QueuedHoles
+		if typeof(Value3) ~= "number" then
+			error(`Expected Value3 to be of type number, got {type(Value3)} instead.`)
+		end
+		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value3)
+	end
+	-- Value4: QueuedHoles
+	if typeof(Value4) ~= "number" then
+		error(`Expected Value4 to be of type number, got {type(Value4)} instead.`)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value4)
+	-- Value5: QueuedHoles
+	if Value5 ~= nil then BITFIELD_0 += 0x04 end
+	if Value5 ~= nil then
+		-- Allocate BLOCK: 1 bytes
+		local BLOCK_START = Allocate(1)
+		-- Value5: QueuedHoles
+		if typeof(Value5) ~= "number" then
+			error(`Expected Value5 to be of type number, got {type(Value5)} instead.`)
+		end
+		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value5)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_0)
 end
 
 if not RunService:IsRunning() then
@@ -7651,6 +7704,12 @@ if not RunService:IsRunning() then
 	Unanswered = {
 		On = NOOP_RETURNING
 	},
+	QueuedHoles = {
+		Fire = NOOP,
+		FireAll = NOOP,
+		FireList = NOOP,
+		FireExcept = NOOP
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -8007,7 +8066,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					Events.Reliable[0](Player, Value)
 				else
 					if #Queue.Reliable[0] < 256 then
-						table.insert(Queue.Reliable[0], {Player, Value} :: {any})
+						table.insert(Queue.Reliable[0], table.pack(Player, Value))
 					end
 				end
 			end
@@ -8042,7 +8101,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[2], {Player, Value, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[2], table.pack(Player, Value, InvocationIdentifier))
 			end
 		elseif Index == 4 then
 			Push(Queue.Reliable[4], table.pack(Player, SerdesFunctions.ReadEVENT_ClientPollEvent()))
@@ -8055,7 +8114,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Events.Reliable[8](Player, Value)
 			else
 				if #Queue.Reliable[8] < 256 then
-					table.insert(Queue.Reliable[8], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[8], table.pack(Player, Value))
 				end
 			end
 		elseif Index == 10 then
@@ -8075,7 +8134,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[10], {Player, Value, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[10], table.pack(Player, Value, InvocationIdentifier))
 			end
 		elseif Index == 11 then
 			-- Read BLOCK: 1 bytes
@@ -8094,7 +8153,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[11], {Player, Value, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[11], table.pack(Player, Value, InvocationIdentifier))
 			end
 		elseif Index == 19 then
 			local Value: { boolean } = SerdesFunctions.ReadEVENT_Booleans()
@@ -8102,7 +8161,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[19], Player, Value)
 			else
 				if #Queue.Reliable[19] < 256 then
-					table.insert(Queue.Reliable[19], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[19], table.pack(Player, Value))
 				end
 			end
 		elseif Index == 31 then
@@ -8112,7 +8171,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Events.Reliable[31](Player, Value)
 			else
 				if #Queue.Reliable[31] < 256 then
-					table.insert(Queue.Reliable[31], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[31], table.pack(Player, Value))
 				end
 			end
 		elseif Index == 39 then
@@ -8132,7 +8191,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[39], {Player, Value, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[39], table.pack(Player, Value, InvocationIdentifier))
 			end
 		elseif Index == 41 then
 			-- Read BLOCK: 1 bytes
@@ -8151,7 +8210,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[41], {Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[41], table.pack(Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier))
 			end
 		elseif Index == 46 then
 			local Value: any = SerdesFunctions.ReadEVENT_UnknownInbound()
@@ -8160,7 +8219,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Events.Reliable[46](Player, Value)
 			else
 				if #Queue.Reliable[46] < 256 then
-					table.insert(Queue.Reliable[46], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[46], table.pack(Player, Value))
 				end
 			end
 		elseif Index == 48 then
@@ -8180,7 +8239,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[48], {Player, id, label, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[48], table.pack(Player, id, label, InvocationIdentifier))
 			end
 		elseif Index == 50 then
 			-- Read BLOCK: 1 bytes
@@ -8199,7 +8258,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[50], {Player, Value, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[50], table.pack(Player, Value, InvocationIdentifier))
 			end
 		elseif Index == 51 then
 			-- Read BLOCK: 2 bytes
@@ -8226,7 +8285,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Events.Reliable[52](Player, Value)
 			else
 				if #Queue.Reliable[52] < 256 then
-					table.insert(Queue.Reliable[52], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[52], table.pack(Player, Value))
 				end
 			end
 		elseif Index == 53 then
@@ -8236,7 +8295,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Events.Reliable[53](Player, Value)
 			else
 				if #Queue.Reliable[53] < 256 then
-					table.insert(Queue.Reliable[53], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[53], table.pack(Player, Value))
 				end
 			end
 		elseif Index == 54 then
@@ -8256,7 +8315,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[54], {Player, Value, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[54], table.pack(Player, Value, InvocationIdentifier))
 			end
 		elseif Index == 55 then
 			local Value: number = SerdesFunctions.ReadEVENT_PlainFromClient()
@@ -8265,7 +8324,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Events.Reliable[55](Player, Value)
 			else
 				if #Queue.Reliable[55] < 256 then
-					table.insert(Queue.Reliable[55], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[55], table.pack(Player, Value))
 				end
 			end
 		elseif Index == 56 then
@@ -8274,7 +8333,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[56], Player, Value)
 			else
 				if #Queue.Reliable[56] < 256 then
-					table.insert(Queue.Reliable[56], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[56], table.pack(Player, Value))
 				end
 			end
 		elseif Index == 57 then
@@ -8294,7 +8353,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[57], {Player, Value, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[57], table.pack(Player, Value, InvocationIdentifier))
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -12198,7 +12257,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[0] = Listener
 			for Index, Arguments in Queue.Reliable[0] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[0] = {}
 			return function (): ()
@@ -12213,7 +12272,7 @@ local Returns = table.freeze({
 				Events.Reliable[0](Player, Value)
 			else
 				if #Queue.Reliable[0] < 256 then
-					table.insert(Queue.Reliable[0], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[0], table.pack(Player, Value))
 				end
 			end
 		end
@@ -12292,7 +12351,7 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[2] or {}
 				Queue.Reliable[2] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[2](table.unpack(Arguments))
+					Events.Reliable[2](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
@@ -12931,7 +12990,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[8] = Listener
 			for Index, Arguments in Queue.Reliable[8] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[8] = {}
 			return function (): ()
@@ -12946,7 +13005,7 @@ local Returns = table.freeze({
 				Events.Reliable[8](Player, Value)
 			else
 				if #Queue.Reliable[8] < 256 then
-					table.insert(Queue.Reliable[8], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[8], table.pack(Player, Value))
 				end
 			end
 		end
@@ -13090,7 +13149,7 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[10] or {}
 				Queue.Reliable[10] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[10](table.unpack(Arguments))
+					Events.Reliable[10](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
@@ -13123,7 +13182,7 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[11] or {}
 				Queue.Reliable[11] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[11](table.unpack(Arguments))
+					Events.Reliable[11](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
@@ -13492,7 +13551,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[19] = Listener
 			for Index, Arguments in Queue.Reliable[19] do
-				Spawn(Listener, table.unpack(Arguments))
+				Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[19] = {}
 			return function (): ()
@@ -13506,7 +13565,7 @@ local Returns = table.freeze({
 				Spawn(Events.Reliable[19], Player, Value)
 			else
 				if #Queue.Reliable[19] < 256 then
-					table.insert(Queue.Reliable[19], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[19], table.pack(Player, Value))
 				end
 			end
 		end
@@ -14243,7 +14302,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[31] = Listener
 			for Index, Arguments in Queue.Reliable[31] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[31] = {}
 			return function (): ()
@@ -14258,7 +14317,7 @@ local Returns = table.freeze({
 				Events.Reliable[31](Player, Value)
 			else
 				if #Queue.Reliable[31] < 256 then
-					table.insert(Queue.Reliable[31], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[31], table.pack(Player, Value))
 				end
 			end
 		end
@@ -14749,7 +14808,7 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[39] or {}
 				Queue.Reliable[39] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[39](table.unpack(Arguments))
+					Events.Reliable[39](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
@@ -14874,7 +14933,7 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[41] or {}
 				Queue.Reliable[41] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[41](table.unpack(Arguments))
+					Events.Reliable[41](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
@@ -15098,7 +15157,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[46] = Listener
 			for Index, Arguments in Queue.Reliable[46] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[46] = {}
 			return function (): ()
@@ -15113,7 +15172,7 @@ local Returns = table.freeze({
 				Events.Reliable[46](Player, Value)
 			else
 				if #Queue.Reliable[46] < 256 then
-					table.insert(Queue.Reliable[46], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[46], table.pack(Player, Value))
 				end
 			end
 		end
@@ -15197,7 +15256,7 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[48] or {}
 				Queue.Reliable[48] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[48](table.unpack(Arguments))
+					Events.Reliable[48](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
@@ -15281,7 +15340,7 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[50] or {}
 				Queue.Reliable[50] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[50](table.unpack(Arguments))
+					Events.Reliable[50](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
@@ -15314,7 +15373,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[52] = Listener
 			for Index, Arguments in Queue.Reliable[52] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[52] = {}
 			return function (): ()
@@ -15329,7 +15388,7 @@ local Returns = table.freeze({
 				Events.Reliable[52](Player, Value)
 			else
 				if #Queue.Reliable[52] < 256 then
-					table.insert(Queue.Reliable[52], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[52], table.pack(Player, Value))
 				end
 			end
 		end
@@ -15360,7 +15419,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[53] = Listener
 			for Index, Arguments in Queue.Reliable[53] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[53] = {}
 			return function (): ()
@@ -15375,7 +15434,7 @@ local Returns = table.freeze({
 				Events.Reliable[53](Player, Value)
 			else
 				if #Queue.Reliable[53] < 256 then
-					table.insert(Queue.Reliable[53], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[53], table.pack(Player, Value))
 				end
 			end
 		end
@@ -15408,7 +15467,7 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[54] or {}
 				Queue.Reliable[54] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[54](table.unpack(Arguments))
+					Events.Reliable[54](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
@@ -15420,7 +15479,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[55] = Listener
 			for Index, Arguments in Queue.Reliable[55] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[55] = {}
 			return function (): ()
@@ -15435,7 +15494,7 @@ local Returns = table.freeze({
 				Events.Reliable[55](Player, Value)
 			else
 				if #Queue.Reliable[55] < 256 then
-					table.insert(Queue.Reliable[55], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[55], table.pack(Player, Value))
 				end
 			end
 		end
@@ -15447,7 +15506,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[56] = Listener
 			for Index, Arguments in Queue.Reliable[56] do
-				Spawn(Listener, table.unpack(Arguments))
+				Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[56] = {}
 			return function (): ()
@@ -15461,7 +15520,7 @@ local Returns = table.freeze({
 				Spawn(Events.Reliable[56], Player, Value)
 			else
 				if #Queue.Reliable[56] < 256 then
-					table.insert(Queue.Reliable[56], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[56], table.pack(Player, Value))
 				end
 			end
 		end
@@ -15494,10 +15553,61 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[57] or {}
 				Queue.Reliable[57] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[57](table.unpack(Arguments))
+					Events.Reliable[57](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
+	},
+	QueuedHoles = {
+		Fire = function(Player: Player, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
+			Load(PlayersMap[Player])
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_QueuedHoles, Value1, Value2, Value3, Value4, Value5)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
+			SavePlayerBuffer(Player)
+		end,
+		FireAll = function(Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
+			Load()
+			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in Players:GetPlayers() do
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
+		FireList = function(List: {Player}, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
+			Load()
+			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in List do
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
+		FireExcept = function(Except: Player, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
+			Load()
+			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
+				end
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
 	},
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)

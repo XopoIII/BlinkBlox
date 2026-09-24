@@ -44,6 +44,9 @@ end
 --- Emits the enqueue into `Target`, the branch taken when no listener is bound, and returns it.
 --- `Invocation` is the event index of a function, whose caller is answered rather than dropped when
 --- the server's queue is full.
+--- Each row is `table.pack`ed and replayed with its own `n`. A row built as `{A, B, ...}` lost every
+--- value after a `nil` it ended on: `#{1, nil, nil, 4, nil}` is 1, so a tuple with optional elements
+--- that arrived before its listener was replayed with some of its values gone.
 local function Enqueue(
 	Target: Block,
 	Context: string,
@@ -52,7 +55,7 @@ local function Enqueue(
 	Name: string,
 	Invocation: number?
 ): Block
-	local Insert = `table.insert({Queue}, \{{Row}\} :: \{any\})`
+	local Insert = `table.insert({Queue}, table.pack({Row}))`
 
 	if Context ~= "Server" then
 		return Target:Compare(`#{Queue}`, CAPACITY, "Greater")

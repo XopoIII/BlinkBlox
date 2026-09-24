@@ -94,3 +94,20 @@ RunClosure("A second listener on a Single event is reported, and the first one's
 
 	DisconnectSecond()
 end)
+
+--> An event that arrives before its listener is queued and replayed when the listener connects. The
+--> row was a table literal replayed with `table.unpack`, which stops at whatever border `#` finds:
+--> for `(1, nil, nil, 4, nil)` that is 1, and the listener was handed only the first value.
+RunClosure("A queued event keeps every value after a nil", function()
+	Server.QueuedHoles.FireAll(1, nil, nil, 4, nil)
+	task.wait(1 / 30)
+
+	local Count, Fourth
+	local Disconnect = Client.QueuedHoles.On(function(...)
+		Count = select("#", ...)
+		Fourth = select(4, ...)
+	end)
+	Disconnect()
+
+	assert(Fourth == 4, `the queued event was replayed with {Count} value(s) and no 4`)
+end)

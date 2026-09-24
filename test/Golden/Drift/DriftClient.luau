@@ -488,7 +488,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[0] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Inserted\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[0], {Value} :: {any})
+				table.insert(Queue.Reliable[0], table.pack(Value))
 			end
 		elseif Index == 1 then
 			local Value: number = SerdesFunctions.ReadEVENT_Alpha()
@@ -499,7 +499,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[1] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Alpha\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[1], {Value} :: {any})
+				table.insert(Queue.Reliable[1], table.pack(Value))
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -553,7 +553,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[0] = Listener
 			for Index, Arguments in Queue.Reliable[0] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[0] = {}
 			return function (): ()
@@ -570,7 +570,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[1] = Listener
 			for Index, Arguments in Queue.Reliable[1] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[1] = {}
 			return function (): ()

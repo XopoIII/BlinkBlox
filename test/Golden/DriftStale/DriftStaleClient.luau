@@ -475,7 +475,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				if #Queue.Reliable[0] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Alpha\" exceeded 256, did you forget to implement a listener?")
 				end
-				table.insert(Queue.Reliable[0], {Value} :: {any})
+				table.insert(Queue.Reliable[0], table.pack(Value))
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -529,7 +529,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[0] = Listener
 			for Index, Arguments in Queue.Reliable[0] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[0] = {}
 			return function (): ()

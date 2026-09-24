@@ -244,7 +244,10 @@ function Declarations.Event(Declaration: Parser.Event)
 		if IsReliable then
 			Listener = BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true))
 				:Iterator("Index", "Arguments", Queue)
-				:Line(IsSync and `Listener(table.unpack(Arguments))` or `Spawn(Listener, table.unpack(Arguments))`)
+				:Line(
+					IsSync and `Listener(table.unpack(Arguments, 1, Arguments.n))`
+						or `Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))`
+				)
 				:End()
 				:Line(`{Queue} = \{}`)
 				:Lines(Disconnect.Content, 1)

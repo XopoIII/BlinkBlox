@@ -3380,7 +3380,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Events.Reliable[4](Player, Value)
 			else
 				if #Queue.Reliable[4] < 256 then
-					table.insert(Queue.Reliable[4], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[4], table.pack(Player, Value))
 				end
 			end
 		elseif Index == 6 then
@@ -3400,7 +3400,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[6], {Player, Value, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[6], table.pack(Player, Value, InvocationIdentifier))
 			end
 		elseif Index == 14 then
 			local Value: { boolean } = SerdesFunctions.ReadEVENT_Booleans()
@@ -3408,7 +3408,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[14], Player, Value)
 			else
 				if #Queue.Reliable[14] < 256 then
-					table.insert(Queue.Reliable[14], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[14], table.pack(Player, Value))
 				end
 			end
 		elseif Index == 24 then
@@ -3418,7 +3418,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Events.Reliable[24](Player, Value)
 			else
 				if #Queue.Reliable[24] < 256 then
-					table.insert(Queue.Reliable[24], {Player, Value} :: {any})
+					table.insert(Queue.Reliable[24], table.pack(Player, Value))
 				end
 			end
 		elseif Index == 31 then
@@ -3438,7 +3438,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[31], {Player, Value, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[31], table.pack(Player, Value, InvocationIdentifier))
 			end
 		elseif Index == 33 then
 			-- Read BLOCK: 1 bytes
@@ -3457,7 +3457,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					SavePlayerBuffer(Player)
 					return
 				end
-				table.insert(Queue.Reliable[33], {Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier} :: {any})
+				table.insert(Queue.Reliable[33], table.pack(Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier))
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -4415,7 +4415,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[4] = Listener
 			for Index, Arguments in Queue.Reliable[4] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[4] = {}
 			return function (): ()
@@ -4558,7 +4558,7 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[6] or {}
 				Queue.Reliable[6] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[6](table.unpack(Arguments))
+					Events.Reliable[6](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
@@ -4927,7 +4927,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[14] = Listener
 			for Index, Arguments in Queue.Reliable[14] do
-				Spawn(Listener, table.unpack(Arguments))
+				Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[14] = {}
 			return function (): ()
@@ -5567,7 +5567,7 @@ local Returns = table.freeze({
 			end
 			Events.Reliable[24] = Listener
 			for Index, Arguments in Queue.Reliable[24] do
-				Listener(table.unpack(Arguments))
+				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[24] = {}
 			return function (): ()
@@ -6006,7 +6006,7 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[31] or {}
 				Queue.Reliable[31] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[31](table.unpack(Arguments))
+					Events.Reliable[31](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
@@ -6131,7 +6131,7 @@ local Returns = table.freeze({
 				local EventQueue = Queue.Reliable[33] or {}
 				Queue.Reliable[33] = nil
 				for Index, Arguments in EventQueue do
-					Events.Reliable[33](table.unpack(Arguments))
+					Events.Reliable[33](table.unpack(Arguments, 1, Arguments.n))
 				end
 			end)
 		end
