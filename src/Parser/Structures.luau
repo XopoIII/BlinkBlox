@@ -9,7 +9,6 @@
 
 local Error = require("../Modules/Error")
 local Grammar = require("../Modules/Grammar")
-local Lexer = require("../Lexer")
 local ParserClass = require("./Class")
 
 type Parser = ParserClass.Parser
@@ -50,14 +49,8 @@ end
 
 function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption }): { [string]: any }
 	local Fields: { [string]: any } = {}
-	local Open, Close: Lexer.Token? = self:Consume("OpenBraces"), nil
 
-	while true do
-		Close = self:TryConsume("CloseBraces")
-		if Close then
-			break
-		end
-
+	local Open, Close = self:List("OpenBraces", "CloseBraces", function()
 		local Value: any
 		local Field = self:ConsumeText()
 		local Option = self:GetOptionFromToken(Field, Structure)
@@ -109,14 +102,7 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 		end
 
 		Fields[Option.Key] = Value
-		Close = self:TryConsume("CloseBraces")
-
-		if Close then
-			break
-		end
-
-		self:Consume("Comma")
-	end
+	end)
 
 	--> Check if all required fields where supplied
 	for _, Option in Structure do
@@ -129,7 +115,7 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 		end
 
 		local Span: Error.Span = {
-			End = math.max((Close :: Lexer.Token).End - 2, Open.Start),
+			End = math.max(Close.End - 2, Open.Start),
 			Start = Open.Start,
 		}
 

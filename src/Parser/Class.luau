@@ -69,6 +69,7 @@ export type State = {
 export type Methods = {
 	--> Stream.luau
 	Diagnostic: (self: Parser, Code: number, Message: string, Severity: Error.Severity?) -> Error.Class,
+	List: (self: Parser, Open: Lexer.Types, Close: Lexer.Types, Item: () -> ()) -> (Token, Token),
 	Peek: (self: Parser) -> Token,
 	Consume: (self: Parser, Type: Lexer.Types) -> Token,
 	TryConsume: (self: Parser, Type: Lexer.Types) -> Token?,

@@ -28,23 +28,11 @@ local LUAU_KEYWORDS = Grammar.LUAU_KEYWORDS
 local Parser = ParserClass.Class
 
 function Parser.Set(self: Parser, Name: Token): Set
-	self:Consume("OpenBraces")
-
 	local Values: { string } = {}
-	while true do
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
+	self:List("OpenBraces", "CloseBraces", function()
 		local Token = self:ConsumeText(true, true)
 		table.insert(Values, Token.Value)
-
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
-		self:Consume("Comma")
-	end
+	end)
 
 	return {
 		Type = "Set",
@@ -102,22 +90,10 @@ function Parser.Enum(self: Parser, Name: Token): Enum | TagEnum
 		return self:TagEnum(Tag, Name)
 	end
 
-	self:Consume("OpenBraces")
-
-	while true do
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
+	self:List("OpenBraces", "CloseBraces", function()
 		local Token = self:ConsumeText(true, true)
 		table.insert(Values, Token.Value)
-
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
-		self:Consume("Comma")
-	end
+	end)
 
 	return {
 		Type = "Enum",
@@ -129,13 +105,8 @@ end
 
 function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 	local Values: { Struct } = {}
-	self:Consume("OpenBraces")
 
-	while true do
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
+	self:List("OpenBraces", "CloseBraces", function()
 		local Token: Token
 
 		if self:Peek().Type == "OpenBrackets" then
@@ -160,13 +131,7 @@ function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 		end
 
 		table.insert(Values, Struct)
-
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
-		self:Consume("Comma")
-	end
+	end)
 
 	return {
 		Type = "TagEnum",
@@ -183,7 +148,6 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 	local Names: { [number]: string } = {}
 	local Taken: { [string]: true } = {}
 	local Values: { TypeNode } = {}
-	self:Consume("OpenParentheses")
 
 	--> An element may carry a name: `(chefId: f64, dish: string)`. Deciding that needs one token of
 	--> lookahead past the candidate -- `(u8)` and `(x: u8)` are indistinguishable where the element
@@ -199,11 +163,7 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 		return Text
 	end
 
-	while true do
-		if self:TryConsume("CloseParentheses") then
-			break
-		end
-
+	self:List("OpenParentheses", "CloseParentheses", function()
 		local Text = TryConsumeName()
 		if Text then
 			--> Unlike a struct field, which becomes a table key and is quoted on the way out, this name
@@ -242,13 +202,7 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 			Taken[Text.Value] = true
 			Names[#Values] = Text.Value
 		end
-
-		if self:TryConsume("CloseParentheses") then
-			break
-		end
-
-		self:Consume("Comma")
-	end
+	end)
 
 	return {
 		Type = "Tuple",
@@ -264,13 +218,8 @@ end
 function Parser.Struct(self: Parser, Name: Token): Struct
 	local Fields: { [string]: true } = {}
 	local Values: { TypeNode } = {}
-	self:Consume("OpenBraces")
 
-	while true do
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
+	self:List("OpenBraces", "CloseBraces", function()
 		--> struct merging
 		if self:TryConsume("Merge") then
 			local Text = self:Peek()
@@ -325,13 +274,7 @@ function Parser.Struct(self: Parser, Name: Token): Struct
 			Fields[Text.Value] = true
 			table.insert(Values, self:Type(Text))
 		end
-
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
-		self:Consume("Comma")
-	end
+	end)
 
 	return {
 		Type = "Struct",
