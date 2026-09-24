@@ -132,3 +132,47 @@ RunClosure("A listener that disconnects itself does not cost the next one the ev
 
 	assert(#Seen == 2, `one fire reached {table.concat(Seen, " and ")}, expected first and second`)
 end)
+
+--> A Sync listener runs inside the pcall that guards decoding, so a listener that threw used to be
+--> reported as a packet that could not be decoded: blamed on the sender, and the rest of the packet
+--> dropped along with every listener after it. The listener's error is its own now, raised on a thread
+--> of its own, and decoding carries on.
+RunClosure("A Sync listener that throws costs nothing but its own call", function()
+	local Raised: { string } = {}
+	Shared.Task.spawn = function(Function, ...)
+		if Function == error then
+			table.insert(Raised, tostring((...)))
+			return nil :: any
+		end
+
+		return task.spawn(Function, ...)
+	end
+
+	local Second = 0
+	local DisconnectFirst = Client.ManyReliableSync.On(function()
+		error("a bug in the game")
+	end)
+	local DisconnectSecond = Client.ManyReliableSync.On(function()
+		Second += 1
+	end)
+
+	Shared.DrainWarnings()
+	--> Two events in one frame, so one packet.
+	Server.ManyReliableSync.FireAll(1)
+	Server.ManyReliableSync.FireAll(2)
+	task.wait(1 / 30)
+
+	DisconnectFirst()
+	DisconnectSecond()
+	Shared.Task.spawn = nil :: any
+
+	for _, Warning in Shared.DrainWarnings() do
+		assert(
+			not string.find(Warning, "could not be decoded", 1, true),
+			`the listener's error was reported as: {Warning}`
+		)
+	end
+
+	assert(Second == 2, `the listener after the one that threw ran {Second} time(s), expected 2`)
+	assert(#Raised == 2 and string.find(Raised[1], "a bug in the game", 1, true), "the listener's error was not raised")
+end)

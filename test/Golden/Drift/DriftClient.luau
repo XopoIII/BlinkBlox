@@ -483,7 +483,8 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			local Value: number = SerdesFunctions.ReadEVENT_Inserted()
 			if Events.Reliable[0] ~= nil then
 				SerdesEvent = "Inserted"
-				Events.Reliable[0](Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[0], Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[0] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Inserted\" exceeded 256, did you forget to implement a listener?")
@@ -494,7 +495,8 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			local Value: number = SerdesFunctions.ReadEVENT_Alpha()
 			if Events.Reliable[1] ~= nil then
 				SerdesEvent = "Alpha"
-				Events.Reliable[1](Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[1], Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[1] > 256 then
 					warn("[BlinkBlox]: Event queue of \"Alpha\" exceeded 256, did you forget to implement a listener?")

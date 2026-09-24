@@ -889,7 +889,8 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.ReadEVENT_Snapshot()
 			if Events.Unreliable[0] ~= nil then
 				SerdesEvent = "Snapshot"
-				Events.Unreliable[0](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[0], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")

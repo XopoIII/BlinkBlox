@@ -1026,13 +1026,15 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Generics_ReadEVENT_Snapshot()
 			if Events.Unreliable[0] ~= nil then
 				SerdesEvent = "Snapshot"
-				Events.Unreliable[0](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[0], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 1 then
 			local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Example_ReadEVENT_Snapshot()
 			if Events.Unreliable[1] ~= nil then
 				SerdesEvent = "Snapshot"
-				Events.Unreliable[1](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[1], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")

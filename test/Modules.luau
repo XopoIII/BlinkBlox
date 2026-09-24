@@ -9,7 +9,6 @@ local Shared = require("./Shared")
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local roblox = require("@lune/roblox")
-local task = require("@lune/task")
 
 local function MockTypeof(a: any)
 	local TypeofA = typeof(a)
@@ -29,7 +28,7 @@ local function MockRequire(Path: string, Environment)
 
 	Environment._G = {}
 	Environment.os = Shared.Os
-	Environment.task = task
+	Environment.task = Shared.Task
 	Environment.typeof = MockTypeof
 	--> Lune has no global `Vector3`, so until this was passed in no spec could run a vector's
 	--> serialiser at all -- the magnitude assert was emitted and never executed.

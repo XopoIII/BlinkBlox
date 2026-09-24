@@ -182,9 +182,20 @@ function Declarations.Event(Declaration: Parser.Event)
 				CallListener = CallListener:Line(`SerdesEvent = "{Declaration.Name}"`)
 			end
 
+			--> A Sync listener runs inside the decode loop's pcall, so an error in game code used to be
+			--> reported as a packet that could not be decoded -- blamed on the sender, silently on the
+			--> server unless the game had installed a handler, and taking the rest of the packet and
+			--> any later listeners with it. It is caught here instead, where the cursor already sits
+			--> past the event, and raised on a thread of its own: which is where an Async listener's
+			--> error has always surfaced.
 			local PathExpr = IsSingle and Connection or "Listener"
-			local CallExpr = IsSync and `{PathExpr}({ListenerArguments})` or `Spawn({PathExpr}, {ListenerArguments})`
-			CallListener = CallListener:Line(CallExpr)
+			if IsSync then
+				CallListener = CallListener
+					:Line(`local ListenerRan, ListenerFailure = pcall({PathExpr}, {ListenerArguments})`)
+					:Line("if not ListenerRan then task.spawn(error, ListenerFailure, 0) end")
+			else
+				CallListener = CallListener:Line(`Spawn({PathExpr}, {ListenerArguments})`)
+			end
 		end
 
 		--> Read before the payload, because that is the order it was written in. The DECISION comes

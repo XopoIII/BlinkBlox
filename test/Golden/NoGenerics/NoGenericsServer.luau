@@ -3377,7 +3377,8 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyEvent()
 			if Events.Reliable[4] ~= nil then
 				SerdesEvent = "ClientEmptyEvent"
-				Events.Reliable[4](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[4], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[4] < 256 then
 					table.insert(Queue.Reliable[4], table.pack(Player, Value))
@@ -3415,7 +3416,8 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local Value: number = SerdesFunctions.ReadEVENT_ReliableClient()
 			if Events.Reliable[24] ~= nil then
 				SerdesEvent = "ReliableClient"
-				Events.Reliable[24](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[24], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[24] < 256 then
 					table.insert(Queue.Reliable[24], table.pack(Player, Value))
@@ -3516,13 +3518,15 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyUnreliableEvent()
 			if Events.Unreliable[4] ~= nil then
 				SerdesEvent = "ClientEmptyUnreliableEvent"
-				Events.Unreliable[4](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[4], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 12 then
 			local Value: number = SerdesFunctions.ReadEVENT_UnreliableClient()
 			if Events.Unreliable[12] ~= nil then
 				SerdesEvent = "UnreliableClient"
-				Events.Unreliable[12](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[12], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")

@@ -8063,7 +8063,8 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			if RateAccept(Player, 1, 5, 10, "RateLimited") == true then
 				if Events.Reliable[0] ~= nil then
 					SerdesEvent = "RateLimited"
-					Events.Reliable[0](Player, Value)
+					local ListenerRan, ListenerFailure = pcall(Events.Reliable[0], Player, Value)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				else
 					if #Queue.Reliable[0] < 256 then
 						table.insert(Queue.Reliable[0], table.pack(Player, Value))
@@ -8111,7 +8112,8 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyEvent()
 			if Events.Reliable[8] ~= nil then
 				SerdesEvent = "ClientEmptyEvent"
-				Events.Reliable[8](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[8], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[8] < 256 then
 					table.insert(Queue.Reliable[8], table.pack(Player, Value))
@@ -8168,7 +8170,8 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local Value: number = SerdesFunctions.ReadEVENT_ReliableClient()
 			if Events.Reliable[31] ~= nil then
 				SerdesEvent = "ReliableClient"
-				Events.Reliable[31](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[31], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[31] < 256 then
 					table.insert(Queue.Reliable[31], table.pack(Player, Value))
@@ -8216,7 +8219,8 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local Value: any = SerdesFunctions.ReadEVENT_UnknownInbound()
 			if Events.Reliable[46] ~= nil then
 				SerdesEvent = "UnknownInbound"
-				Events.Reliable[46](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[46], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[46] < 256 then
 					table.insert(Queue.Reliable[46], table.pack(Player, Value))
@@ -8282,7 +8286,8 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local Value: number = SerdesFunctions.ReadEVENT_RangedFromClient()
 			if Events.Reliable[52] ~= nil then
 				SerdesEvent = "RangedFromClient"
-				Events.Reliable[52](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[52], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[52] < 256 then
 					table.insert(Queue.Reliable[52], table.pack(Player, Value))
@@ -8292,7 +8297,8 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local Value: Vector3 = SerdesFunctions.ReadEVENT_RangedVectorFromClient()
 			if Events.Reliable[53] ~= nil then
 				SerdesEvent = "RangedVectorFromClient"
-				Events.Reliable[53](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[53], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[53] < 256 then
 					table.insert(Queue.Reliable[53], table.pack(Player, Value))
@@ -8321,7 +8327,8 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local Value: number = SerdesFunctions.ReadEVENT_PlainFromClient()
 			if Events.Reliable[55] ~= nil then
 				SerdesEvent = "PlainFromClient"
-				Events.Reliable[55](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[55], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[55] < 256 then
 					table.insert(Queue.Reliable[55], table.pack(Player, Value))
@@ -8412,14 +8419,16 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			if OrderAccept(Player, 1, OrderIdentifier) == true then
 				if Events.Unreliable[1] ~= nil then
 					SerdesEvent = "OrderedPosition"
-					Events.Unreliable[1](Player, Value)
+					local ListenerRan, ListenerFailure = pcall(Events.Unreliable[1], Player, Value)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
 		elseif Index == 2 then
 			local Value: string = SerdesFunctions.ReadEVENT_UnreliableOversize()
 			if Events.Unreliable[2] ~= nil then
 				SerdesEvent = "UnreliableOversize"
-				Events.Unreliable[2](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[2], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 3 then
 			Push(Queue.Unreliable[3], table.pack(Player, SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent()))
@@ -8429,19 +8438,22 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyUnreliableEvent()
 			if Events.Unreliable[7] ~= nil then
 				SerdesEvent = "ClientEmptyUnreliableEvent"
-				Events.Unreliable[7](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[7], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 15 then
 			local Value: number = SerdesFunctions.ReadEVENT_UnreliableClient()
 			if Events.Unreliable[15] ~= nil then
 				SerdesEvent = "UnreliableClient"
-				Events.Unreliable[15](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[15], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 17 then
 			local Value: number = SerdesFunctions.ReadEVENT_RangedUnreliableFromClient()
 			if Events.Unreliable[17] ~= nil then
 				SerdesEvent = "RangedUnreliableFromClient"
-				Events.Unreliable[17](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[17], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -10679,7 +10691,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: number): ()
 			if Events.Unreliable[1] ~= nil then
 				SerdesEvent = "OrderedPosition"
-				Events.Unreliable[1](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[1], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
 	},
@@ -12269,7 +12282,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: number): ()
 			if Events.Reliable[0] ~= nil then
 				SerdesEvent = "RateLimited"
-				Events.Reliable[0](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[0], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[0] < 256 then
 					table.insert(Queue.Reliable[0], table.pack(Player, Value))
@@ -12319,7 +12333,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: string): ()
 			if Events.Unreliable[2] ~= nil then
 				SerdesEvent = "UnreliableOversize"
-				Events.Unreliable[2](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[2], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
 	},
@@ -13002,7 +13017,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: nil): ()
 			if Events.Reliable[8] ~= nil then
 				SerdesEvent = "ClientEmptyEvent"
-				Events.Reliable[8](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[8], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[8] < 256 then
 					table.insert(Queue.Reliable[8], table.pack(Player, Value))
@@ -13025,7 +13041,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: nil): ()
 			if Events.Unreliable[7] ~= nil then
 				SerdesEvent = "ClientEmptyUnreliableEvent"
-				Events.Unreliable[7](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[7], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
 	},
@@ -14314,7 +14331,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: number): ()
 			if Events.Reliable[31] ~= nil then
 				SerdesEvent = "ReliableClient"
-				Events.Reliable[31](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[31], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[31] < 256 then
 					table.insert(Queue.Reliable[31], table.pack(Player, Value))
@@ -14419,7 +14437,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: number): ()
 			if Events.Unreliable[15] ~= nil then
 				SerdesEvent = "UnreliableClient"
-				Events.Unreliable[15](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[15], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
 	},
@@ -15169,7 +15188,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: any): ()
 			if Events.Reliable[46] ~= nil then
 				SerdesEvent = "UnknownInbound"
-				Events.Reliable[46](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[46], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[46] < 256 then
 					table.insert(Queue.Reliable[46], table.pack(Player, Value))
@@ -15385,7 +15405,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: number): ()
 			if Events.Reliable[52] ~= nil then
 				SerdesEvent = "RangedFromClient"
-				Events.Reliable[52](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[52], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[52] < 256 then
 					table.insert(Queue.Reliable[52], table.pack(Player, Value))
@@ -15408,7 +15429,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: number): ()
 			if Events.Unreliable[17] ~= nil then
 				SerdesEvent = "RangedUnreliableFromClient"
-				Events.Unreliable[17](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[17], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
 	},
@@ -15431,7 +15453,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: Vector3): ()
 			if Events.Reliable[53] ~= nil then
 				SerdesEvent = "RangedVectorFromClient"
-				Events.Reliable[53](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[53], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[53] < 256 then
 					table.insert(Queue.Reliable[53], table.pack(Player, Value))
@@ -15491,7 +15514,8 @@ local Returns = table.freeze({
 		Predict = function(Player: Player, Value: number): ()
 			if Events.Reliable[55] ~= nil then
 				SerdesEvent = "PlainFromClient"
-				Events.Reliable[55](Player, Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[55], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[55] < 256 then
 					table.insert(Queue.Reliable[55], table.pack(Player, Value))
