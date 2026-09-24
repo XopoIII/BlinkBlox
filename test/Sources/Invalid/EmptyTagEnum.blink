@@ -1,0 +1,6 @@
+-- expect E3029
+-- A tagged enum with no variants failed inside the generator, which looked up the first variant.
+option ClientOutput = "../../Network/EmptyTagEnumClient.luau"
+option ServerOutput = "../../Network/EmptyTagEnumServer.luau"
+
+enum Nothing = "Kind" {}

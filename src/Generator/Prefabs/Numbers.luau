@@ -58,13 +58,22 @@ Types.f16 = {
 		Types.u16.Read("Encoded", Block)
 		Block:Declare(Variable, true)
 		Block:Line(`local MantissaExponent = Encoded % 0x8000`)
-		Block:Compare("MantissaExponent", "0b0_11111_0000000000 ", "Equals")
+		Block
+			:Compare("MantissaExponent", "0b0_11111_0000000000 ", "Equals")
 			:Compare("Encoded // 0x8000", "1", "Equals")
 			:Line(`{Variable} = -math.huge`)
 			:Branch("Default")
 			:Line(`{Variable} = math.huge`)
 			:End()
-			:Branch("Conditional", "MantissaExponent", "0b1_11111_0000000000  ", "Equals")
+			--> Exponent all ones with any mantissa is NaN. This compared against the SIGNED pattern,
+			--> which a value with the sign stripped can never equal, so a NaN fell through to the
+			--> arithmetic below and came out as -65600.
+			:Branch(
+				"Conditional",
+				"MantissaExponent",
+				"0b0_11111_0000000000",
+				"Greater"
+			)
 			:Line(`{Variable} = 0 / 0`)
 			:Branch("Conditional", "MantissaExponent", "0b0_00000_0000000000  ", "Equals")
 			:Line(`{Variable} = 0`)
@@ -101,11 +110,14 @@ Types.f16 = {
 				"local RoundedValue = (Abosulte // Interval) * Interval\n",
 				"local Fraction, Exponent = math.frexp(RoundedValue)\n",
 				"Exponent += 14\n",
-				"local Mantissa = math.round(if Exponent <= 0\n",
+				--> Rounding can carry a mantissa into the exponent -- a subnormal just below the smallest
+				--> normal rounds up to it. Adding the mantissa to the exponent field, rather than taking
+				--> it modulo 0x400 first, lets the carry land; the modulo dropped it, and 6.102e-5 went
+				--> out as zero.
+				"local Scaled = math.round(if Exponent <= 0\n",
 				"	then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))\n",
-				"	else Fraction * 0x800) % 0x400\n",
-				"local Result = Mantissa\n",
-				"	+ math.max(Exponent, 0) * 0x400\n",
+				"	else Fraction * 0x800)\n",
+				"local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)\n",
 				"	+ if float < 0 then 0x8000 else 0\n",
 			}, Block.Indent + 1)
 			:Line(`buffer.writeu16({SEND_BUFFER}, {Allocation}, Result)`)

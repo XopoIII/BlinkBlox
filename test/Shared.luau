@@ -98,6 +98,8 @@ local function GetEnvironment()
 	local Services = {
 		Players = {
 			PlayerRemoving = Signal.new(),
+			--> One mock player, so a server's polled queues stop at 256 rows.
+			MaxPlayers = 1,
 			GetPlayers = function(_self)
 				return { Player }
 			end,
@@ -216,6 +218,11 @@ return {
 	--> limit, an oversized unreliable payload, a packet it could not decode. None of that was
 	--> assertable before, so a guard could stop warning and the suite would still be green.
 	Warnings = Warnings,
+
+	--> The `task` the generated modules see: Lune's, behind a table a spec may put a function on for a
+	--> while. Lune ends the run with a failure once any thread has errored, so a spec that makes a
+	--> module report an error through `task.spawn(error, ...)` catches it here instead.
+	Task = setmetatable({}, { __index = task }),
 	Attributes = Attributes,
 	AttributeMethods = AttributeMethods,
 	DrainWarnings = function(): { string }

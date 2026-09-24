@@ -48,6 +48,28 @@ local function Flood(Event: { number }, Count: number)
 	task.wait(0.3)
 end
 
+RunClosure("A client cannot grow a polled event's queue past its cap", function()
+	--> The same fault as the listener queue above, on the other queue a client fills: a polled event
+	--> is stored until the game asks for it, and a game that asks rarely, or not yet, let a client grow
+	--> it without end. It stops at 256 rows per player the server can hold, one in the mock.
+	--> Whatever earlier specs left queued, drained first.
+	local Drain = Server.ClientEmptyPollEvent.Iter()
+	while Drain() ~= nil do
+		continue
+	end
+
+	Flood({ ReliableIndex("ClientEmptyPollEvent") }, 300)
+
+	local Polled = 0
+	for _ in Server.ClientEmptyPollEvent.Iter() do
+		Polled += 1
+	end
+
+	if Polled ~= 256 then
+		ErrorPrint(`Failed "Polled queue": {Polled} rows were queued, expected the cap of 256.`)
+	end
+end)
+
 RunClosure("A client cannot grow the queue of an event nobody listens to", function()
 	--> Upstream issue #93. Events that arrive with no listener bound are queued for the listener
 	--> that has not connected yet -- and on the server, a client decides how many arrive. Uncapped,
@@ -250,6 +272,54 @@ RunClosure("A burst of refused events is reported once a second, with its count"
 	if #Reports ~= 2 or not Second or Second.Refused ~= 5 or Second.Event ~= "RateLimited" then
 		ErrorPrint(
 			`Failed "Rate reports": {#Reports} report(s) after a second, the last counting {Second and Second.Refused}, expected 2 and 5.`
+		)
+	end
+end)
+
+RunClosure("What a client can make the server report is limited to once a second", function()
+	--> A malformed packet was warned about before it was charged to the inbound budget, and a packet
+	--> that failed to decode called the game's handler, each once per packet: a client could put a
+	--> line in the output, or a handler call in the game, for every packet it sent.
+	ServerEnvironment.Services.Players.PlayerRemoving:Fire(Shared.Player)
+	task.wait(0.2)
+	Shared.AdvanceClock(10)
+	Shared.DrainWarnings()
+
+	local Remote = ServerEnvironment.Instances.BLINK_RELIABLE_REMOTE
+	for _ = 1, 50 do
+		Remote.OnServerEvent:Fire(Shared.Player, "not a buffer", {})
+	end
+	task.wait(0.2)
+
+	local Malformed = 0
+	for _, Warning in Shared.DrainWarnings() do
+		if string.find(Warning, "malformed packet", 1, true) then
+			Malformed += 1
+		end
+	end
+
+	local Reports = 0
+	Server.SetDecodeErrorHandler(function()
+		Reports += 1
+	end)
+
+	local Truncated = buffer.fromstring(string.char(ReliableIndex("PlainFromClient")))
+	for _ = 1, 50 do
+		Remote.OnServerEvent:Fire(Shared.Player, Truncated, {})
+	end
+	task.wait(0.2)
+	Server.SetDecodeErrorHandler(nil)
+
+	--> Every module on the mock remotes warns once, and an earlier spec loaded a second server.
+	if Malformed < 1 or Malformed > 2 then
+		ErrorPrint(
+			`Failed "Report limits": fifty malformed packets gave {Malformed} warning(s), expected one per module.`
+		)
+	end
+
+	if Reports ~= 1 then
+		ErrorPrint(
+			`Failed "Report limits": fifty undecodable packets called the handler {Reports} time(s), expected 1.`
 		)
 	end
 end)

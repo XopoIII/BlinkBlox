@@ -63,7 +63,9 @@ function Serde.Set(Declaration: Parser.Set, Read: Blocks.Block, Write: Blocks.Bl
 			for Index = 1, Partition do
 				local Flag = Flags[FlagIndex]
 
-				Read:EmptyDeclare(Flag)
+				--> A flag is a table field, never a local, so nothing is declared for it. It used to be
+				--> recorded as a declared variable, and a reader after it that declares a local of the
+				--> same name -- a string's `Length`, an enum's `Index` -- then assigned a global instead.
 				Read:Line(`{Variable}{FormatIndex(Flag)} = bit32.btest(SET_BITS, {BitIndexToHex(Index - 1)});`)
 
 				FlagIndex += 1
@@ -176,11 +178,11 @@ function Serde.Struct(Declaration: Parser.Struct, Read: Blocks.Block, Write: Blo
 	end
 end
 
+--- A pack's elements are serialised under positional names, never the ones the schema gave them; see
+--- `Generators.LuauType`.
 function Serde.Tuple(Declaration: Parser.Tuple, Read: Blocks.Block, Write: Blocks.Block)
-	local Names = Declaration.Value.Names
 	for Index, Value in Declaration.Value.Values do
-		local Variable = Names[Index] or `Value{Index}`
-		Serde.Emit(Value :: Type, Read, Write, Variable)
+		Serde.Emit(Value :: Type, Read, Write, `Value{Index}`)
 	end
 end
 
@@ -331,13 +333,18 @@ function Serde.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Block
 	end
 
 	--> Body
-	Read = Read:Loop("Index = 1", "Length")
+	--> The reader's counter is named for its depth: an element's own reader may declare an `Index` of
+	--> its own -- an enum does -- which would shadow a counter of that name before it is used below.
+	local Slot = `Slot_{Read.Indent}`
+	Read = Read:Loop(`{Slot} = 1`, "Length")
 	Write = Write:Loop("Index = 1", IsVariableSize and `#{Variable}` or Upper)
 
 	Write:Line(`local {Iterator} = {Variable}[Index]`)
 	Serde.Emit(Of, Read, Write, Iterator)
 
-	Read:Line(`table.insert({Variable}, {Iterator})`)
+	--> By index, not `table.insert`: an absent optional element is nil, and inserting nil does nothing,
+	--> so every element after a hole used to arrive one place early.
+	Read:Line(`{Variable}[{Slot}] = {Iterator}`)
 
 	--> End
 	Read = Read:End()

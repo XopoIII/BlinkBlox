@@ -1,0 +1,12 @@
+-- expect E3005
+-- A named element becomes a parameter of the generated Fire, whose body already uses `Player` for the
+-- recipient. Named so, the payload would take its place.
+option ClientOutput = "../../Network/ReservedPackNameClient.luau"
+option ServerOutput = "../../Network/ReservedPackNameServer.luau"
+
+event Greet {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: (Player: u8, Message: string),
+}

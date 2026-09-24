@@ -880,3 +880,70 @@ scope DevOnlyDebug {
         Call: SingleSync
     }
 }
+
+--> A tuple that ends on a nil, arriving before its listener. The queue used to store it as a table
+--> literal and replay it with `table.unpack`, which stops at the first border `#` finds -- here 1.
+event QueuedHoles {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: (u8, u8?, u8?, u8, u8?)
+}
+
+--> Ordered from the server, which stamps each player's own sequence number into each send.
+event OrderedToClient {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Data: u8
+}
+
+--> An array of optional elements with a hole in it. The reader inserted each element, and inserting a
+--> nil does nothing, so every element after the hole arrived one place early.
+export type OptionalHoles = u8?[3]
+
+--> A half-precision float with a public reader and writer, for the edge cases of the encoding: NaN,
+--> the infinities, and the subnormal that rounds up to the smallest normal number.
+export type HalfFloat = f16
+
+--> Float ranges whose bounds the encoding cannot hold exactly. 0.3 is 0.30000001192092896 as an f32,
+--> above its own bound, and 0.1 as an f16 is 0.0999755859375, below it; the receiver has to check
+--> against the bounds as they would arrive, or it refuses the very values the range names.
+event RangedFloat32 {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: f32(0..0.3)
+}
+
+event RangedFloat16 {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: f16(0.1..1)
+}
+
+--> Pack elements named after the serialisers' own locals. A string's writer declares `local Length`,
+--> which shadowed an element called Length, and the u16 went out as the string's length.
+event NamedLength {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: (s: string, Length: u16)
+}
+
+event LengthFirst {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: (Length: u16, s: string)
+}
+
+--> Flags named after locals the readers after them declare. Each flag was recorded as a declared
+--> variable, so the string's reader assigned `Length` without `local` -- a global write.
+set CollidingFlags = { Length, Index }
+export struct FlagCarrier {
+    Flags: CollidingFlags,
+    Text: string,
+    Kind: enum { A, B },
+}

@@ -1,0 +1,14 @@
+-- expect E2003
+-- An event spends one whole token. A burst of half a token never holds one, so every event is refused
+-- however long the client waits.
+option ClientOutput = "../../Network/FractionalBurstClient.luau"
+option ServerOutput = "../../Network/FractionalBurstServer.luau"
+
+event Purchase {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Rate: 1,
+    Burst: 0.5,
+    Data: u8,
+}

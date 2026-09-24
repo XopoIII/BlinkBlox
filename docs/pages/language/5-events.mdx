@@ -32,9 +32,12 @@ Determines the type (reliability) of the event.
     Plain `Unreliable` is right for independent one-off signals, where an older packet is still
     useful on its own.
 
-    The sequence is tracked per event, and on the server per player: sixty clients each run their own
-    counter, and one client's says nothing about another's. It wraps at 65536, and the comparison is
-    written to tolerate that.
+    The sequence is tracked per event, and on the server per player in both directions: sixty clients
+    each run their own counter, and the server counts what it sends to each of them separately, so a
+    player left out of a `FireList` or `FireExcept` is never told that the next packet it does get is
+    stale. It wraps at 65536: a packet counts as newer when it is less than half the counter's range
+    ahead of the last one seen, so one from just before the wrap that arrives just after it is still
+    recognised as old.
 </Callout>
 
 #### `Call`
@@ -81,7 +84,8 @@ event the server sends -- only inbound traffic is limited.
 
 `Rate` is the sustained number of events per second accepted from a single player. `Burst` is the
 bucket capacity: how many may arrive at once before the rate applies. It defaults to `Rate` rounded
-up.
+up, and may not be below 1: each event spends one whole token, so a smaller bucket would refuse every
+event however long the client waited.
 
 ```blink copy
 event Purchase {
@@ -161,9 +165,12 @@ left unnamed keep their positional `Value1`, `Value3`.
     pack does not change a single byte of what it sends, and the two sides stay compatible.
 </Callout>
 
-A name becomes a Luau variable, so it has to be usable as one: `end`, `local` and anything that is
-not an identifier are refused at compile time, as are two elements sharing a name. That is stricter
-than a [struct](./4-types.mdx) field, which becomes a table key and may be any string.
+A name becomes a parameter of the generated `Fire` and `Invoke`, so it has to be usable as one: `end`,
+`local` and anything that is not an identifier are refused at compile time, as are two elements
+sharing a name, and the few names those functions already use themselves -- `Player`, `Buffer`,
+`Instances`, `Load` and the like; the compiler says which. That is stricter than a
+[struct](./4-types.mdx) field, which becomes a table key and may be any string. Inside the module the
+elements travel under positional names, so a name can never collide with the serialisers' own.
 
 ## Usage in Luau
 
@@ -225,6 +232,14 @@ end)
 `Event` is the event the packet claimed to carry, or `nil` if its index named no event at all. On the
 client the handler takes `(Event, Failure)`, and without one the client warns, naming both.
 
+On the server the handler is called at most once a second for each player, channel and event, like
+the rate-limit handler: a client sending a bad packet every frame costs the game one call a second,
+not one per packet. The server's own warnings about what a client sent -- a malformed packet, an
+oversized one, too many instances, too many events -- keep the same schedule, per player.
+
+An error thrown by a `Sync` listener is not a decode failure. It is raised as an error of its own,
+the way an `Async` listener's is, and the rest of the packet is still delivered.
+
 ### Iterating an Event (Polling)
 ```lua filename="client.luau" copy
 for Index, Value in MyEvent.Iter() do
@@ -242,3 +257,7 @@ for Index, Player, Foo, Bar, FooBar in MyTypePackEvent.Iter() do
     -- ...
 end
 ```
+
+On the server a polled event's queue is filled by clients, so it stops taking rows at 256 for each
+player the server can hold (`Players.MaxPlayers`). A game that iterates its polled events every frame
+never comes near that; one that leaves an event unpolled no longer lets clients grow it without end.

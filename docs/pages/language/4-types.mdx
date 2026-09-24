@@ -261,6 +261,9 @@ set Flags = {
 ## Enums
 BlinkBlox supports two types of enums, unit and tagged enums.
 
+Either kind travels as a one-byte index, so an enum holds between 1 and 256 values or variants. An
+empty one, or one past 256, is refused at compile time (`E3029`).
+
 ### Unit Enums
 Units enums represent a set of possible values.<br/>
 They are defined using the `enum` type. 
@@ -424,7 +427,9 @@ type MyCFrame = CFrame<f16, f32>
 ```
 <Callout type="warning">
     The numerical precision limitations of [vectors](#specifying-encoding) also apply to CFrames.<br/>
-    Furthermore, using an [integer type](#unsigned-integers) for the rotational encoding will result in the rotation being zeroed out.
+    Furthermore, an [integer type](#unsigned-integers) for the rotational encoding keeps only whole
+    radians of each angle, and an unsigned one wraps a negative angle round: -1.57 is sent as 255 in a
+    `u8`. Use a float type, or `quat`, for a rotation.
 </Callout>
 
 ### Quaternion Rotation

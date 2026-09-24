@@ -59,10 +59,15 @@ function Generators.UserType(Declaration: Type, Read: Blocks.Block, Write: Block
 	end
 end
 
+--- `Positional` names a pack's elements `Value1`, `Value2`... whatever the schema called them. The
+--- names a schema gives belong in what the game sees -- a Fire's parameters, a listener's type -- and
+--- nowhere else: inside a serialiser, a decode branch or a listener's reply they shared a scope with
+--- the generated code's own locals, and `(s: string, Length: u16)` wrote `#s` as the u16.
 function Generators.LuauType(
 	Declaration: Type,
 	UseTypeAsValue: boolean?,
-	Prefix: string?
+	Prefix: string?,
+	Positional: boolean?
 ): (string, string, string, string)
 	Prefix = Prefix or ""
 
@@ -110,7 +115,8 @@ function Generators.LuauType(
 		--> The prefix applies to a named element too: a function's Data and Return packs share a scope
 		--> in the generated body, so it is what keeps `(id: u8)` and `(id: string)` from colliding.
 		for Index, TupleValue in Value.Values do
-			local Variable = `{Prefix}{Value.Names[Index] or `Value{Index}`}`
+			local Name = if Positional then nil else Value.Names[Index]
+			local Variable = `{Prefix}{Name or `Value{Index}`}`
 			local ValueType = Generators.LuauType(TupleValue)
 
 			TupleTypes[Index] = ValueType
@@ -158,9 +164,27 @@ function Generators.Export(Declaration: Type)
 	local Indent = Util.GetScopeIndent(State.Scope)
 	Body.Push(`{Name} = \{`, 0, Indent)
 
-	--> Overwrite buffer
-	Read:Comment("Buffer overwrite")
-	Write:Comment("Buffer overwrite")
+	--> The serialiser runs against the module's own cursors, swapped out for the call and swapped back
+	--> after. Protected, because a value that fails validation throws part way through: before, the
+	--> swap back was skipped, so a failed Write left its scratch buffer installed as the outgoing one
+	--> -- the batch already queued was gone, and the next flush sent the half-written value instead --
+	--> and a failed Read left the receive cursors pointing into the caller's buffer, under a decode
+	--> loop that would carry on reading from it.
+	local Reader = Blocks.Function("", "", `({Export})`)
+	local Writer = Blocks.Function("", "", "(buffer)")
+
+	Generators.UserType(Declaration, Reader, Writer)
+
+	--> The payload is complete, so any half-filled bitfield has to reach the buffer BEFORE the trim
+	--> and the return below. Left to `End`, it would be emitted after the return.
+	Reader:FlushBits()
+	Writer:FlushBits()
+
+	Writer:Line("local Result = buffer.create(SendCursor)")
+	Writer:Line("buffer.copy(Result, 0, SendBuffer, 0, SendCursor)")
+
+	Reader:Return(Returns)
+	Writer:Return("Result")
 
 	Read:Lines({
 		"local PreviousCursor = RecieveCursor\n",
@@ -169,44 +193,23 @@ function Generators.Export(Declaration: Type)
 		"RecieveCursor = 0\n",
 		"RecieveBuffer = Buffer\n",
 	}, 1)
-
-	Write:Lines({
-		"local Previous = Save()\n",
-		"Load()\n",
-	}, 1)
-
-	Read:Advance(#Read.Content - 1)
-	Write:Advance(#Write.Content - 1)
-
-	--> Write to buffer
-	Read:Comment("Buffer read")
-	Write:Comment("Buffer write")
-
-	Generators.UserType(Declaration, Read, Write)
-
-	--> The payload is complete, so any half-filled bitfield has to reach the buffer BEFORE the trim
-	--> and the return below. Left to `End`, it would be emitted after the return.
-	Read:FlushBits()
-	Write:FlushBits()
-
-	--> Restore buffer
-	Read:Comment("Buffer restore")
-	Write:Comment("Buffer restore")
-
+	Read:Lines(Reader:End():Wrap("local Success, Result = pcall(", ")").Content, 1)
 	Read:Lines({
 		"RecieveCursor = PreviousCursor\n",
 		"RecieveBuffer = PreviousBuffer\n",
 		"RecieveInstanceCursor = PreviousInstanceCursor\n",
 	}, 1)
 
-	--> Trim buffer
-	Write:Line("local Result = buffer.create(SendCursor)")
-	Write:Line("buffer.copy(Result, 0, SendBuffer, 0, SendCursor)")
+	Write:Lines({
+		"local Previous = Save()\n",
+		"Load()\n",
+	}, 1)
+	Write:Lines(Writer:End():Wrap("local Success, Result = pcall(", ")").Content, 1)
+	Write:Line("Load(Previous)")
 
-	Write:Line(`Load(Previous)`)
-
-	--> End export
-	Read:Return(Returns)
+	Read:Compare("Success", "true", "Not"):Line("error(Result, 0)"):End()
+	Write:Compare("Success", "true", "Not"):Line("error(Result, 0)"):End()
+	Read:Return("Result")
 	Write:Return("Result")
 
 	Read:End():Wrap("", ",")
@@ -231,7 +234,7 @@ function Generators.Event(
 ): ({ string }, { string })
 	local Type, Values, _, Returns = "nil", "Value: nil", nil, "nil"
 	if Data then
-		Type, Values, _, Returns = Generators.LuauType(Data, true)
+		Type, Values, _, Returns = Generators.LuauType(Data, true, nil, true)
 	end
 
 	local Arguments = `{Values}{Function and ", InvocationIdentifier: number" or ""}`
@@ -247,17 +250,25 @@ function Generators.Event(
 
 	--> An ordered event carries a per-event sequence number after its index. It wraps at 65536, and
 	--> the receiver's comparison is written to tolerate that.
+	--> On the server the sequence is per recipient, so the writer leaves a placeholder that each send
+	--> stamps with its own recipient's number; see the ordering body in Generator/init.luau.
 	if Ordered then
-		Write:Line(`local OrderIdentifier = ((OrderOut[{Index}] or 0) + 1) % 65536`)
-		Write:Line(`OrderOut[{Index}] = OrderIdentifier`)
-		Types.u16.Write("OrderIdentifier", Write)
+		if State.Context == "Server" then
+			Types.u16.Write("0", Write)
+		else
+			Write:Line(`local OrderIdentifier = ((OrderOut[{Index}] or 0) + 1) % 65536`)
+			Write:Line(`OrderOut[{Index}] = OrderIdentifier`)
+			Types.u16.Write("OrderIdentifier", Write)
+		end
 	end
+	--> A reply carries a flag after its id: 1 when the payload follows, 0 when the call failed and
+	--> nothing does. The flag is read by the reply branch, not here -- a failure reply is three bytes
+	--> long, and a reader that took the flag inside the payload's block had already skipped past the
+	--> payload's size before it learnt there was none, landing in the middle of the next event.
 	if Function then
 		Types.u8.Write("InvocationIdentifier", Write)
 		if Function == "Return" then
 			Types.u8.Write("1", Write)
-			Types.u8.Read("Success", Read)
-			Read:Compare("Success", "1", "Not"):Line('error("Server encountered an error.")'):End()
 		end
 	end
 

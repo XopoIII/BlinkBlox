@@ -94,3 +94,85 @@ RunClosure("A second listener on a Single event is reported, and the first one's
 
 	DisconnectSecond()
 end)
+
+--> An event that arrives before its listener is queued and replayed when the listener connects. The
+--> row was a table literal replayed with `table.unpack`, which stops at whatever border `#` finds:
+--> for `(1, nil, nil, 4, nil)` that is 1, and the listener was handed only the first value.
+RunClosure("A queued event keeps every value after a nil", function()
+	Server.QueuedHoles.FireAll(1, nil, nil, 4, nil)
+	task.wait(1 / 30)
+
+	local Count, Fourth
+	local Disconnect = Client.QueuedHoles.On(function(...)
+		Count = select("#", ...)
+		Fourth = select(4, ...)
+	end)
+	Disconnect()
+
+	assert(Fourth == 4, `the queued event was replayed with {Count} value(s) and no 4`)
+end)
+
+--> A Many event dispatches by walking its list of listeners. Disconnecting removed from that same
+--> list, so a listener that disconnected itself during dispatch -- the usual shape of a "once" --
+--> shifted the next listener into the index the loop had just passed, and that one never ran.
+RunClosure("A listener that disconnects itself does not cost the next one the event", function()
+	local Seen: { string } = {}
+	local DisconnectFirst: () -> ()
+	DisconnectFirst = Client.ManyReliableSync.On(function()
+		table.insert(Seen, "first")
+		DisconnectFirst()
+	end)
+	local DisconnectSecond = Client.ManyReliableSync.On(function()
+		table.insert(Seen, "second")
+	end)
+
+	Server.ManyReliableSync.FireAll(1)
+	task.wait(1 / 30)
+	DisconnectSecond()
+
+	assert(#Seen == 2, `one fire reached {table.concat(Seen, " and ")}, expected first and second`)
+end)
+
+--> A Sync listener runs inside the pcall that guards decoding, so a listener that threw used to be
+--> reported as a packet that could not be decoded: blamed on the sender, and the rest of the packet
+--> dropped along with every listener after it. The listener's error is its own now, raised on a thread
+--> of its own, and decoding carries on.
+RunClosure("A Sync listener that throws costs nothing but its own call", function()
+	local Raised: { string } = {}
+	Shared.Task.spawn = function(Function, ...)
+		if Function == error then
+			table.insert(Raised, tostring((...)))
+			return nil :: any
+		end
+
+		return task.spawn(Function, ...)
+	end
+
+	local Second = 0
+	local DisconnectFirst = Client.ManyReliableSync.On(function()
+		error("a bug in the game")
+	end)
+	local DisconnectSecond = Client.ManyReliableSync.On(function()
+		Second += 1
+	end)
+
+	Shared.DrainWarnings()
+	--> Two events in one frame, so one packet.
+	Server.ManyReliableSync.FireAll(1)
+	Server.ManyReliableSync.FireAll(2)
+	task.wait(1 / 30)
+
+	DisconnectFirst()
+	DisconnectSecond()
+	Shared.Task.spawn = nil :: any
+
+	for _, Warning in Shared.DrainWarnings() do
+		assert(
+			not string.find(Warning, "could not be decoded", 1, true),
+			`the listener's error was reported as: {Warning}`
+		)
+	end
+
+	assert(Second == 2, `the listener after the one that threw ran {Second} time(s), expected 2`)
+	assert(#Raised == 2 and string.find(Raised[1], "a bug in the game", 1, true), "the listener's error was not raised")
+end)

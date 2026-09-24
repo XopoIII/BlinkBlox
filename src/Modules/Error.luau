@@ -111,6 +111,7 @@ local Error = {
 	AnalyzeUnknownProfile = 3026,
 	AnalyzeExcludedReference = 3027,
 	AnalyzeMisplacedAttribute = 3028,
+	AnalyzeEnumSize = 3029,
 }
 
 Error.__index = Error

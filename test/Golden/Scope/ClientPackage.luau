@@ -19,14 +19,6 @@ local RunService = game:GetService("RunService")
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "Package_BLINK"
 local SCHEMA_SIGNATURE = "8cf84aec00597400"
---> Free-slot bitset for outstanding invocations: a set bit is a free slot.
--->
---> This replaces a counter that wrapped at 255 and never released a slot on SUCCESS -- only on the
---> error path. Two calls in flight across the wrap therefore collided: the reused id was still
---> occupied, and the collision check refused a perfectly legitimate call. With a bitset the id is
---> the first genuinely free slot, and it goes back the moment its reply arrives.
-local InvocationSlots = 0xFFFFFFFF
-
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -48,7 +40,8 @@ type Entry = {
 
 type Queue = {
     head: Entry?,
-    tail: Entry?
+    tail: Entry?,
+    count: number
 }
 
 type BufferSave = {
@@ -117,23 +110,6 @@ local function Rollback(Cursor: number, Instances: number)
     end
 end
 
-local function Invoke(): number
-    local Slot = bit32.countrz(InvocationSlots)
-
-    --> countrz of zero is 32: every slot taken. Thirty-two calls from one side with none answered is
-    --> already pathological, and failing here beats handing out an id that belongs to someone else.
-    if Slot == 32 then
-        error("[BlinkBlox]: 32 calls are already awaiting a response, this call has been dropped.")
-    end
-
-    InvocationSlots = bit32.bxor(InvocationSlots, bit32.lshift(1, Slot))
-    return Slot
-end
-
-local function ReleaseInvocation(Identifier: number)
-    InvocationSlots = bit32.bor(InvocationSlots, bit32.lshift(1, Identifier))
-end
-
 local function Allocate(Bytes: number)
     local InUse = (SendCursor + Bytes)
     if InUse > SendSize then
@@ -156,7 +132,8 @@ end
 local function CreateQueue(): Queue
     return {
         head = nil,
-        tail = nil
+        tail = nil,
+        count = 0
     }
 end
 
@@ -167,6 +144,12 @@ local function Pop(queue: Queue): any
     end
 
     queue.head = head.next
+    queue.count -= 1
+    if queue.head == nil then
+        --> Otherwise the last entry stays reachable, value and all, until the next push.
+        queue.tail = nil
+    end
+
     return head.value
 end
 
@@ -185,6 +168,8 @@ local function Push(queue: Queue, value: any)
     if queue.head == nil then
         queue.head = entry
     end
+
+    queue.count += 1
 end
 
 --> One Luau thread, reused across Async dispatches, instead of one allocated per event.
@@ -224,39 +209,127 @@ local function Spawn<T...>(Function: (T...) -> (), ...: T...)
     task.spawn(FreeThread :: thread, Function, ...)
 end
 
-local Calls = table.create(256)
+--> OUTSTANDING INVOCATIONS: the calls this side made that are still waiting for an answer.
+-->
+--> A call is known by its id, a u8 the answer carries back, and by the function it was made to. The
+--> id alone used to be the whole identity, and three faults came of it. Ids were handed out lowest
+--> free first, so the id a reply had just released was the next one claimed -- usually from the very
+--> same thread. A timer armed for one call then found "its" slot holding the same thread and failed
+--> whichever later call happened to be in flight. A reply that arrived after its call had timed out,
+--> or had been cancelled, resumed that later call with the earlier one's values. And nothing
+--> checked which FUNCTION a reply was for, so an answer to one function could resume a caller of
+--> another, typed as something else entirely.
+-->
+--> So ids now go round the whole u8, skipping any still in use, and a released id is the last to
+--> come back; a late reply reaches a newer call only after 255 more have been made, and only if that
+--> one is to the same function, which the reply is checked against. Each call's timer is cancelled
+--> the moment the call is settled, so a timer only ever fires for the call that armed it. At most
+--> thirty-two calls are outstanding at once, as before: more than that with none answered is
+--> already pathological, and failing here beats queueing without bound.
+type Invocations = {
+    Next: number,
+    Outstanding: number,
+    --> The function index each claimed id was claimed for.
+    Claimed: {[number]: number},
+    Threads: {[number]: thread},
+    Timers: {[number]: thread},
+}
 
---> Fails an invocation nobody answered.
--->
---> Until now there was no timeout at all, and the consequence was quiet: a call that never came back
---> left its entry in `Calls` and its bit claimed in `InvocationSlots` forever, so the caller hung and
---> the slot was gone. Thirty-two of those and `Invoke` refuses every further call for the lifetime of
---> the session.
--->
---> That was survivable while the callee was always the SERVER, which always answers -- every refusal
---> path writes a three-byte failure reply precisely so the caller does not hang. It stops being
---> survivable the moment a client can be the callee, because a client that never replies is ordinary
---> rather than a fault: it left, it crashed, it was exploited.
--->
---> The identity check is what makes this safe against a reply that arrives late. By then the slot may
---> belong to an unrelated call, and resuming that caller with this one's failure would be worse than
---> the hang.
-local function TimeoutInvocation(Identifier: number, Seconds: number, Name: string)
-    local Thread = Calls[Identifier]
-    task.delay(Seconds, function()
-        if Calls[Identifier] ~= Thread then
-            return
-        end
+local function CreateInvocations(): Invocations
+    return {
+        Next = 0,
+        Outstanding = 0,
+        Claimed = {},
+        Threads = {},
+        Timers = {},
+    }
+end
 
-        Calls[Identifier] = nil
-        ReleaseInvocation(Identifier)
+local function ClaimInvocation(State: Invocations, Index: number): number
+    if State.Outstanding >= 32 then
+        error("[BlinkBlox]: 32 calls are already awaiting a response, this call has been dropped.")
+    end
+
+    local Identifier = State.Next
+    while State.Claimed[Identifier] ~= nil do
+        Identifier = (Identifier + 1) % 256
+    end
+
+    State.Next = (Identifier + 1) % 256
+    State.Claimed[Identifier] = Index
+    State.Outstanding += 1
+    return Identifier
+end
+
+--> Settles a call: its id goes back and its timer is cancelled. Safe to call twice, and on a state
+--> that is already gone -- a player who left takes theirs with them.
+local function ReleaseInvocation(State: Invocations?, Identifier: number)
+    if not State or State.Claimed[Identifier] == nil then
+        return
+    end
+
+    State.Claimed[Identifier] = nil
+    State.Threads[Identifier] = nil
+    State.Outstanding -= 1
+
+    local Timer = State.Timers[Identifier]
+    if Timer then
+        State.Timers[Identifier] = nil
+        task.cancel(Timer)
+    end
+end
+
+local function ParkInvocation(State: Invocations?, Identifier: number, Thread: thread)
+    if State and State.Claimed[Identifier] ~= nil then
+        State.Threads[Identifier] = Thread
+    end
+end
+
+--> The caller an answer is for, settled on the way out -- or nil when the id is not outstanding or
+--> was claimed by a different function. That second case is what a hostile client answering one
+--> function's call with another function's reply runs into.
+local function TakeInvocation(State: Invocations?, Identifier: number, Index: number): thread?
+    if not State or State.Claimed[Identifier] ~= Index then
+        return nil
+    end
+
+    local Thread = State.Threads[Identifier]
+    ReleaseInvocation(State, Identifier)
+    return Thread
+end
+
+--> Fails a call nobody answered, after `Seconds`.
+-->
+--> Until there was a timeout at all, a call that never came back left its id claimed forever, and
+--> thirty-two of those made every further call fail for the rest of the session. That was survivable
+--> while the callee was always the server, which always answers -- every refusal path writes a
+--> failure reply precisely so the caller does not hang -- and stopped being so once a client could
+--> be the callee, since a client that never replies is ordinary: it left, it crashed, it was
+--> exploited. `Expired` runs after the caller has been failed; the server uses it to let go of a
+--> player who is gone.
+local function TimeoutInvocation(State: Invocations, Identifier: number, Seconds: number, Name: string, Expired: (() -> ())?)
+    local Thread = State.Threads[Identifier]
+    if not Thread then
+        return
+    end
+
+    State.Timers[Identifier] = task.delay(Seconds, function()
+        --> Cleared first, so the release below does not try to cancel the timer that is running it.
+        State.Timers[Identifier] = nil
+        ReleaseInvocation(State, Identifier)
 
         if coroutine.status(Thread) == "suspended" then
-            warn(`[BlinkBlox]: "{Name}" was never answered and has been failed after {Seconds} seconds.`)
+            warn(`[BlinkBlox]: {Name} and has been failed after {Seconds} seconds.`)
             task.spawn(Thread, false)
+        end
+
+        if Expired then
+            Expired()
         end
     end)
 end
+
+local Invocations = CreateInvocations()
 
 local Events: any = {
     Reliable = table.create(256),

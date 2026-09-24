@@ -163,6 +163,29 @@ what a game depends on: the remotes, `_G._BLINK`, the plugin's `Blink` output fo
 `BLINK_CONFIGURATION_FILES`, and the `.blink` extension all keep their names, so builds either side
 of the rename still talk to each other.
 
+0.29.0 audited the runtime, once the split had left it in pieces small enough to read whole. The
+worst of what turned up was a reply: a refused or failed invocation is answered in three bytes, and the
+caller's reader took the success flag inside the payload's block, so it had stepped the payload's size
+forward before it learnt there was none -- and a pcall around the read hid it, so everything batched
+after a refusal was decoded from the wrong offset, in both directions. Calls were known by their id
+alone. Ids went lowest-free first, so an earlier call's timer failed a later one from the same thread,
+a late or cancelled reply resumed the next call, and a reply for one function resumed a caller of
+another -- on the server, a client choosing the type of a value the game was promised. Ids now go round
+the u8, each records its function, and a timer is cancelled with its call. A failed server fire left
+its Instance in the player's batch, shifting every instance after it; a failed exported Write lost the
+queued batch. A queued event lost its values after a trailing nil (`#{1, nil, nil, 4, nil}` is 1). A
+listener that disconnected itself cost the next one the event. A Sync listener's error was reported as
+the sender's decode failure. OrderedUnreliable accepted a stale packet across the wrap, starved a
+player left out of the server's sends -- the server now counts per player -- and never freed what it
+kept. The thesis again: a polled event's queue had no cap on the server, and a client could put a line
+in the output or a call into the game's decode handler per packet; both are bounded now. The
+serialisers: an optional array's holes closed up, f16 NaN decoded as -65600 and a subnormal lost its
+carry, a float range refused its own bounds once narrowed on receipt, a pack element named `Length`
+shadowed the string writer's local -- elements now travel under positional names inside the module --
+and an enum past 256 values wrapped. Before it, the parser cleanup: repeated flags, values and variants
+are refused, the TypeScript tag is quoted, and a trailing comma is accepted in every list. The wire
+does not change.
+
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of

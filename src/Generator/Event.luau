@@ -27,8 +27,17 @@ local RateGuardExpression = Decode.RateGuardExpression
 local OrderGuardExpression = Decode.OrderGuardExpression
 local Declarations = Serde
 
---- What a server send needs to know about the event it sends.
-type Send = { IsReliable: boolean, WriteEvent: string, Name: string }
+--- What a server send needs to know about the event it sends. `Ordered` is the event's index when it
+--- is an ordered unreliable one, whose sequence number each send stamps per recipient.
+type Send = { IsReliable: boolean, WriteEvent: string, Name: string, Ordered: number? }
+
+--- Stamps the recipient's own sequence number into an ordered packet. An unreliable server send always
+--- starts from a fresh buffer, so the event sits at offset 0 and its sequence at offset 1.
+local function StampOrder(Target: Blocks.Block, Send: Send)
+	if Send.Ordered then
+		Target:Line(`buffer.writeu16(Buffer, 1, NextOrder(Player, {Send.Ordered}))`)
+	end
+end
 
 --- The loop over the players a send reaches, leaving out `Except` when asked to.
 local function EachRecipient(Target: Blocks.Block, Recipients: string, SkipExcept: boolean?): Blocks.Block
@@ -59,12 +68,13 @@ local function Broadcast(
 		Fire:Line(`if not CheckUnreliableSize("{Send.Name}") then return end`)
 		Fire:Lines(UNRELIABLE_BODY, 1)
 
-		if Options.AllClients then
+		--> An ordered packet carries a different number to each player, so it is sent one by one.
+		if Options.AllClients and not Send.Ordered then
 			Fire:Line("Unreliable:FireAllClients(Buffer, SendInstances)")
 		else
-			EachRecipient(Fire, Recipients, Options.SkipExcept)
-				:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
-				:End()
+			local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept)
+			StampOrder(Loop, Send)
+			Loop:Line("Unreliable:FireClient(Player, Buffer, SendInstances)"):End()
 		end
 	end
 
@@ -98,11 +108,15 @@ function Declarations.Event(Declaration: Parser.Event)
 	local Connection = `Events.{ChannelName}[{Index}]`
 
 	--> Data body
+	--> Two spellings of the payload: with the schema's names, for what the game sees, and positional,
+	--> for the decode branch, where a name like `Player` or `Index` would shadow the loop's own.
 	local DataTypes, Values, Arguments, _ = "nil", "Value: nil", "Value", nil
+	local InnerValues, InnerArguments = "Value: nil", "Value"
 	local Read, Write = Generators.Event(Value.Data, Index, Identifier, nil, IsOrdered)
 
 	if Value.Data then
 		DataTypes, Values, _, Arguments = Generators.LuauType(Value.Data :: Type, true)
+		_, InnerValues, _, InnerArguments = Generators.LuauType(Value.Data :: Type, true, nil, true)
 	end
 
 	if IsSameContext then
@@ -115,10 +129,19 @@ function Declarations.Event(Declaration: Parser.Event)
 	local Body = Builder.new()
 	local Indent = Util.GetScopeIndent(State.Scope)
 	local WriteEvent = `{Util.GetPath(Identifier, true, State.Scope)}({Arguments})`
-	--> The same call, protected. Only the CLIENT needs it: every server fire begins with its own
-	--> `Load`, so a write that throws is confined to scratch state the next `Load` replaces, while
-	--> the client writes straight into the batch it is still accumulating.
+	--> The same call, protected, for every write into a batch that outlives it: the client's own, and
+	--> the one the server keeps per player. `Load(PlayersMap[Player])` installs that player's saved
+	--> instance list itself rather than a copy, so an Instance appended before a later field threw
+	--> stayed in it even though the cursor was never saved -- and every instance after it in that
+	--> flush reached the client one place out. A broadcast writes into a fresh buffer and needs none.
 	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, State.Scope)}, {Arguments})`
+
+	--> Writes into a batch that is kept, undoing whatever a write that throws had already added.
+	local function WriteKept(Target: Blocks.Block)
+		Target:Line("local Cursor, Instances = Mark()")
+		Target:Line(`local Sent, Failure = {TryWriteEvent}`)
+		Target:Compare("Sent", "true", "Not"):Line("Rollback(Cursor, Instances)"):Line("error(Failure, 0)"):End()
+	end
 
 	Body.Push(`{Declaration.Name} = \{`, 0, Indent)
 	State.Noop.Push(`{Declaration.Name} = \{`, 0, Indent)
@@ -134,8 +157,15 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> stops doing anything. Two systems that each connect and later disconnect therefore leave a
 		--> listener attached that neither of them believes it owns. Upstream #167.
 		local function BindListener(Target: Blocks.Block): Blocks.Block
+			--> A Many event's list is replaced, never edited in place: a dispatch in progress iterates
+			--> the list it started with. Removing from that list shifted the next listener into an index
+			--> the loop had already passed, so a listener that disconnected itself -- a "once" -- made
+			--> the one after it miss the event. Copying costs an allocation per connect and disconnect,
+			--> and nothing per event.
 			if not IsSingle then
-				return Target:Line(`table.insert({Connection}, Listener)`)
+				return Target:Line(`local Listeners = table.clone({Connection})`)
+					:Line("table.insert(Listeners, Listener)")
+					:Line(`{Connection} = Listeners`)
 			end
 
 			return Target:Line(`if {Connection} ~= nil then`)
@@ -158,17 +188,29 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> Event recieve body
 		local Listener: Blocks.Block
 		local ContextArguments = `Listener: ({State.Context == "Server" and "Player: Player, " or ""}{Values}) -> ()`
-		local ListenerArguments = `{State.Context == "Server" and "Player, " or ""}{Arguments}`
+		local Sender = if State.Context == "Server" then "Player, " else ""
 
-		local CallListener = Blocks.Block()
-		do
+		local function CallListener(ListenerArguments: string): Blocks.Block
+			local Call = Blocks.Block()
 			if IsSync and State.Options.SyncValidation then
-				CallListener = CallListener:Line(`SerdesEvent = "{Declaration.Name}"`)
+				Call = Call:Line(`SerdesEvent = "{Declaration.Name}"`)
 			end
 
+			--> A Sync listener runs inside the decode loop's pcall, so an error in game code used to be
+			--> reported as a packet that could not be decoded -- blamed on the sender, silently on the
+			--> server unless the game had installed a handler, and taking the rest of the packet and
+			--> any later listeners with it. It is caught here instead, where the cursor already sits
+			--> past the event, and raised on a thread of its own: which is where an Async listener's
+			--> error has always surfaced.
 			local PathExpr = IsSingle and Connection or "Listener"
-			local CallExpr = IsSync and `{PathExpr}({ListenerArguments})` or `Spawn({PathExpr}, {ListenerArguments})`
-			CallListener = CallListener:Line(CallExpr)
+			if IsSync then
+				Call = Call:Line(`local ListenerRan, ListenerFailure = pcall({PathExpr}, {ListenerArguments})`)
+					:Line("if not ListenerRan then task.spawn(error, ListenerFailure, 0) end")
+			else
+				Call = Call:Line(`Spawn({PathExpr}, {ListenerArguments})`)
+			end
+
+			return Call
 		end
 
 		--> Read before the payload, because that is the order it was written in. The DECISION comes
@@ -178,7 +220,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Types.u16.Read("OrderIdentifier", Block)
 		end
 
-		Block:Line(`local {Values} = {Util.GetPath(Identifier, false, State.Scope)}()`)
+		Block:Line(`local {InnerValues} = {Util.GetPath(Identifier, false, State.Scope)}()`)
 
 		--> The decode above has to happen either way: payloads are variable length, so skipping an
 		--> event without reading it would leave the cursor mid-event and turn the rest of the packet
@@ -198,7 +240,11 @@ function Declarations.Event(Declaration: Parser.Event)
 			Disconnect = Disconnect:Compare(Connection, "Listener", "Equals"):Line(`{Connection} = nil`):End()
 		else
 			Disconnect = Disconnect:Line(`local Index = table.find({Connection}, Listener)`)
-			Disconnect = Disconnect:Compare("Index", "nil", "Not"):Line(`table.remove({Connection}, Index)`):End()
+			Disconnect = Disconnect:Compare("Index", "nil", "Not")
+				:Line(`local Listeners = table.clone({Connection})`)
+				:Line("table.remove(Listeners, Index)")
+				:Line(`{Connection} = Listeners`)
+				:End()
 		end
 
 		Disconnect = Disconnect:End():Wrap("return ", "")
@@ -206,12 +252,14 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> Hands the event to its listeners, or -- for a reliable event with none bound -- queues it for
 		--> the listener to come. The receive branch and Predict both go through this, so an event
 		--> predicted locally is delivered exactly as one received from the network would be.
-		local function Deliver(Target: Blocks.Block)
+		local function Deliver(Target: Blocks.Block, Payload: string)
+			local ListenerArguments = `{Sender}{Payload}`
+			local Call = CallListener(ListenerArguments)
 			if not IsReliable then
 				if IsSingle then
-					Target:Compare(Connection, "nil", "Not"):Lines(CallListener.Content, Target.Indent):End()
+					Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent):End()
 				else
-					Target:Iterator("_", "Listener", Connection):Lines(CallListener.Content, Target.Indent):End()
+					Target:Iterator("_", "Listener", Connection):Lines(Call.Content, Target.Indent):End()
 				end
 
 				return
@@ -219,23 +267,26 @@ function Declarations.Event(Declaration: Parser.Event)
 
 			local Bound: Blocks.Block
 			if IsSingle then
-				Bound = Target:Compare(Connection, "nil", "Not"):Lines(CallListener.Content, Target.Indent)
+				Bound = Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent)
 			else
 				Bound = Target:Compare(`#{Connection}`, "0", "Greater")
 					:Iterator("_", "Listener", Connection)
-					:Lines(CallListener.Content, Target.Indent + 1)
+					:Lines(Call.Content, Target.Indent + 1)
 					:End()
 			end
 
 			Queues.Enqueue(Bound:Branch("Default"), State.Context, Queue, ListenerArguments, Declaration.Name):End()
 		end
 
-		Deliver(Block)
+		Deliver(Block, InnerArguments)
 
 		if IsReliable then
 			Listener = BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true))
 				:Iterator("Index", "Arguments", Queue)
-				:Line(IsSync and `Listener(table.unpack(Arguments))` or `Spawn(Listener, table.unpack(Arguments))`)
+				:Line(
+					IsSync and `Listener(table.unpack(Arguments, 1, Arguments.n))`
+						or `Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))`
+				)
 				:End()
 				:Line(`{Queue} = \{}`)
 				:Lines(Disconnect.Content, 1)
@@ -266,7 +317,7 @@ function Declarations.Event(Declaration: Parser.Event)
 
 			--> A Many event with no listener used to be dropped here while the network queued it, and a
 			--> Single one was queued past the cap the network stops at. Both now share the receive path.
-			Deliver(Predict)
+			Deliver(Predict, Arguments)
 			Predict:End()
 
 			State.Noop.Push(`{State.Casing.On} = NOOP_RETURNING,`, 0, Indent + 1)
@@ -294,12 +345,22 @@ function Declarations.Event(Declaration: Parser.Event)
 		local PollOrderGuard = OrderGuardExpression(IsOrdered, Index)
 		local PollRateGuard = RateGuardExpression(Value, Declaration.Name)
 
-		--> Both gate the same enqueue, so they combine into one condition rather than nesting.
-		if PollRateGuard and PollOrderGuard then
-			PollRateGuard = `{PollRateGuard} and {PollOrderGuard}`
-		elseif PollOrderGuard then
-			PollRateGuard = PollOrderGuard
+		--> On the server the queue is filled by clients, so it stops at a cap; see MAX_POLLED in the
+		--> server template. Every check gates the same enqueue, so they combine into one condition.
+		local Checks = {}
+		if State.Context == "Server" then
+			table.insert(Checks, `{Queue}.count < MAX_POLLED`)
 		end
+
+		if PollRateGuard then
+			table.insert(Checks, PollRateGuard)
+		end
+
+		if PollOrderGuard then
+			table.insert(Checks, PollOrderGuard)
+		end
+
+		PollRateGuard = if #Checks > 0 then table.concat(Checks, " and ") else nil
 
 		if PollRateGuard then
 			--> Split because the one-liner decodes and enqueues at once, and only the enqueue may be
@@ -348,9 +409,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			--> Rolled back rather than left, because this write lands in the batch every other event
 			--> is queued in. Half an event in there is not one bad send: the receiver reads the
 			--> truncated event and then decodes the REST of the batch from the wrong offset.
-			Fire:Line("local Cursor, Instances = Mark()")
-			Fire:Line(`local Sent, Failure = {TryWriteEvent}`)
-			Fire:Compare("Sent", "true", "Not"):Line("Rollback(Cursor, Instances)"):Line("error(Failure, 0)"):End()
+			WriteKept(Fire)
 		else
 			Fire:Line(`local Previous = Save()`)
 			Fire:Line(`Load()`)
@@ -374,17 +433,23 @@ function Declarations.Event(Declaration: Parser.Event)
 		State.Noop.Push(`{State.Casing.Fire} = NOOP`, 0, Indent + 1)
 		Body.PushLines(Fire.Content, 0, Indent + 1)
 	else
-		local Send: Send = { IsReliable = IsReliable, WriteEvent = WriteEvent, Name = Declaration.Name }
+		local Send: Send = {
+			IsReliable = IsReliable,
+			WriteEvent = WriteEvent,
+			Name = Declaration.Name,
+			Ordered = if IsOrdered then Index else nil,
+		}
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 		if IsReliable then
 			Fire:Line("Load(PlayersMap[Player])")
-			Fire:Line(WriteEvent)
+			WriteKept(Fire)
 			Fire:Line("SavePlayerBuffer(Player)")
 		else
 			Fire:Line("Load()")
 			Fire:Line(WriteEvent)
 			Fire:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
 			Fire:Lines(UNRELIABLE_BODY, 1)
+			StampOrder(Fire, Send)
 			Fire:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
 		end
 		Fire:End()

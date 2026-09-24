@@ -30,4 +30,10 @@ InvokeAndExpectTuple(
 	{ 65535, "out" }
 )
 
+--> Elements named after a serialiser's own locals. A string's writer declares `local Length`, which
+--> shadowed the element of that name: the u16 went out as the string's length, or the string's length
+--> was read back as the u16.
+FireAndExpectTuple("An element named Length after a string", Server.NamedLength, Client.NamedLength, "abc", 300)
+FireAndExpectTuple("An element named Length before a string", Server.LengthFirst, Client.LengthFirst, 300, "abc")
+
 return {}
