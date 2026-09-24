@@ -4,9 +4,9 @@ Benchmarks are done by firing the event 1000 times per frame with the same data 
 
 BlinkBlox's inbound limits are raised in the definition file for this, since a live server's defaults refuse most of what the benchmark sends -- that is what they are for. Studio caps the framerate at 60, so a tool at 60 FPS is bounded by the cap, not by its own cost.
 
-Source code can be found here [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src).  
+Source code can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src).  
 Data used for benchmarks can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches).   
-Defenition files used for benchmarks can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/definitions).  
+Definition files used for benchmarks can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/definitions).  
  
 ## Results
 

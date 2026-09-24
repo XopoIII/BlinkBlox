@@ -125,6 +125,18 @@ local Items = Net.GetInventory.Invoke(1)
 	</Card>
 </CardGrid>
 
+## Measured
+
+A thousand events a frame from client to server, run in Studio on 0.29.0. The numbers are median
+frame rates, with bandwidth in brackets.
+
+| Payload | Roblox remotes | BlinkBlox | zap | ByteNet |
+|---|---|---|---|---|
+| 1000 booleans | 15 FPS | **57 FPS** (3.19 Kbps) | 37 FPS (8.53 Kbps) | 22 FPS (8.33 Kbps) |
+| 100 entities | 16 FPS | **60 FPS**\* (41.57 Kbps) | 42 FPS (41.86 Kbps) | 24 FPS (41.71 Kbps) |
+
+\* Studio caps the frame rate at 60. [How these were measured](/BlinkBlox/guides/benchmarks/).
+
 ## Where it fits
 
 BlinkBlox is a maintained fork of [Blink](https://github.com/1Axen/blink). Upstream froze this line

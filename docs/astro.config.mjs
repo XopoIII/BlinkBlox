@@ -74,6 +74,7 @@ export default defineConfig({
 					items: [
 						'guides/securing-the-server',
 						'guides/bandwidth',
+						'guides/benchmarks',
 						'guides/migrating-from-blink',
 						'guides/roblox-ts',
 						'guides/ai-assistants',

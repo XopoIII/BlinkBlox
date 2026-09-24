@@ -3,8 +3,6 @@ title: Bandwidth
 description: How BlinkBlox lays out bytes on the wire, and how to choose types, ranges and reliabilities that send fewer of them.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
-
 Every byte a schema sends is decided by its types. This page explains how those bytes are laid out,
 with worked counts, so you can see what a change to the schema will cost before you make it.
 
@@ -239,12 +237,7 @@ position, an aim direction -- where a stale packet would make something visibly 
 
 ## Benchmarks
 
-[`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md)
-compares frame rate and bandwidth against plain remotes, zap and ByteNet.
-
-<Aside type="caution">
-Those numbers were measured on upstream Blink v0.17.1, before the fork, and have not been re-run
-since. Every wire-format change on this page -- the shared bitfield, offset-encoded lengths, packed
-boolean arrays, `CFrame<quat>` -- came after them, as did the inbound checks, which cost the server
-some CPU per packet. Treat them as indicative of the approach, not as a measurement of this compiler.
-</Aside>
+Measured in Studio against 0.29.0, an array of 1000 booleans costs BlinkBlox 3.19 Kbps, where zap and
+ByteNet spend about 8.5, because `boolean[]` is packed eight to a byte. Structs of plain `u8` fields
+cost every tool the same. [Benchmarks](/BlinkBlox/guides/benchmarks/) has the full numbers and how
+they were measured.

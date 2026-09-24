@@ -56,6 +56,22 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 - **Tooling.** The CLI has watch mode and `@profile` builds that keep debug remotes out of release.
   You also get TypeScript definitions and a Studio plugin with live diagnostics.
 
+## Performance
+
+Each tool fires 1000 events a frame from client to server. The run was in Studio, on BlinkBlox
+0.29.0, and the numbers are median frame rate and bandwidth.
+
+| Payload | Roblox remotes | BlinkBlox | zap | ByteNet |
+|---|---|---|---|---|
+| 1000 booleans | 15 FPS | **57 FPS**, 3.19 Kbps | 37 FPS, 8.53 Kbps | 22 FPS, 8.33 Kbps |
+| 100 entities | 16 FPS | **60 FPS**\*, 41.57 Kbps | 42 FPS, 41.86 Kbps | 24 FPS, 41.71 Kbps |
+
+\* Studio caps the frame rate at 60. The methodology and the full percentiles are in
+[Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
+[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md).
+
+## Where it comes from
+
 BlinkBlox is a maintained fork of [Blink](https://github.com/1Axen/blink). Upstream froze this line
 of the compiler and began a rewrite. It left reported defects open, including an unbounded parse of
 a hostile client buffer. This fork fixes them and continues from `v0.18.8`. See

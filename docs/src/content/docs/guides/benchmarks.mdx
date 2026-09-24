@@ -1,0 +1,74 @@
+---
+title: Benchmarks
+description: Frame rate and bandwidth of BlinkBlox 0.29.0 against plain remotes, zap and ByteNet, measured in Studio.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Each tool fires the same event 1000 times a frame, with the same data, for ten seconds, and every
+tool received everything it sent. The numbers below are medians. The percentiles, and the harness
+itself, are in
+[`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
+
+The run was made on 2026-09-24 on an Apple M1 with 16 GB of memory, in Roblox Studio. The versions
+were BlinkBlox 0.29.0, zap 0.6.29 and ByteNet 0.4.3.
+
+## Booleans
+
+The payload is an array of 1000 `true` values: `boolean[0..1000]`.
+
+| Tool | FPS | Kbps |
+|---|---|---|
+| Roblox remotes | 15 | 136800 |
+| **BlinkBlox** | **57** | **3.19** |
+| zap | 37 | 8.53 |
+| ByteNet | 22 | 8.33 |
+
+BlinkBlox sends about 2.7 times less data than zap or ByteNet here, because
+[`boolean[]`](/BlinkBlox/language/types/#arrays-of-booleans) is packed eight elements to a byte. The
+other two spend a whole byte on each boolean.
+
+## Entities
+
+The payload is 100 structs of six `u8` fields each: an id, a position, an orientation and an
+animation.
+
+| Tool | FPS | Kbps |
+|---|---|---|
+| Roblox remotes | 16 | 721337 |
+| **BlinkBlox** | **60** | **41.57** |
+| zap | 42 | 41.86 |
+| ByteNet | 24 | 41.71 |
+
+Every tool encodes six `u8` fields in six bytes, so the bandwidth is the same within noise. The
+frame rate is where they differ: the generated serialisers cost less per event.
+
+## Reading the numbers
+
+<Aside type="caution" title="60 FPS is Studio's cap">
+Studio does not render faster than 60 frames a second. A tool at 60 FPS is limited by the cap, not by
+its own cost, so the Entities result shows only that BlinkBlox kept up. It does not show by how much.
+</Aside>
+
+- **The inbound limits are raised for the run.**
+  [`benchmark/definitions/Definition.blink`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/definitions/Definition.blink)
+  sets the following options far above their defaults:
+  - [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket)
+    and `MaxEventsPerPacket`;
+  - `InboundBytesPerSecond` and `InboundBurst`.
+
+  A thousand events a frame is a flood, and with the defaults a live server refuses most of it.
+  Refusing it is the purpose of those limits. The checks still run, so their cost is included in the
+  numbers above. See [Securing the server](/BlinkBlox/guides/securing-the-server/).
+- **The events go from client to server.** That direction is the one BlinkBlox validates.
+  Every event is checked before a listener sees it.
+- **Bandwidth depends on your schema.** These two payloads are simple. Where a schema has bounded
+  lengths, optionals or booleans spread across structs, the savings come from the techniques in
+  [Bandwidth and sizes](/BlinkBlox/guides/bandwidth/).
+- **A different machine gives different numbers.** The ratios between the tools are the useful part.
+
+## Running them yourself
+
+The harness lives in [`benchmark/`](https://github.com/XopoIII/BlinkBlox/tree/main/benchmark). For
+now it is Windows-only: it uses 7-Zip, `wmic` and `build.bat` to fetch the tools and to record the
+machine's specs. On other systems, fetch the tools by hand and fill in the specs yourself.
