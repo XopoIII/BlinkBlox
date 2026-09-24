@@ -11,6 +11,7 @@ local RunService = game:GetService("RunService")
 
 ---- Imports ----
 
+local Analysis = require("@self/Analysis")
 local Completion = require("@self/Completion")
 local Diagnostics = require("@self/Diagnostics")
 local Gutter = require("@self/Gutter")
@@ -79,7 +80,6 @@ local LineGutter = Gutter.new(LinesContainer, LineTemplate :: any, TextHeight, T
 
 --> Objects
 local SourceLexer = Lexer.new("Highlighting")
-local SourceParser = Parser.new()
 
 local EditorWidget: DockWidgetPluginGui
 
@@ -96,6 +96,9 @@ local CompletionPending: boolean?
 local IgnoreCursorChange: boolean?
 
 local AnalysisError: State.Class<Error.Class?> = State.new(nil :: any)
+local SourceAnalysis = Analysis.new(function(Diagnostic)
+	AnalysisError:Set(Diagnostic)
+end)
 local RenderedDiagnostic: string?
 local AbstractSyntaxTree: Parser.Body?
 
@@ -121,13 +124,9 @@ local function UpdateColors()
 end
 
 local function UpdateAnalysis()
-	local Success, Result = pcall(function()
-		return SourceParser:Parse(Editor.GetSource())
-	end)
-
-	if Success then
-		AnalysisError:Set(nil)
-		AbstractSyntaxTree = Result
+	local Tree = SourceAnalysis:Run(Editor.GetSource())
+	if Tree then
+		AbstractSyntaxTree = Tree
 	end
 end
 
@@ -145,10 +144,6 @@ local function UpdateHighlightedLine()
 end
 
 ---- Event Functions -----
-
-local function OnErrorEmitted(Object: Error.Class)
-	AnalysisError:Set(Object)
-end
 
 local function OnPreRender(DeltaTime: number)
 	if NavigationPending then
@@ -457,7 +452,9 @@ function Editor.Initialize(Widget: DockWidgetPluginGui)
 	Spans.Prepare({ Selection, ErrorSelection })
 
 	--> Connections
-	Error.OnEmit = OnErrorEmitted
+	Error.OnEmit = function(Diagnostic)
+		return SourceAnalysis:Emitted(Diagnostic)
+	end
 
 	Scroll:OnChange(OnScrollChanged)
 	Predictions:OnChange(OnPredictionsChanged)
