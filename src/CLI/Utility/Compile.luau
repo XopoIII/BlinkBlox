@@ -3,6 +3,7 @@
 ---- Imports ----
 
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local stdio = require("@lune/stdio")
 
 local Attributes = require("../../Modules/Attributes")
@@ -11,6 +12,7 @@ local Generator = require("../../Generator")
 local GetDefinitionFilePath = require("./GetDefinitionFilePath")
 local Parser = require("../../Parser")
 local PathParser = require("../../Modules/Path")
+local Report = require("./Report")
 
 ---- Settings ----
 
@@ -22,6 +24,11 @@ export type CompileOptions = {
 	OutputAbstractSyntaxTree: boolean,
 	--> What `@profile` compiles under; nil means the default. See Modules/Attributes.
 	Profile: string?,
+	--> Parse and generate everything, write nothing: `--check`.
+	Check: boolean?,
+	--> Print the diagnostics as one JSON document on standard output instead of rendering them:
+	--> `--json`. See Report.luau.
+	Json: boolean?,
 }
 
 ---- Constants ----
@@ -80,9 +87,18 @@ local function CreateDirectoryIfNotFound(Path: string, Options: CompileOptions)
 	error("User refused prompt to create directory")
 end
 
----- Public Functions ----
+--- Writes one output and records its path. A check writes and records nothing.
+local function Write(Path: string, Contents: string, Options: CompileOptions, Outputs: { string })
+	if Options.Check then
+		return
+	end
 
-function Utility.Compile(Path: string, Options: CompileOptions)
+	fs.writeFile(Path, Contents)
+	table.insert(Outputs, PathParser.Normalise(Path))
+end
+
+--- The whole compile. `Outputs` collects every path written, for `--json` to report.
+local function Build(Path: string, Options: CompileOptions, Outputs: { string })
 	local FilePath = GetDefinitionFilePath(Path)
 	Error.SetCompact(Options.Compact)
 
@@ -91,8 +107,10 @@ function Utility.Compile(Path: string, Options: CompileOptions)
 
 	Message("blue", Options, "Parsing source into AST...")
 	local FileDirectory = PathParser.Directory(FilePath) or "./"
-	local SourceParser =
-		Parser.new(FileDirectory, PathParser.NameWithExtension(FilePath), nil, Attributes.new(Options.Profile))
+
+	--> The path as given, normalised, rather than the bare file name: every diagnostic names this
+	--> file, and a name alone cannot be opened from wherever the compiler was run.
+	local SourceParser = Parser.new(FileDirectory, PathParser.Normalise(FilePath), nil, Attributes.new(Options.Profile))
 
 	local ParseStart = os.clock()
 	local AbstractSyntaxTree = SourceParser:Parse(Source)
@@ -108,8 +126,14 @@ function Utility.Compile(Path: string, Options: CompileOptions)
 	local ClientOutputPath = FileOptions.ClientOutput
 	local ServerOutputPath = FileOptions.ServerOutput
 
-	assert(ClientOutputPath, "A client output path must be defined.")
-	assert(ServerOutputPath, "A server output path must be defined.")
+	--> Level 0: the line of this file that noticed is no help to someone whose schema lacks the option.
+	if not ClientOutputPath then
+		error("A client output path must be defined.", 0)
+	end
+
+	if not ServerOutputPath then
+		error("A server output path must be defined.", 0)
+	end
 
 	local ClientTypescriptPath
 	local ServerTypescriptPath
@@ -149,8 +173,10 @@ function Utility.Compile(Path: string, Options: CompileOptions)
 		ServerOutput = `{FileDirectory}{ServerOutputPath}`
 	end
 
-	CreateDirectoryIfNotFound(ClientOutput, Options)
-	CreateDirectoryIfNotFound(ServerOutput, Options)
+	if not Options.Check then
+		CreateDirectoryIfNotFound(ClientOutput, Options)
+		CreateDirectoryIfNotFound(ServerOutput, Options)
+	end
 
 	Message("blue", Options, "Generating output files...")
 	local FilesStart = os.clock()
@@ -183,20 +209,23 @@ function Utility.Compile(Path: string, Options: CompileOptions)
 	end
 
 	local FilesTime = (os.clock() - FilesStart)
-	fs.writeFile(ServerOutput, ServerSource)
-	fs.writeFile(ClientOutput, ClientSource)
+	Write(ServerOutput, ServerSource, Options, Outputs)
+	Write(ClientOutput, ClientSource, Options, Outputs)
 
 	if TypesSource and TypesOutput then
-		CreateDirectoryIfNotFound(TypesOutput, Options)
-		fs.writeFile(TypesOutput, TypesSource)
+		if not Options.Check then
+			CreateDirectoryIfNotFound(TypesOutput, Options)
+		end
+
+		Write(TypesOutput, TypesSource, Options, Outputs)
 	end
 
 	if ClientTypescriptSource and ServerTypescriptSource then
-		fs.writeFile(ClientTypescriptPath, ClientTypescriptSource)
-		fs.writeFile(ServerTypescriptPath, ServerTypescriptSource)
+		Write(ClientTypescriptPath, ClientTypescriptSource, Options, Outputs)
+		Write(ServerTypescriptPath, ServerTypescriptSource, Options, Outputs)
 	end
 
-	Message("green", Options, "Network files generated!")
+	Message("green", Options, if Options.Check then "Schema checked, nothing written." else "Network files generated!")
 
 	if Options.Debug and not Options.Silent then
 		print(`[DEBUG]: Parsed source in {FormatTime(ParseTime)}.`)
@@ -204,6 +233,41 @@ function Utility.Compile(Path: string, Options: CompileOptions)
 		print(`[DEBUG]: Generated client luau in {FormatTime(ClientGenerateTime)}.`)
 		print(`[DEBUG]: Generated files in {FormatTime(FilesTime)}.`)
 		print(`[DEBUG]: Completed everything in {FormatTime(ParseTime + FilesTime)}.`)
+	end
+end
+
+---- Public Functions ----
+
+function Utility.Compile(Path: string, Options: CompileOptions)
+	if not Options.Json then
+		Build(Path, Options, {})
+		return
+	end
+
+	--> Standard output carries the JSON document and nothing else, so nothing else may print there:
+	--> the progress lines are silenced, and every diagnostic goes to the collector instead.
+	local Quiet = table.clone(Options)
+	Quiet.Silent = true
+	Quiet.Debug = false
+
+	local Collector = Report.Collect()
+	local Outputs: { string } = {}
+	local Success, Why = pcall(function(): nil
+		Build(Path, Quiet, Outputs)
+		return nil
+	end)
+	Error.OnEmit = nil
+
+	--> A diagnostic error has been collected already, and what the pcall caught is the throw that
+	--> aborted the compile after it. Anything else failed outside the schema and is reported as is.
+	if not Success and not Collector.Failed then
+		local Resolved, FilePath = pcall(GetDefinitionFilePath, Path)
+		Report.Fail(Collector, PathParser.Normalise(if Resolved then FilePath else Path), tostring(Why))
+	end
+
+	print(Report.Encode(Collector, Outputs))
+	if Collector.Failed then
+		process.exit(1)
 	end
 end
 

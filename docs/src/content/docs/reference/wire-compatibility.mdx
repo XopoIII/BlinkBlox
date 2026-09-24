@@ -90,7 +90,8 @@ hashes `WIRE_VERSION`, a number the compiler bumps by hand whenever a type's byt
 | 0.27.0 | `boolean[]` packed eight to a byte; `WIRE_VERSION` 2. `CFrame<quat>` added (opt-in, so only schemas that use it are affected). | 0.27.0 onward. |
 | 0.28.0 | Renamed from Blink to BlinkBlox. The remotes keep their names -- `BLINK_RELIABLE_REMOTE`, `BLINK_UNRELIABLE_REMOTE` -- as do `_G._BLINK` and the `SchemaSignature` attribute, so builds either side of the rename still find each other. | 0.27.0 onward. |
 | 0.29.0 | No change to the format. | 0.27.0 onward. |
-| 0.30.0 | `f16` writes -0 as `0x8000` instead of `0x0000`. An older reader decodes it as 0, so builds either side agree on everything but the sign of a zero. | 0.27.0 onward. |
+| 0.30.0 | No change to the format. | 0.27.0 onward. |
+| 0.31.0 | `f16` writes -0 as `0x8000` instead of `0x0000`. An older reader decodes it as 0, so builds either side agree on everything but the sign of a zero. | 0.27.0 onward. |
 
 Modules from different releases with the same `WIRE_VERSION` interoperate, but a fix to how a value is
 read or handled applies only on the side built by the release that has it. Ship both sides from one

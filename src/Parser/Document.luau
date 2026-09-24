@@ -47,7 +47,7 @@ function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
 	table.clear(self.Symbols)
 
 	--> Start the lexer
-	self.Lexer:Initialize(Source)
+	self.Lexer:Initialize(Source, self.File)
 	self.LookAhead = self.Lexer:GetNextToken()
 
 	--> Cast because Luau will not match a metatable-backed type against a structural one, however
@@ -146,7 +146,9 @@ function Parser.Import(self: Parser): ScopeNode
 	end
 
 	local Imported: Body
-	local ImportParser = Parser.new(ImportDirectory, ImportPath, self.Importing, self.Attributes)
+	--> The resolved path, not the one the import wrote: that one is relative to whichever file wrote
+	--> it, so a diagnostic naming it could not be found again from anywhere else.
+	local ImportParser = Parser.new(ImportDirectory, Key, self.Importing, self.Attributes)
 
 	self.Importing[Key] = true
 	local Success, ErrorText = pcall(function()

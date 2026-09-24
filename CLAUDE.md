@@ -186,7 +186,20 @@ and an enum past 256 values wrapped. Before it, the parser cleanup: repeated fla
 are refused, the TypeScript tag is quoted, and a trailing comma is accepted in every list. The wire
 does not change.
 
-0.30.0 came out of reading 2026's research for anything this fork could use, and what it took was
+0.30.0 is for the programs that read the compiler rather than the games that run its output. Talking
+through editor support settled what not to build: no VS Code extension -- upstream never had one of its
+own, the third-party ones know 0.18's syntax and guess at errors with regular expressions -- and no MCP
+server, which the docs had promised, since an assistant that can run a command needs only the
+command. What both wanted was the compiler's diagnostics in a form a program can read, so that is what
+was built. `--check` runs the whole compile and writes nothing; `--json` prints one JSON document,
+every diagnostic with its code, file, line, column and labels, and still a document when the failure
+is a missing file. The released CLI had never handed an error to `Error.OnEmit` -- it printed and
+exited -- so it does now whenever a handler is installed. Doing it turned up that diagnostics could not
+say where they were: the schema was named by its bare file name, an import by the string that
+imported it, and the lexer's one error by `input.blink` whatever the file was called. The docs'
+TextMate grammar, the one thing kept of editor support, learnt the fork's syntax.
+
+0.31.0 came out of reading 2026's research for anything this fork could use, and what it took was
 a way of testing rather than a feature. VUPER (arXiv 2608.09094), a verified parser for ASN.1's
 packed encoding -- the closest relative of this wire format -- states the properties a bit-level
 serialiser must hold, and PBT-Bench (2605.15229) the reason random tests usually miss: a draw has to
@@ -225,6 +238,7 @@ is the actual objection.
 | Format | `stylua src test plugin .lune` |
 | Install git hooks | `lefthook install` |
 | Compile a schema | `lune run init <path-to-.blink> -- --yes` (from `src/CLI`) |
+| Check a schema, diagnostics as JSON | `lune run init <path-to-.blink> -- --check --json` (from `src/CLI`) |
 | Build release binaries | `lune run build` |
 | Docs, locally | `cd docs && npm install && npm run dev` |
 | Build the docs (dead links fail it) | `cd docs && npm run build` |

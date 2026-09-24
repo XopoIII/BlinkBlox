@@ -44,6 +44,14 @@ local ARGUMENTS: { [string]: Argument } = {
 		Aliases = { "-y", "--yes" },
 		Description = "Accept all prompts",
 	},
+	Check = {
+		Aliases = { "--check" },
+		Description = "Check [CONFIG] for errors and warnings without writing any files",
+	},
+	Json = {
+		Aliases = { "--json" },
+		Description = "Print diagnostics as one JSON document on standard output, and nothing else",
+	},
 	Profile = {
 		Aliases = { "-p", "--profile" },
 		Description = "Compile under a profile: dev, debug, test or release (the default). Takes a value.",
@@ -146,6 +154,17 @@ for Index, Argument in RawArguments do
 	end
 end
 
+--> Watch mode runs until it is stopped, so it never gets to the end of a JSON document.
+if Arguments.Json and Arguments.Watch then
+	print(Color(`"--json" cannot be combined with "--watch"`, "red"))
+	process.exit(1)
+end
+
+--> `--json` owns standard output: a banner in front of the document is a document nothing parses.
+if Arguments.Json then
+	Arguments.Silent = true
+end
+
 --> The banner is decoration, and it used to be the FIRST statement in this file -- printed before
 --> the flags that should have governed it were even looked at, so `--quiet` never suppressed it.
 if not Arguments.Silent then
@@ -182,11 +201,13 @@ if not Arguments.Watch then
 		YesToEverything = Arguments.YesToAll,
 		OutputAbstractSyntaxTree = Arguments.OutputAst,
 		Profile = Profile,
+		Check = Arguments.Check,
+		Json = Arguments.Json,
 	}
 
 	Compile.Compile(Path, CompileOptions)
 else
-	Watch.Watch(Path, Profile)
+	Watch.Watch(Path, Profile, Arguments.Check)
 end
 
 return nil

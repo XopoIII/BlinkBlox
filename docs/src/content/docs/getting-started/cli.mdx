@@ -44,7 +44,7 @@ What gets written:
 On success it prints its progress and stops:
 
 ```text
-BlinkBlox 0.30.0
+BlinkBlox 0.31.0
 Reading source from net.blink...
 Parsing source into AST...
 Generating output files...
@@ -75,6 +75,8 @@ not a flag -- `blinkblox --yes net` and `blinkblox net --yes` are the same comma
 | `-q`, `--quiet` | Prints nothing on success: no banner, no progress. Errors and warnings are still printed, `--version` still prints the version, and watch mode still says what it is watching. |
 | `-c`, `--compact` | Prints each diagnostic as a single line instead of the full rendering. See [diagnostics](#diagnostics). |
 | `-y`, `--yes` | Accepts every prompt. The only prompt is [creating a missing output directory](#a-missing-output-directory). |
+| `--check` | Parses and generates everything, and writes nothing -- no modules, no output directories. Reports the same diagnostics and exits with the same code as a real compile. See [checking without writing](#checking-without-writing). |
+| `--json` | Prints the result as one JSON document on standard output instead of rendering diagnostics, and prints nothing else. See [JSON output](#json-output). |
 | `-p`, `--profile` | Compiles under a [profile](/BlinkBlox/language/profiles/): `dev`, `debug`, `test` or `release`. Takes a value: `--profile dev`. Without it the build is `release`. |
 
 Flags are matched whole, so short flags do not combine: write `-q -y`, not `-qy`. An argument the
@@ -111,7 +113,7 @@ event Chat {
 the compiler prints:
 
 ```text
-BlinkBlox 0.30.0
+BlinkBlox 0.31.0
 Reading source from net.blink...
 Parsing source into AST...
 [E3020] Error: Inbound "Chat" has no rate limit
@@ -126,7 +128,9 @@ Parsing source into AST...
 ────╯
 ```
 
-The bracket after the file name is the range of lines in the file -- line 1 to line 11 here -- not
+The file is named by the path it was compiled from, normalised: `blinkblox schemas/net` reports
+`schemas/net.blink`, and an error inside an import names the imported file's own path, not the string
+the `import` wrote. The bracket after the file name is the range of lines in the file -- line 1 to line 11 here -- not
 the position of the error. The line number on the left of the source is the one to look at.
 
 With `--compact`, the same diagnostic is one line, in the form
@@ -136,8 +140,8 @@ With `--compact`, the same diagnostic is one line, in the form
 [E3020] [L005:L005] [net.blink] Error: Inbound "Chat" has no rate limit
 ```
 
-That form is meant for editors and scripts that pick errors out of the output. It carries no
-labels or notes.
+It carries no column, labels or notes. A program that needs those should use
+[`--json`](#json-output) instead.
 
 Warnings (codes starting with `W`) use the same layout in yellow. They do not stop the compile:
 the modules are written, and the warning is printed alongside. Diagnostics go to standard error;
@@ -150,11 +154,107 @@ Every code, and what to do about it, is listed in the
 
 | Code | When |
 |---|---|
-| `0` | The modules were written, or `--help` or `--version` was asked for. Warnings do not change it. |
-| `1` | Anything else: a diagnostic error in the schema, an unknown `--profile`, a schema file that does not exist, a schema without `ServerOutput` or `ClientOutput`, or a refused directory prompt. |
+| `0` | The modules were written (or, with `--check`, would have been), or `--help` or `--version` was asked for. Warnings do not change it. |
+| `1` | Anything else: a diagnostic error in the schema, an unknown `--profile`, a schema file that does not exist, a schema without `ServerOutput` or `ClientOutput`, a refused directory prompt, or `--json` combined with `--watch`. |
 
-Only diagnostics are rendered as above. The last three are reported as a plain error message
-followed by a stack trace.
+Only diagnostics are rendered as above. A missing schema file or a refused prompt is reported as a
+plain error message followed by a stack trace. Under [`--json`](#json-output) every one of these is
+reported in the document instead.
+
+## Checking without writing
+
+```sh
+blinkblox net --check
+```
+
+`--check` runs the whole compile -- the parse, every analysis, and the generator -- and stops short
+of the disk: no module is written and no output directory is created, so it never prompts. The
+diagnostics and the exit code are the ones a real compile would give, and on success it ends with
+`Schema checked, nothing written.` instead of `Network files generated!`.
+
+Use it wherever the modules on disk should not change: a pre-commit hook, a CI step that only has to
+say whether the schema is valid, or an editor task run on save. It combines with `--watch`, which
+then reports each change without writing anything.
+
+## JSON output
+
+```sh
+blinkblox net --check --json
+```
+
+`--json` prints one JSON document on standard output and nothing else: no banner, no progress, and
+no rendered diagnostics on standard error. It is meant for programs -- an editor task, a CI step, a
+coding assistant -- that need to know exactly where a diagnostic is without parsing the rendered
+form. The exit code is unchanged: `1` when `success` is `false`, `0` otherwise.
+
+For the schema in [Diagnostics](#diagnostics) above, it prints (formatted here; the real output is
+one line):
+
+```json
+{
+  "version": 1,
+  "success": false,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "E3020",
+      "name": "AnalyzeMissingRateLimit",
+      "message": "Inbound \"Chat\" has no rate limit",
+      "file": "net.blink",
+      "range": {
+        "start": { "line": 5, "column": 7, "offset": 122 },
+        "end": { "line": 5, "column": 11, "offset": 126 }
+      },
+      "labels": [
+        {
+          "primary": true,
+          "message": "Add a Rate, in events per second",
+          "range": {
+            "start": { "line": 5, "column": 7, "offset": 122 },
+            "end": { "line": 5, "column": 11, "offset": 126 }
+          }
+        }
+      ],
+      "notes": [
+        "option RequireRates is set, so every inbound event and function must declare one."
+      ]
+    }
+  ],
+  "outputs": []
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `version` | The format's version, `1`. It changes when a field is removed or changes meaning; a new field does not change it. |
+| `success` | `false` if the compile failed, for any reason. Warnings do not make it `false`. |
+| `diagnostics` | Every error and warning, in the order they were raised. A compile stops at its first error, so there is at most one error, after any warnings. |
+| `outputs` | The paths written, normalised. Empty under `--check`, and empty when the compile failed. |
+
+Each diagnostic has:
+
+| Field | Meaning |
+|---|---|
+| `severity` | `"error"` or `"warning"`. |
+| `code` | The code as the rendered form prints it -- `"E3020"`, `"W3019"` -- listed in the [diagnostics reference](/BlinkBlox/reference/diagnostics/). `null` for a failure that is not a diagnostic. |
+| `name` | The code's name in the compiler, such as `"AnalyzeMissingRateLimit"`. `null` when `code` is. |
+| `message` | The headline, without colour codes. |
+| `file` | The file it is in, named as in the [rendered form](#diagnostics). |
+| `range` | Where the primary label points, or `null` when there is none. |
+| `labels` | Every underlined span: the primary one and any secondary ones, each with its `message` and `range`. |
+| `notes` | The `= note:` lines, which say what to do about it. |
+
+A range's `start` is inclusive and its `end` exclusive. `line` and `column` count from 1, as the
+rendered form's line numbers do, and `offset` is the byte offset into the file, counting from 0. A
+column counts bytes, so a tab is one column.
+
+A failure that is not a diagnostic -- a schema file that does not exist, a schema without
+`ServerOutput` -- is reported the same way, with `code`, `name` and `range` set to `null` and the
+error in `message`. Standard output is a JSON document on every run, including the ones that fail
+before the schema is read.
+
+`--json` cannot be combined with `--watch`: watch mode never finishes, so its document would never
+be complete. The compiler refuses the pair and exits with `1`.
 
 ## Watch mode
 
@@ -167,7 +267,7 @@ file it imports changes -- imports of imports included. It prints what it is wat
 starts, and again whenever an edit changes how many imports there are:
 
 ```text
-BlinkBlox 0.30.0
+BlinkBlox 0.31.0
 BlinkBlox is watching for changes:
 	Entry: net.blink
 	Imports: 2

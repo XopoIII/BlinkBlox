@@ -3,8 +3,6 @@ title: AI assistants
 description: Giving Claude Code, Cursor and other coding assistants the BlinkBlox documentation as plain text.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
-
 An assistant that has never seen BlinkBlox will write schemas in some other IDL's syntax, or in
 upstream Blink's, and guess at option names. Give it these docs instead. The site publishes them as
 plain text files, following the [llms.txt](https://llmstxt.org/) convention, rebuilt with every
@@ -55,12 +53,26 @@ file, or point a project rule at it.
 Anything that can read a URL or a file works the same way: paste the `llms-full.txt` link, or attach
 the file. For an assistant with a small context window, use `llms-small.txt`.
 
-Whatever the assistant, have it **compile the schema** after changing it. The compiler's diagnostics
+## Checking its work
+
+Whatever the assistant, have it **check the schema** after changing it. The compiler's diagnostics
 name the rule and the fix (see [Diagnostics](/BlinkBlox/reference/diagnostics/)), and an assistant
 that reads them corrects its own mistakes far more reliably than one working from memory.
 
-<Aside type="note" title="Planned: an MCP server">
-A `blinkblox mcp` command is planned: a Model Context Protocol server that lets an assistant compile a
-schema, read its diagnostics and look up the documentation directly, without shelling out. It is not
-in any release yet.
-</Aside>
+```sh
+blinkblox src/network.blink --check --json
+```
+
+[`--check`](/BlinkBlox/getting-started/cli/#checking-without-writing) runs the whole compile without
+touching the generated modules, and [`--json`](/BlinkBlox/getting-started/cli/#json-output) reports
+each diagnostic with its code, file, line and column, its labels and its notes, as one JSON document
+an assistant can read without picking through box-drawing characters. The exit code says whether the
+schema compiles. Put the command in `CLAUDE.md` or a project rule next to the documentation link:
+
+```md title="CLAUDE.md"
+After changing `src/network.blink`, run `blinkblox src/network.blink --check --json` and fix every
+error and warning it reports before recompiling.
+```
+
+There is no MCP server for BlinkBlox, and none is planned: an assistant that can run a command gets
+everything such a server would offer from the command above and from `llms-full.txt`.

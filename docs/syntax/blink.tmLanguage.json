@@ -4,6 +4,7 @@
 	"scopeName": "source.blink",
 	"patterns": [
 		{ "include": "#comments" },
+		{ "include": "#attributes" },
 		{ "include": "#scope" },
 		{ "include": "#brackets" },
 		{ "include": "#autoClosingPairs" },
@@ -63,6 +64,8 @@
 						{ "include": "#symbols" },
 						{ "include": "#comments" },
 						{ "include": "#brackets" },
+						{ "include": "#numbers" },
+						{ "include": "#attributes" },
 						{
 							"match": "([a-zA-Z_]\\w*):",
 							"captures": { "1": { "name": "variable.other.blink" } }
@@ -154,6 +157,14 @@
 				}
 			]
 		},
+		"attributes": {
+			"patterns": [
+				{
+					"match": "@[a-zA-Z_]\\w*",
+					"name": "entity.name.function.decorator.blink"
+				}
+			]
+		},
 		"keywords": {
 			"patterns": [
 				{
@@ -173,7 +184,7 @@
 		"types": {
 			"patterns": [
 				{
-					"match": "\\b(?:u8|u16|u32|i8|i16|i32|f16|f32|f64|boolean|string|buffer|unknown|Instance|Color3|vector|CFrame|BrickColor|DateTime|DateTimeMillis)\\b",
+					"match": "\\b(?:u8|u16|u32|i8|i16|i32|f16|f32|f64|boolean|string|buffer|unknown|Instance|Color3|vector|CFrame|BrickColor|DateTime|DateTimeMillis|quat)\\b",
 					"name": "storage.type.blink"
 				}
 			]
@@ -181,7 +192,7 @@
 		"setting": {
 			"patterns": [
 				{
-					"match": "\\b(?:Server|Client|Reliable|Unreliable|SingleSync|SingleAsync|ManySync|ManyAsync|Polling|Coroutine|Future|Promise|Pascal|Camel|Snake)\\b",
+					"match": "\\b(?:Server|Client|Reliable|Unreliable|OrderedUnreliable|SingleSync|SingleAsync|ManySync|ManyAsync|Polling|Coroutine|Future|Promise|Pascal|Camel|Snake)\\b",
 					"name": "entity.name.type.enum.blink"
 				}
 			]
@@ -240,7 +251,7 @@
 		"numbers": {
 			"patterns": [
 				{
-					"match": "\\d+?",
+					"match": "\\b\\d+(?:\\.\\d+)?\\b",
 					"name": "constant.numeric.blink"
 				}
 			]
