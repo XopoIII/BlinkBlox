@@ -938,3 +938,12 @@ event LengthFirst {
     Call: SingleSync,
     Data: (Length: u16, s: string)
 }
+
+--> Flags named after locals the readers after them declare. Each flag was recorded as a declared
+--> variable, so the string's reader assigned `Length` without `local` -- a global write.
+set CollidingFlags = { Length, Index }
+export struct FlagCarrier {
+    Flags: CollidingFlags,
+    Text: string,
+    Kind: enum { A, B },
+}

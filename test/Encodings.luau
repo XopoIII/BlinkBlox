@@ -168,3 +168,38 @@ RunClosure("Half floats keep NaN, the infinities and the carry out of a subnorma
 		end
 	end
 end)
+
+RunClosure("A set flag named like a reader's local leaves no global behind", function()
+	--> Each flag was recorded as a declared variable, though it is only ever a table field, so the
+	--> string reader after it assigned `Length` without `local` and the enum reader `Index`: two
+	--> globals written into the module's environment on every read.
+	local ClientEnvironment = require("./Client")
+	local Environment = {
+		game = ClientEnvironment.game,
+		Color3 = ClientEnvironment.Color3,
+		DateTime = ClientEnvironment.DateTime,
+		BrickColor = ClientEnvironment.BrickColor,
+	}
+	local Copy = Modules.MockRequire("../Network/Client.luau", Environment)
+
+	local Sent = { Flags = { Length = true, Index = false }, Text = "hi", Kind = "B" }
+	local Read = Copy.FlagCarrier.Read(Copy.FlagCarrier.Write(Sent :: any))
+
+	if Read.Text ~= "hi" or Read.Kind ~= "B" or Read.Flags.Length ~= true then
+		ErrorPrint(`Failed "Colliding flags": the value did not survive the round trip.`)
+	end
+
+	--> The loader builds the module's environment from the table it is given, so the globals are
+	--> looked for where the module's own functions see them.
+	local Globals = getfenv(Copy.FlagCarrier.Read :: any) :: any
+	local Leaked = {}
+	for _, Name in { "Length", "Index" } do
+		if rawget(Globals, Name) ~= nil then
+			table.insert(Leaked, Name)
+		end
+	end
+
+	if #Leaked > 0 then
+		ErrorPrint(`Failed "Colliding flags": reading wrote the global(s) {table.concat(Leaked, ", ")}.`)
+	end
+end)

@@ -639,6 +639,8 @@ export type Issue33_Enum<T> = { Tag: "Variant", field: ("One" | "Two") }
 export type Issue33_Struct<T> = { field: ("One" | "Two") }
 export type OptionalHoles = { number? }
 export type HalfFloat = number
+export type CollidingFlags = {Length: boolean,Index: boolean,}
+export type FlagCarrier = { Flags: {Length: boolean,Index: boolean,}, Text: string, Kind: ("A" | "B") }
 function SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
 	-- Allocate BLOCK: 8 bytes
 	local BLOCK_START = Allocate(8)
@@ -8037,6 +8039,87 @@ if not RunService:IsRunning() then
 		FireAll = NOOP,
 		FireList = NOOP,
 		FireExcept = NOOP
+	},
+	FlagCarrier = {
+		Read = function(Buffer: buffer): (FlagCarrier)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FlagCarrier)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				-- Value: FlagCarrier
+				local Value = {} :: any
+				-- Value.Flags: Flags
+				Value.Flags = {}
+				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value.Flags.Length = bit32.btest(SET_BITS, 0x1);
+				Value.Flags.Index = bit32.btest(SET_BITS, 0x2);
+				-- Value.Text: Text
+				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Text" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Value.Text = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				-- Value.Kind: Kind
+				Value.Kind = true :: any
+				local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+				if Index == 0 then
+					Value.Kind = "A"
+				elseif Index == 1 then
+					Value.Kind = "B"
+				else
+					error(`Unexpected enum: {Index}`)
+				end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end,
+		Write = function(Value: FlagCarrier): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				-- Value: FlagCarrier
+				-- Value.Flags: Flags
+				local SET_BITS = 0
+				if Value.Flags.Length == true then SET_BITS += 0x1 end
+				if Value.Flags.Index == true then SET_BITS += 0x2 end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, SET_BITS)
+				-- Value.Text: Text
+				if typeof(Value.Text) ~= "string" then
+					error(`Expected Value.Text to be of type string, got {type(Value.Text)} instead.`)
+				end
+				local Length = #Value.Text
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Value.Text, Length)
+				-- Value.Kind: Kind
+				if Value.Kind == "A" then
+					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
+				elseif Value.Kind == "B" then
+					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
+				else
+					error(`Unexpected enum: {Value.Kind}, expected one of "A" or "B".`)
+				end
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
 	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
@@ -16399,6 +16482,87 @@ local Returns = table.freeze({
 				SavePlayerBuffer(Player)
 			end
 		end,
+	},
+	FlagCarrier = {
+		Read = function(Buffer: buffer): (FlagCarrier)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FlagCarrier)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				-- Value: FlagCarrier
+				local Value = {} :: any
+				-- Value.Flags: Flags
+				Value.Flags = {}
+				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value.Flags.Length = bit32.btest(SET_BITS, 0x1);
+				Value.Flags.Index = bit32.btest(SET_BITS, 0x2);
+				-- Value.Text: Text
+				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Text" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Value.Text = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				-- Value.Kind: Kind
+				Value.Kind = true :: any
+				local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+				if Index == 0 then
+					Value.Kind = "A"
+				elseif Index == 1 then
+					Value.Kind = "B"
+				else
+					error(`Unexpected enum: {Index}`)
+				end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end,
+		Write = function(Value: FlagCarrier): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				-- Value: FlagCarrier
+				-- Value.Flags: Flags
+				local SET_BITS = 0
+				if Value.Flags.Length == true then SET_BITS += 0x1 end
+				if Value.Flags.Index == true then SET_BITS += 0x2 end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, SET_BITS)
+				-- Value.Text: Text
+				if typeof(Value.Text) ~= "string" then
+					error(`Expected Value.Text to be of type string, got {type(Value.Text)} instead.`)
+				end
+				local Length = #Value.Text
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Value.Text, Length)
+				-- Value.Kind: Kind
+				if Value.Kind == "A" then
+					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
+				elseif Value.Kind == "B" then
+					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
+				else
+					error(`Unexpected enum: {Value.Kind}, expected one of "A" or "B".`)
+				end
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
 	},
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)

@@ -63,7 +63,9 @@ function Serde.Set(Declaration: Parser.Set, Read: Blocks.Block, Write: Blocks.Bl
 			for Index = 1, Partition do
 				local Flag = Flags[FlagIndex]
 
-				Read:EmptyDeclare(Flag)
+				--> A flag is a table field, never a local, so nothing is declared for it. It used to be
+				--> recorded as a declared variable, and a reader after it that declares a local of the
+				--> same name -- a string's `Length`, an enum's `Index` -- then assigned a global instead.
 				Read:Line(`{Variable}{FormatIndex(Flag)} = bit32.btest(SET_BITS, {BitIndexToHex(Index - 1)});`)
 
 				FlagIndex += 1
