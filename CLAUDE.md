@@ -199,10 +199,27 @@ say where they were: the schema was named by its bare file name, an import by th
 imported it, and the lexer's one error by `input.blink` whatever the file was called. The docs'
 TextMate grammar, the one thing kept of editor support, learnt the fork's syntax.
 
+0.31.0 came out of reading 2026's research for anything this fork could use, and what it took was
+a way of testing rather than a feature. VUPER (arXiv 2608.09094), a verified parser for ASN.1's
+packed encoding -- the closest relative of this wire format -- states the properties a bit-level
+serialiser must hold, and PBT-Bench (2605.15229) the reason random tests usually miss: a draw has to
+land where the bug is. `test/Properties.luau` draws every exported type of Test.blink, leaning on
+the edges (`test/Generate.luau`), into a build with WriteValidations and one without, and judges
+the result by `test/Oracle.luau`, which reads the schema and never the generated code. Round trip,
+size inside the analysis, one encoding per value, every byte read, and corrupted bytes that decode
+only to what the schema admits. Put back into the compiler, the 0.28 length wrap, the 0.29 f16
+carry and the 0.29 closed-up holes each fail it. What it found on its first run: f16 lost the sign
+of zero, and a fixed-length array was cut short on send even under WriteValidations. Taking stock
+for the survey turned up the thesis again: the docs admitted that a 257th declaration on a channel
+compiled and went out with the first one's index. It is now `E3030`. `BLINKBLOX_SEED` replays or varies the draws.
+
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of
-responsibility, not an optimisation.
+responsibility, not an optimisation. If it is ever reopened, the shape is keyframes plus deltas
+against the last keyframe -- as real-time particle streaming does it (DELUGE, arXiv 2609.19750) --
+which bounds the divergence to one keyframe interval. It does not remove the per-player state, which
+is the actual objection.
 
 ## Commands
 
@@ -211,6 +228,7 @@ responsibility, not an optimisation.
 | Install the toolchain | `rokit install` |
 | Run the test suite | `sh scripts/run-tests.sh` |
 | Re-record the output snapshots | `cd test && lune run Test --yes --update-goldens` |
+| Replay or vary the property draws | `cd test && BLINKBLOX_SEED=<n> lune run Test --yes` |
 | Type-check everything | `sh scripts/type-check.sh` |
 | Lint | `selene src test plugin/src .lune` |
 | Check type-checking modes | `sh scripts/check-strict.sh` |

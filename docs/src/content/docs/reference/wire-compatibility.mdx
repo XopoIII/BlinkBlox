@@ -91,6 +91,7 @@ hashes `WIRE_VERSION`, a number the compiler bumps by hand whenever a type's byt
 | 0.28.0 | Renamed from Blink to BlinkBlox. The remotes keep their names -- `BLINK_RELIABLE_REMOTE`, `BLINK_UNRELIABLE_REMOTE` -- as do `_G._BLINK` and the `SchemaSignature` attribute, so builds either side of the rename still find each other. | 0.27.0 onward. |
 | 0.29.0 | No change to the format. | 0.27.0 onward. |
 | 0.30.0 | No change to the format. | 0.27.0 onward. |
+| 0.31.0 | `f16` writes -0 as `0x8000` instead of `0x0000`. An older reader decodes it as 0, so builds either side agree on everything but the sign of a zero. | 0.27.0 onward. |
 
 Modules from different releases with the same `WIRE_VERSION` interoperate, but a fix to how a value is
 read or handled applies only on the side built by the release that has it. Ship both sides from one
@@ -99,6 +100,7 @@ release.
 ## One byte per event index
 
 Each channel numbers its declarations with a single byte: reliable events and functions share one
-channel, `Unreliable` and `OrderedUnreliable` events the other. Keep each channel to 256
-declarations. The compiler does not refuse more yet, and a 257th would be sent with the first one's
+channel, `Unreliable` and `OrderedUnreliable` events the other. So each channel holds at most 256
+declarations, counting what the schema imports and not counting what its profile leaves out. The
+compiler refuses a 257th (`E3030`); before 0.30.0 it compiled, and was sent with the first one's
 index.

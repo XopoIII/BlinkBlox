@@ -7,6 +7,40 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.31.0 — 2026-09-24
+
+Property-based tests for every serialiser, and what they found. **The wire format does not change**:
+modules from 0.27.0 onward still talk to each other.
+
+### Fixed
+
+- **A 257th declaration on a channel was sent as the first.** Each channel numbers its declarations
+  with one byte, and nothing refused the 257th, so the receiver decoded it as a different event. It
+  is now a compile error, `E3030`. Imports count toward the limit, and declarations a profile leaves
+  out do not.
+- `f16` lost the sign of zero: -0 arrived as +0. It is now written as `0x8000`, which an older
+  reader still decodes as 0.
+- Under `WriteValidations`, a fixed-length array longer than its length was cut short on send
+  instead of refused. Without `WriteValidations` it is still cut short, as an exact-length string is.
+- A function or event whose data is an empty type pack, `Data: ()`, read an undeclared global in its
+  reader: nil at runtime, but a type error in the `--!strict` generated module.
+
+### Tests
+
+- Every exported type of the test schema is drawn at random, 100 times, into two builds: one with
+  `WriteValidations` on and one with the defaults. Draws lean on the edges: a range's own bounds,
+  lengths of 255 and 256, f16 subnormals, NaN and -0.
+- Each draw must be written into the size the compiler's analysis allows, read back as itself,
+  and re-written to the same bytes. The encoding must also be impossible to decode one byte short.
+- Corrupted bytes must either fail to decode, or decode to a value the schema admits and the sender
+  would write.
+- A value the receiver would not accept, such as a length past its bound or a float that needs
+  rounding, may be refused. What is written anyway must be read to its last byte, and under
+  `WriteValidations` must arrive as what was sent.
+- The tests catch each of three earlier serialiser bugs when it is put back into the compiler: the
+  0.28.0 length prefix that wrapped, the 0.29.0 f16 carry, and the 0.29.0 holes in optional arrays.
+  `BLINKBLOX_SEED` replays or varies the draws.
+
 ## 0.30.0 — 2026-09-24
 
 Tooling for the programs that read the compiler's output: editor tasks, CI steps and coding

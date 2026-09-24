@@ -317,6 +317,19 @@ function Serde.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Block
 		end
 	else
 		Read:Line(`local Length = {Upper}`)
+
+		--> A fixed length sends no prefix, so a longer array cannot corrupt the packet -- it is cut
+		--> to its first elements, silently. Under WriteValidations that is refused instead. `#` is
+		--> meaningless across an optional's holes, so there every index is checked.
+		if State.Options.WriteValidations then
+			if Of.Type == "Optional" then
+				Write:Line(
+					`for Key in {Variable} do if type(Key) == "number" and Key > {Upper} then error(\`Expected "{Variable}" to hold at most {Upper} elements, got one at index \{Key} instead.\`) end end`
+				)
+			else
+				Write:Line(Prefabs.Asserts.string(Variable, Upper, Upper).Exact :: string)
+			end
+		end
 	end
 
 	--> Array

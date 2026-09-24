@@ -112,6 +112,7 @@ local Error = {
 	AnalyzeExcludedReference = 3027,
 	AnalyzeMisplacedAttribute = 3028,
 	AnalyzeEnumSize = 3029,
+	AnalyzeChannelSize = 3030,
 }
 
 Error.__index = Error

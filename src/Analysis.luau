@@ -303,8 +303,71 @@ local function Rotations(Source: string, File: string?, Declarations: { Declarat
 	end)
 end
 
+--- How many declarations one channel can number: the index travels as a single byte.
+local CHANNEL_CAPACITY = 256
+
+--- Refuses a channel with more declarations than its one-byte index can number.
+---
+--- Reliable events and functions share one channel, Unreliable and OrderedUnreliable events the
+--- other, and each numbers its declarations 0 to 255 in the order the generator meets them. Nothing
+--- stopped a 257th: it went out with the first one's index, and the receiver decoded it as that
+--- event -- the same silent misreading the schema signature exists to prevent, with nothing for the
+--- signature to catch, since both sides agree on it.
+---
+--- The count is the generator's own walk (see `Collect` in Modules/Signature.luau), so unlike the
+--- checks above it DOES descend into imported scopes: an import takes indices like anything written
+--- here. An overflow inside one is reported at its `import`, the only span this file has for it. A
+--- file that overflows on its own is refused by its own parse first.
+local function Channels(Source: string, File: string?, Declarations: { Declaration })
+	local Counts = { Reliable = 0, Unreliable = 0 }
+
+	local function Visit(List: { Declaration }, Import: Token?)
+		for _, Declaration in List do
+			local Value = Declaration.Value
+
+			if Declaration.Type == "Scope" then
+				Visit(Value.Values, Import or (if Value.Imported then Declaration.Tokens.Path else nil))
+				continue
+			elseif Declaration.Type ~= "Event" and Declaration.Type ~= "Function" then
+				continue
+			end
+
+			local Unreliable = Declaration.Type == "Event"
+				and (Value.Type == "Unreliable" or Value.Type == "OrderedUnreliable")
+			local Channel = if Unreliable then "Unreliable" else "Reliable"
+			Counts[Channel] += 1
+
+			if Counts[Channel] <= CHANNEL_CAPACITY then
+				continue
+			end
+
+			local Noun = if Unreliable then "unreliable events" else "reliable events and functions"
+
+			local Diagnostic = Error.new(Error.AnalyzeChannelSize, Source, `Too many {Noun}`, File)
+
+			if Import then
+				Diagnostic:Primary(Import, `This import brings the channel past {CHANNEL_CAPACITY}`)
+			else
+				Diagnostic:Primary(Declaration.Tokens.Identifier, `This is number {Counts[Channel]} on its channel`)
+			end
+
+			Diagnostic:Note(
+				`Each channel numbers its declarations with one byte, so it holds at most {CHANNEL_CAPACITY}: `
+					.. "the next would be sent with the first one's index."
+			)
+				:Note(
+					"Reliable events and functions share a channel; Unreliable and OrderedUnreliable events share the other."
+				)
+				:Emit()
+		end
+	end
+
+	Visit(Declarations, nil)
+end
+
 --- Every check, in the order the parser has always run them.
 local function Run(Source: string, File: string?, Declarations: { Declaration }, Options: Options)
+	Channels(Source, File, Declarations)
 	UnreliableSizes(Source, File, Declarations, Options)
 	RateLimits(Source, File, Declarations, Options)
 	CostlessRepetitions(Source, File, Declarations)
@@ -313,6 +376,7 @@ local function Run(Source: string, File: string?, Declarations: { Declaration },
 end
 
 return {
+	Channels = Channels,
 	RateLimits = RateLimits,
 	UnreliableSizes = UnreliableSizes,
 	CostlessRepetitions = CostlessRepetitions,

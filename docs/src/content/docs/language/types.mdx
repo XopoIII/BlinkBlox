@@ -160,7 +160,8 @@ lists the largest integer each type represents exactly.
 |`f64`|`8 bytes`|`9,007,199,254,740,992`|about `1.8e308`|
 
 A range on a float may go past the exact-integer limit, and an open side of one, as in `f32(0..)`, is
-not bounded at all. A value past `65,504` sent as an `f16` arrives as infinity.
+not bounded at all. A value past `65,504` sent as an `f16` arrives as infinity. Every float type
+carries `NaN`, both infinities and `-0`, though a ranged float refuses `NaN`.
 
 <Aside>
 Luau stores every number as an `f64`, so `f64` is lossless and the smaller floats round.
@@ -281,7 +282,9 @@ type RecentIds = f64[..50]
 type Corners = vector[4]
 ```
 
-`[4]` is exactly four elements and sends no length. A variable length is sent like a string's, and an
+`[4]` is exactly four elements and sends no length. Like an exact-length string, a longer array is
+refused on send under [`WriteValidations`](/BlinkBlox/language/options/#writevalidations) and cut to
+its first elements without it. A variable length is sent like a string's, and an
 array holds at most 65535 elements. Before allocating, the receiver checks the length against what the
 rest of the packet can hold, so a length prefix of 65535 on a two-byte packet buys nothing.
 

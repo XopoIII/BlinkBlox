@@ -235,6 +235,13 @@ function Generators.Event(
 	local Type, Values, _, Returns = "nil", "Value: nil", nil, "nil"
 	if Data then
 		Type, Values, _, Returns = Generators.LuauType(Data, true, nil, true)
+
+		--> An empty pack, `Data: ()`, names the placeholder `Value` for its parameter lists, where it
+		--> is declared. The reader has no such parameter, so returning it read an undeclared global:
+		--> nil at runtime, and a type error in the `--!strict` module a game's editor checks.
+		if Data.Type == "Tuple" and #(Data :: Parser.Tuple).Value.Values == 0 then
+			Returns = "nil"
+		end
 	end
 
 	local Arguments = `{Values}{Function and ", InvocationIdentifier: number" or ""}`

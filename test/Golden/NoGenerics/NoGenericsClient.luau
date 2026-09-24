@@ -532,7 +532,7 @@ function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Flo
 		elseif Value.Float16Field ~= Value.Float16Field then
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
 		elseif Value.Float16Field == 0 then
-			buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
 		else
 			local float = Value.Float16Field
 			local Abosulte = math.abs(float)
@@ -568,6 +568,7 @@ function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Flo
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value.Nested.Guh)
 	-- Value.Nested.Array: Array
 	-- START ARRAY
+	if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
 		-- Allocate BLOCK: 1 bytes
 	local ARRAY_START_1 = Allocate(1 * 10)
 	for Index = 1, 10 do
@@ -587,6 +588,7 @@ function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Flo
 	if Value.Nested.OptionalArray ~= nil then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
+		if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
 			-- Allocate BLOCK: 1 bytes
 		local ARRAY_START_2 = Allocate(1 * 2)
 		for Index = 1, 2 do
@@ -639,7 +641,7 @@ function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: nu
 		elseif Value.Float16Field ~= Value.Float16Field then
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
 		elseif Value.Float16Field == 0 then
-			buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
 		else
 			local float = Value.Float16Field
 			local Abosulte = math.abs(float)
@@ -675,6 +677,7 @@ function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: nu
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value.Nested.Guh)
 	-- Value.Nested.Array: Array
 	-- START ARRAY
+	if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
 		-- Allocate BLOCK: 1 bytes
 	local ARRAY_START_1 = Allocate(1 * 10)
 	for Index = 1, 10 do
@@ -694,6 +697,7 @@ function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: nu
 	if Value.Nested.OptionalArray ~= nil then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
+		if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
 			-- Allocate BLOCK: 1 bytes
 		local ARRAY_START_2 = Allocate(1 * 2)
 		for Index = 1, 2 do
@@ -755,7 +759,7 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 		elseif MantissaExponent > 0b0_11111_0000000000 then
 			Value.Float16Field = 0 / 0
 		elseif MantissaExponent == 0b0_00000_0000000000   then
-			Value.Float16Field = 0
+			Value.Float16Field = if Encoded == 0 then 0 else -0
 		else
 			local Mantissa = MantissaExponent % 0x400
 			local Exponent = MantissaExponent // 0x400
@@ -852,7 +856,7 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 		elseif MantissaExponent > 0b0_11111_0000000000 then
 			Value.Float16Field = 0 / 0
 		elseif MantissaExponent == 0b0_00000_0000000000   then
-			Value.Float16Field = 0
+			Value.Float16Field = if Encoded == 0 then 0 else -0
 		else
 			local Mantissa = MantissaExponent % 0x400
 			local Exponent = MantissaExponent // 0x400
@@ -1541,7 +1545,7 @@ function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field:
 			elseif MantissaExponent > 0b0_11111_0000000000 then
 				Value.Float16Field = 0 / 0
 			elseif MantissaExponent == 0b0_00000_0000000000   then
-				Value.Float16Field = 0
+				Value.Float16Field = if Encoded == 0 then 0 else -0
 			else
 				local Mantissa = MantissaExponent % 0x400
 				local Exponent = MantissaExponent // 0x400
@@ -1647,7 +1651,7 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 			elseif MantissaExponent > 0b0_11111_0000000000 then
 				Item_1.Float16Field = 0 / 0
 			elseif MantissaExponent == 0b0_00000_0000000000   then
-				Item_1.Float16Field = 0
+				Item_1.Float16Field = if Encoded == 0 then 0 else -0
 			else
 				local Mantissa = MantissaExponent % 0x400
 				local Exponent = MantissaExponent // 0x400
@@ -1759,7 +1763,7 @@ function SerdesFunctions.ReadEVENT_ReferenceOptional(): ({ Field: number?, Float
 			elseif MantissaExponent > 0b0_11111_0000000000 then
 				Value.Float16Field = 0 / 0
 			elseif MantissaExponent == 0b0_00000_0000000000   then
-				Value.Float16Field = 0
+				Value.Float16Field = if Encoded == 0 then 0 else -0
 			else
 				local Mantissa = MantissaExponent % 0x400
 				local Exponent = MantissaExponent // 0x400

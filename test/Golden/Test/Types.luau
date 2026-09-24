@@ -1409,7 +1409,7 @@ return {
 				elseif MantissaExponent > 0b0_11111_0000000000 then
 					X = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
-					X = 0
+					X = if Encoded == 0 then 0 else -0
 				else
 					local Mantissa = MantissaExponent % 0x400
 					local Exponent = MantissaExponent // 0x400
@@ -1434,7 +1434,7 @@ return {
 				elseif MantissaExponent > 0b0_11111_0000000000 then
 					Y = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
-					Y = 0
+					Y = if Encoded == 0 then 0 else -0
 				else
 					local Mantissa = MantissaExponent % 0x400
 					local Exponent = MantissaExponent // 0x400
@@ -1459,7 +1459,7 @@ return {
 				elseif MantissaExponent > 0b0_11111_0000000000 then
 					Z = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
-					Z = 0
+					Z = if Encoded == 0 then 0 else -0
 				else
 					local Mantissa = MantissaExponent % 0x400
 					local Exponent = MantissaExponent // 0x400
@@ -1506,7 +1506,7 @@ return {
 				elseif Position.X ~= Position.X then
 					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
 				elseif Position.X == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Position.X < 0 then 0x8000 else 0)
 				else
 					local float = Position.X
 					local Abosulte = math.abs(float)
@@ -1528,7 +1528,7 @@ return {
 				elseif Position.Y ~= Position.Y then
 					buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000001)
 				elseif Position.Y == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, 0)
+					buffer.writeu16(SendBuffer, BLOCK_START + 2, if 1 / Position.Y < 0 then 0x8000 else 0)
 				else
 					local float = Position.Y
 					local Abosulte = math.abs(float)
@@ -1550,7 +1550,7 @@ return {
 				elseif Position.Z ~= Position.Z then
 					buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000001)
 				elseif Position.Z == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, 0)
+					buffer.writeu16(SendBuffer, BLOCK_START + 4, if 1 / Position.Z < 0 then 0x8000 else 0)
 				else
 					local float = Position.Z
 					local Abosulte = math.abs(float)
@@ -1603,7 +1603,7 @@ return {
 				elseif MantissaExponent > 0b0_11111_0000000000 then
 					X = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
-					X = 0
+					X = if Encoded == 0 then 0 else -0
 				else
 					local Mantissa = MantissaExponent % 0x400
 					local Exponent = MantissaExponent // 0x400
@@ -1628,7 +1628,7 @@ return {
 				elseif MantissaExponent > 0b0_11111_0000000000 then
 					Y = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
-					Y = 0
+					Y = if Encoded == 0 then 0 else -0
 				else
 					local Mantissa = MantissaExponent % 0x400
 					local Exponent = MantissaExponent // 0x400
@@ -1653,7 +1653,7 @@ return {
 				elseif MantissaExponent > 0b0_11111_0000000000 then
 					Z = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
-					Z = 0
+					Z = if Encoded == 0 then 0 else -0
 				else
 					local Mantissa = MantissaExponent % 0x400
 					local Exponent = MantissaExponent // 0x400
@@ -1700,7 +1700,7 @@ return {
 				elseif Position.X ~= Position.X then
 					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
 				elseif Position.X == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Position.X < 0 then 0x8000 else 0)
 				else
 					local float = Position.X
 					local Abosulte = math.abs(float)
@@ -1722,7 +1722,7 @@ return {
 				elseif Position.Y ~= Position.Y then
 					buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000001)
 				elseif Position.Y == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, 0)
+					buffer.writeu16(SendBuffer, BLOCK_START + 2, if 1 / Position.Y < 0 then 0x8000 else 0)
 				else
 					local float = Position.Y
 					local Abosulte = math.abs(float)
@@ -1744,7 +1744,7 @@ return {
 				elseif Position.Z ~= Position.Z then
 					buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000001)
 				elseif Position.Z == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, 0)
+					buffer.writeu16(SendBuffer, BLOCK_START + 4, if 1 / Position.Z < 0 then 0x8000 else 0)
 				else
 					local float = Position.Z
 					local Abosulte = math.abs(float)
@@ -2212,6 +2212,7 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Value: SizeFixedArray
 				-- START ARRAY
+				if #Value ~= 4 then error(`Expected length of "Value" to be equal to 4, got {#Value} instead.`) end
 					-- Allocate BLOCK: 1 bytes
 				local ARRAY_START_1 = Allocate(1 * 4)
 				for Index = 1, 4 do
@@ -3583,6 +3584,7 @@ return {
 				local BLOCK_START = Allocate(2)
 				-- Value: PackedFixed
 				-- START ARRAY
+				if #Value ~= 10 then error(`Expected length of "Value" to be equal to 10, got {#Value} instead.`) end
 				do
 					local PACKED_LENGTH = 10
 					local PACKED_OFFSET = BLOCK_START + 0
@@ -3989,6 +3991,7 @@ return {
 				if Value.B then BITFIELD_0 += 0x02 end
 				-- Value.Fixed: Fixed
 				-- START ARRAY
+				if #Value.Fixed ~= 3 then error(`Expected length of "Value.Fixed" to be equal to 3, got {#Value.Fixed} instead.`) end
 				do
 					local PACKED_LENGTH = 3
 					local PACKED_OFFSET = BLOCK_START + 3
@@ -4564,6 +4567,7 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Value: OptionalHoles
 				-- START ARRAY
+				for Key in Value do if type(Key) == "number" and Key > 3 then error(`Expected "Value" to hold at most 3 elements, got one at index {Key} instead.`) end end
 					-- Allocate BLOCK: 1 bytes
 				local ARRAY_START_1 = Allocate(1 * 3)
 				for Index = 1, 3 do
@@ -4620,7 +4624,7 @@ return {
 				elseif MantissaExponent > 0b0_11111_0000000000 then
 					Value = 0 / 0
 				elseif MantissaExponent == 0b0_00000_0000000000   then
-					Value = 0
+					Value = if Encoded == 0 then 0 else -0
 				else
 					local Mantissa = MantissaExponent % 0x400
 					local Exponent = MantissaExponent // 0x400
@@ -4660,7 +4664,7 @@ return {
 				elseif Value ~= Value then
 					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
 				elseif Value == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value < 0 then 0x8000 else 0)
 				else
 					local float = Value
 					local Abosulte = math.abs(float)

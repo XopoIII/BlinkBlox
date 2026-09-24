@@ -75,8 +75,14 @@ Types.f16 = {
 				"Greater"
 			)
 			:Line(`{Variable} = 0 / 0`)
-			:Branch("Conditional", "MantissaExponent", "0b0_00000_0000000000  ", "Equals")
-			:Line(`{Variable} = 0`)
+			--> Zero keeps its sign, as it does in f32 and f64: 0x8000 is -0.
+			:Branch(
+				"Conditional",
+				"MantissaExponent",
+				"0b0_00000_0000000000  ",
+				"Equals"
+			)
+			:Line(`{Variable} = if Encoded == 0 then 0 else -0`)
 			:Branch("Default")
 			:Lines({
 				"local Mantissa = MantissaExponent % 0x400\n",
@@ -94,14 +100,23 @@ Types.f16 = {
 	end,
 	Write = function(Value: string, Block: Block)
 		local Allocation = Block:Allocate(HALF_FLOAT)
-		Block:Compare(Value, "65504", "Greater")
+		Block
+			:Compare(Value, "65504", "Greater")
 			:Line(`buffer.writeu16({SEND_BUFFER}, {Allocation}, 0b0_11111_0000000000)`)
 			:Branch("Conditional", Value, "-65504", "Less")
 			:Line(`buffer.writeu16({SEND_BUFFER}, {Allocation}, 0b1_11111_0000000000)`)
 			:Branch("Conditional", Value, Value, "Not")
 			:Line(`buffer.writeu16({SEND_BUFFER}, {Allocation}, 0b1_11111_0000000001)`)
-			:Branch("Conditional", Value, "0", "Equals")
-			:Line(`buffer.writeu16({SEND_BUFFER}, {Allocation}, 0)`)
+			--> `-0 == 0`, so the sign of a zero is read off its reciprocal. Written as 0 it came back as
+			--> +0; an older reader decodes 0x8000 as 0, so builds either side still agree on everything
+			--> but the sign.
+			:Branch(
+				"Conditional",
+				Value,
+				"0",
+				"Equals"
+			)
+			:Line(`buffer.writeu16({SEND_BUFFER}, {Allocation}, if 1 / {Value} < 0 then 0x8000 else 0)`)
 			:Branch("Default")
 			:Line(`local float = {Value}`)
 			:Lines({
