@@ -351,9 +351,9 @@ return {
 				error(`Expected Value to be of type Color3, got {type(Value)} instead.`)
 			end
 			local Color = Value
-			buffer.writeu8(SendBuffer, BLOCK_START + 0, Color.R * 255)
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, Color.G * 255)
-			buffer.writeu8(SendBuffer, BLOCK_START + 2, Color.B * 255)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, math.clamp(math.round(Color.G * 255), 0, 255))
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, math.clamp(math.round(Color.B * 255), 0, 255))
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
 			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)

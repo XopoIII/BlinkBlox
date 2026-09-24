@@ -3166,9 +3166,9 @@ if not RunService:IsRunning() then
 				error(`Expected Value to be of type Color3, got {type(Value)} instead.`)
 			end
 			local Color = Value
-			buffer.writeu8(SendBuffer, BLOCK_START + 0, Color.R * 255)
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, Color.G * 255)
-			buffer.writeu8(SendBuffer, BLOCK_START + 2, Color.B * 255)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, math.clamp(math.round(Color.G * 255), 0, 255))
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, math.clamp(math.round(Color.B * 255), 0, 255))
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
 			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
@@ -3239,15 +3239,15 @@ if not RunService:IsRunning() then
 				-- Allocate 1
 				local OPERATION_OFFSET_0 = ARRAY_START_1
 				ARRAY_START_1 += 1
-				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Color.R * 255)
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, math.clamp(math.round(Color.R * 255), 0, 255))
 				-- Allocate 1
 				local OPERATION_OFFSET_1 = ARRAY_START_1
 				ARRAY_START_1 += 1
-				buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, Color.G * 255)
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, math.clamp(math.round(Color.G * 255), 0, 255))
 				-- Allocate 1
 				local OPERATION_OFFSET_2 = ARRAY_START_1
 				ARRAY_START_1 += 1
-				buffer.writeu8(SendBuffer, OPERATION_OFFSET_2, Color.B * 255)
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_2, math.clamp(math.round(Color.B * 255), 0, 255))
 			end
 			-- END ARRAY
 			-- Buffer restore
@@ -6673,9 +6673,9 @@ local Returns = table.freeze({
 				error(`Expected Value to be of type Color3, got {type(Value)} instead.`)
 			end
 			local Color = Value
-			buffer.writeu8(SendBuffer, BLOCK_START + 0, Color.R * 255)
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, Color.G * 255)
-			buffer.writeu8(SendBuffer, BLOCK_START + 2, Color.B * 255)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, math.clamp(math.round(Color.G * 255), 0, 255))
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, math.clamp(math.round(Color.B * 255), 0, 255))
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
 			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
@@ -6746,15 +6746,15 @@ local Returns = table.freeze({
 				-- Allocate 1
 				local OPERATION_OFFSET_0 = ARRAY_START_1
 				ARRAY_START_1 += 1
-				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Color.R * 255)
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, math.clamp(math.round(Color.R * 255), 0, 255))
 				-- Allocate 1
 				local OPERATION_OFFSET_1 = ARRAY_START_1
 				ARRAY_START_1 += 1
-				buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, Color.G * 255)
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, math.clamp(math.round(Color.G * 255), 0, 255))
 				-- Allocate 1
 				local OPERATION_OFFSET_2 = ARRAY_START_1
 				ARRAY_START_1 += 1
-				buffer.writeu8(SendBuffer, OPERATION_OFFSET_2, Color.B * 255)
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_2, math.clamp(math.round(Color.B * 255), 0, 255))
 			end
 			-- END ARRAY
 			-- Buffer restore

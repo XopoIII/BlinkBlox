@@ -819,6 +819,7 @@ require("./ClientDecoding")
 require("./SyncValidation")
 require("./Highlighting")
 require("./WireFormat")
+require("./Encodings")
 require("./Decoding")
 require("./BufferIntegrity")
 

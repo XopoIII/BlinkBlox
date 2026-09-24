@@ -595,10 +595,13 @@ do
 			)
 		end,
 		Write = function(Value: string, Block: Block)
+			--> Rounded, not truncated, and clamped: `writeu8` keeps the low byte, so an HDR channel of
+			--> 2.0 -- which Highlight and neon colours use -- wrapped to 254, and a negative one to near
+			--> 255. A channel written as 127.5 now reaches the other side as 128 rather than 127.
 			Block:Line(`local Color = {Value}`)
-			Types.u8.Write("Color.R * 255", Block)
-			Types.u8.Write("Color.G * 255", Block)
-			Types.u8.Write("Color.B * 255", Block)
+			Types.u8.Write("math.clamp(math.round(Color.R * 255), 0, 255)", Block)
+			Types.u8.Write("math.clamp(math.round(Color.G * 255), 0, 255)", Block)
+			Types.u8.Write("math.clamp(math.round(Color.B * 255), 0, 255)", Block)
 		end,
 	}
 
