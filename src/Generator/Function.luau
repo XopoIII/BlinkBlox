@@ -1,0 +1,347 @@
+--!strict
+--!native
+--!optimize 2
+
+--- Emits one `function`: the invocation on the side that calls, and the listener and its reply on the
+--- side that answers.
+---
+--- Adds `Function` to the Serde table, which the declaration walk in Generators.luau dispatches through.
+local Blocks = require("./Blocks")
+local Builder = require("../Modules/Builder")
+local Decode = require("./Decode")
+local Fragments = require("./Fragments")
+local Generators = require("./Generators")
+local Parser = require("../Parser")
+local Prefabs = require("./Prefabs")
+local Queues = require("./Queue")
+local Serde = require("./Serde")
+local State = require("./State")
+local Util = require("./Util")
+
+type Type = Parser.TypeNode
+
+local DEFAULT_INVOCATION_TIMEOUT = Fragments.DEFAULT_INVOCATION_TIMEOUT
+local Types = Prefabs.Types
+local RateGuardExpression = Decode.RateGuardExpression
+local Declarations = Serde
+
+function Declarations.Function(Declaration: Parser.Function)
+	local Name = Declaration.Name
+	local Value = Declaration.Value
+
+	local DataIdentifier = `FUNCTION_DATA_{Name}`
+	local ReturnIdentifier = `FUNCTION_RETURN_{Name}`
+
+	local Yield = Value.Yield
+	local IsFuture = (Yield == "Future")
+	local IsPromise = (Yield == "Promise")
+
+	if IsFuture and not State.Options.FutureLibrary then
+		error(`Cannot use yield type: "Future", without providing a path to the future library.`)
+	end
+
+	if IsPromise and not State.Options.PromiseLibrary then
+		error(`Cannot use yield type: "Promise", without providing a path to the promise library.`)
+	end
+
+	local Block = State.Reliables
+	local Channel = State.Channels.Reliable
+
+	local Index = Channel.Count
+	local Queue = `Queue.Reliable[{Index}]`
+	local Connection = `Events.Reliable[{Index}]`
+
+	--> WHICH SIDE IS WHICH. `From` names the side that INVOKES; the other side listens. Until this
+	--> existed the answer was always "the client invokes", and the fork below was written as
+	--> `Context == "Server"` -- true only because that meant the same thing.
+	local IsCaller = (Value.From == State.Context)
+	local OnServer = (State.Context == "Server")
+
+	--> A server calling a client needs per-player invocation state, because the id is a u8 the client
+	--> sends back and one shared id space would let a client answer a call made to somebody else. See
+	--> Templates/Server.luau.
+	local ServerCalls = OnServer and IsCaller
+	local ClaimSlot = if ServerCalls then "InvokePlayer(Player)" else "Invoke()"
+	local ReleaseSlot = if ServerCalls
+		then "ReleasePlayerInvocation(Player, InvocationIdentifier)"
+		else "ReleaseInvocation(InvocationIdentifier)"
+	local ParkCaller = if ServerCalls
+		then "ParkInvocation(Player, InvocationIdentifier, coroutine.running())"
+		else "Calls[InvocationIdentifier] = coroutine.running()"
+	local TakeCaller = if ServerCalls
+		then "TakeInvocation(Player, InvocationIdentifier)"
+		else "Calls[InvocationIdentifier]"
+	local ForgetCaller = if ServerCalls then "" else "Calls[InvocationIdentifier] = nil"
+	local ArmTimeout = if ServerCalls
+		then `TimeoutPlayerInvocation(Player, InvocationIdentifier, {State.Options.InvocationTimeout or DEFAULT_INVOCATION_TIMEOUT}, "{Name}")`
+		else `TimeoutInvocation(InvocationIdentifier, {State.Options.InvocationTimeout or DEFAULT_INVOCATION_TIMEOUT}, "{Name}")`
+
+	--> Data and return body
+	local DataTypes, DataValues, _, DataArguments = "nil", "Value: nil", nil, "Value"
+	local ReturnTypes, ReturnValues, _, ReturnArguments = "nil", "ReturnValue: nil", nil, "ReturnValue"
+
+	if Value.Data then
+		DataTypes, DataValues, _, DataArguments = Generators.LuauType(Value.Data :: Type, true)
+	end
+
+	if Value.Return then
+		ReturnTypes, ReturnValues, _, ReturnArguments = Generators.LuauType(Value.Return :: Type, true, "Return")
+	end
+
+	do
+		local DataRead, DataWrite = Generators.Event(Value.Data :: Type, Index, DataIdentifier, "Data")
+		local ReturnRead, ReturnWrite = Generators.Event(Value.Return :: Type, Index, ReturnIdentifier, "Return")
+
+		--> By DIRECTION, not by context. The caller writes the arguments and reads the answer; the
+		--> listener reads the arguments and writes the answer. Keying this on `Context == "Client"`
+		--> was correct only while the client was always the caller.
+		if IsCaller then
+			State.UserTypes.PushLines(DataWrite, 1, 0)
+			State.UserTypes.PushLines(ReturnRead, 1, 0)
+		else
+			State.UserTypes.PushLines(DataRead, 1, 0)
+			State.UserTypes.PushLines(ReturnWrite, 1, 0)
+		end
+	end
+
+	--> Main
+	local Body = Builder.new()
+	local Indent = Util.GetScopeIndent(State.Scope)
+
+	State.Noop.Push(`{Name} = \{`, 0, Indent)
+	Body.Push(`{Name} = \{`, 0, Indent)
+
+	--> Create queue and event branch
+	State.Events.Push(`{Queue} = table.create(256)`)
+	State.Events.Push(`EventNames.Reliable[{Index}] = "{Name}"`)
+	Block = (Channel.Listening == false) and Block:Compare("Index", Index, "Equals")
+		or Block:Branch("Conditional", "Index", Index, "Equals")
+
+	--> Update event block to branch block
+	State.Reliables = Block
+
+	if not IsCaller then
+		--> Data recieve body
+		Types.u8.Read("InvocationIdentifier", Block)
+		Block:Line(`local {DataValues} = {Util.GetPath(DataIdentifier, false, State.Scope)}()`)
+
+		--> A refused invocation still has to be ANSWERED; see Queue.Refuse.
+		local RateGuard = RateGuardExpression(Value, Name)
+		if RateGuard then
+			Queues.Refuse(Block:Line(`if not {RateGuard} then`), Index, Block.Indent + 1):Line("end")
+		end
+
+		--> The listening side passes a Player only when it IS the server. A client listening to a
+		--> function the server invokes has no player to name: the caller is the server.
+		local Caller = if OnServer then "Player, " else ""
+		local Queued = Block:Compare(Connection, "nil", "Not")
+			:Line(`Spawn({Connection}, {Caller}{DataArguments}, InvocationIdentifier)`)
+			:Branch("Default")
+		Queues.Enqueue(Queued, State.Context, Queue, `{Caller}{DataArguments}, InvocationIdentifier`, Name, Index):End()
+
+		--> Data listener body
+		local FlushQueue = Blocks.Function("", "", "()")
+			:Line(`local EventQueue = {Queue} or \{\}`)
+			:Line(`{Queue} = nil`)
+			:Iterator("Index", "Arguments", "EventQueue")
+			:Line(`{Connection}(table.unpack(Arguments))`)
+			:End()
+			:End()
+			:Wrap("Spawn(", ")")
+
+		local Serialize = Blocks.Function("", "")
+			:Line(`{ReturnArguments} = Listener({if OnServer then "Player, " else ""}{DataArguments})`)
+			:End()
+			:Wrap("local Success, Error = pcall(", ")")
+
+		--> Writing the reply. The server holds one send buffer per player and has to swap the right one
+		--> in first; the client has a single buffer aimed at the server and nothing to select.
+		local TrueListener = Blocks.Function(
+			Connection,
+			`{if OnServer then "Player: Player, " else ""}{DataValues}, InvocationIdentifier: number`,
+			"()",
+			true
+		)
+			:Line(`local {ReturnValues};`)
+			:Lines(Serialize.Content, 1)
+
+		if OnServer then
+			TrueListener:Line("Load(PlayersMap[Player])")
+		end
+
+		--> Serialising the reply is protected for the same reason calling the listener is.
+		-->
+		--> It was not, and the gap was the worst shape a gap can take: the return serialiser carries
+		--> the same hard type asserts every write does, so a listener returning the wrong type threw
+		--> from OUTSIDE the pcall above. That skipped the reply and the save both, and the caller --
+		--> who is owed exactly one answer -- got none, waiting out the full invocation timeout for
+		--> what is really an immediate, local, reportable mistake.
+		-->
+		--> Failing the write folds into the failure reply below instead of adding a second path,
+		--> which is also what keeps "exactly one reply, always" true by construction.
+		TrueListener:Compare("Success", "true", "Equals")
+			:Line("local Cursor, Instances = Mark()")
+			:Line(
+				`Success, Error = pcall({Util.GetPath(ReturnIdentifier, true, State.Scope)}, {ReturnArguments}, InvocationIdentifier)`
+			)
+			:Compare("Success", "true", "Not")
+			:Line("Rollback(Cursor, Instances)")
+			:End()
+			:End()
+
+		TrueListener:Compare("Success", "true", "Not")
+			:Line("local Position = Allocate(3)")
+			:Line(`buffer.writeu8(SendBuffer, Position, {Index})`)
+			:Line(`buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)`)
+			:Line(`buffer.writeu8(SendBuffer, Position + 2, 0)`)
+			:Line(`warn(\`"{Name}" encountered an error, \{Error\}\`)`)
+			:End()
+
+		if OnServer then
+			TrueListener:Line("SavePlayerBuffer(Player)")
+		end
+
+		TrueListener:End()
+
+		local ListenerSignature = `Listener: ({if OnServer then "Player, " else ""}{DataTypes}) -> ({ReturnTypes})`
+		local Listener = Blocks.Function(State.Casing.On, ListenerSignature, "()", true)
+			:Lines(TrueListener.Content, 1)
+			:Lines(FlushQueue.Content, 1)
+			:End()
+
+		State.Noop.Push(`{State.Casing.On} = NOOP_RETURNING`, 0, Indent + 1)
+		Body.PushLines(Listener.Content, 0, 2)
+	else
+		--> Return recieve body
+		local Deserialize = Blocks.Function("", "")
+			:Return(`{Util.GetPath(ReturnIdentifier, false, State.Scope)}()`)
+			:End()
+			:Wrap(`local Success, {ReturnArguments} = pcall(`, ")")
+
+		Types.u8.Read("InvocationIdentifier", Block)
+		Block:Lines(Deserialize.Content, Block.Indent + 1)
+		--> The slot is freed before the thread is resumed, so a caller that immediately invokes again
+		--> from inside its own continuation gets a slot rather than an exhaustion error.
+		-->
+		--> The status check is not paranoia: a Promise that was cancelled, or a Future that already
+		--> completed, leaves a thread that is dead or running. `task.spawn` on either of those throws
+		--> from inside the remote handler, where no user pcall can reach it.
+		--> A server looks the reply up in the REPLYING PLAYER's own table, so an id belonging to a call
+		--> made to somebody else simply is not there. That is the check, and it is structural.
+		local Forget = if ForgetCaller ~= "" then { ForgetCaller } else {}
+		Block:Compare(TakeCaller, "nil", "Not")
+			:Line(`local Thread = {TakeCaller}`)
+			:Lines(Forget, 0)
+			:Line(ReleaseSlot)
+			:Compare("coroutine.status(Thread)", `"suspended"`, "Equals")
+			:Line(`task.spawn(Thread, Success, {ReturnArguments})`)
+			:End()
+			:End()
+
+		local Error = `"There was an exception while processing \\"{Name}\\"."`
+		--> A server invoking has to say WHICH client it is asking.
+		local InvokeValues = `{if ServerCalls then "Player: Player, " else ""}{DataValues}`
+		--> Sending the call. Again the server has to select the target player's buffer around the write.
+		local Send = Blocks.Block():Line(`local InvocationIdentifier = {ClaimSlot}`)
+		if ServerCalls then
+			Send:Line("Load(PlayersMap[Player])")
+		end
+
+		--> Releasing the slot when the ARGUMENTS fail to serialise.
+		-->
+		--> The slot is claimed before the write and the caller is parked after it, so a throw in
+		--> between used to strand the slot with nothing outstanding: no entry in `Calls`, so nothing
+		--> for the timeout to find and reclaim. Thirty-two rejected calls -- the same wrong argument
+		--> thirty-two times -- and every later invocation fails for the lifetime of the session.
+		--> This is the one leak the timeout cannot cover, because the timeout is armed after it.
+		Send:Line("local Cursor, Instances = Mark()")
+		Send:Line(
+			`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, State.Scope)}, {DataArguments}, InvocationIdentifier)`
+		)
+		Send:Compare("Sent", "true", "Not")
+			:Line("Rollback(Cursor, Instances)")
+			:Line(ReleaseSlot)
+			:Line("error(Failure, 0)")
+			:End()
+
+		if ServerCalls then
+			Send:Line("SavePlayerBuffer(Player)")
+		end
+
+		local Contents = Send:Line(ParkCaller)
+			:Line(ArmTimeout)
+			:Line(`local Success, {ReturnValues} = coroutine.yield()`)
+			:Compare("Success", "true", "Not")
+			:Line(`error({Error})`)
+			:End()
+			:Return(ReturnArguments).Content
+
+		local Invoke
+		if IsFuture then
+			local Wrapper = Blocks.Function("", ""):Lines(Contents):End():Wrap("return Future.Try(", ")")
+
+			Invoke = Blocks.Function(State.Casing.Invoke, InvokeValues, `Future.Future<boolean, {ReturnTypes}>`, true)
+			Invoke:Lines(Wrapper.Content, 1)
+		elseif IsPromise then
+			--> A cancelled promise gives its slot back too, otherwise cancelling enough calls would
+			--> exhaust the bitset with nothing outstanding.
+			local Cancel = Blocks.Function("", "")
+			if ForgetCaller ~= "" then
+				Cancel:Line(ForgetCaller)
+			end
+
+			local OnCancel = Cancel:Line(ReleaseSlot):End():Wrap("OnCancel(", ")")
+
+			local Promise = Blocks.Function("", "Resolve, Reject, OnCancel")
+				:Line(`local InvocationIdentifier = {ClaimSlot}`)
+			if ServerCalls then
+				Promise:Line("Load(PlayersMap[Player])")
+			end
+
+			Promise:Line("local Cursor, Instances = Mark()")
+			Promise:Line(
+				`local Sent, Failure = pcall({Util.GetPath(DataIdentifier, true, State.Scope)}, {DataArguments}, InvocationIdentifier)`
+			)
+			Promise:Compare("Sent", "true", "Not")
+				:Line("Rollback(Cursor, Instances)")
+				:Line(ReleaseSlot)
+				:Line("error(Failure, 0)")
+				:End()
+
+			if ServerCalls then
+				Promise:Line("SavePlayerBuffer(Player)")
+			end
+
+			Promise:Line(ParkCaller)
+				:Line(ArmTimeout)
+				:Lines(OnCancel.Content, 1)
+				:Line(`local Success, {ReturnValues} = coroutine.yield()`)
+				:Compare("Success", "true", "Not")
+				:Line(`Reject({Error})`)
+				:Return("")
+				:End()
+				:Line(`Resolve({ReturnArguments})`)
+				:End()
+				:Wrap(`return Promise.new(`, ")")
+
+			Invoke = Blocks.Function(State.Casing.Invoke, InvokeValues, nil, true)
+			Invoke:Lines(Promise.Content, 1)
+		else
+			Invoke = Blocks.Function(State.Casing.Invoke, InvokeValues, `({ReturnTypes})`, true)
+			Invoke:Lines(Contents, 0)
+		end
+
+		Invoke:End()
+		State.Noop.Push(`{State.Casing.Invoke} = NOOP`, 0, Indent + 1)
+		Body.PushLines(Invoke.Content, 0, Indent + 1)
+	end
+
+	Channel.Count += 1
+	Channel.Listening = true
+
+	State.Noop.Push(`\},`, 0, Indent)
+	Body.Push(`\},`, 0, Indent)
+	State.Return.PushLines(Body.DumpLines(), 0)
+end
+
+return Declarations

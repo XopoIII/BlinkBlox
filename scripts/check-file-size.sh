@@ -21,8 +21,7 @@ cd "$ROOT"
 LIMIT=500
 
 # path:maximum-lines
-GRANDFATHERED="src/Generator/init.luau:1533
-plugin/src/Editor/init.luau:921
+GRANDFATHERED="plugin/src/Editor/init.luau:921
 test/Test.luau:777
 src/Generator/Prefabs.luau:788
 test/Guards.luau:721

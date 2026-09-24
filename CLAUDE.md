@@ -202,7 +202,10 @@ src/Lexer.luau             tokeniser, pattern table + transformers
 src/AST.luau               the AST's node types, re-exported by Parser
 src/Parser/                recursive descent and semantic analysis, one class across files:
                            Class.luau declares the state and every method, the rest add them
-src/Generator/init.luau    the Luau emitter
+src/Generator/init.luau    the Luau emitter: assembles one module from the parts below
+src/Generator/State.luau   everything one generation run builds up, shared by the files here
+src/Generator/Generators   Luau types and serialisers for declarations, and the declaration walk
+src/Generator/Event.luau   one `event`; Function.luau one `function`; Decode.luau their guards
 src/Generator/Blocks.luau  code-emitting DSL (Block / Function / Connection)
 src/Generator/Prefabs.luau read/write prefabs per primitive, plus range and type asserts
 src/Templates/*.luau       runtime fragments spliced into generated output
