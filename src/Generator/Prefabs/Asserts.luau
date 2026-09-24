@@ -28,8 +28,7 @@ local function Bounds(
 	Max: number,
 	Noun: string,
 	Measure: string,
-	NaNSafe: boolean,
-	EqualTo: string
+	NaNSafe: boolean
 ): AssertPrefab
 	local Subject = `{Noun}"{Variable}"`
 	local Below = if NaNSafe then `not ({Measure} >= {Min})` else `{Measure} < {Min}`
@@ -38,27 +37,27 @@ local function Bounds(
 	return {
 		Lower = `if {Below} then error(\`Expected {Subject} to be larger than or equal to {Min}, got \{{Measure}} instead.\`) end`,
 		Upper = `if {Above} then error(\`Expected {Subject} to be smaller than or equal to {Max}, got \{{Measure}} instead.\`) end`,
-		Exact = `if {Measure} ~= {Max} then error(\`Expected {Subject} to {EqualTo} {Max}, got \{{Measure}} instead.\`) end`,
+		Exact = `if {Measure} ~= {Max} then error(\`Expected {Subject} to be equal to {Max}, got \{{Measure}} instead.\`) end`,
 	}
 end
 
 local Asserts = {
 	number = function(Variable: string, Min: number, Max: number): AssertPrefab
-		return Bounds(Variable, Min, Max, "", Variable, true, "be equal to")
+		return Bounds(Variable, Min, Max, "", Variable, true)
 	end,
 
 	--> `Measure` names the expression to compare. The read path passes the decoded length so the
 	--> bound is checked before the string is read; the write path omits it and measures the value.
 	string = function(Variable: string, Min: number, Max: number, Measure: string?): AssertPrefab
-		return Bounds(Variable, Min, Max, "length of ", Measure or `#{Variable}`, false, "equal to")
+		return Bounds(Variable, Min, Max, "length of ", Measure or `#{Variable}`, false)
 	end,
 
 	vector = function(Variable: string, Min: number, Max: number): AssertPrefab
-		return Bounds(Variable, Min, Max, "magnitude of ", `{Variable}.Magnitude`, true, "equal to")
+		return Bounds(Variable, Min, Max, "magnitude of ", `{Variable}.Magnitude`, true)
 	end,
 
 	buffer = function(Variable: string, Min: number, Max: number, Measure: string?): AssertPrefab
-		return Bounds(Variable, Min, Max, "size of ", Measure or `buffer.len({Variable})`, false, "equal to")
+		return Bounds(Variable, Min, Max, "size of ", Measure or `buffer.len({Variable})`, false)
 	end,
 
 	Instance = function(Variable: string, Class: string): AssertPrefab

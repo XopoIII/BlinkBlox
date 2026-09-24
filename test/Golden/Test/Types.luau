@@ -1026,7 +1026,7 @@ return {
 			-- Value: ExactBuffer
 			local Value = buffer.create(9)
 			buffer.copy(Value, 0, RecieveBuffer, BLOCK_START + 0, 9)
-			if buffer.len(Value) ~= 9 then error(`Expected size of "Value" to equal to 9, got {buffer.len(Value)} instead.`) end
+			if buffer.len(Value) ~= 9 then error(`Expected size of "Value" to be equal to 9, got {buffer.len(Value)} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -1044,7 +1044,7 @@ return {
 			if typeof(Value) ~= "buffer" then
 				error(`Expected Value to be of type buffer, got {type(Value)} instead.`)
 			end
-			if buffer.len(Value) ~= 9 then error(`Expected size of "Value" to equal to 9, got {buffer.len(Value)} instead.`) end
+			if buffer.len(Value) ~= 9 then error(`Expected size of "Value" to be equal to 9, got {buffer.len(Value)} instead.`) end
 			buffer.copy(SendBuffer, BLOCK_START + 0, Value, 0, 9)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
@@ -1883,7 +1883,7 @@ return {
 			-- Buffer read
 			-- Value: SizeFixedString
 			local Value = buffer.readstring(RecieveBuffer, BLOCK_START + 0, 8)
-			if #Value ~= 8 then error(`Expected length of "Value" to equal to 8, got {#Value} instead.`) end
+			if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
 			-- Buffer restore
 			RecieveCursor = PreviousCursor
 			RecieveBuffer = PreviousBuffer
@@ -1901,7 +1901,7 @@ return {
 			if typeof(Value) ~= "string" then
 				error(`Expected Value to be of type string, got {type(Value)} instead.`)
 			end
-			if #Value ~= 8 then error(`Expected length of "Value" to equal to 8, got {#Value} instead.`) end
+			if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
 			buffer.writestring(SendBuffer, BLOCK_START + 0, Value, 8)
 			-- Buffer restore
 			local Result = buffer.create(SendCursor)
