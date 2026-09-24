@@ -99,6 +99,7 @@ misbehaved at runtime -- usually silently -- and is refused at compile time inst
 | `E3022` | A type that refers to itself. | Restructure it; references are inlined, so a type cannot contain itself. |
 | `E3024` | The same option set twice. | Keep one. |
 | `E3029` | An enum with no values, or more than 256. | An enum travels as one byte. |
+| `E3030` | More than 256 reliable events and functions, or more than 256 unreliable events. | Each channel numbers its declarations with one byte; upstream sent the 257th as the first. |
 | `E2003` | A numeric option that is not a positive whole number, or an unknown `Casing`. | Fix the value. |
 
 New warnings are worth reading too. `W3019` means an unreliable event may exceed the ~900-byte limit

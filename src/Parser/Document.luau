@@ -173,7 +173,7 @@ function Parser.Import(self: Parser): ScopeNode
 			Values = Imported.Value.Declarations,
 			Imported = true,
 		},
-		Tokens = {},
+		Tokens = { Path = Path },
 	}
 end
 

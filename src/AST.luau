@@ -175,7 +175,11 @@ export type ScopeNode = Node<
 		--- whatever text happens to sit there.
 		Imported: boolean?,
 	},
-	{}
+	{
+		--- The path string of the `import` statement, for a diagnostic about everything the import
+		--- brought in. Absent on a `scope` block, whose declarations are this file's own.
+		Path: Token?,
+	}
 >
 
 return {}

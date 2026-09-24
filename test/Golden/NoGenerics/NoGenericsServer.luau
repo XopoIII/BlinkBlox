@@ -465,7 +465,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		elseif MantissaExponent > 0b0_11111_0000000000 then
 			Value.Float16Field = 0 / 0
 		elseif MantissaExponent == 0b0_00000_0000000000   then
-			Value.Float16Field = 0
+			Value.Float16Field = if Encoded == 0 then 0 else -0
 		else
 			local Mantissa = MantissaExponent % 0x400
 			local Exponent = MantissaExponent // 0x400
@@ -562,7 +562,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		elseif MantissaExponent > 0b0_11111_0000000000 then
 			Value.Float16Field = 0 / 0
 		elseif MantissaExponent == 0b0_00000_0000000000   then
-			Value.Float16Field = 0
+			Value.Float16Field = if Encoded == 0 then 0 else -0
 		else
 			local Mantissa = MantissaExponent % 0x400
 			local Exponent = MantissaExponent // 0x400
@@ -672,7 +672,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 		elseif Value.Float16Field ~= Value.Float16Field then
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
 		elseif Value.Float16Field == 0 then
-			buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
 		else
 			local float = Value.Float16Field
 			local Abosulte = math.abs(float)
@@ -708,6 +708,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value.Nested.Guh)
 	-- Value.Nested.Array: Array
 	-- START ARRAY
+	if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
 		-- Allocate BLOCK: 1 bytes
 	local ARRAY_START_1 = Allocate(1 * 10)
 	for Index = 1, 10 do
@@ -727,6 +728,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 	if Value.Nested.OptionalArray ~= nil then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
+		if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
 			-- Allocate BLOCK: 1 bytes
 		local ARRAY_START_2 = Allocate(1 * 2)
 		for Index = 1, 2 do
@@ -779,7 +781,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 		elseif Value.Float16Field ~= Value.Float16Field then
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
 		elseif Value.Float16Field == 0 then
-			buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
 		else
 			local float = Value.Float16Field
 			local Abosulte = math.abs(float)
@@ -815,6 +817,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value.Nested.Guh)
 	-- Value.Nested.Array: Array
 	-- START ARRAY
+	if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
 		-- Allocate BLOCK: 1 bytes
 	local ARRAY_START_1 = Allocate(1 * 10)
 	for Index = 1, 10 do
@@ -834,6 +837,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 	if Value.Nested.OptionalArray ~= nil then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
+		if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
 			-- Allocate BLOCK: 1 bytes
 		local ARRAY_START_2 = Allocate(1 * 2)
 		for Index = 1, 2 do
@@ -1076,6 +1080,7 @@ function SerdesFunctions.WriteEVENT_DynamicArray(Value: { { Static: number, Dyna
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 12)
 	-- Value: DynamicArray
 	-- START ARRAY
+	if #Value ~= 12 then error(`Expected length of "Value" to be equal to 12, got {#Value} instead.`) end
 		-- Allocate BLOCK: 3 bytes
 	local ARRAY_START_1 = Allocate(3 * 12)
 	for Index = 1, 12 do
@@ -1281,6 +1286,7 @@ function SerdesFunctions.WriteEVENT_MapComplexEvent(Value: {[string]: { number }
 		buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 		-- Element_1: MapComplex
 		-- START ARRAY
+		if #Element_1 ~= 8 then error(`Expected length of "Element_1" to be equal to 8, got {#Element_1} instead.`) end
 			-- Allocate BLOCK: 1 bytes
 		local ARRAY_START_2 = Allocate(1 * 8)
 		for Index = 1, 8 do
@@ -1357,6 +1363,7 @@ function SerdesFunctions.WriteEVENT_ArrayPrimitive(Value: { number }): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 6)
 	-- Value: ArrayPrimitive
 	-- START ARRAY
+	if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
 		-- Allocate BLOCK: 1 bytes
 	local ARRAY_START_1 = Allocate(1 * 8)
 	for Index = 1, 8 do
@@ -1583,7 +1590,7 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 			elseif Value.Float16Field ~= Value.Float16Field then
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
 			elseif Value.Float16Field == 0 then
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
 			else
 				local float = Value.Float16Field
 				local Abosulte = math.abs(float)
@@ -1619,6 +1626,7 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 		buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Nested.Guh)
 		-- Value.Nested.Array: Array
 		-- START ARRAY
+		if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
 			-- Allocate BLOCK: 1 bytes
 		local ARRAY_START_2 = Allocate(1 * 10)
 		for Index = 1, 10 do
@@ -1638,6 +1646,7 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 		if Value.Nested.OptionalArray ~= nil then
 			-- Value.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
+			if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
 				-- Allocate BLOCK: 1 bytes
 			local ARRAY_START_3 = Allocate(1 * 2)
 			for Index = 1, 2 do
@@ -1665,6 +1674,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 29)
 	-- Value: ReferenceArray
 	-- START ARRAY
+	if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
 		-- Allocate BLOCK: 3 bytes
 	local ARRAY_START_1 = Allocate(3 * 8)
 	for Index = 1, 8 do
@@ -1701,7 +1711,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 			elseif Item_1.Float16Field ~= Item_1.Float16Field then
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
 			elseif Item_1.Float16Field == 0 then
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Item_1.Float16Field < 0 then 0x8000 else 0)
 			else
 				local float = Item_1.Float16Field
 				local Abosulte = math.abs(float)
@@ -1743,6 +1753,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 		buffer.writeu8(SendBuffer, OPERATION_OFFSET_2, Item_1.Nested.Guh)
 		-- Item_1.Nested.Array: Array
 		-- START ARRAY
+		if #Item_1.Nested.Array ~= 10 then error(`Expected length of "Item_1.Nested.Array" to be equal to 10, got {#Item_1.Nested.Array} instead.`) end
 			-- Allocate BLOCK: 1 bytes
 		local ARRAY_START_2 = Allocate(1 * 10)
 		for Index = 1, 10 do
@@ -1762,6 +1773,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 		if Item_1.Nested.OptionalArray ~= nil then
 			-- Item_1.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
+			if #Item_1.Nested.OptionalArray ~= 2 then error(`Expected length of "Item_1.Nested.OptionalArray" to be equal to 2, got {#Item_1.Nested.OptionalArray} instead.`) end
 				-- Allocate BLOCK: 1 bytes
 			local ARRAY_START_3 = Allocate(1 * 2)
 			for Index = 1, 2 do
@@ -1822,7 +1834,7 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 			elseif Value.Float16Field ~= Value.Float16Field then
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
 			elseif Value.Float16Field == 0 then
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
 			else
 				local float = Value.Float16Field
 				local Abosulte = math.abs(float)
@@ -1858,6 +1870,7 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 		buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Nested.Guh)
 		-- Value.Nested.Array: Array
 		-- START ARRAY
+		if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
 			-- Allocate BLOCK: 1 bytes
 		local ARRAY_START_2 = Allocate(1 * 10)
 		for Index = 1, 10 do
@@ -1877,6 +1890,7 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 		if Value.Nested.OptionalArray ~= nil then
 			-- Value.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
+			if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
 				-- Allocate BLOCK: 1 bytes
 			local ARRAY_START_3 = Allocate(1 * 2)
 			for Index = 1, 2 do
@@ -1967,6 +1981,7 @@ function SerdesFunctions.WriteEVENT_Tuple(Value1: number, Value2: ("A" | "B" | "
 	table.insert(SendInstances, Value5 or Null)
 	-- Value6: Tuple
 	-- START ARRAY
+	if #Value6 ~= 8 then error(`Expected length of "Value6" to be equal to 8, got {#Value6} instead.`) end
 		-- Allocate BLOCK: 1 bytes
 	local ARRAY_START_1 = Allocate(1 * 8)
 	for Index = 1, 8 do

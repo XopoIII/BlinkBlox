@@ -87,6 +87,7 @@ it, and `note` lines with the fix. With `--compact` the CLI prints one line inst
 | `E3023` | Type doesn't accept components / Too many components / Unknown or invalid primitive used as component | Components go on `vector` (one) and `CFrame` (two), and must be number types or `quat`. |
 | `E3023` | `quat` is not a type on its own / Only a CFrame's rotation can be a quaternion / A CFrame has one rotation | `quat` is valid only as one component of a `CFrame`. |
 | `E3029` | Too many values / variants, or Empty enum | An enum travels as one byte: it holds 1 to 256 values or variants. |
+| `E3030` | Too many reliable events and functions / Too many unreliable events | A channel numbers its declarations with one byte, so it holds 256. Imports count; declarations a profile leaves out do not. Split the schema's traffic, or move events to the other channel. |
 
 ### Files, options and profiles
 

@@ -242,10 +242,6 @@ that name. Avoid those names.
 | Queued calls with no listener | 256 per function on the server, then answered with a failure |
 | Polled queue on the server | 256 x `Players.MaxPlayers` rows per event |
 | Enum values or tagged-enum variants | 256 |
+| Declarations per channel | 256 (reliable events and functions share one channel, unreliable events the other) |
 | Unbounded string, buffer or array | 65535 bytes or elements |
 
-<Aside type="caution">
-Events are numbered with a one-byte index per channel: reliable events and functions share one
-channel, `Unreliable` and `OrderedUnreliable` events the other. Keep each channel to 256
-declarations. The compiler does not refuse more yet, and the 257th would be sent as the first.
-</Aside>
