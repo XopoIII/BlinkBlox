@@ -276,4 +276,52 @@ RunClosure("A burst of refused events is reported once a second, with its count"
 	end
 end)
 
+RunClosure("What a client can make the server report is limited to once a second", function()
+	--> A malformed packet was warned about before it was charged to the inbound budget, and a packet
+	--> that failed to decode called the game's handler, each once per packet: a client could put a
+	--> line in the output, or a handler call in the game, for every packet it sent.
+	ServerEnvironment.Services.Players.PlayerRemoving:Fire(Shared.Player)
+	task.wait(0.2)
+	Shared.AdvanceClock(10)
+	Shared.DrainWarnings()
+
+	local Remote = ServerEnvironment.Instances.BLINK_RELIABLE_REMOTE
+	for _ = 1, 50 do
+		Remote.OnServerEvent:Fire(Shared.Player, "not a buffer", {})
+	end
+	task.wait(0.2)
+
+	local Malformed = 0
+	for _, Warning in Shared.DrainWarnings() do
+		if string.find(Warning, "malformed packet", 1, true) then
+			Malformed += 1
+		end
+	end
+
+	local Reports = 0
+	Server.SetDecodeErrorHandler(function()
+		Reports += 1
+	end)
+
+	local Truncated = buffer.fromstring(string.char(ReliableIndex("PlainFromClient")))
+	for _ = 1, 50 do
+		Remote.OnServerEvent:Fire(Shared.Player, Truncated, {})
+	end
+	task.wait(0.2)
+	Server.SetDecodeErrorHandler(nil)
+
+	--> Every module on the mock remotes warns once, and an earlier spec loaded a second server.
+	if Malformed < 1 or Malformed > 2 then
+		ErrorPrint(
+			`Failed "Report limits": fifty malformed packets gave {Malformed} warning(s), expected one per module.`
+		)
+	end
+
+	if Reports ~= 1 then
+		ErrorPrint(
+			`Failed "Report limits": fifty undecodable packets called the handler {Reports} time(s), expected 1.`
+		)
+	end
+end)
+
 return {}

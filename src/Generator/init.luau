@@ -124,7 +124,9 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		local function EmitEventCap(Channel: Blocks.Block)
 			Channel:Line("DecodedEvents += 1")
 			Channel:Line(`if DecodedEvents > {MaxEvents} then`)
-			Channel:Line(`\twarn(\`[BlinkBlox]: Dropped the rest of a packet from \{Player.Name\}, too many events.\`)`)
+			Channel:Line(
+				`\tif ShouldReport(Player, "Events") then warn(\`[BlinkBlox]: Dropped the rest of a packet from \{Player.Name\}, too many events.\`) end`
+			)
 			Channel:Line("\tbreak")
 			Channel:Line("end")
 		end
@@ -216,8 +218,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> Close the decode function opened above and act on its result. What is said about it, and to
 	--> whom, is ReportDecodeFailure's business: the server is silent unless the game installed a
 	--> handler, the client warns. See the two templates.
-	local Sender = if State.Context == "Server" then "Player, " else ""
 	local function CloseDecode(Channel: Blocks.Block, Name: string)
+		local Sender = if State.Context == "Server" then `Player, "{Name}", ` else ""
 		Channel:Line("end)")
 		Channel:Line("if not Parsed then")
 		Channel:Line(`\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], Failure)`)

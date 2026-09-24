@@ -127,18 +127,18 @@ local function InboundGuard(Options: Grammar.Options): { string }
 
 	return {
 		'if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then\n',
-		"\twarn(`[BlinkBlox]: Dropped a malformed packet from {Player.Name}.`)\n",
+		'\tif ShouldReport(Player, "Malformed") then warn(`[BlinkBlox]: Dropped a malformed packet from {Player.Name}.`) end\n',
 		"\treturn\n",
 		"end\n",
 		`if buffer.len(Buffer) > {MaxPacketSize} then\n`,
-		"\twarn(`[BlinkBlox]: Dropped an oversized packet from {Player.Name}.`)\n",
+		'\tif ShouldReport(Player, "Oversized") then warn(`[BlinkBlox]: Dropped an oversized packet from {Player.Name}.`) end\n',
 		"\treturn\n",
 		"end\n",
 		`if not InboundAccept(Player, math.max(buffer.len(Buffer), {Floor}), {Rate}, {Burst}) then\n`,
 		"\treturn\n",
 		"end\n",
 		`if #Instances > {MaxInstances} then\n`,
-		"\twarn(`[BlinkBlox]: Dropped a packet with too many instances from {Player.Name}.`)\n",
+		'\tif ShouldReport(Player, "Instances") then warn(`[BlinkBlox]: Dropped a packet with too many instances from {Player.Name}.`) end\n',
 		"\treturn\n",
 		"end\n",
 	}

@@ -180,22 +180,39 @@ end)
 RunClosure("The inbound budget charges a packet by its size", function()
 	Reset()
 
-	local Reports = 0
-	Server.SetDecodeErrorHandler(function()
-		Reports += 1
+	--> The index of ReliableClient, from a packet the client really sends.
+	local ClientRemote = ClientEnvironment.Instances.BLINK_RELIABLE_REMOTE
+	local Original = ClientRemote.FireServer
+	local Captured: buffer?
+	ClientRemote.FireServer = function(_self, Buffer: buffer)
+		Captured = Buffer
+	end
+	Client.ReliableClient.Fire(1)
+	task.wait(1 / 30)
+	ClientRemote.FireServer = Original
+	assert(Captured, "no ReliableClient packet was sent to take the index from")
+
+	--> Counted by the event each one opens with, since the junk after it is reported at most once a
+	--> second and so cannot be counted by its reports.
+	local Decoded = 0
+	local Disconnect = Server.ReliableClient.On(function()
+		Decoded += 1
 	end)
 
-	--> Junk of the largest size a packet may have: eight of them spend the burst exactly. Each one
-	--> that is decoded fails and is reported; the ninth is refused before anyone reads it.
+	--> Packets of the largest size a packet may have: eight of them spend the burst exactly. Each one
+	--> that is decoded delivers its event and then fails on the junk; the ninth is refused before
+	--> anyone reads it.
 	local Junk = buffer.fromstring(string.rep("\255", 8192))
+	buffer.writeu8(Junk, 0, buffer.readu8(Captured, 0))
+	buffer.writeu8(Junk, 1, 1)
 	for _ = 1, 9 do
 		ServerEnvironment.Instances.BLINK_RELIABLE_REMOTE.OnServerEvent:Fire(Shared.Player, Junk, {})
 	end
 	Settle()
-	Server.SetDecodeErrorHandler(nil)
+	Disconnect()
 
-	if Reports ~= 8 then
-		ErrorPrint(`Failed "Charged by size": {Reports} of nine full-size packets were decoded, expected 8.`)
+	if Decoded ~= 8 then
+		ErrorPrint(`Failed "Charged by size": {Decoded} of nine full-size packets were decoded, expected 8.`)
 	end
 
 	if BudgetWarnings() == 0 then

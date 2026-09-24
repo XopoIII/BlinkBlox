@@ -561,6 +561,36 @@ local RateHandler: ((Player: Player, Event: string?, Refused: number) -> ())? = 
 --> passed all of them while the server decoded every one.
 local InboundBudgets: {[Player]: {number}} = {}
 
+--> WHAT A CLIENT CAN MAKE THE SERVER SAY. A packet refused for its shape, its size or its instance
+--> count, a packet cut short by the event cap, and a packet that failed to decode are each reported
+--> at most once a second per player -- per channel and event, for a decode failure -- the schedule
+--> the rate limit's reports already keep. They used
+--> to be reported per packet, so a client could put a line in the output, or a call to the game's
+--> handler, for every packet it sent: hundreds a second, and the malformed and oversized ones
+--> without even being charged to the inbound budget first.
+local Reports: {[Player]: {[string]: number}} = {}
+
+local function ShouldReport(Player: Player, Kind: string): boolean
+    local Times = Reports[Player]
+    if not Times then
+        if Player.Parent == nil then
+            return false
+        end
+
+        Times = {}
+        Reports[Player] = Times
+    end
+
+    local Now = os.clock()
+    local Last = Times[Kind]
+    if Last ~= nil and (Now - Last) < 1 then
+        return false
+    end
+
+    Times[Kind] = Now
+    return true
+end
+
 --> INVOCATION STATE FOR FUNCTIONS THE SERVER CALLS, one set per player rather than the single set
 --> Base.luau gives a client. Three separate reasons, and the second is the one that matters.
 -->
@@ -615,6 +645,7 @@ Players.PlayerRemoving:Connect(function(Player)
     PlayersMap[Player] = nil
     RateBuckets[Player] = nil
     InboundBudgets[Player] = nil
+    Reports[Player] = nil
 
     --> Every call outstanding to this player is now unanswerable. Failing them here rather than
     --> leaving them to time out matters because the thread on the other end is game code holding a
@@ -656,9 +687,10 @@ local function SetDecodeErrorHandler(Handler: ((Player: Player, Event: string?, 
     DecodeHandler = Handler
 end
 
-local function ReportDecodeFailure(Player: Player, Event: string?, Failure: unknown)
+local function ReportDecodeFailure(Player: Player, Channel: string, Event: string?, Failure: unknown)
     local Handler = DecodeHandler
-    if Handler then
+    --> Once a second per player, per channel and per event it claimed to be.
+    if Handler and ShouldReport(Player, `{Channel} {Event or "?"}`) then
         --> Spawned for the same reason RateAccept spawns its handler: one that throws or yields must
         --> not reach back into the receive loop that called it.
         Spawn(Handler, Player, Event, tostring(Failure))
@@ -817,18 +849,18 @@ end
 RunService.Heartbeat:Connect(StepReplication)
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
 	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
-		warn(`[BlinkBlox]: Dropped a malformed packet from {Player.Name}.`)
+		if ShouldReport(Player, "Malformed") then warn(`[BlinkBlox]: Dropped a malformed packet from {Player.Name}.`) end
 		return
 	end
 	if buffer.len(Buffer) > 8192 then
-		warn(`[BlinkBlox]: Dropped an oversized packet from {Player.Name}.`)
+		if ShouldReport(Player, "Oversized") then warn(`[BlinkBlox]: Dropped an oversized packet from {Player.Name}.`) end
 		return
 	end
 	if not InboundAccept(Player, math.max(buffer.len(Buffer), 128), 65536, 65536) then
 		return
 	end
 	if #Instances > 256 then
-		warn(`[BlinkBlox]: Dropped a packet with too many instances from {Player.Name}.`)
+		if ShouldReport(Player, "Instances") then warn(`[BlinkBlox]: Dropped a packet with too many instances from {Player.Name}.`) end
 		return
 	end
 	RecieveCursor = 0
@@ -847,7 +879,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		local BLOCK_START = Read(1)
 		DecodedEvents += 1
 		if DecodedEvents > 64 then
-			warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`)
+			if ShouldReport(Player, "Events") then warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`) end
 			break
 		end
 		local Decoding = -1
@@ -857,25 +889,25 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		error("[BlinkBlox]: This channel receives no events.")
 		end)
 		if not Parsed then
-			ReportDecodeFailure(Player, EventNames.Reliable[Decoding], Failure)
+			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
 			break
 		end
 	end
 end)
 Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
 	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
-		warn(`[BlinkBlox]: Dropped a malformed packet from {Player.Name}.`)
+		if ShouldReport(Player, "Malformed") then warn(`[BlinkBlox]: Dropped a malformed packet from {Player.Name}.`) end
 		return
 	end
 	if buffer.len(Buffer) > 8192 then
-		warn(`[BlinkBlox]: Dropped an oversized packet from {Player.Name}.`)
+		if ShouldReport(Player, "Oversized") then warn(`[BlinkBlox]: Dropped an oversized packet from {Player.Name}.`) end
 		return
 	end
 	if not InboundAccept(Player, math.max(buffer.len(Buffer), 128), 65536, 65536) then
 		return
 	end
 	if #Instances > 256 then
-		warn(`[BlinkBlox]: Dropped a packet with too many instances from {Player.Name}.`)
+		if ShouldReport(Player, "Instances") then warn(`[BlinkBlox]: Dropped a packet with too many instances from {Player.Name}.`) end
 		return
 	end
 	RecieveCursor = 0
@@ -894,7 +926,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		local BLOCK_START = Read(1)
 		DecodedEvents += 1
 		if DecodedEvents > 64 then
-			warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`)
+			if ShouldReport(Player, "Events") then warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`) end
 			break
 		end
 		local Decoding = -1
@@ -913,7 +945,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		end
 		end)
 		if not Parsed then
-			ReportDecodeFailure(Player, EventNames.Unreliable[Decoding], Failure)
+			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
 			break
 		end
 	end

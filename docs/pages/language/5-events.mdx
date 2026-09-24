@@ -228,6 +228,14 @@ end)
 `Event` is the event the packet claimed to carry, or `nil` if its index named no event at all. On the
 client the handler takes `(Event, Failure)`, and without one the client warns, naming both.
 
+On the server the handler is called at most once a second for each player, channel and event, like
+the rate-limit handler: a client sending a bad packet every frame costs the game one call a second,
+not one per packet. The server's own warnings about what a client sent -- a malformed packet, an
+oversized one, too many instances, too many events -- keep the same schedule, per player.
+
+An error thrown by a `Sync` listener is not a decode failure. It is raised as an error of its own,
+the way an `Async` listener's is, and the rest of the packet is still delivered.
+
 ### Iterating an Event (Polling)
 ```lua filename="client.luau" copy
 for Index, Value in MyEvent.Iter() do
