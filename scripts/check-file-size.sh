@@ -25,7 +25,7 @@ GRANDFATHERED="src/Parser.luau:1768
 src/Generator/init.luau:1568
 plugin/src/Editor/init.luau:921
 test/Test.luau:777
-src/Generator/Prefabs.luau:792
+src/Generator/Prefabs.luau:788
 test/Guards.luau:721
 plugin/src/init.server.luau:579
 test/Assertions.luau:559"

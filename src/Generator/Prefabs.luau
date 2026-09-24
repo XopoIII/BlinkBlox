@@ -105,9 +105,6 @@ local Asserts = {
 		}
 	end,
 }
-local Structures = {
-	Array = nil :: any,
-}
 local Primitives: { [string]: {
 	Type: string | (Declaration: Parser.Primitive) -> string,
 	Generate: Generate,
@@ -785,7 +782,6 @@ return {
 	Asserts = Asserts,
 	EmitCapacityGuard = EmitCapacityGuard,
 	Primitives = Primitives,
-	Structures = Structures,
 	Required = Required,
 	GetTypeToUse = GetTypeToUse,
 	GetTypeToUseByBits = GetTypeToUseByBits,
