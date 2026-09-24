@@ -1,6 +1,14 @@
 option ClientOutput = "../src/shared/blink/Client.luau"
 option ServerOutput = "../src/shared/blink/Server.luau"
 
+-- The bench fires 1000 events a frame, up to 600 KB of Entities, and measures throughput, so the
+-- inbound limits a live server wants are raised to fit it. With the defaults -- 64 events and 8192
+-- bytes a packet, 64 KB a second per player -- the server refuses most of what the bench sends.
+option MaxPacketSize = 2097152
+option MaxEventsPerPacket = 2048
+option InboundBytesPerSecond = 1073741824
+option InboundBurst = 1073741824
+
 struct Entity {
     id: u8,
     x: u8,
