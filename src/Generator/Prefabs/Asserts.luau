@@ -14,45 +14,51 @@ type AssertPrefab = Common.AssertPrefab
 local RECIEVE_BUFFER = Common.RECIEVE_BUFFER
 local RECIEVE_CURSOR = Common.RECIEVE_CURSOR
 
+--- The bound checks on one measured quantity: a number itself, a string's length, a buffer's size or
+--- a vector's magnitude. `Noun` names what is measured in the message, and `Measure` is the expression
+--- compared.
+---
+--- `NaNSafe` writes the comparisons as `not (x >= Min)` rather than `x < Min`. NaN compares false
+--- against everything, so `x < Min` and `x > Max` both let it through, and a client could hand a
+--- ranged float listener a NaN that every check downstream had been told was impossible. A length is
+--- an integer, so the plain form is kept there.
+local function Bounds(
+	Variable: string,
+	Min: number,
+	Max: number,
+	Noun: string,
+	Measure: string,
+	NaNSafe: boolean,
+	EqualTo: string
+): AssertPrefab
+	local Subject = `{Noun}"{Variable}"`
+	local Below = if NaNSafe then `not ({Measure} >= {Min})` else `{Measure} < {Min}`
+	local Above = if NaNSafe then `not ({Measure} <= {Max})` else `{Measure} > {Max}`
+
+	return {
+		Lower = `if {Below} then error(\`Expected {Subject} to be larger than or equal to {Min}, got \{{Measure}} instead.\`) end`,
+		Upper = `if {Above} then error(\`Expected {Subject} to be smaller than or equal to {Max}, got \{{Measure}} instead.\`) end`,
+		Exact = `if {Measure} ~= {Max} then error(\`Expected {Subject} to {EqualTo} {Max}, got \{{Measure}} instead.\`) end`,
+	}
+end
+
 local Asserts = {
-	--> Written as `not (x >= Min)` rather than `x < Min`, here and for vectors: NaN compares false
-	--> against everything, so `x < Min` and `x > Max` both let it through, and a client could hand a
-	--> ranged float listener a NaN that every check downstream had been told was impossible.
 	number = function(Variable: string, Min: number, Max: number): AssertPrefab
-		return {
-			Lower = `if not ({Variable} >= {Min}) then error(\`Expected "{Variable}" to be larger than or equal to {Min}, got \{{Variable}} instead.\`) end`,
-			Upper = `if not ({Variable} <= {Max}) then error(\`Expected "{Variable}" to be smaller than or equal to {Max}, got \{{Variable}} instead.\`) end`,
-			Exact = `if {Variable} ~= {Max} then error(\`Expected "{Variable}" to be equal to {Max}, got \{{Variable}\} instead.\`) end`,
-		}
+		return Bounds(Variable, Min, Max, "", Variable, true, "be equal to")
 	end,
 
+	--> `Measure` names the expression to compare. The read path passes the decoded length so the
+	--> bound is checked before the string is read; the write path omits it and measures the value.
 	string = function(Variable: string, Min: number, Max: number, Measure: string?): AssertPrefab
-		--> `Measure` names the expression to compare. The read path passes the decoded length so the
-		--> bound is checked before the string is read; the write path omits it and measures the value.
-		local Length = Measure or `#{Variable}`
-		return {
-			Lower = `if {Length} < {Min} then error(\`Expected length of "{Variable}" to be larger than or equal to {Min}, got \{{Length}} instead.\`) end`,
-			Upper = `if {Length} > {Max} then error(\`Expected length of "{Variable}" to be smaller than or equal to {Max}, got \{{Length}} instead.\`) end`,
-			Exact = `if {Length} ~= {Max} then error(\`Expected length of "{Variable}" to equal to {Max}, got \{{Length}} instead.\`) end`,
-		}
+		return Bounds(Variable, Min, Max, "length of ", Measure or `#{Variable}`, false, "equal to")
 	end,
 
 	vector = function(Variable: string, Min: number, Max: number): AssertPrefab
-		return {
-			Lower = `if not ({Variable}.Magnitude >= {Min}) then error(\`Expected magnitude of "{Variable}" to be larger than or equal to {Min}, got \{{Variable}.Magnitude} instead.\`) end`,
-			Upper = `if not ({Variable}.Magnitude <= {Max}) then error(\`Expected magnitude of "{Variable}" to be smaller than or equal to {Max}, got \{{Variable}.Magnitude} instead.\`) end`,
-			Exact = `if {Variable}.Magnitude ~= {Max} then error(\`Expected magnitude of "{Variable}" to equal to {Max}, got \{{Variable}.Magnitude} instead.\`) end`,
-		}
+		return Bounds(Variable, Min, Max, "magnitude of ", `{Variable}.Magnitude`, true, "equal to")
 	end,
 
 	buffer = function(Variable: string, Min: number, Max: number, Measure: string?): AssertPrefab
-		--> See the note on `Asserts.string` for what `Measure` is for.
-		local Length = Measure or `buffer.len({Variable})`
-		return {
-			Lower = `if {Length} < {Min} then error(\`Expected size of "{Variable}" to be larger than or equal to {Min}, got \{{Length}} instead.\`) end`,
-			Upper = `if {Length} > {Max} then error(\`Expected size of "{Variable}" to be smaller than or equal to {Max}, got \{{Length}} instead.\`) end`,
-			Exact = `if {Length} ~= {Max} then error(\`Expected size of "{Variable}" to equal to {Max}, got \{{Length}} instead.\`) end`,
-		}
+		return Bounds(Variable, Min, Max, "size of ", Measure or `buffer.len({Variable})`, false, "equal to")
 	end,
 
 	Instance = function(Variable: string, Class: string): AssertPrefab
