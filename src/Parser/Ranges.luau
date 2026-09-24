@@ -56,9 +56,7 @@ function Parser.NumberRange(self: Parser, Token: Lexer.Token, Bounds: NumberRang
 			return Settings.NumberRange.new(Minimum, Maximum)
 		end
 
-		Error.new(Error.AnalyzeInvalidRange, self.Source, "Malformed range", self.File)
-			:Primary(Token, "Unable to parse range")
-			:Emit()
+		self:Diagnostic(Error.AnalyzeInvalidRange, "Malformed range"):Primary(Token, "Unable to parse range"):Emit()
 
 		error("never")
 	end
@@ -67,16 +65,14 @@ function Parser.NumberRange(self: Parser, Token: Lexer.Token, Bounds: NumberRang
 
 	--> check int
 	if Integer and (IsInteger(Range.Min) == false or IsInteger(Range.Max) == false) then
-		Error.new(Error.AnalyzeInvalidRange, self.Source, "Expected an integer", self.File)
-			:Primary(Token, "Expected an integer")
-			:Emit()
+		self:Diagnostic(Error.AnalyzeInvalidRange, "Expected an integer"):Primary(Token, "Expected an integer"):Emit()
 
 		error("never")
 	end
 
 	--> check bounds
 	if Range.Min < Bounds.Min or Range.Max > Bounds.Max then
-		Error.new(Error.AnalyzeInvalidRange, self.Source, "Range outside bounds", self.File)
+		self:Diagnostic(Error.AnalyzeInvalidRange, "Range outside bounds")
 			:Primary(Token, `Expected a range within ({Bounds.Min}..{Bounds.Max})`)
 			:Emit()
 
@@ -133,7 +129,7 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 
 	if Primitive.AllowedComponents == 0 then
 		error(
-			Error.new(Error.AnalyzeInvalidComponents, self.Source, `Type doesn't accept components`, self.File)
+			self:Diagnostic(Error.AnalyzeInvalidComponents, `Type doesn't accept components`)
 				:Primary(OpenChevrons, `Remove component here`)
 				:Emit()
 		)
@@ -151,12 +147,18 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 		end
 
 		self:Consume("Comma")
+
+		--> A trailing comma, as every other list in the language accepts.
+		if self:TryConsume("CloseChevrons") then
+			Closed = true
+			break
+		end
 	end
 
 	if not Closed then
 		local Extra = self:Peek()
 		error(
-			Error.new(Error.AnalyzeInvalidComponents, self.Source, `Too many components`, self.File)
+			self:Diagnostic(Error.AnalyzeInvalidComponents, `Too many components`)
 				:Primary(Extra, `Expected at most {Primitive.AllowedComponents} component(s)`)
 				:Emit()
 		)
@@ -168,7 +170,7 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 
 		if not ComponentPrimitive then
 			error(
-				Error.new(Error.AnalyzeInvalidComponents, self.Source, `Unknown primitive used as component`, self.File)
+				self:Diagnostic(Error.AnalyzeInvalidComponents, `Unknown primitive used as component`)
 					:Primary(Token, `"{Component}" is invalid`)
 					:Emit()
 			)
@@ -176,7 +178,7 @@ function Parser.Components(self: Parser, Primitive: Settings.Primitive): { strin
 
 		if not ComponentPrimitive.Component then
 			error(
-				Error.new(Error.AnalyzeInvalidComponents, self.Source, `Invalid primitive used as component`, self.File)
+				self:Diagnostic(Error.AnalyzeInvalidComponents, `Invalid primitive used as component`)
 					:Primary(Token, `"{Component}" cannot be used as a component`)
 					:Emit()
 			)

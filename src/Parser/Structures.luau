@@ -9,7 +9,6 @@
 
 local Error = require("../Modules/Error")
 local Grammar = require("../Modules/Grammar")
-local Lexer = require("../Lexer")
 local ParserClass = require("./Class")
 
 type Parser = ParserClass.Parser
@@ -42,7 +41,7 @@ function Parser.GetOptionFromToken(self: Parser, Token: Token, Structure: { Even
 	end
 
 	error(
-		Error.new(Error.ParserUnknownOption, self.Source, `Unknown option "{Value}"`, self.File)
+		self:Diagnostic(Error.ParserUnknownOption, `Unknown option "{Value}"`)
 			:Primary(Token, `Expected one of {OptionsString}`)
 			:Emit()
 	)
@@ -50,14 +49,8 @@ end
 
 function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption }): { [string]: any }
 	local Fields: { [string]: any } = {}
-	local Open, Close: Lexer.Token? = self:Consume("OpenBraces"), nil
 
-	while true do
-		Close = self:TryConsume("CloseBraces")
-		if Close then
-			break
-		end
-
+	local Open, Close = self:List("OpenBraces", "CloseBraces", function()
 		local Value: any
 		local Field = self:ConsumeText()
 		local Option = self:GetOptionFromToken(Field, Structure)
@@ -65,7 +58,7 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 
 		--> Prevent duplicate fields
 		if Fields[Option.Key] then
-			Error.new(Error.AnalyzeDuplicateField, self.Source, `Field "{Option.Key}" was already specified`, self.File)
+			self:Diagnostic(Error.AnalyzeDuplicateField, `Field "{Option.Key}" was already specified`)
 				:Primary(Field, `Already specified earlier in the structure`)
 				:Emit()
 		end
@@ -76,7 +69,7 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 		--> and nothing warns you off. `UseColon` has warned for the same reason since it stopped
 		--> doing anything; this one still works, which is why it warns rather than errors.
 		if Option.Key == "Poll" then
-			Error.new(Error.AnalyzeDeprecatedOption, self.Source, `Field "Poll" is deprecated`, self.File, "Warning")
+			self:Diagnostic(Error.AnalyzeDeprecatedOption, `Field "Poll" is deprecated`, "Warning")
 				:Primary(Field, "Use `Call: Polling` instead")
 				:Note("The two compile to the same thing, but only `Call` is documented.")
 				:Warn()
@@ -88,7 +81,7 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 			local Numeric = tonumber(Token.Value)
 
 			if not Numeric or Numeric <= 0 then
-				Error.new(Error.ParserUnknownOption, self.Source, `Invalid value for "{Option.Key}"`, self.File)
+				self:Diagnostic(Error.ParserUnknownOption, `Invalid value for "{Option.Key}"`)
 					:Primary(Token, "Expected a number greater than zero")
 					:Emit()
 			end
@@ -100,7 +93,7 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 			Value = Token.Value
 
 			if not table.find(Option.Values, Value) then
-				Error.new(Error.ParserUnknownOption, self.Source, `Unknown option "{Value}"`, self.File)
+				self:Diagnostic(Error.ParserUnknownOption, `Unknown option "{Value}"`)
 					:Primary(Token, `Expected one of "{table.concat(Option.Values, `" or "`)}"`)
 					:Emit()
 			end
@@ -109,14 +102,7 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 		end
 
 		Fields[Option.Key] = Value
-		Close = self:TryConsume("CloseBraces")
-
-		if Close then
-			break
-		end
-
-		self:Consume("Comma")
-	end
+	end)
 
 	--> Check if all required fields where supplied
 	for _, Option in Structure do
@@ -129,11 +115,11 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 		end
 
 		local Span: Error.Span = {
-			End = math.max((Close :: Lexer.Token).End - 2, Open.Start),
+			End = math.max(Close.End - 2, Open.Start),
 			Start = Open.Start,
 		}
 
-		Error.new(Error.ParserExpectedExtraToken, self.Source, `Field "{Option.Key}" is missing`, self.File)
+		self:Diagnostic(Error.ParserExpectedExtraToken, `Field "{Option.Key}" is missing`)
 			:Primary(Span, `Add missing field "{Option.Key}"`)
 			:Emit()
 	end

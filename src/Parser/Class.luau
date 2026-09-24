@@ -7,6 +7,7 @@
 --- file of its own would otherwise be invisible to the type checker everywhere else.
 local AST = require("../AST")
 local AttributeParser = require("../Modules/Attributes")
+local Error = require("../Modules/Error")
 local Grammar = require("../Modules/Grammar")
 local Lexer = require("../Lexer")
 local Settings = require("../Settings")
@@ -67,6 +68,8 @@ export type State = {
 
 export type Methods = {
 	--> Stream.luau
+	Diagnostic: (self: Parser, Code: number, Message: string, Severity: Error.Severity?) -> Error.Class,
+	List: (self: Parser, Open: Lexer.Types, Close: Lexer.Types, Item: () -> ()) -> (Token, Token),
 	Peek: (self: Parser) -> Token,
 	Consume: (self: Parser, Type: Lexer.Types) -> Token,
 	TryConsume: (self: Parser, Type: Lexer.Types) -> Token?,

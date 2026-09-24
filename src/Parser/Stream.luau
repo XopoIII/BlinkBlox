@@ -18,11 +18,42 @@ type Primitive = ParserClass.Primitive
 
 local Parser = ParserClass.Class
 
+--- A diagnostic about this parser's source. Every one the parser raises points into the file it is
+--- parsing -- an import's own errors come from the parser that reads it -- so the source and the
+--- file name are filled in here rather than passed at forty call sites.
+function Parser.Diagnostic(self: Parser, Code: number, Message: string, Severity: Error.Severity?): Error.Class
+	return Error.new(Code, self.Source, Message, self.File, Severity)
+end
+
+--- Reads `Open item, item, ... Close`, calling `Item` to read each one, and returns both brackets.
+---
+--- An empty list and a trailing comma are accepted; two items with no comma between them are not.
+--- Every delimited list in a declaration -- fields, variants, flags, values, pack elements, an
+--- event's or a function's options -- is read through here, so they all agree on that.
+function Parser.List(self: Parser, Open: Lexer.Types, Close: Lexer.Types, Item: () -> ()): (Token, Token)
+	local Opening = self:Consume(Open)
+	while true do
+		local Closing = self:TryConsume(Close)
+		if Closing then
+			return Opening, Closing
+		end
+
+		Item()
+
+		Closing = self:TryConsume(Close)
+		if Closing then
+			return Opening, Closing
+		end
+
+		self:Consume("Comma")
+	end
+end
+
 function Parser.Peek(self: Parser): Token
 	local Token = self.LookAhead
 	if not Token then
 		error(
-			Error.new(Error.ParserUnexpectedEndOfFile, self.Source, "Unexpected end of file", self.File)
+			self:Diagnostic(Error.ParserUnexpectedEndOfFile, "Unexpected end of file")
 				:Primary({ Start = #self.Source, End = #self.Source }, "File ends here")
 				:Emit()
 		)
@@ -34,7 +65,7 @@ end
 function Parser.Consume(self: Parser, Type: Lexer.Types): Token
 	local Token = self.LookAhead
 	if not Token then
-		Error.new(Error.ParserUnexpectedEndOfFile, self.Source, "Unexpected end of file", self.File)
+		self:Diagnostic(Error.ParserUnexpectedEndOfFile, "Unexpected end of file")
 			:Primary({ Start = #self.Source, End = #self.Source }, "File ends here")
 			:Emit()
 
@@ -43,7 +74,7 @@ function Parser.Consume(self: Parser, Type: Lexer.Types): Token
 	end
 
 	if Token.Type ~= Type then
-		Error.new(Error.ParserUnexpectedToken, self.Source, `Unexpected token`, self.File)
+		self:Diagnostic(Error.ParserUnexpectedToken, `Unexpected token`)
 			:Primary(Token, `Expected "{Type}", found "{Token.Type}"`)
 			:Emit()
 	end
@@ -79,7 +110,7 @@ function Parser.ConsumeAny(self: Parser, ...: Lexer.Types): Token
 
 	local Token = self:Peek()
 	error(
-		Error.new(Error.ParserUnexpectedToken, self.Source, `Unexpected token`, self.File)
+		self:Diagnostic(Error.ParserUnexpectedToken, `Unexpected token`)
 			:Primary(Token, `Expected one of "{table.concat(Types, `", "`)}", found "{Token.Type}"`)
 			:Emit()
 	)

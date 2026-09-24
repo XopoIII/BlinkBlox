@@ -302,4 +302,29 @@ event Renamed {
 ]]
 )
 
+--> A trailing comma is accepted in every list the language has, so it cannot change a byte either.
+--> Declarations always took one; generic arguments and components refused it until they read their
+--> lists the same way.
+ExpectSame(
+	"A trailing comma in generic arguments",
+	[[
+struct Pair<A, B> { Left: A, Right: B }
+event Moved { From: Server, Type: Reliable, Call: SingleSync, Data: Pair<u8, u16> }
+]],
+	[[
+struct Pair<A, B> { Left: A, Right: B }
+event Moved { From: Server, Type: Reliable, Call: SingleSync, Data: Pair<u8, u16,> }
+]]
+)
+
+ExpectSame(
+	"A trailing comma in components",
+	[[
+event Moved { From: Server, Type: Reliable, Call: SingleSync, Data: (CFrame<f32, f16>, vector<i16>) }
+]],
+	[[
+event Moved { From: Server, Type: Reliable, Call: SingleSync, Data: (CFrame<f32, f16,>, vector<i16,>) }
+]]
+)
+
 return {}

@@ -143,3 +143,18 @@ export enum Tagged = "local" { A { function: u8 } }
 		end
 	end
 end)
+
+RunClosure("A tagged enum's tag is quoted in the TypeScript output as in the Luau output", function()
+	--> The Luau side has always written the tag through FormatKey; the TypeScript side wrote it bare,
+	--> so a tag that is not an identifier produced a declaration file that does not parse.
+	local Tree = Parser.new():Parse([[
+export enum Shape = "my tag" { Circle { Radius: f32 }, Square { Side: f32 } }
+]])
+
+	for _, Context in { "Client", "Server" } do
+		local Source = Generator.GenerateTypescript(Context :: any, Tree)
+		if not string.find(Source, `["my tag"]: "Circle"`, 1, true) then
+			ErrorPrint(`Failed "TypeScript tag": the {Context} declaration does not quote the tag:\n{Source}`)
+		end
+	end
+end)

@@ -27,24 +27,32 @@ local LUAU_KEYWORDS = Grammar.LUAU_KEYWORDS
 
 local Parser = ParserClass.Class
 
-function Parser.Set(self: Parser, Name: Token): Set
-	self:Consume("OpenBraces")
-
+--- Reads a set's flags or an enum's values: a braced list of names, each allowed once. A repeat was
+--- accepted, and meant a flag taking two bits that always travel together, or an enum index the
+--- writer never sends because the first of the two always matches.
+local function ReadNames(self: Parser, Noun: string): { string }
 	local Values: { string } = {}
-	while true do
-		if self:TryConsume("CloseBraces") then
-			break
-		end
+	local Seen: { [string]: true } = {}
 
+	self:List("OpenBraces", "CloseBraces", function()
 		local Token = self:ConsumeText(true, true)
-		table.insert(Values, Token.Value)
-
-		if self:TryConsume("CloseBraces") then
-			break
+		if Seen[Token.Value] then
+			error(
+				self:Diagnostic(Error.AnalyzeDuplicateField, `Duplicate {Noun} "{Token.Value}"`)
+					:Primary(Token, `Duplicate {Noun}`)
+					:Emit()
+			)
 		end
 
-		self:Consume("Comma")
-	end
+		Seen[Token.Value] = true
+		table.insert(Values, Token.Value)
+	end)
+
+	return Values
+end
+
+function Parser.Set(self: Parser, Name: Token): Set
+	local Values = ReadNames(self, "flag")
 
 	return {
 		Type = "Set",
@@ -64,7 +72,7 @@ function Parser.Map(self: Parser, Name: Token): Map
 		local Token = self:Peek()
 		local Declaration = self:Type(Name)
 		if Declaration.Type == "Optional" then
-			Error.new(Error.AnalyzeInvalidOptionalType, self.Source, "Invalid optional type", self.File)
+			self:Diagnostic(Error.AnalyzeInvalidOptionalType, "Invalid optional type")
 				:Primary(Token, `Maps cannot have optionals as keys or values`)
 				:Emit()
 		end
@@ -94,30 +102,13 @@ function Parser.Map(self: Parser, Name: Token): Map
 end
 
 function Parser.Enum(self: Parser, Name: Token): Enum | TagEnum
-	local Values: { string } = {}
-
 	--> Is it a tagged enum?
 	local Tag = self:TryConsume("String")
 	if Tag then
 		return self:TagEnum(Tag, Name)
 	end
 
-	self:Consume("OpenBraces")
-
-	while true do
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
-		local Token = self:ConsumeText(true, true)
-		table.insert(Values, Token.Value)
-
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
-		self:Consume("Comma")
-	end
+	local Values = ReadNames(self, "value")
 
 	return {
 		Type = "Enum",
@@ -129,13 +120,9 @@ end
 
 function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 	local Values: { Struct } = {}
-	self:Consume("OpenBraces")
+	local Seen: { [string]: true } = {}
 
-	while true do
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
+	self:List("OpenBraces", "CloseBraces", function()
 		local Token: Token
 
 		if self:Peek().Type == "OpenBrackets" then
@@ -146,13 +133,25 @@ function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 			Token = self:ConsumeText(true)
 		end
 
+		--> The writer dispatches on the variant's name, so a second variant of the same name could
+		--> never be sent: the first always matches.
+		if Seen[Token.Value] then
+			error(
+				self:Diagnostic(Error.AnalyzeDuplicateField, `Duplicate variant "{Token.Value}"`)
+					:Primary(Token, `Duplicate variant`)
+					:Emit()
+			)
+		end
+
+		Seen[Token.Value] = true
+
 		local Struct = self:Struct(Token)
 		local Fields = Struct.Value.Values
 
 		--> Don't allow tag field to be set
 		for _, Field: TypeNode in Fields do
 			if Field.Name == Tag.Value then
-				Error.new(Error.AnalyzeReservedIdentifier, self.Source, `Enum tag used as field in variant`, self.File)
+				self:Diagnostic(Error.AnalyzeReservedIdentifier, `Enum tag used as field in variant`)
 					:Secondary(Token, `Used in variant`)
 					:Primary(Tag, `Enum tag`)
 					:Emit()
@@ -160,13 +159,7 @@ function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 		end
 
 		table.insert(Values, Struct)
-
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
-		self:Consume("Comma")
-	end
+	end)
 
 	return {
 		Type = "TagEnum",
@@ -183,7 +176,6 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 	local Names: { [number]: string } = {}
 	local Taken: { [string]: true } = {}
 	local Values: { TypeNode } = {}
-	self:Consume("OpenParentheses")
 
 	--> An element may carry a name: `(chefId: f64, dish: string)`. Deciding that needs one token of
 	--> lookahead past the candidate -- `(u8)` and `(x: u8)` are indistinguishable where the element
@@ -199,11 +191,7 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 		return Text
 	end
 
-	while true do
-		if self:TryConsume("CloseParentheses") then
-			break
-		end
-
+	self:List("OpenParentheses", "CloseParentheses", function()
 		local Text = TryConsumeName()
 		if Text then
 			--> Unlike a struct field, which becomes a table key and is quoted on the way out, this name
@@ -212,12 +200,7 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 			--> author can see which name did it, rather than by luau-analyze over generated output.
 			if LUAU_KEYWORDS[Text.Value] or not string.match(Text.Value, "^[%a_][%w_]*$") then
 				error(
-					Error.new(
-						Error.AnalyzeReservedIdentifier,
-						self.Source,
-						`"{Text.Value}" cannot name a type pack element`,
-						self.File
-					)
+					self:Diagnostic(Error.AnalyzeReservedIdentifier, `"{Text.Value}" cannot name a type pack element`)
 						:Primary(Text, "Not usable as a variable name")
 						:Note(
 							"A named element becomes a parameter in the generated code, so it has to be a Luau identifier."
@@ -228,7 +211,7 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 
 			if Taken[Text.Value] then
 				error(
-					Error.new(Error.AnalyzeDuplicateField, self.Source, `Duplicate element "{Text.Value}"`, self.File)
+					self:Diagnostic(Error.AnalyzeDuplicateField, `Duplicate element "{Text.Value}"`)
 						:Primary(Text, `Duplicate element`)
 						:Note("Each named element of a type pack becomes a parameter, so the names must differ.")
 						:Emit()
@@ -247,13 +230,7 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 			Taken[Text.Value] = true
 			Names[#Values] = Text.Value
 		end
-
-		if self:TryConsume("CloseParentheses") then
-			break
-		end
-
-		self:Consume("Comma")
-	end
+	end)
 
 	return {
 		Type = "Tuple",
@@ -269,24 +246,17 @@ end
 function Parser.Struct(self: Parser, Name: Token): Struct
 	local Fields: { [string]: true } = {}
 	local Values: { TypeNode } = {}
-	self:Consume("OpenBraces")
 
-	while true do
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
+	self:List("OpenBraces", "CloseBraces", function()
 		--> struct merging
 		if self:TryConsume("Merge") then
 			local Text = self:Peek()
 			local Declaration = self:Declaration(Name)
 			if Declaration.Type ~= "Struct" then
 				error(
-					Error.new(
+					self:Diagnostic(
 						Error.AnalyzeReferenceInvalidType,
-						self.Source,
-						`Expected a struct to merge, got "{Declaration.Type}" instead`,
-						self.File
+						`Expected a struct to merge, got "{Declaration.Type}" instead`
 					)
 						:Primary(Text, `Expected a "Struct", got "{Declaration.Type}" instead`)
 						:Emit()
@@ -299,12 +269,7 @@ function Parser.Struct(self: Parser, Name: Token): Struct
 				local FieldIdentifier = Field.Name
 				if Fields[FieldIdentifier] then
 					error(
-						Error.new(
-							Error.AnalyzeDuplicateField,
-							self.Source,
-							`Merged struct contains a duplicate field`,
-							self.File
-						)
+						self:Diagnostic(Error.AnalyzeDuplicateField, `Merged struct contains a duplicate field`)
 							:Primary(Text, `Field "{FieldIdentifier}" already exists in struct`)
 							:Emit()
 					)
@@ -326,7 +291,7 @@ function Parser.Struct(self: Parser, Name: Token): Struct
 
 			if Fields[Text.Value] then
 				error(
-					Error.new(Error.AnalyzeDuplicateField, self.Source, `Duplicate field "{Text.Value}"`, self.File)
+					self:Diagnostic(Error.AnalyzeDuplicateField, `Duplicate field "{Text.Value}"`)
 						:Primary(Text, `Duplicate field`)
 						:Emit()
 				)
@@ -337,13 +302,7 @@ function Parser.Struct(self: Parser, Name: Token): Struct
 			Fields[Text.Value] = true
 			table.insert(Values, self:Type(Text))
 		end
-
-		if self:TryConsume("CloseBraces") then
-			break
-		end
-
-		self:Consume("Comma")
-	end
+	end)
 
 	return {
 		Type = "Struct",

@@ -73,7 +73,7 @@ function Parser.SetReference(self: Parser, Bucket: Bucket, Identifier: Token, De
 	local Name = Identifier.Value
 
 	if RESERVED[Name] then
-		Error.new(Error.AnalyzeReservedIdentifier, self.Source, `Reserved identifier`, self.File)
+		self:Diagnostic(Error.AnalyzeReservedIdentifier, `Reserved identifier`)
 			:Primary(Identifier, `"{Name}" is reserved and cannot be used as an identifier.`)
 			:Emit()
 	end
@@ -156,6 +156,9 @@ function Parser.ReplaceGenerics(self: Parser, Of: TypeNode): TypeNode
 		end
 	end
 
+	--> A trailing comma, as every other list in the language accepts. The count is still exact: one
+	--> argument short fails at the comma above, one too many at the closing chevron below.
+	self:TryConsume("Comma")
 	self:Consume("CloseChevrons")
 
 	--> hack to find lost references
@@ -220,7 +223,7 @@ function Parser.Declaration(self: Parser, Name: Token): TypeNode
 		--> which the parser could tie the knot.
 		if self.Declaring ~= nil and Token.Value == self.Declaring then
 			error(
-				Error.new(Error.AnalyzeRecursiveType, self.Source, `Recursive type`, self.File)
+				self:Diagnostic(Error.AnalyzeRecursiveType, `Recursive type`)
 					:Primary(Token, `"{Token.Value}" refers to itself`)
 					:Note(
 						"A declaration is only in scope once it closes, and references are inlined where they appear, so a type cannot contain another of itself."
@@ -230,7 +233,7 @@ function Parser.Declaration(self: Parser, Name: Token): TypeNode
 		end
 
 		error(
-			Error.new(Error.AnalyzeUnknownReference, self.Source, `Unknown reference`, self.File)
+			self:Diagnostic(Error.AnalyzeUnknownReference, `Unknown reference`)
 				:Primary(Token, "Unknown reference")
 				:Emit()
 		)

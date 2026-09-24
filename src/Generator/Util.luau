@@ -84,7 +84,67 @@ local function Constants(RemoteScope: string?, Tree: any): { string }
 	}
 end
 
+---- Type text shared by the Luau and TypeScript emitters ----
+--
+-- Both emitters write these the same way, and a fix to one has to reach the other: the TypeScript
+-- side left a tagged enum's tag unquoted for as long as it held its own copy.
+
+--- A set's type: one boolean per flag.
+local function SetType(Flags: { string }): string
+	local Entries: { string } = {}
+	for _, Flag in Flags do
+		table.insert(Entries, `{FormatKey(Flag)}: boolean,`)
+	end
+
+	return `\{{table.concat(Entries)}\}`
+end
+
+--- A tagged enum's type: a union of its variants' struct types, each with the tag field spliced in
+--- after the opening brace. `VariantType` renders a variant's struct in the emitter's language.
+local function TagEnumType(
+	Tag: string,
+	Variants: { Parser.Struct },
+	VariantType: (Variant: Parser.Struct) -> string
+): string
+	local Literals: { string } = {}
+	for _, Variant in Variants do
+		local TagField = `{FormatKey(Tag)}: "{Variant.Name}"`
+		table.insert(Literals, `\{ {TagField},{string.sub(VariantType(Variant), 2)}`)
+	end
+
+	return table.concat(Literals, " | ")
+end
+
+--- A struct's type. `FieldType` renders one field's type; `MarkOptional` puts `?` on the name of an
+--- optional field, which TypeScript wants and Luau does not.
+local function StructType(
+	Fields: { Parser.TypeNode },
+	FieldType: (Field: Parser.TypeNode) -> string,
+	MarkOptional: boolean
+): string
+	local Entries: { string } = {}
+	for _, Field in Fields do
+		local Optional = if MarkOptional and Field.Type == "Optional" then "?" else ""
+		table.insert(Entries, `{FormatKey(Field.Name)}{Optional}: {FieldType(Field)}`)
+	end
+
+	return `\{ {table.concat(Entries, ", ")}\ }`
+end
+
+--- `<A,B>` after a generic declaration's name, or nothing for one that is not generic.
+local function GenericsHeader(Generics: { List: { string } }?): string
+	if not Generics then
+		return ""
+	end
+
+	return `<{table.concat(Generics.List, ",")}>`
+end
+
 return {
+	SetType = SetType,
+	TagEnumType = TagEnumType,
+	StructType = StructType,
+	GenericsHeader = GenericsHeader,
 	GetPath = GetTypesPath,
 	GetExportName = GetExportName,
 	GetScopePrefix = GetScopePrefix,

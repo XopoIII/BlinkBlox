@@ -16,7 +16,6 @@ local Util = require("./Util")
 type Type = Parser.TypeNode
 
 local IGNORED_TYPES_IN_SHARED = Fragments.IGNORED_TYPES_IN_SHARED
-local FormatKey = Util.FormatKey
 local Types = Prefabs.Types
 local Primitives = Prefabs.Primitives
 local Declarations = Serde
@@ -81,44 +80,24 @@ function Generators.LuauType(
 			Type = Primitive.Type
 		end
 	elseif Declaration.Type == "Set" then
-		local Value = (Declaration :: Parser.Set).Value
-		local Entries: { string } = {}
-
-		for _, Flag in Value.Values do
-			table.insert(Entries, `{FormatKey(Flag)}: boolean,`)
-		end
-
-		Type = `\{{table.concat(Entries)}\}`
+		Type = Util.SetType((Declaration :: Parser.Set).Value.Values)
 	elseif Declaration.Type == "Enum" then
 		local Value = (Declaration :: Parser.Enum).Value
 		Type = `({Util.GenerateEnumLiterals(Value.Values)})`
 	elseif Declaration.Type == "TagEnum" then
 		local Value = (Declaration :: Parser.TagEnum).Value
-		local Literals = {}
-
-		for _, Variant in Value.Values do
-			local TagField = `{FormatKey(Value.Tag)}: "{Variant.Name}"`
-			local ValueType = Generators.LuauType(Variant)
-			table.insert(Literals, `\{ {TagField},{string.sub(ValueType, 2)}`)
-		end
-
-		Type = table.concat(Literals, " | ")
+		Type = Util.TagEnumType(Value.Tag, Value.Values, function(Variant)
+			return (Generators.LuauType(Variant))
+		end)
 	elseif Declaration.Type == "Map" then
 		local MapValue = (Declaration :: Parser.Map).Value
 		local Key = Generators.LuauType(MapValue.Values[1])
 		local Value = Generators.LuauType(MapValue.Values[2])
 		Type = `\{[{Key}]: {Value}\}`
 	elseif Declaration.Type == "Struct" then
-		local Value = Declaration.Value
-		local Fields = {}
-
-		for _, Field in Value.Values do
-			local Name = Field.Name
-			local FieldType = Generators.LuauType(Field)
-			table.insert(Fields, `{FormatKey(Name)}: {FieldType}`)
-		end
-
-		Type = `\{ {table.concat(Fields, ", ")}\ }`
+		Type = Util.StructType(Declaration.Value.Values, function(Field)
+			return (Generators.LuauType(Field))
+		end, false)
 	elseif Declaration.Type == "Generic" then
 		Type = `{Declaration.Value.Generic}`
 	elseif Declaration.Type == "Tuple" then
@@ -150,21 +129,6 @@ function Generators.LuauType(
 		Type = `{Generators.LuauType(Value.Of)}?`
 	end
 
-	local Value = Declaration.Value
-
-	if Value.Parameters then
-		local Parameters = {}
-
-		--> Generate luau types for parameters
-		for _, Parameter in Value.Parameters do
-			local ParameterType = Generators.LuauType(Parameter)
-			table.insert(Parameters, ParameterType)
-		end
-
-		--> Wrap in chevrons
-		Type = `{Type}<{table.concat(Parameters, ",")}>`
-	end
-
 	--> Generalized type generation, works for everything except tuples
 	if Declaration.Type ~= "Tuple" then
 		Values = `{Prefix}Value: {UseTypeAsValue and Type or Export}`
@@ -177,15 +141,7 @@ function Generators.Type(Declaration: Type)
 	local Value = Declaration.Value
 	local Type, _, Export = Generators.LuauType(Declaration)
 
-	local Generics = ""
-	if Value.Generics then
-		local GenericNames = {}
-		for _, Generic in Value.Generics.List do
-			table.insert(GenericNames, Generic)
-		end
-
-		Generics = `<{table.concat(GenericNames, ",")}>`
-	end
+	local Generics = Util.GenericsHeader(Value.Generics)
 
 	--> Write luau export
 	State.LuauTypes.PushMultiline(`export type {Export}{Generics} = {Type}`, 1, 0)

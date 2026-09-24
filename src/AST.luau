@@ -50,7 +50,6 @@ export type Attributes = {
 	Range: NumberRange?,
 	Export: boolean?,
 	Generics: Generics?,
-	Parameters: { TypeNode }?,
 	Components: { string }?,
 }
 
