@@ -63,12 +63,7 @@ function Parser.Type(self: Parser, Name: Token, Keyword: Token?, IsDataField: bo
 			if Token.Type == "Identifier" then
 				Declaration = self:Declaration(Name)
 				if not IsDeclarationTypeSimiliar(Declaration.Type, Type :: Declarations) then
-					Error.new(
-						Error.AnalyzeReferenceInvalidType,
-						self.Source,
-						`Cannot cast "{Declaration.Type}" to "{Type}"`,
-						self.File
-					)
+					self:Diagnostic(Error.AnalyzeReferenceInvalidType, `Cannot cast "{Declaration.Type}" to "{Type}"`)
 						:Primary(Token, `Expected a reference to "{Type}", got "{Declaration.Type}" instead`)
 						:Emit()
 				end
@@ -118,7 +113,7 @@ function Parser.Type(self: Parser, Name: Token, Keyword: Token?, IsDataField: bo
 		end
 
 		if not Declaration then
-			Error.new(Error.ParserUnexpectedToken, self.Source, `Unexpected token`, self.File)
+			self:Diagnostic(Error.ParserUnexpectedToken, `Unexpected token`)
 				:Primary(Peek, `Expected one of "Identifier" or "Primitive" or "Keyword", got "{Type}" instead`)
 				:Emit()
 		end
@@ -144,7 +139,7 @@ function Parser.Type(self: Parser, Name: Token, Keyword: Token?, IsDataField: bo
 		if Range then
 			if not Primitive.AllowsRange then
 				local PrimitiveToken = (Declaration :: Primitive).Tokens.Primitive
-				Error.new(Error.AnalyzeInvalidRangeType, self.Source, `Type doesn't accept a range`, self.File)
+				self:Diagnostic(Error.AnalyzeInvalidRangeType, `Type doesn't accept a range`)
 					:Primary(Range.Token, "Remove this range")
 					:Secondary(PrimitiveToken, `"{PrimitiveToken.Value}" has no bounds to constrain`)
 					:Emit()
@@ -162,7 +157,7 @@ function Parser.Type(self: Parser, Name: Token, Keyword: Token?, IsDataField: bo
 			if Declaration.Type == "Primitive" then
 				local Node = Declaration :: Primitive
 				if not Node.Value.Primitive.AllowsOptional then
-					Error.new(Error.AnalyzeInvalidOptionalType, self.Source, `Type cannot be optional`, self.File)
+					self:Diagnostic(Error.AnalyzeInvalidOptionalType, `Type cannot be optional`)
 						:Primary(Optional, "Remove this optional")
 						:Secondary(
 							Node.Tokens.Primitive,

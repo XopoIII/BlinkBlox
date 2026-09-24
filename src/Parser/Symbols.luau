@@ -73,7 +73,7 @@ function Parser.SetReference(self: Parser, Bucket: Bucket, Identifier: Token, De
 	local Name = Identifier.Value
 
 	if RESERVED[Name] then
-		Error.new(Error.AnalyzeReservedIdentifier, self.Source, `Reserved identifier`, self.File)
+		self:Diagnostic(Error.AnalyzeReservedIdentifier, `Reserved identifier`)
 			:Primary(Identifier, `"{Name}" is reserved and cannot be used as an identifier.`)
 			:Emit()
 	end
@@ -220,7 +220,7 @@ function Parser.Declaration(self: Parser, Name: Token): TypeNode
 		--> which the parser could tie the knot.
 		if self.Declaring ~= nil and Token.Value == self.Declaring then
 			error(
-				Error.new(Error.AnalyzeRecursiveType, self.Source, `Recursive type`, self.File)
+				self:Diagnostic(Error.AnalyzeRecursiveType, `Recursive type`)
 					:Primary(Token, `"{Token.Value}" refers to itself`)
 					:Note(
 						"A declaration is only in scope once it closes, and references are inlined where they appear, so a type cannot contain another of itself."
@@ -230,7 +230,7 @@ function Parser.Declaration(self: Parser, Name: Token): TypeNode
 		end
 
 		error(
-			Error.new(Error.AnalyzeUnknownReference, self.Source, `Unknown reference`, self.File)
+			self:Diagnostic(Error.AnalyzeUnknownReference, `Unknown reference`)
 				:Primary(Token, "Unknown reference")
 				:Emit()
 		)

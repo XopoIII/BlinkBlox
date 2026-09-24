@@ -64,7 +64,7 @@ function Parser.Map(self: Parser, Name: Token): Map
 		local Token = self:Peek()
 		local Declaration = self:Type(Name)
 		if Declaration.Type == "Optional" then
-			Error.new(Error.AnalyzeInvalidOptionalType, self.Source, "Invalid optional type", self.File)
+			self:Diagnostic(Error.AnalyzeInvalidOptionalType, "Invalid optional type")
 				:Primary(Token, `Maps cannot have optionals as keys or values`)
 				:Emit()
 		end
@@ -152,7 +152,7 @@ function Parser.TagEnum(self: Parser, Tag: Token, Name: Token): TagEnum
 		--> Don't allow tag field to be set
 		for _, Field: TypeNode in Fields do
 			if Field.Name == Tag.Value then
-				Error.new(Error.AnalyzeReservedIdentifier, self.Source, `Enum tag used as field in variant`, self.File)
+				self:Diagnostic(Error.AnalyzeReservedIdentifier, `Enum tag used as field in variant`)
 					:Secondary(Token, `Used in variant`)
 					:Primary(Tag, `Enum tag`)
 					:Emit()
@@ -212,12 +212,7 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 			--> author can see which name did it, rather than by luau-analyze over generated output.
 			if LUAU_KEYWORDS[Text.Value] or not string.match(Text.Value, "^[%a_][%w_]*$") then
 				error(
-					Error.new(
-						Error.AnalyzeReservedIdentifier,
-						self.Source,
-						`"{Text.Value}" cannot name a type pack element`,
-						self.File
-					)
+					self:Diagnostic(Error.AnalyzeReservedIdentifier, `"{Text.Value}" cannot name a type pack element`)
 						:Primary(Text, "Not usable as a variable name")
 						:Note(
 							"A named element becomes a parameter in the generated code, so it has to be a Luau identifier."
@@ -228,7 +223,7 @@ function Parser.Tuple(self: Parser, Name: Token): Tuple
 
 			if Taken[Text.Value] then
 				error(
-					Error.new(Error.AnalyzeDuplicateField, self.Source, `Duplicate element "{Text.Value}"`, self.File)
+					self:Diagnostic(Error.AnalyzeDuplicateField, `Duplicate element "{Text.Value}"`)
 						:Primary(Text, `Duplicate element`)
 						:Note("Each named element of a type pack becomes a parameter, so the names must differ.")
 						:Emit()
@@ -282,11 +277,9 @@ function Parser.Struct(self: Parser, Name: Token): Struct
 			local Declaration = self:Declaration(Name)
 			if Declaration.Type ~= "Struct" then
 				error(
-					Error.new(
+					self:Diagnostic(
 						Error.AnalyzeReferenceInvalidType,
-						self.Source,
-						`Expected a struct to merge, got "{Declaration.Type}" instead`,
-						self.File
+						`Expected a struct to merge, got "{Declaration.Type}" instead`
 					)
 						:Primary(Text, `Expected a "Struct", got "{Declaration.Type}" instead`)
 						:Emit()
@@ -299,12 +292,7 @@ function Parser.Struct(self: Parser, Name: Token): Struct
 				local FieldIdentifier = Field.Name
 				if Fields[FieldIdentifier] then
 					error(
-						Error.new(
-							Error.AnalyzeDuplicateField,
-							self.Source,
-							`Merged struct contains a duplicate field`,
-							self.File
-						)
+						self:Diagnostic(Error.AnalyzeDuplicateField, `Merged struct contains a duplicate field`)
 							:Primary(Text, `Field "{FieldIdentifier}" already exists in struct`)
 							:Emit()
 					)
@@ -326,7 +314,7 @@ function Parser.Struct(self: Parser, Name: Token): Struct
 
 			if Fields[Text.Value] then
 				error(
-					Error.new(Error.AnalyzeDuplicateField, self.Source, `Duplicate field "{Text.Value}"`, self.File)
+					self:Diagnostic(Error.AnalyzeDuplicateField, `Duplicate field "{Text.Value}"`)
 						:Primary(Text, `Duplicate field`)
 						:Emit()
 				)

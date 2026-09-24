@@ -81,7 +81,7 @@ function Parser.Import(self: Parser): ScopeNode
 
 	if not ImportSource then
 		error(
-			Error.new(Error.AnalyzeUnknownImport, self.Source, `Unknown require`, self.File)
+			self:Diagnostic(Error.AnalyzeUnknownImport, `Unknown require`)
 				:Primary(Path, `Unknown require: "{ImportPath}"`)
 				:Emit()
 		)
@@ -113,7 +113,7 @@ function Parser.Import(self: Parser): ScopeNode
 
 	local Existing = self:Reference("Scopes", Name)
 	if Existing then
-		Error.new(Error.AnalyzeDuplicateDeclaration, self.Source, `Duplicate declaration: "{Name}"`, self.File)
+		self:Diagnostic(Error.AnalyzeDuplicateDeclaration, `Duplicate declaration: "{Name}"`)
 			:Secondary(Existing.Name, "Previously declared here")
 			:Primary(Token, "Duplicate declared here")
 			:Emit()
@@ -139,7 +139,7 @@ function Parser.Import(self: Parser): ScopeNode
 	local Key = PathParser.Normalise(Resolved or ImportPath)
 	if self.Importing[Key] then
 		error(
-			Error.new(Error.AnalyzeCyclicImport, self.Source, `Cyclic import`, self.File)
+			self:Diagnostic(Error.AnalyzeCyclicImport, `Cyclic import`)
 				:Primary(Path, `"{ImportPath}" is already being imported, so this would never finish`)
 				:Emit()
 		)
@@ -206,7 +206,7 @@ function Parser.Declarations(self: Parser): { Declaration }
 		local Declaration: Declaration
 
 		if Keyword.Value == "option" then
-			Error.new(Error.AnalyzeOptionAfterStart, self.Source, "Option set after start of file", self.File)
+			self:Diagnostic(Error.AnalyzeOptionAfterStart, "Option set after start of file")
 				:Primary(Keyword, "Move to the start of the file")
 				:Emit()
 		end
@@ -219,7 +219,7 @@ function Parser.Declarations(self: Parser): { Declaration }
 		local Existing = self:Reference(Bucket, Name.Value)
 
 		if Existing then
-			Error.new(Error.AnalyzeDuplicateDeclaration, self.Source, `Duplicate declaration`, self.File)
+			self:Diagnostic(Error.AnalyzeDuplicateDeclaration, `Duplicate declaration`)
 				:Secondary(Existing.Name, "Previously declared here")
 				:Primary(Name, "Duplicate declared here")
 				:Emit()
@@ -258,17 +258,12 @@ function Parser.Declarations(self: Parser): { Declaration }
 		if Export then
 			--> Prevent non exportable types from being exported
 			if not KeywordSettings.Exportable then
-				Error.new(
-					Error.AnalyzeInvalidExport,
-					self.Source,
-					`Declaration of type "{Keyword.Value}" is not exportable`,
-					self.File
-				)
+				self:Diagnostic(Error.AnalyzeInvalidExport, `Declaration of type "{Keyword.Value}" is not exportable`)
 					:Primary(Export, `Remove export here`)
 					:Emit()
 			--> Prevent types with generics from being exported
 			elseif Generics then
-				Error.new(Error.AnalyzeInvalidExport, self.Source, `Generic types can't be exported`, self.File)
+				self:Diagnostic(Error.AnalyzeInvalidExport, `Generic types can't be exported`)
 					:Primary(Export, `Remove export here`)
 					:Emit()
 			end
@@ -279,12 +274,7 @@ function Parser.Declarations(self: Parser): { Declaration }
 			--> be silently lost on write and read back as nil. Nothing checked this before.
 			local Measured = Size.Sealed(Declaration :: any)
 			if Measured.Refs > 0 then
-				Error.new(
-					Error.AnalyzeInvalidExport,
-					self.Source,
-					`Types containing an Instance or unknown can't be exported`,
-					self.File
-				)
+				self:Diagnostic(Error.AnalyzeInvalidExport, `Types containing an Instance or unknown can't be exported`)
 					:Primary(Export, "Remove export here")
 					:Secondary(Name, `"{Name.Value}" carries a value that travels beside the buffer`)
 					:Note("An exported Read/Write pair only has the buffer, so such a value cannot survive it.")
@@ -296,7 +286,7 @@ function Parser.Declarations(self: Parser): { Declaration }
 
 		if Generics then
 			if Declaration.Type == "Enum" then
-				Error.new(Error.AnalyzeInvalidGenerics, self.Source, `Unit enums don't support generics`, self.File)
+				self:Diagnostic(Error.AnalyzeInvalidGenerics, `Unit enums don't support generics`)
 					:Primary(Generics.Span, "Remove generics")
 					:Emit()
 			end
