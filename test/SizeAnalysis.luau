@@ -18,7 +18,7 @@ local ErrorPrint = Harness.ErrorPrint
 local RunClosure = Assertions.RunClosure
 
 RunClosure("Static size analysis matches the emitter", function()
-	--> src/Modules/Size.luau predicts how many bytes a type occupies; src/Generator/Prefabs.luau
+	--> src/Modules/Size.luau predicts how many bytes a type occupies; src/Generator/Prefabs/
 	--> decides it. Nothing links the two, so the analysis can drift out of agreement with the
 	--> compiler it describes and the only symptom would be a wrong diagnostic -- either a schema
 	--> refused for no reason, or an oversize unreliable event let through.

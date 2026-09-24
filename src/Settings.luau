@@ -44,7 +44,7 @@ export type Primitive = {
 	--- this field for everything else.
 	---
 	--- It lives here rather than next to the prefabs that emit the writes because the Studio plugin
-	--- cannot reach `src/Generator/Prefabs.luau` -- it never loads `Blocks` -- and the size analysis
+	--- cannot reach `src/Generator/Prefabs/` -- it never loads `Blocks` -- and the size analysis
 	--- has to run in the editor for the oversize-unreliable diagnostic to appear there.
 	Bytes: number,
 }

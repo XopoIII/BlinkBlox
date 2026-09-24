@@ -9,7 +9,7 @@
 --- broken in a way that no test in the game will reproduce, so the compiler has to say so before
 --- the schema ships rather than after.
 ---
---- The numbers here MUST track what `src/Generator/Prefabs.luau` actually emits. They are checked
+--- The numbers here MUST track what `src/Generator/Prefabs/` actually emits. They are checked
 --- against it rather than trusted: the suite serialises every exported type and asserts the measured
 --- bounds contain the real byte length, so a prefab that changes size without a matching change here
 --- fails the build.

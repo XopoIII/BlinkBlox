@@ -207,7 +207,7 @@ src/Generator/State.luau   everything one generation run builds up, shared by th
 src/Generator/Generators   Luau types and serialisers for declarations, and the declaration walk
 src/Generator/Event.luau   one `event`; Function.luau one `function`; Decode.luau their guards
 src/Generator/Blocks.luau  code-emitting DSL (Block / Function / Connection)
-src/Generator/Prefabs.luau read/write prefabs per primitive, plus range and type asserts
+src/Generator/Prefabs/     read/write prefabs per primitive, plus range and type asserts
 src/Templates/*.luau       runtime fragments spliced into generated output
 plugin/src/                the Studio plugin: editor, syntax highlighting, autocomplete
 ```
