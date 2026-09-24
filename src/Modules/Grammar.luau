@@ -5,11 +5,11 @@
 --- scripts/check-file-size.sh and had no room to grow.
 ---
 --- Data only, so this module requires nothing but the lexer's token types. Everything that reads a
---- token or raises a diagnostic stays in Parser.luau -- put behaviour here and the cycle comes back.
+--- token or raises a diagnostic stays in src/Parser/ -- put behaviour here and the cycle comes back.
 
 local Lexer = require("../Lexer")
 
---- Every kind of node the parser can produce. Parser.luau aliases this rather than restating it.
+--- Every kind of node the parser can produce. AST.luau aliases this rather than restating it.
 export type Declarations =
 	"Map"
 	| "Set"

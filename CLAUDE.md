@@ -200,7 +200,8 @@ src/CLI/init.luau          argument parsing, help, watch mode
 src/CLI/Utility/Compile    the pipeline: read -> parse -> generate -> write
 src/Lexer.luau             tokeniser, pattern table + transformers
 src/AST.luau               the AST's node types, re-exported by Parser
-src/Parser.luau            recursive descent, semantic analysis, building the AST
+src/Parser/                recursive descent and semantic analysis, one class across files:
+                           Class.luau declares the state and every method, the rest add them
 src/Generator/init.luau    the Luau emitter
 src/Generator/Blocks.luau  code-emitting DSL (Block / Function / Connection)
 src/Generator/Prefabs.luau read/write prefabs per primitive, plus range and type asserts
@@ -214,7 +215,7 @@ There is no separate IR — the generator walks the AST directly.
 
 The same lexer, parser and error modules run **on Lune** for the CLI *and* **inside Roblox** for the
 Studio plugin, which requires them through the `@compiler` alias in `.luaurc`. They branch at
-runtime: `src/Parser.luau` tests `task ~= nil`, `src/Modules/Error.luau` tests `game ~= nil`.
+runtime: `src/Parser/Document.luau` tests `task ~= nil`, `src/Modules/Error.luau` tests `game ~= nil`.
 
 Consequences worth remembering:
 
@@ -235,6 +236,10 @@ Consequences worth remembering:
 - **`Token.Value` is typed `string`, but `true`/`false` arrive as real booleans.** `Parser.Options`
   depends on that when storing a boolean option. The widening is confined to `TokenTransformer` and
   one cast in `Lexer.GetNextToken`.
+- **A parser method is declared twice.** Its signature goes in `Methods` in `src/Parser/Class.luau`,
+  its body in whichever file of `src/Parser/` it belongs to. The methods call each other through
+  `self` across files, and the declaration is what lets the type checker see them there; a body
+  with no declaration fails the type gate, and one that disagrees with it does too.
 - **`Blocks.Emittable` is `string | number` on purpose.** Callers pass identifiers *and* numeric
   literals into the generated text; both interpolate identically.
 

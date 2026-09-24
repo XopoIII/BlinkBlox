@@ -1,0 +1,221 @@
+--!strict
+--!native
+--!optimize 2
+
+--- Declarations with a body of named fields -- events, functions -- and scope blocks.
+---
+--- Part of the parser: every file in src/Parser/ adds methods to the one class in Class.luau,
+--- so a method here calls any other through `self` as if they shared a file.
+
+local Error = require("../Modules/Error")
+local Grammar = require("../Modules/Grammar")
+local Lexer = require("../Lexer")
+local ParserClass = require("./Class")
+
+type Parser = ParserClass.Parser
+type Token = ParserClass.Token
+type EventOption = ParserClass.EventOption
+type Declarations = ParserClass.Declarations
+type Scope = ParserClass.Scope
+type EventCall = ParserClass.EventCall
+type Event = ParserClass.Event
+type Function = ParserClass.Function
+type ScopeNode = ParserClass.ScopeNode
+
+local EVENT = Grammar.EVENT
+local FUNCTION = Grammar.FUNCTION
+
+local Parser = ParserClass.Class
+
+function Parser.GetOptionFromToken(self: Parser, Token: Token, Structure: { EventOption }): EventOption
+	local Value = Token.Value
+	for _, Option in Structure do
+		local Key = Option.Key
+		if Key == Value or string.lower(Key) == Value then
+			return Option
+		end
+	end
+
+	local OptionsString = ""
+	for Index, Option in Structure do
+		OptionsString ..= `{Index ~= 1 and " or " or ""}"{Option.Key}"`
+	end
+
+	error(
+		Error.new(Error.ParserUnknownOption, self.Source, `Unknown option "{Value}"`, self.File)
+			:Primary(Token, `Expected one of {OptionsString}`)
+			:Emit()
+	)
+end
+
+function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption }): { [string]: any }
+	local Fields: { [string]: any } = {}
+	local Open, Close: Lexer.Token? = self:Consume("OpenBraces"), nil
+
+	while true do
+		Close = self:TryConsume("CloseBraces")
+		if Close then
+			break
+		end
+
+		local Value: any
+		local Field = self:ConsumeText()
+		local Option = self:GetOptionFromToken(Field, Structure)
+		self:Consume("FieldAssign")
+
+		--> Prevent duplicate fields
+		if Fields[Option.Key] then
+			Error.new(Error.AnalyzeDuplicateField, self.Source, `Field "{Option.Key}" was already specified`, self.File)
+				:Primary(Field, `Already specified earlier in the structure`)
+				:Emit()
+		end
+
+		--> `Poll: true` is the 0.x spelling of `Call: Polling`. Both still work and compile to exactly
+		--> the same thing -- Parser.Event folds one into the other -- but only `Call` appears in the
+		--> documentation, so a schema written with `Poll` is using a spelling nothing tells you about
+		--> and nothing warns you off. `UseColon` has warned for the same reason since it stopped
+		--> doing anything; this one still works, which is why it warns rather than errors.
+		if Option.Key == "Poll" then
+			Error.new(Error.AnalyzeDeprecatedOption, self.Source, `Field "Poll" is deprecated`, self.File, "Warning")
+				:Primary(Field, "Use `Call: Polling` instead")
+				:Note("The two compile to the same thing, but only `Call` is documented.")
+				:Warn()
+		end
+
+		--> Parse non data/return field
+		if Option.Numeric then
+			local Token = self:Consume(Option.Type)
+			local Numeric = tonumber(Token.Value)
+
+			if not Numeric or Numeric <= 0 then
+				Error.new(Error.ParserUnknownOption, self.Source, `Invalid value for "{Option.Key}"`, self.File)
+					:Primary(Token, "Expected a number greater than zero")
+					:Emit()
+			end
+
+			--> Stored as a number: every consumer does arithmetic with it.
+			Value = Numeric
+		elseif Option.Key ~= "Data" and Option.Key ~= "Return" then
+			local Token = self:Consume(Option.Type)
+			Value = Token.Value
+
+			if not table.find(Option.Values, Value) then
+				Error.new(Error.ParserUnknownOption, self.Source, `Unknown option "{Value}"`, self.File)
+					:Primary(Token, `Expected one of "{table.concat(Option.Values, `" or "`)}"`)
+					:Emit()
+			end
+		else
+			Value = self:Type(Name, nil, true)
+		end
+
+		Fields[Option.Key] = Value
+		Close = self:TryConsume("CloseBraces")
+
+		if Close then
+			break
+		end
+
+		self:Consume("Comma")
+	end
+
+	--> Check if all required fields where supplied
+	for _, Option in Structure do
+		if Option.Optional then
+			continue
+		end
+
+		if Fields[Option.Key] ~= nil then
+			continue
+		end
+
+		local Span: Error.Span = {
+			End = math.max((Close :: Lexer.Token).End - 2, Open.Start),
+			Start = Open.Start,
+		}
+
+		Error.new(Error.ParserExpectedExtraToken, self.Source, `Field "{Option.Key}" is missing`, self.File)
+			:Primary(Span, `Add missing field "{Option.Key}"`)
+			:Emit()
+	end
+
+	return Fields
+end
+
+function Parser.Event(self: Parser, Name: Token): Event
+	local Structure = self:Structure(Name, EVENT)
+	local Call: EventCall = Structure.Call
+	if Structure.Poll then
+		Call = "Polling"
+	end
+
+	return {
+		Type = "Event",
+		Name = Name.Value,
+		Value = {
+			From = Structure.From,
+			Type = Structure.Type,
+			Call = Call,
+			Data = Structure.Data,
+			Rate = Structure.Rate,
+			Burst = Structure.Burst,
+		},
+		Tokens = {
+			Identifier = Name,
+		},
+	}
+end
+
+function Parser.Function(self: Parser, Name: Token): Function
+	local Structure = self:Structure(Name, FUNCTION)
+
+	return {
+		Type = "Function",
+		Name = Name.Value,
+		Value = {
+			From = Structure.From or "Client",
+			Yield = Structure.Yield,
+			Data = Structure.Data,
+			Return = Structure.Return,
+			Rate = Structure.Rate,
+			Burst = Structure.Burst,
+		},
+		Tokens = {
+			Identifier = Name,
+		},
+	}
+end
+
+function Parser.Namespace(self: Parser, Name: Token): ScopeNode
+	self:Consume("OpenBraces")
+
+	--> Open scope
+	local Parent = self.Scope
+	local Scope: Scope = {
+		Name = Name,
+		Parent = Parent,
+		Symbols = {
+			Types = {},
+			Scopes = {},
+		},
+	}
+
+	self.Scope = Scope
+	self.Symbols[Name.Value] = true
+	Parent.Symbols.Scopes[Name.Value] = Scope
+
+	local Declarations = self:Declarations()
+
+	self.Scope = Parent
+
+	return {
+		Type = "Scope",
+		Name = Name.Value,
+		Value = {
+			Scope = Scope,
+			Values = Declarations,
+		},
+		Tokens = {},
+	}
+end
+
+return Parser
