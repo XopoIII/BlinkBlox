@@ -74,10 +74,6 @@ Each tool fires 1000 events a frame from client to server. The run was in Studio
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
 [`benchmark/Benchmarks.md`](benchmark/Benchmarks.md).
 
-<div align="center">
-  <img src="./docs/src/assets/bb_end.jpg" alt="A Roblox character holding up a pile of bricks against a flood of data" width="640">
-</div>
-
 ## Where it comes from
 
 BlinkBlox is a maintained fork of [Blink](https://github.com/1Axen/blink). Upstream froze this line
@@ -105,6 +101,10 @@ cd docs && npm install && npm run dev   # documentation site
 ```
 
 `CLAUDE.md` describes the architecture and the gates that CI and the git hooks run.
+
+<div align="center">
+  <img src="./docs/src/assets/bb_end.jpg" alt="A Roblox character holding up a pile of bricks against a flood of data" width="640">
+</div>
 
 ## Credits
 
