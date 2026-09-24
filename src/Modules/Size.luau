@@ -296,7 +296,10 @@ local function MeasureMap(Node: Node): Measurement
 	Result.Max = 2 + (Pair.Max * MAP_LENGTH)
 	Result.Refs = Pair.Refs * MAP_LENGTH
 	Result.Unbounded = true
-	Result.Culprit = Node.Tokens.Primitive
+	--> A map node carries only its key's token (see Parser.Map); it has no `Primitive` to point at,
+	--> and reading one left every map without a culprit. The key is inside the braces the author
+	--> would have to change.
+	Result.Culprit = Node.Tokens.Key
 
 	return Result
 end

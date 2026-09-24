@@ -24,7 +24,7 @@ LIMIT=500
 GRANDFATHERED="src/Parser.luau:1768
 src/Generator/init.luau:1568
 plugin/src/Editor/init.luau:921
-test/Test.luau:844
+test/Test.luau:777
 src/Generator/Prefabs.luau:792
 test/Guards.luau:721
 plugin/src/init.server.luau:579
