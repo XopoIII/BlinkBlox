@@ -735,10 +735,7 @@ function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
 
 	Options.SyncValidation = if Options.SyncValidation ~= nil then Options.SyncValidation else true
 
-	Analysis.UnreliableSizes(self.Source, self.File, Declarations, Options)
-	Analysis.RateLimits(self.Source, self.File, Declarations, Options)
-	Analysis.CostlessRepetitions(self.Source, self.File, Declarations)
-	Analysis.MapKeys(self.Source, self.File, Declarations)
+	Analysis.Run(self.Source, self.File, Declarations, Options)
 
 	return {
 		Type = "Body",

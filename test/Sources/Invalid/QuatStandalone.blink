@@ -1,0 +1,3 @@
+-- expect E3023
+-- `quat` names a rotation encoding, which means nothing outside a CFrame.
+type Rotation = quat

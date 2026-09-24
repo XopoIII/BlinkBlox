@@ -1,0 +1,3 @@
+-- expect E3023
+-- A CFrame has one rotation, so two `quat` components leave the position without a type.
+type Pose = CFrame<quat, quat>
