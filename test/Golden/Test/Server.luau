@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "40aab18d5a9b14c9"
+local SCHEMA_SIGNATURE = "8d11ce1a5cb81d40"
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -530,6 +530,10 @@ Queue.Reliable[56] = table.create(256)
 EventNames.Reliable[56] = "Unlistened"
 Queue.Reliable[57] = table.create(256)
 EventNames.Reliable[57] = "Unanswered"
+Queue.Reliable[59] = table.create(256)
+EventNames.Reliable[59] = "RangedFloat32"
+Queue.Reliable[60] = table.create(256)
+EventNames.Reliable[60] = "RangedFloat16"
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
 export type Indexers_TestFlags = {["a a"]: boolean,}
 export type Indexers_TestEnums = ("b b")
@@ -3335,6 +3339,50 @@ function SerdesFunctions.WriteEVENT_OrderedToClient(Value: number): ()
 		error(`Expected Value to be of type number, got {type(Value)} instead.`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value)
+end
+
+function SerdesFunctions.ReadEVENT_RangedFloat32(): (number)
+	-- Read BLOCK: 4 bytes
+	local BLOCK_START = Read(4)
+	-- Value: RangedFloat32
+	local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+	if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+	if not (Value <= 0.30000001192092896) then error(`Expected "Value" to be smaller than or equal to 0.30000001192092896, got {Value} instead.`) end
+	return Value
+end
+
+function SerdesFunctions.ReadEVENT_RangedFloat16(): (number)
+	-- Read BLOCK: 2 bytes
+	local BLOCK_START = Read(2)
+	-- Value: RangedFloat16
+	local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	local Value
+	local MantissaExponent = Encoded % 0x8000
+	if MantissaExponent == 0b0_11111_0000000000  then
+		if Encoded // 0x8000 == 1 then
+			Value = -math.huge
+		else
+			Value = math.huge
+		end
+	elseif MantissaExponent > 0b0_11111_0000000000 then
+		Value = 0 / 0
+	elseif MantissaExponent == 0b0_00000_0000000000   then
+		Value = 0
+	else
+		local Mantissa = MantissaExponent % 0x400
+		local Exponent = MantissaExponent // 0x400
+		local Fraction;
+		if Exponent == 0 then
+			Fraction = Mantissa / 0x400
+		else
+			Fraction = Mantissa / 0x800 + 0.5
+		end
+		local Result = math.ldexp(Fraction, Exponent - 14)
+		Value = if Encoded // 0x8000 == 1 then -Result else Result
+	end
+	if not (Value >= 0.0999755859375) then error(`Expected "Value" to be larger than or equal to 0.0999755859375, got {Value} instead.`) end
+	if not (Value <= 1) then error(`Expected "Value" to be smaller than or equal to 1, got {Value} instead.`) end
+	return Value
 end
 
 if not RunService:IsRunning() then
@@ -7926,6 +7974,14 @@ if not RunService:IsRunning() then
 			return Result
 		end
 	},
+	RangedFloat32 = {
+		On = NOOP_RETURNING,
+		Predict = NOOP
+	},
+	RangedFloat16 = {
+		On = NOOP_RETURNING,
+		Predict = NOOP
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -8621,6 +8677,28 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 					return
 				end
 				table.insert(Queue.Reliable[57], table.pack(Player, Value, InvocationIdentifier))
+			end
+		elseif Index == 59 then
+			local Value: number = SerdesFunctions.ReadEVENT_RangedFloat32()
+			if Events.Reliable[59] ~= nil then
+				SerdesEvent = "RangedFloat32"
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[59], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			else
+				if #Queue.Reliable[59] < 256 then
+					table.insert(Queue.Reliable[59], table.pack(Player, Value))
+				end
+			end
+		elseif Index == 60 then
+			local Value: number = SerdesFunctions.ReadEVENT_RangedFloat16()
+			if Events.Reliable[60] ~= nil then
+				SerdesEvent = "RangedFloat16"
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[60], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			else
+				if #Queue.Reliable[60] < 256 then
+					table.insert(Queue.Reliable[60], table.pack(Player, Value))
+				end
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -16106,6 +16184,62 @@ local Returns = table.freeze({
 				error(Result, 0)
 			end
 			return Result
+		end
+	},
+	RangedFloat32 = {
+		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+			if Events.Reliable[59] ~= nil then
+				warn("[BlinkBlox]: \"RangedFloat32\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Reliable[59] = Listener
+			for Index, Arguments in Queue.Reliable[59] do
+				Listener(table.unpack(Arguments, 1, Arguments.n))
+			end
+			Queue.Reliable[59] = {}
+			return function (): ()
+				if Events.Reliable[59] == Listener then
+					Events.Reliable[59] = nil
+				end
+			end
+		end,
+		Predict = function(Player: Player, Value: number): ()
+			if Events.Reliable[59] ~= nil then
+				SerdesEvent = "RangedFloat32"
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[59], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			else
+				if #Queue.Reliable[59] < 256 then
+					table.insert(Queue.Reliable[59], table.pack(Player, Value))
+				end
+			end
+		end
+	},
+	RangedFloat16 = {
+		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+			if Events.Reliable[60] ~= nil then
+				warn("[BlinkBlox]: \"RangedFloat16\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Reliable[60] = Listener
+			for Index, Arguments in Queue.Reliable[60] do
+				Listener(table.unpack(Arguments, 1, Arguments.n))
+			end
+			Queue.Reliable[60] = {}
+			return function (): ()
+				if Events.Reliable[60] == Listener then
+					Events.Reliable[60] = nil
+				end
+			end
+		end,
+		Predict = function(Player: Player, Value: number): ()
+			if Events.Reliable[60] ~= nil then
+				SerdesEvent = "RangedFloat16"
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[60], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			else
+				if #Queue.Reliable[60] < 256 then
+					table.insert(Queue.Reliable[60], table.pack(Player, Value))
+				end
+			end
 		end
 	},
 })

@@ -9,6 +9,7 @@
 --- The registries are filled at load, in the order Prefabs/init.luau requires the files, and a later
 --- prefab may build on an earlier one: f16 reads through u16, CFrame through vector.
 local Blocks = require("../Blocks")
+local Narrow = require("./Narrow")
 local Parser = require("../../Parser")
 
 export type Block = Blocks.Block
@@ -131,7 +132,12 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 			end
 
 			if Range then
-				local Assert = AssertGenerator(TargetVariable, Range.Min, Range.Max)
+				local Min, Max = Range.Min, Range.Max
+				if Block == Read then
+					Min, Max = Narrow.Bounds(Primitive, Min, Max)
+				end
+
+				local Assert = AssertGenerator(TargetVariable, Min, Max)
 				if not IsVariableSize and Assert.Exact then
 					Block:Line(Assert.Exact)
 				else

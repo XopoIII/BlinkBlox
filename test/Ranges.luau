@@ -155,3 +155,45 @@ do
 		struct
 	)
 end
+
+RunClosure("A float range accepts the values it names once they are narrowed", function()
+	--> The receiver checked a decoded f32 or f16 against the bounds as written, but decoded values
+	--> are narrowed: 0.3 arrives as 0.30000001192092896, above `f32(0..0.3)`, and 0.1 as an f16
+	--> arrives as 0.0999755859375, below `f16(0.1..1)`. Each range refused its own bound.
+	local task = require("@lune/task")
+	local Seen32, Seen16 = 0, 0
+	local Disconnect32 = Server.RangedFloat32.On(function()
+		Seen32 += 1
+	end)
+	local Disconnect16 = Server.RangedFloat16.On(function()
+		Seen16 += 1
+	end)
+
+	--> One per frame: a refused value drops the rest of its packet. The out-of-range ones may be refused
+	--> by either side -- this schema validates writes as well -- and only the in-range ones may land.
+	for _, Send in
+		{
+			function()
+				Client.RangedFloat32.Fire(0.3)
+			end,
+			function()
+				pcall(Client.RangedFloat32.Fire, 0.4)
+			end,
+			function()
+				Client.RangedFloat16.Fire(0.1)
+			end,
+			function()
+				pcall(Client.RangedFloat16.Fire, 1.5)
+			end,
+		}
+	do
+		Send()
+		task.wait(1 / 30)
+	end
+
+	Disconnect32()
+	Disconnect16()
+
+	assert(Seen32 == 1, `f32(0..0.3) accepted {Seen32} of 0.3 and 0.4, expected only 0.3`)
+	assert(Seen16 == 1, `f16(0.1..1) accepted {Seen16} of 0.1 and 1.5, expected only 0.1`)
+end)

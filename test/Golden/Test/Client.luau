@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "40aab18d5a9b14c9"
+local SCHEMA_SIGNATURE = "8d11ce1a5cb81d40"
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -3171,6 +3171,55 @@ function SerdesFunctions.ReadEVENT_OrderedToClient(): (number)
 	-- Value: OrderedToClient
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
+end
+
+function SerdesFunctions.WriteEVENT_RangedFloat32(Value: number): ()
+	-- Allocate BLOCK: 5 bytes
+	local BLOCK_START = Allocate(5)
+	-- EVENT_RangedFloat32 (59)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 59)
+	-- Value: RangedFloat32
+	if typeof(Value) ~= "number" then
+		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+	end
+	if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+	if not (Value <= 0.3) then error(`Expected "Value" to be smaller than or equal to 0.3, got {Value} instead.`) end
+	buffer.writef32(SendBuffer, BLOCK_START + 1, Value)
+end
+
+function SerdesFunctions.WriteEVENT_RangedFloat16(Value: number): ()
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
+	-- EVENT_RangedFloat16 (60)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 60)
+	-- Value: RangedFloat16
+	if typeof(Value) ~= "number" then
+		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+	end
+	if not (Value >= 0.1) then error(`Expected "Value" to be larger than or equal to 0.1, got {Value} instead.`) end
+	if not (Value <= 1) then error(`Expected "Value" to be smaller than or equal to 1, got {Value} instead.`) end
+	if Value > 65504 then
+		buffer.writeu16(SendBuffer, BLOCK_START + 1, 0b0_11111_0000000000)
+	elseif Value < -65504 then
+		buffer.writeu16(SendBuffer, BLOCK_START + 1, 0b1_11111_0000000000)
+	elseif Value ~= Value then
+		buffer.writeu16(SendBuffer, BLOCK_START + 1, 0b1_11111_0000000001)
+	elseif Value == 0 then
+		buffer.writeu16(SendBuffer, BLOCK_START + 1, 0)
+	else
+		local float = Value
+		local Abosulte = math.abs(float)
+		local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+		local RoundedValue = (Abosulte // Interval) * Interval
+		local Fraction, Exponent = math.frexp(RoundedValue)
+		Exponent += 14
+		local Scaled = math.round(if Exponent <= 0
+			then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+			else Fraction * 0x800)
+		local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+			+ if float < 0 then 0x8000 else 0
+		buffer.writeu16(SendBuffer, BLOCK_START + 1, Result)
+	end
 end
 
 if not RunService:IsRunning() then
@@ -7644,6 +7693,12 @@ if not RunService:IsRunning() then
 			end
 			return Result
 		end
+	},
+	RangedFloat32 = {
+		Fire = NOOP
+	},
+	RangedFloat16 = {
+		Fire = NOOP
 	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
@@ -14413,6 +14468,26 @@ local Returns = table.freeze({
 				error(Result, 0)
 			end
 			return Result
+		end
+	},
+	RangedFloat32 = {
+		Fire = function(Value: number): ()
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_RangedFloat32, Value)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
+		end
+	},
+	RangedFloat16 = {
+		Fire = function(Value: number): ()
+			local Cursor, Instances = Mark()
+			local Sent, Failure = pcall(SerdesFunctions.WriteEVENT_RangedFloat16, Value)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
 		end
 	},
 })

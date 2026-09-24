@@ -905,3 +905,20 @@ export type OptionalHoles = u8?[3]
 --> A half-precision float with a public reader and writer, for the edge cases of the encoding: NaN,
 --> the infinities, and the subnormal that rounds up to the smallest normal number.
 export type HalfFloat = f16
+
+--> Float ranges whose bounds the encoding cannot hold exactly. 0.3 is 0.30000001192092896 as an f32,
+--> above its own bound, and 0.1 as an f16 is 0.0999755859375, below it; the receiver has to check
+--> against the bounds as they would arrive, or it refuses the very values the range names.
+event RangedFloat32 {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: f32(0..0.3)
+}
+
+event RangedFloat16 {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: f16(0.1..1)
+}
