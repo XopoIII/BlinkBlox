@@ -7,6 +7,7 @@
 local Assertions = require("./Assertions")
 local Completion = require("@compiler/../plugin/src/Editor/Completion")
 local Harness = require("./Harness")
+local Utility = require("@compiler/../plugin/src/Editor/Utility")
 
 local ErrorPrint = Harness.ErrorPrint
 local RunClosure = Assertions.RunClosure
@@ -65,6 +66,12 @@ RunClosure("Completion offers keywords, primitives and declared names where each
 		--> A brace in a comment or a string opens nothing.
 		{ Text = "-- event X {\nstr", Cursor = 17, Expect = "struct" },
 		{ Text = 'option ServerOutput = "{"\nstr', Cursor = 30, Expect = "struct" },
+		--> The declaration is found across blank lines and nested structs, and not after it closed.
+		{ Text = "event X {\n\n  R", Cursor = 15, Expect = "Rate" },
+		{ Text = "event X {\n  Data: struct {\n    A: u8,\n  },\n  R", Cursor = 47, Expect = "Rate" },
+		{ Text = "event X {\n  Data: struct {\n    ty", Cursor = 34, Expect = "type" },
+		{ Text = "event X {\n  From: Client,\n}\nstr", Cursor = 32, Expect = "struct" },
+		{ Text = "scope S {\n  event X {\n    Ty", Cursor = 29, Expect = "Type" },
 		--> Inside a struct, a field's name is the author's: keywords as before.
 		{ Text = "struct S {\n  Type: u", Cursor = 21, Expect = "u8,u16,u24,u32,unknown" },
 	}
@@ -119,5 +126,34 @@ RunClosure("The arrow keys step through the list, wrapping at both ends", functi
 
 	if Completion.Step(1, 3, -1) ~= 3 or Completion.Step(3, 3, 1) ~= 1 or Completion.Step(1, 3, 1) ~= 2 then
 		ErrorPrint(`Failed "Navigation": stepping past either end of the list did not wrap.`)
+	end
+end)
+
+RunClosure("The line at the cursor is the one splitting the whole text finds", function()
+	--> The reference is what GetLineRangeAtPosition did before it stopped splitting the document.
+	local function Reference(Source: string, Cursor: number)
+		local Position = 0
+		for _, Slice in string.split(Source, "\n") do
+			local Start = Position
+			Position += (#Slice + 1)
+			if Cursor <= Position then
+				return Slice, Start + 1, Position - 1
+			end
+		end
+		return nil, nil, nil
+	end
+
+	for _, Source in { "", "a", "abc\ndef", "\n\nx\n", "event X {\n  From: Client,\n}\n" } do
+		for Cursor = 1, #Source + 1 do
+			local Text, Start, End = Reference(Source, Cursor)
+			local Got = Utility.GetLineRangeAtPosition(Source, Cursor)
+			if Got.Text ~= Text or Got.Start ~= Start or Got.End ~= End then
+				ErrorPrint(
+					`Failed "Line range": {string.format("%q", Source)} at {Cursor} gave `
+						.. `{string.format("%q", Got.Text)} {Got.Start}..{Got.End}, expected `
+						.. `{string.format("%q", Text or "")} {Start}..{End}.`
+				)
+			end
+		end
 	end
 end)

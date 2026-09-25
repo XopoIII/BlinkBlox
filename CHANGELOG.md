@@ -19,6 +19,14 @@ startup instead of misreading packets.
   yet, and each field is followed by the values it accepts, where before every `:` offered the
   primitive types. `@profile` is offered at the start of a line, and a profile inside it.
 
+### Performance
+
+- The editor's completion no longer splits the whole document on every keystroke to find the line
+  under the cursor; it reads that line alone. The declaration around the cursor is found by reading
+  back from it with plain `string.find`, only as far as the nearest `event` or `function`. On a
+  2400-line schema a keystroke's completion went from 0.25 ms to 0.01, and inside a 2000-field
+  struct from 0.48 ms to 0.03.
+
 ### Fixed
 
 - `--help` said `--compact` prints the full message after the compacted one. It prints only the one

@@ -75,6 +75,13 @@ local FIELDS: { [string]: { Grammar.EventOption } } = {
 	["function"] = Grammar.FUNCTION,
 }
 
+local FIELD_KEYS: { [string]: true } = {}
+for _, Fields in FIELDS do
+	for _, Field in Fields do
+		FIELD_KEYS[Field.Key] = true
+	end
+end
+
 --> Shortest first, so the closest match to what has been typed is at the top. Labels of one length go
 --> in name order: `Settings.Primtives` is a map, so without it their order was whatever the table's
 --> layout happened to be, and adding `u24` put it after `u32`.
@@ -94,13 +101,88 @@ local function Extends(Label: string, Typed: string): boolean
 	return Stub == Typed and Stub ~= Label
 end
 
+--- Whether the `Keyword` at `At` opens a declaration: first on its line, after any attribute, and
+--- followed by a name.
+local function Declares(Text: string, At: number, Keyword: string): boolean
+	if not string.match(Text, "^[ \t]+[%a_]", At + #Keyword) then
+		return false
+	end
+
+	local LineStart = At
+	while LineStart > 1 and string.sub(Text, LineStart - 1, LineStart - 1) ~= "\n" do
+		LineStart -= 1
+	end
+
+	local Prefix = string.sub(Text, LineStart, At - 1)
+	return string.match(Prefix, "^%s*$") ~= nil or string.match(Prefix, "^%s*@%a+%b()%s*$") ~= nil
+end
+
+--> How much text `NearestBlock` reads at a time, walking back from the cursor.
+local CHUNK = 4096
+
+--- The nearest `event` or `function` declaration before `Position`, and where its keyword is.
+---
+--- Runs on every keystroke, so it reads the schema from the cursor back, a chunk at a time, and only as
+--- far as the nearest one, finding the keywords with plain `string.find` at memory speed. A pattern
+--- search or a walk in Luau costs about a millisecond per 30 KB, and so does `string.reverse`.
+local function NearestBlock(Text: string, Position: number): (string?, number)
+	local Upper = Position - 1
+	while Upper >= 1 do
+		local From = math.max(1, Upper - CHUNK + 1)
+		local Slice = string.sub(Text, From, Upper)
+
+		--> Each keyword's occurrences in the chunk, checked from the last: the first that opens a
+		--> declaration is its nearest.
+		local Found: string?, Best = nil, 0
+		for Keyword in FIELDS do
+			local Occurrences: { number } = {}
+			local Index = 1
+			while true do
+				local At = string.find(Slice, Keyword, Index, true)
+				if not At then
+					break
+				end
+
+				table.insert(Occurrences, From + At - 1)
+				Index = At + 1
+			end
+
+			for Nth = #Occurrences, 1, -1 do
+				local At = Occurrences[Nth]
+				if At <= Best then
+					break
+				elseif Declares(Text, At, Keyword) then
+					Found, Best = Keyword, At
+					break
+				end
+			end
+		end
+
+		if Found then
+			return Found, Best
+		elseif From == 1 then
+			break
+		end
+
+		--> Overlapping by a keyword's length, so one split across two chunks is still found.
+		Upper = From + #"function" - 2
+	end
+
+	return nil, 0
+end
+
 --- The declaration whose braces hold `Position`, if it is an `event` or a `function`, and the text of
---- its body up to there. Comments and strings are skipped, so a brace in either does not count.
+--- its body up to there. Braces are counted from the nearest such declaration, skipping comments and
+--- strings, and only until its block closes: its body is short, whatever the schema's length.
 local function Enclosing(Text: string, Position: number): (string?, string)
-	local Opened: { number } = {}
-	local Index = 1
-	--> Called on every keystroke, so it jumps between the characters that matter rather than stepping
-	--> through each one.
+	local Keyword, Start = NearestBlock(Text, Position)
+	if not Keyword then
+		return nil, ""
+	end
+
+	--> The cursor is in the body only at depth one; deeper is a nested struct.
+	local Depth, Brace = 0, 0
+	local Index = Start
 	while true do
 		local At = string.find(Text, '[{}"%-]', Index)
 		if not At or At >= Position then
@@ -118,36 +200,28 @@ local function Enclosing(Text: string, Position: number): (string?, string)
 			Index = (End or #Text) + 1
 		else
 			if Character == "{" then
-				table.insert(Opened, At)
+				Depth += 1
+				if Depth == 1 then
+					Brace = At
+				end
 			elseif Character == "}" then
-				table.remove(Opened)
+				Depth -= 1
+				if Depth == 0 then
+					--> The declaration closed before the cursor.
+					return nil, ""
+				end
 			end
 			Index = At + 1
 		end
 	end
 
-	local Brace = Opened[#Opened]
-	if not Brace then
+	if Depth ~= 1 then
 		return nil, ""
 	end
 
-	--> The header is what precedes the brace in its statement: `event Hit {`, after any attribute.
-	--> Found by walking back from the brace: a pattern anchored only at the end tries every start.
-	local From = Brace - 1
-	while From > 0 and not string.find("{}\n", string.sub(Text, From, From), 1, true) do
-		From -= 1
-	end
-	local Header = string.sub(Text, From + 1, Brace - 1)
-	Header = string.gsub(Header, "^%s*@%a+%b()", "")
-	local Keyword = string.match(Header, "^%s*(%a+)%s+[%a_][%w_]*%s*$")
-
-	if Keyword and FIELDS[Keyword] then
-		--> A nested struct's own fields are not the declaration's.
-		local Body = string.gsub(string.sub(Text, Brace + 1, Position - 1), "%b{}", "")
-		return Keyword, Body
-	end
-
-	return nil, ""
+	--> A nested struct's own fields are not the declaration's.
+	local Body = string.gsub(string.sub(Text, Brace + 1, Position - 1), "%b{}", "")
+	return Keyword, Body
 end
 
 local function Offer(Items: { Item }, Icon: string, Typed: string, Label: string, Insert: string)
@@ -170,8 +244,6 @@ function Completion.Match(Text: string, Cursor: number, Symbols: { [string]: tru
 		return Items
 	end
 
-	local Block, Body = Enclosing(Text, Line.Start + Word.Start - 1)
-
 	--> A profile inside `@profile("`: the whole word is replaced, so the insert is the whole attribute.
 	local Profile = string.match(Typed, '^@profile%("(%a*)$')
 	if Profile and Word.Index == 1 then
@@ -182,7 +254,9 @@ function Completion.Match(Text: string, Cursor: number, Symbols: { [string]: tru
 		return Items
 	end
 
+	local WordStart = Line.Start + Word.Start - 1
 	if Word.Index == 1 then
+		local Block, Body = Enclosing(Text, WordStart)
 		if Block then
 			--> A field opens a line in an event or a function, once each.
 			for _, Field in FIELDS[Block] do
@@ -225,8 +299,10 @@ function Completion.Match(Text: string, Cursor: number, Symbols: { [string]: tru
 		return Items
 	end
 
-	--> A field of an event or a function takes its own values, and `Data` and `Return` a type.
+	--> A field of an event or a function takes its own values, and `Data` and `Return` a type. Only a
+	--> key one of them has is worth finding the enclosing declaration for.
 	local Key = string.match(Previous.Text, "^([%a_][%w_]*):$")
+	local Block = if Key and FIELD_KEYS[Key] then Enclosing(Text, WordStart) else nil
 	if Block and Key then
 		for _, Field in FIELDS[Block] do
 			if Field.Key == Key and #Field.Values > 0 then
