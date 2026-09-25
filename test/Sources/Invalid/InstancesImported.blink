@@ -1,0 +1,8 @@
+-- expect E3031
+-- An imported file's client-sent Instance shares this file's remote and option, so it is refused
+-- too, and reported at the import.
+option MaxInstancesPerPacket = 0
+option ClientOutput = "../../Network/InstancesImportedClient.luau"
+option ServerOutput = "../../Network/InstancesImportedServer.luau"
+
+import "./Imported/ClientInstance.blink"

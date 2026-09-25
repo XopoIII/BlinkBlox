@@ -293,8 +293,12 @@ game has said where it wants to hear about packets and the warnings stop. `MaxIn
 may be 0, and a client-sent Instance beside it is `E3031`, a check that walks imports because they
 share the remote. Adding it took `src/Templates/Server.luau` to the size cap, so the server's limits
 moved into `src/Templates/Limits.luau`, spliced at a second `-- SPLIT --`. The TypeScript output had
-never declared the two older handlers; it declares all three now. Neither the wire nor the schema
-signature changed.
+never declared the two older handlers; it declares all three now. Reviewing it turned up two older
+holes of the same kind as `E3005`: the reserved check knew only the `Pascal` spelling of a member,
+so under `Camel` an event `stepReplication` replaced the member (and no scope was checked at all),
+and the runtime's own type aliases -- `Entry`, `Queue` -- were redefined by a schema type of the same
+name. `src/Modules/ModuleNames.luau` checks the spelling in force, and the aliases are `BLINK_*`.
+Neither the wire nor the schema signature changed.
 
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as

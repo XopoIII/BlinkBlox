@@ -66,11 +66,11 @@ end
 --> Oversized and Budget, its instance count for Instances, the events decoded for Events, 0 otherwise.
 --> With a handler installed the warnings are not printed, and Budget no longer reaches the rate-limit
 --> handler: the game has said where it wants to hear about packets.
-type DropReason = "Malformed" | "Oversized" | "Budget" | "Instances" | "Events"
-local DropHandler: ((Player: Player, Reason: DropReason, Refused: number, Detail: number) -> ())? = nil
+type BLINK_DROP_REASON = "Malformed" | "Oversized" | "Budget" | "Instances" | "Events"
+local DropHandler: ((Player: Player, Reason: BLINK_DROP_REASON, Refused: number, Detail: number) -> ())? = nil
 local Drops: {[Player]: {[string]: number}} = {}
 
-local function SetPacketDropHandler(Handler: ((Player: Player, Reason: DropReason, Refused: number, Detail: number) -> ())?)
+local function SetPacketDropHandler(Handler: ((Player: Player, Reason: BLINK_DROP_REASON, Refused: number, Detail: number) -> ())?)
     DropHandler = Handler
 end
 
@@ -83,7 +83,7 @@ local DROP_WARNINGS: {[string]: string} = {
     Events = "Dropped the rest of a packet from %s, too many events.",
 }
 
-local function ReportDrop(Player: Player, Reason: DropReason, Detail: number)
+local function ReportDrop(Player: Player, Reason: BLINK_DROP_REASON, Detail: number)
     local Counts = Drops[Player]
     if not Counts then
         if Player.Parent == nil then
@@ -184,7 +184,7 @@ local function InboundAccept(Player: Player, Length: number, Floor: number, Rate
     --> throwing handler would take the connection's thread with it.
     local Dropped = DropHandler
     if Dropped then
-        Spawn(Dropped, Player, "Budget" :: DropReason, Refused, Length)
+        Spawn(Dropped, Player, "Budget" :: BLINK_DROP_REASON, Refused, Length)
         return false
     end
 

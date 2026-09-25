@@ -981,3 +981,12 @@ event RangedFloat24 {
     Call: SingleSync,
     Data: f24(0.1..0.7)
 }
+
+--> The runtime's own type aliases were once called these, and a top-level type of the same name
+--> redefined one in the module's strict check. They are spelled BLINK_* now; the golden type gate
+--> keeps these free.
+type Entry = u8
+type Queue = u8
+type BufferSave = u8
+type Invocations = u8
+type DropReason = u8

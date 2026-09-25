@@ -247,19 +247,14 @@ its result (`:andThen(...)`) errors in a story. Guard it with `RunService:IsRunn
 
 | Name | Why |
 |---|---|
-| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | Module members. A top-level declaration may not take these names (`E3005`). |
+| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | Module members. A top-level event, function, scope or type may not take these names, nor, under `Camel` or `Snake` casing, the spelling the module gives them there (`stepReplication`, `step_replication`, ...) (`E3005`). |
+| `BLINK_ENTRY`, `BLINK_QUEUE`, `BLINK_BUFFER_SAVE`, `BLINK_INVOCATIONS`, `BLINK_DROP_REASON`, `BLINK_EVENTS_SYMBOL` | Types the module declares for itself. A top-level type of that name would redefine one (`E3005`). |
 | Built-in Luau types: `any`, `never`, `number`, `thread` | A declared type is exported under its own name, and Luau refuses `export type number = number` (`E3005`, since 0.32.0). |
 | Roblox types the module uses: `Player`, `RemoteEvent`, `UnreliableRemoteEvent`, `Vector3`, and any class the schema names in `Instance(...)` | A top-level type of that name would refer to itself and shadow every use of the Roblox type in the module (`E3005`, since 0.32.0). A type inside a `scope` is exported with the scope's name in front, so it may take these names. |
 | BlinkBlox's own types: `boolean`, `buffer`, `string`, `unknown`, `Instance`, `CFrame`, `Color3`, `DateTime`, `BrickColor` and the rest | The parser reads them as primitives, so a declaration cannot be named after one (`E2002`). |
 | Luau keywords (`end`, `local`, ...) | A named type-pack element becomes a parameter, so it must be a Luau identifier (`E3005`). Struct fields, flags and tags may be keywords; they are quoted. |
 | `Player`, `Buffer`, `Load`, `Size`, `Success` and other names the generated functions use | Refused as type-pack element names, which would shadow them (`E3005`); the diagnostic names the clash. |
 | A tagged enum's tag | May not also be a field of one of its variants (`E3005`). |
-
-<Aside type="caution">
-The reserved check compares the `Pascal` spelling only. Under `Camel` or `Snake` casing, a top-level
-declaration named `stepReplication` or `step_replication` compiles and replaces the module member of
-that name. Avoid those names.
-</Aside>
 
 ## Limits
 

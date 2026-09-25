@@ -61,6 +61,14 @@ does the schema signature**: a 0.37.0 module talks to a 0.36.x one built from th
   `SetPacketDropHandler`, in the module's `Casing`.
 - `--help` said `--compact` prints the full message after the compacted one. It prints only the one
   line.
+- Under `option Casing = Camel` or `Snake`, a top-level event, function or scope named in that
+  spelling of a module member -- `stepReplication`, `set_packet_drop_handler` -- compiled and replaced
+  the member in the returned table, since the reserved check compared the `Pascal` spelling only. And
+  a `scope StepReplication` passed even under `Pascal`, since scopes were never checked. Both are
+  `E3005` now; a name in some other casing's spelling still compiles, since it collides with nothing.
+- A top-level type named `Entry`, `Queue`, `BufferSave`, `Invocations` or `DropReason` redefined a type
+  alias the runtime declares for itself, and the generated module failed its own `--!strict` check.
+  The runtime's aliases are spelled `BLINK_*` now, and a type of one of those names is `E3005`.
 
 ### Changed
 

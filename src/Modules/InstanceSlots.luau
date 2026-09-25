@@ -24,10 +24,6 @@ type Declaration = any
 --- The type nodes of `Declaration` that a client writes, or none.
 local function ClientSent(Declaration: Declaration): { any }
 	local Value = Declaration.Value
-	if Value.Generics then
-		return {}
-	end
-
 	if Value.From == "Client" then
 		return if Value.Data then { Value.Data } else {}
 	elseif Declaration.Type == "Function" and Value.Return then

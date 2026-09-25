@@ -1,0 +1,6 @@
+-- expect E3005
+-- The runtime declares BLINK_QUEUE itself; a top-level type of that name would redefine it.
+option ClientOutput = "../../Network/ModuleTypeNameClient.luau"
+option ServerOutput = "../../Network/ModuleTypeNameServer.luau"
+
+type BLINK_QUEUE = u8

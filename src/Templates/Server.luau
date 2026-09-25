@@ -39,7 +39,7 @@ end
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
 
-local PlayersMap: {[Player]: BufferSave} = {}
+local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
 
 --> How many rows a polled event's queue holds on the server before it stops taking more. Clients fill
 --> it, and a game that polls an event rarely, or has not got round to polling it at all, would let
@@ -63,7 +63,7 @@ local MAX_POLLED = 256 * math.max(Players.MaxPlayers, 1)
 -->
 --> Lifetime: a player who leaves owes an answer to every call outstanding to them, and those callers
 --> have to be failed rather than left to sit out the timeout.
-local PlayerInvocations: {[Player]: Invocations} = {}
+local PlayerInvocations: {[Player]: BLINK_INVOCATIONS} = {}
 
 local function InvokePlayer(Player: Player, Index: number): number
     --> Checked before an id is claimed. A player who already left gets no answer from anyone, and

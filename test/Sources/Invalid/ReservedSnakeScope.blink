@@ -1,0 +1,14 @@
+-- expect E3005
+-- Under Snake casing the module's member is set_packet_drop_handler; a scope becomes a member too.
+option Casing = Snake
+option ClientOutput = "../../Network/ReservedSnakeScopeClient.luau"
+option ServerOutput = "../../Network/ReservedSnakeScopeServer.luau"
+
+scope set_packet_drop_handler {
+    event Ping {
+        From: Server,
+        Type: Reliable,
+        Call: SingleSync,
+        Data: u8
+    }
+}

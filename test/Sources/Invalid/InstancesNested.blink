@@ -1,0 +1,22 @@
+-- expect E3031
+-- An Instance deep inside a client-sent struct, as a map's value inside an alias, still rides the
+-- remote's instance table, which MaxInstancesPerPacket = 0 refuses whole.
+option MaxInstancesPerPacket = 0
+option ClientOutput = "../../Network/InstancesNestedClient.luau"
+option ServerOutput = "../../Network/InstancesNestedServer.luau"
+
+map Parts = {[string]: Instance}
+
+struct Holder {
+    Id: u8,
+    Inner: struct {
+        Parts: Parts,
+    },
+}
+
+event Placed {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: Holder
+}
