@@ -7,7 +7,7 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
-## Unreleased
+## 0.36.2 — 2026-09-25
 
 **The wire format does not change.**
 
@@ -23,6 +23,20 @@ startup instead of misreading packets.
   only reads the elements costs the same on both. The forms without a branch -- `v and k or 0`, a
   `{ [true] = 1 }` lookup -- measured no faster or slower. The reader already did not depend on
   the data, and a lookup table there was three times slower natively, so it stays as it was.
+
+### Benchmarks
+
+- Blink 0.18.9, the last release of the original project BlinkBlox forked from, is benchmarked
+  beside it, compiling the same schema with its own compiler, in Studio and on Lune.
+- The tables name the tools BlinkBlox, Blink, zap, ByteNet, Packet and Roblox remotes, always in
+  that order, where they had printed the harness's ids (`blink`, `upstream`) in no fixed order.
+- `lune run Runtime` times zap, ByteNet, Packet and Blink as well as BlinkBlox, natively
+  compiled and interpreted, and times the server decoding what they sent, which Studio does not.
+  Each row also gives the encoder's bytes per event and those bytes after zstd.
+- The Studio harness reports bytes per event instead of Kbps. The old column sampled
+  `Stats.DataSendKbps` once a second and scaled it by 60 / FPS, which read low for every tool below
+  60 FPS: Packet's EntitiesRandom came to 486 bytes an event, under the 600 bytes of random data in
+  it. The published numbers were retaken on an Apple M1 with both harnesses.
 
 ## 0.36.1 — 2026-09-25
 
