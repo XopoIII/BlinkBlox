@@ -253,6 +253,12 @@ end
 --- last partial byte with a short loop. The loop they replace went an element at a time and paid a
 --- modulo, a shift and a branch for every boolean -- a million of them a frame at the benchmark's
 --- load -- and the reader appended each one with `table.insert`.
+---
+--- The writer loads a byte's eight elements into locals before it branches on any of them, and
+--- under WriteValidations checks their types in the same pass rather than in a loop of its own.
+--- Branching straight on `Value[i]` cost 13.5 ms a frame on random data against 3.8 on constant,
+--- natively; through locals it is 7.8, and the validated writer went from 17.4 to 9.7. Truly
+--- branchless forms (`v and k or 0`, a `{ [true] = 1 }` lookup) measured no better or worse.
 function Serde.PackedBooleans(Read: Blocks.Block, Write: Blocks.Block, Variable: string, Fixed: number?)
 	local Bytes = if Fixed then math.ceil(Fixed / 8) else nil
 	if Bytes == 0 then
@@ -282,23 +288,47 @@ function Serde.PackedBooleans(Read: Blocks.Block, Write: Blocks.Block, Variable:
 	Read:Line("\tend")
 	Read:Line("end")
 
+	local Validate = State.Options.WriteValidations
+	local function Refuse(Indent: string, Index: string)
+		Write:Line(
+			`{Indent}if typeof(PACKED_ITEM) ~= "boolean" then error(\`Expected {Variable}[\{{Index}}] to be of type boolean, got \{type(PACKED_ITEM)} instead.\`) end`
+		)
+	end
+
 	Write:Line("do")
 	Write:Line(`\tlocal PACKED_LENGTH = {Fixed or `#{Variable}`}`)
-	if State.Options.WriteValidations then
-		Write:Line("\tfor PACKED_INDEX = 1, PACKED_LENGTH do")
-		Write:Line(`\t\tlocal PACKED_ITEM = {Variable}[PACKED_INDEX]`)
-		Write:Line(
-			`\t\tif typeof(PACKED_ITEM) ~= "boolean" then error(\`Expected {Variable}[\{PACKED_INDEX}] to be of type boolean, got \{type(PACKED_ITEM)} instead.\`) end`
-		)
-		Write:Line("\tend")
-	end
 	Write:Line(`\tlocal PACKED_OFFSET = {WriteOffset}`)
 	Write:Line("\tlocal PACKED_WHOLE = PACKED_LENGTH // 8")
 	Write:Line("\tfor PACKED_BYTE = 0, PACKED_WHOLE - 1 do")
 	Write:Line("\t\tlocal PACKED_BASE = PACKED_BYTE * 8")
+	local Items = {}
+	for Bit = 1, 8 do
+		Items[Bit] = `PACKED_{Bit}`
+	end
+	for Half = 0, 4, 4 do
+		local Names = table.concat(Items, ", ", Half + 1, Half + 4)
+		local Reads = {}
+		for Bit = Half + 1, Half + 4 do
+			table.insert(Reads, `{Variable}[PACKED_BASE + {Bit}]`)
+		end
+		Write:Line(`\t\tlocal {Names} = {table.concat(Reads, ", ")}`)
+	end
+	if Validate then
+		--> One test for the byte on the hot path; which element failed is worked out only once one has.
+		local Tests = {}
+		for _, Item in Items do
+			table.insert(Tests, `typeof({Item}) ~= "boolean"`)
+		end
+		Write:Line(`\t\tif {table.concat(Tests, " or ")} then`)
+		Write:Line("\t\t\tfor PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do")
+		Write:Line(`\t\t\t\tlocal PACKED_ITEM = {Variable}[PACKED_INDEX]`)
+		Refuse("\t\t\t\t", "PACKED_INDEX")
+		Write:Line("\t\t\tend")
+		Write:Line("\t\tend")
+	end
 	Write:Line("\t\tlocal PACKED_BITS = 0")
-	for Bit = 0, 7 do
-		Write:Line(`\t\tif {Variable}[PACKED_BASE + {Bit + 1}] then PACKED_BITS += {bit32.lshift(1, Bit)} end`)
+	for Bit, Item in Items do
+		Write:Line(`\t\tif {Item} then PACKED_BITS += {bit32.lshift(1, Bit - 1)} end`)
 	end
 	Write:Line("\t\tbuffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)")
 	Write:Line("\tend")
@@ -306,7 +336,11 @@ function Serde.PackedBooleans(Read: Blocks.Block, Write: Blocks.Block, Variable:
 	Write:Line("\t\tlocal PACKED_BASE = PACKED_WHOLE * 8")
 	Write:Line("\t\tlocal PACKED_BITS = 0")
 	Write:Line("\t\tfor PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do")
-	Write:Line(`\t\t\tif {Variable}[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end`)
+	Write:Line(`\t\t\tlocal PACKED_ITEM = {Variable}[PACKED_BASE + PACKED_BIT + 1]`)
+	if Validate then
+		Refuse("\t\t\t", "PACKED_BASE + PACKED_BIT + 1")
+	end
+	Write:Line("\t\t\tif PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end")
 	Write:Line("\t\tend")
 	Write:Line("\t\tbuffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)")
 	Write:Line("\tend")

@@ -1260,30 +1260,36 @@ function SerdesFunctions.WriteEVENT_Booleans(Value: { boolean }): ()
 	buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value)
 	do
 		local PACKED_LENGTH = #Value
-		for PACKED_INDEX = 1, PACKED_LENGTH do
-			local PACKED_ITEM = Value[PACKED_INDEX]
-			if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-		end
 		local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 		local PACKED_WHOLE = PACKED_LENGTH // 8
 		for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 			local PACKED_BASE = PACKED_BYTE * 8
+			local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+			local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+			if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+				for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+					local PACKED_ITEM = Value[PACKED_INDEX]
+					if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+				end
+			end
 			local PACKED_BITS = 0
-			if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
-			if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
-			if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
-			if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
-			if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
-			if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
-			if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
-			if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+			if PACKED_1 then PACKED_BITS += 1 end
+			if PACKED_2 then PACKED_BITS += 2 end
+			if PACKED_3 then PACKED_BITS += 4 end
+			if PACKED_4 then PACKED_BITS += 8 end
+			if PACKED_5 then PACKED_BITS += 16 end
+			if PACKED_6 then PACKED_BITS += 32 end
+			if PACKED_7 then PACKED_BITS += 64 end
+			if PACKED_8 then PACKED_BITS += 128 end
 			buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 		end
 		if PACKED_LENGTH % 8 ~= 0 then
 			local PACKED_BASE = PACKED_WHOLE * 8
 			local PACKED_BITS = 0
 			for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-				if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+				local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+				if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+				if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 			end
 			buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 		end

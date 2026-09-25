@@ -67,6 +67,17 @@ local Packages: { [string]: Package } = {
 	},
 }
 
+--> Tools run from source rather than a release binary. Upstream Blink, which BlinkBlox forked from,
+--> is pinned at the last release on its main branch: main has had nothing but major fixes since, and
+--> its `rewrite` branch is a different compiler with prereleases only. Its compiler runs on Lune, so
+--> the source archive is all the bench needs.
+local Sources: { [string]: { Url: string, Version: string } } = {
+	upstream = {
+		Url = "https://github.com/1Axen/blink/archive/refs/tags/v0.18.9.zip",
+		Version = "v0.18.9",
+	},
+}
+
 local Versions = {}
 
 if fs.isFile("config.json") then
@@ -242,6 +253,24 @@ for Name, Urls in Packages do
 
 	Versions[Name] = Version
 	print("Downloaded", Name, Version)
+end
+
+for Name, Source in Sources do
+	local Archive = `{PATH_TO_TOOLS}{Name}.zip`
+	local CurlResult = Curl(Source.Url, Archive)
+	assert(CurlResult.ok, `Encountered an exception while downloading {Name}, {CurlResult.stderr}`)
+
+	--> The archive holds one folder named after the repository and tag; it becomes tools/<name>.
+	local Unpacked = `{PATH_TO_TOOLS}{Name}_unpacked`
+	Extract(Archive, Unpacked)
+	local Entries = fs.readDir(Unpacked)
+	assert(#Entries == 1, `The {Name} archive should hold one folder, not {#Entries} entries`)
+	fs.move(`{Unpacked}/{Entries[1]}`, `{PATH_TO_TOOLS}{Name}`, true)
+	fs.removeDir(Unpacked)
+	fs.removeFile(Archive)
+
+	Versions[Name] = Source.Version
+	print("Downloaded", Name, Source.Version)
 end
 
 fs.writeFile("./tools/versions.json", serde.encode("json", Versions))

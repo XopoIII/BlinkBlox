@@ -1,0 +1,47 @@
+-- The same events as Definition.blink, for upstream Blink, the project BlinkBlox forked from. It is
+-- compiled by upstream's own compiler at its last release on main, v0.18.9 (download.luau).
+--
+-- Upstream has no inbound limits to raise, so it takes none of the options Definition.blink raises.
+-- It runs in the same place as BlinkBlox, which keeps upstream's remote names and `_G._BLINK` for
+-- compatibility, so it gets a scope of its own: its remotes are UPSTREAM_BLINK_RELIABLE_REMOTE and
+-- the like.
+option ClientOutput = "../src/shared/upstream/Client.luau"
+option ServerOutput = "../src/shared/upstream/Server.luau"
+option RemoteScope = "UPSTREAM"
+
+struct Entity {
+    id: u8,
+    x: u8,
+    y: u8,
+    z: u8,
+    orientation: u8,
+    animation: u8
+}
+
+event Booleans {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: boolean[0..1000]
+}
+
+event Entities {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: Entity[0..1000]
+}
+
+event BooleansRandom {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: boolean[0..1000]
+}
+
+event EntitiesRandom {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: Entity[0..1000]
+}

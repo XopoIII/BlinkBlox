@@ -8,8 +8,6 @@ local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local Stats = game:GetService("Stats")
 
-local MAXIMUM_FRAMERATE = 60
-
 local Camera = workspace.CurrentCamera
 Camera.FieldOfView = 1
 Camera.CFrame = CFrame.new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -32,7 +30,12 @@ end
 type Benchmark = {
 	Sent: number,
 	Recieve: number,
-	Bandwidth: { number },
+	--> Bytes each event cost on the wire, after Roblox's compression: every byte the client sent from
+	--> the first fire until its backlog drained, less what it sends when idle, over the events fired.
+	BytesPerEvent: number,
+	--> Seconds the client kept sending after its last fire. A tool whose sends fall behind its fires
+	--> finishes them here, which a rate sampled during the run never saw.
+	Drain: number,
 	Framerate: { number },
 	--> Milliseconds of CPU each frame's thousand fires took. Unlike the frame rate this is not capped
 	--> by Studio's 60 FPS, so it still tells two tools apart when both reach the cap.
@@ -55,19 +58,33 @@ local function Percentile(Samples: { number }, Percentile: number)
 	return Samples[Index]
 end
 
+--> `Stats.DataSendKbps` is kilobytes a second, not kilobits: with it, BlinkBlox's incompressible
+--> benches came out at exactly their encoded size, 603 bytes a thousand times a frame at 60 FPS.
+local IDLE_KBPS = 0.5
+
 local function WaitForPacketsToProcess()
 	print("Waiting for packets to be processed.")
-	while Stats.DataSendKbps > 0.5 do
+	while Stats.DataSendKbps > IDLE_KBPS do
 		RunService.Heartbeat:Wait()
 	end
 
 	task.wait(5)
 end
 
+--> What the client sends with nothing firing, in kilobytes a second, averaged over a second.
+local function IdleRate(): number
+	local Total, Elapsed = 0, 0
+	while Elapsed < 1 do
+		local DeltaTime = RunService.Heartbeat:Wait()
+		Total += Stats.DataSendKbps * DeltaTime
+		Elapsed += DeltaTime
+	end
+	return Total / Elapsed
+end
+
 local function RunBenchmark(Tool: string, Bench: string): Benchmark
 	local Total = 0
 	local Frames = 0
-	local Bandwidth = {}
 	local Framerates = {}
 
 	local Sent = 0
@@ -91,14 +108,24 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 		Method = Event.Fire or Event.send
 	end
 
+	--> Bandwidth is integrated over the whole run and its drain rather than sampled once a second and
+	--> scaled by 60 / FPS. The scaled samples undercounted every tool below 60 FPS -- Packet's
+	--> EntitiesRandom read as 486 bytes an event, less than its 600 bytes of random data -- because
+	--> what a slow tool fired late in a second went out after the sample, and after the run.
+	local Idle = IdleRate()
+	local Kilobytes = 0
+	local Metered = 0
+	local Meter = RunService.Heartbeat:Connect(function(DeltaTime: number)
+		Kilobytes += Stats.DataSendKbps * DeltaTime
+		Metered += DeltaTime
+	end)
+
 	local Connection = RunService.PostSimulation:Connect(function(DeltaTime: number)
 		Total += DeltaTime
 		Frames += 1
 
 		if Total >= 1 then
 			Total -= 1
-			local Scale = (MAXIMUM_FRAMERATE / Frames)
-			table.insert(Bandwidth, Stats.DataSendKbps * Scale)
 			table.insert(Framerates, Frames)
 			Frames = 0
 		end
@@ -115,19 +142,24 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 	Connection:Disconnect()
 	print(`> Finished running with {Tool}`)
 
+	--> A minute is far past any drain measured; past it the stat is not falling, and the run goes on.
+	local Finished = os.clock()
+	while Stats.DataSendKbps > IDLE_KBPS and os.clock() - Finished < 60 do
+		RunService.Heartbeat:Wait()
+	end
+	local Drain = os.clock() - Finished
+	Meter:Disconnect()
+
 	--> Generate results
-	table.sort(Bandwidth)
 	table.sort(FireTimes)
 	table.sort(Framerates, function(a, b)
 		return a > b
 	end)
 
 	local FrameratePercentiles = {}
-	local BandwidthPercentiles = {}
 	local FireTimePercentiles = {}
 
 	for _, Percentage in { 50, 0, 80, 90, 95, 100 } do
-		table.insert(BandwidthPercentiles, Percentile(Bandwidth, Percentage))
 		table.insert(FrameratePercentiles, Percentile(Framerates, Percentage))
 		table.insert(FireTimePercentiles, Percentile(FireTimes, Percentage))
 	end
@@ -135,7 +167,8 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 	return {
 		Sent = Sent,
 		Recieve = 0,
-		Bandwidth = BandwidthPercentiles,
+		BytesPerEvent = math.max(Kilobytes - Idle * Metered, 0) * 1000 / Sent,
+		Drain = Drain,
 		Framerate = FrameratePercentiles,
 		FireTime = FireTimePercentiles,
 	}

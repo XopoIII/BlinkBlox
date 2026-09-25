@@ -9,11 +9,24 @@ and their bandwidth measures the compressor; the random benches leave it nothing
 60 FPS is bounded by the cap, not by its own cost, and this column still tells such tools apart. Studio compiles
 LocalScripts natively, which most clients do not, so every tool looks faster here than on a player's device.
 
+`Bytes/event` is what an event cost on the wire after Roblox's compression: every byte the client sent from the first
+fire until its backlog drained, less what it sends idle, over the events fired. `Drain` is how long that backlog took
+after the last fire. This replaced a `Kbps` column that sampled `Stats.DataSendKbps` -- kilobytes a second, not
+kilobits -- once a second and scaled it by 60 / FPS. That read low for every tool below 60 FPS, since what a slow tool
+fired went out after its sample and after the run: on the M1, Packet's EntitiesRandom came to 486 bytes an event, less
+than the 600 bytes of random data in it. Tables older than this change still carry the `Kbps` column, and it should be
+read with that in mind: no tool encodes Entities in fewer bytes than another (see below).
+
 BlinkBlox's inbound limits are raised in the definition file for this, since a live server's defaults refuse most of
 what the benchmark sends -- that is what they are for.
 
-What BlinkBlox's generated code costs on its own, without Studio -- fire, flush and decode, natively compiled and
-interpreted -- is measured by `lune run Runtime` in this directory.
+## Without Studio
+
+`lune run Runtime` in this directory times every tool above on Lune, where Studio cannot: interpreted, as most
+players' clients run code, and decoding on the server, which Studio does not time. It loads zap's generated modules,
+ByteNet and Packet from the same files Studio runs (after `lune run build --download`) with just enough of Roblox
+mocked around them, and times a frame's thousand fires, the flush into packets, and the server decoding those packets
+and calling its listener. `Bytes/event` is the encoder's output; `zstd` is that output compressed as Roblox would.
 
 Source code can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src).  
 Data used for benchmarks can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches).   

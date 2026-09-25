@@ -7,6 +7,23 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+**The wire format does not change.**
+
+### Changed
+
+- A `boolean[]` is written faster, most of all when its elements vary. The writer loads a byte's
+  eight elements into locals before it branches on any of them, and under `WriteValidations` checks
+  their types in that same pass instead of a loop of its own. On the benchmark's thousand arrays of
+  a thousand random booleans a frame, natively compiled, a frame's fires went from 13.9 ms to 8.2;
+  with the same array every time, from 3.9 to 3.3. Interpreted, 27.6 to 25.4 on random data, and
+  the same on constant data. The validated writer measured 17.4 against 9.7 on random data. What
+  the M1 run showed as a slowdown on random data was branch misprediction, not memory: a pass that
+  only reads the elements costs the same on both. The forms without a branch -- `v and k or 0`, a
+  `{ [true] = 1 }` lookup -- measured no faster or slower. The reader already did not depend on
+  the data, and a lookup table there was three times slower natively, so it stays as it was.
+
 ## 0.36.1 — 2026-09-25
 
 **The wire format does not change.**

@@ -88,7 +88,8 @@ end
 type Benchmark = {
 	Sent: number,
 	Recieve: number,
-	Bandwidth: { number },
+	BytesPerEvent: number?,
+	Drain: number?,
 	Framerate: { number },
 	FireTime: { number }?,
 }
@@ -97,10 +98,6 @@ local Metrics = {
 	{
 		Label = "FPS",
 		Samples = "Framerate",
-	},
-	{
-		Label = "Kbps",
-		Samples = "Bandwidth",
 	},
 	{
 		Label = "Fire ms",
@@ -139,6 +136,19 @@ local function WriteBenchResults(Name: string, Results: { [string]: Benchmark })
 
 			Output ..= `\n|{Tool}|{table.concat(Formatted, "|")}|{Loss}%|`
 		end
+	end
+
+	--> One number per tool, not percentiles: it is every byte of the run over every event of it.
+	Output ..= "\n\n|Tool|Bytes/event|Drain (s)|Loss (%)|"
+	Output ..= "\n|---|---|---|---|"
+	for Tool, Result in Results do
+		local Loss = math.floor((1 - (Result.Recieve / Result.Sent)) * 100)
+		if Result.BytesPerEvent == nil or Loss > 50 then
+			Output ..= `\n|{Tool}|-|-|{Loss}%|`
+			continue
+		end
+
+		Output ..= `\n|{Tool}|{string.format("%.2f", Result.BytesPerEvent)}|{string.format("%.1f", Result.Drain or 0)}|{Loss}%|`
 	end
 
 	Contents ..= Output

@@ -6732,30 +6732,36 @@ if not RunService:IsRunning() then
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
 				do
 					local PACKED_LENGTH = #Value
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -6831,30 +6837,36 @@ if not RunService:IsRunning() then
 				if #Value ~= 10 then error(`Expected length of "Value" to be equal to 10, got {#Value} instead.`) end
 				do
 					local PACKED_LENGTH = 10
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = BLOCK_START + 0
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -6937,30 +6949,36 @@ if not RunService:IsRunning() then
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
 				do
 					local PACKED_LENGTH = #Value
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -7067,30 +7085,36 @@ if not RunService:IsRunning() then
 					buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
 					do
 						local PACKED_LENGTH = #Item_1
-						for PACKED_INDEX = 1, PACKED_LENGTH do
-							local PACKED_ITEM = Item_1[PACKED_INDEX]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						end
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 						local PACKED_WHOLE = PACKED_LENGTH // 8
 						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 							local PACKED_BASE = PACKED_BYTE * 8
+							local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Item_1[PACKED_BASE + 1], Item_1[PACKED_BASE + 2], Item_1[PACKED_BASE + 3], Item_1[PACKED_BASE + 4]
+							local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Item_1[PACKED_BASE + 5], Item_1[PACKED_BASE + 6], Item_1[PACKED_BASE + 7], Item_1[PACKED_BASE + 8]
+							if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+								for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+									local PACKED_ITEM = Item_1[PACKED_INDEX]
+									if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+								end
+							end
 							local PACKED_BITS = 0
-							if Item_1[PACKED_BASE + 1] then PACKED_BITS += 1 end
-							if Item_1[PACKED_BASE + 2] then PACKED_BITS += 2 end
-							if Item_1[PACKED_BASE + 3] then PACKED_BITS += 4 end
-							if Item_1[PACKED_BASE + 4] then PACKED_BITS += 8 end
-							if Item_1[PACKED_BASE + 5] then PACKED_BITS += 16 end
-							if Item_1[PACKED_BASE + 6] then PACKED_BITS += 32 end
-							if Item_1[PACKED_BASE + 7] then PACKED_BITS += 64 end
-							if Item_1[PACKED_BASE + 8] then PACKED_BITS += 128 end
+							if PACKED_1 then PACKED_BITS += 1 end
+							if PACKED_2 then PACKED_BITS += 2 end
+							if PACKED_3 then PACKED_BITS += 4 end
+							if PACKED_4 then PACKED_BITS += 8 end
+							if PACKED_5 then PACKED_BITS += 16 end
+							if PACKED_6 then PACKED_BITS += 32 end
+							if PACKED_7 then PACKED_BITS += 64 end
+							if PACKED_8 then PACKED_BITS += 128 end
 							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 						end
 						if PACKED_LENGTH % 8 ~= 0 then
 							local PACKED_BASE = PACKED_WHOLE * 8
 							local PACKED_BITS = 0
 							for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-								if Item_1[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+								local PACKED_ITEM = Item_1[PACKED_BASE + PACKED_BIT + 1]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+								if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 							end
 							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 						end
@@ -7172,30 +7196,36 @@ if not RunService:IsRunning() then
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
 				do
 					local PACKED_LENGTH = #Value
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -7325,30 +7355,36 @@ if not RunService:IsRunning() then
 				buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value.List)
 				do
 					local PACKED_LENGTH = #Value.List
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value.List[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value.List[PACKED_BASE + 1], Value.List[PACKED_BASE + 2], Value.List[PACKED_BASE + 3], Value.List[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value.List[PACKED_BASE + 5], Value.List[PACKED_BASE + 6], Value.List[PACKED_BASE + 7], Value.List[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value.List[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value.List[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value.List[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value.List[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value.List[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value.List[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value.List[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value.List[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value.List[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value.List[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value.List[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -7364,30 +7400,36 @@ if not RunService:IsRunning() then
 				if #Value.Fixed ~= 3 then error(`Expected length of "Value.Fixed" to be equal to 3, got {#Value.Fixed} instead.`) end
 				do
 					local PACKED_LENGTH = 3
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value.Fixed[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = BLOCK_START + 3
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value.Fixed[PACKED_BASE + 1], Value.Fixed[PACKED_BASE + 2], Value.Fixed[PACKED_BASE + 3], Value.Fixed[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value.Fixed[PACKED_BASE + 5], Value.Fixed[PACKED_BASE + 6], Value.Fixed[PACKED_BASE + 7], Value.Fixed[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value.Fixed[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value.Fixed[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value.Fixed[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value.Fixed[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value.Fixed[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value.Fixed[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value.Fixed[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value.Fixed[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value.Fixed[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value.Fixed[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value.Fixed[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -7500,30 +7542,36 @@ if not RunService:IsRunning() then
 					buffer.writeu16(SendBuffer, OFFSET_1, #Element_1)
 					do
 						local PACKED_LENGTH = #Element_1
-						for PACKED_INDEX = 1, PACKED_LENGTH do
-							local PACKED_ITEM = Element_1[PACKED_INDEX]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						end
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 						local PACKED_WHOLE = PACKED_LENGTH // 8
 						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 							local PACKED_BASE = PACKED_BYTE * 8
+							local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Element_1[PACKED_BASE + 1], Element_1[PACKED_BASE + 2], Element_1[PACKED_BASE + 3], Element_1[PACKED_BASE + 4]
+							local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Element_1[PACKED_BASE + 5], Element_1[PACKED_BASE + 6], Element_1[PACKED_BASE + 7], Element_1[PACKED_BASE + 8]
+							if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+								for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+									local PACKED_ITEM = Element_1[PACKED_INDEX]
+									if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+								end
+							end
 							local PACKED_BITS = 0
-							if Element_1[PACKED_BASE + 1] then PACKED_BITS += 1 end
-							if Element_1[PACKED_BASE + 2] then PACKED_BITS += 2 end
-							if Element_1[PACKED_BASE + 3] then PACKED_BITS += 4 end
-							if Element_1[PACKED_BASE + 4] then PACKED_BITS += 8 end
-							if Element_1[PACKED_BASE + 5] then PACKED_BITS += 16 end
-							if Element_1[PACKED_BASE + 6] then PACKED_BITS += 32 end
-							if Element_1[PACKED_BASE + 7] then PACKED_BITS += 64 end
-							if Element_1[PACKED_BASE + 8] then PACKED_BITS += 128 end
+							if PACKED_1 then PACKED_BITS += 1 end
+							if PACKED_2 then PACKED_BITS += 2 end
+							if PACKED_3 then PACKED_BITS += 4 end
+							if PACKED_4 then PACKED_BITS += 8 end
+							if PACKED_5 then PACKED_BITS += 16 end
+							if PACKED_6 then PACKED_BITS += 32 end
+							if PACKED_7 then PACKED_BITS += 64 end
+							if PACKED_8 then PACKED_BITS += 128 end
 							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 						end
 						if PACKED_LENGTH % 8 ~= 0 then
 							local PACKED_BASE = PACKED_WHOLE * 8
 							local PACKED_BITS = 0
 							for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-								if Element_1[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+								local PACKED_ITEM = Element_1[PACKED_BASE + PACKED_BIT + 1]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+								if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 							end
 							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 						end
@@ -13179,30 +13227,36 @@ local Returns = table.freeze({
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
 				do
 					local PACKED_LENGTH = #Value
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -13278,30 +13332,36 @@ local Returns = table.freeze({
 				if #Value ~= 10 then error(`Expected length of "Value" to be equal to 10, got {#Value} instead.`) end
 				do
 					local PACKED_LENGTH = 10
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = BLOCK_START + 0
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -13384,30 +13444,36 @@ local Returns = table.freeze({
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
 				do
 					local PACKED_LENGTH = #Value
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -13514,30 +13580,36 @@ local Returns = table.freeze({
 					buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
 					do
 						local PACKED_LENGTH = #Item_1
-						for PACKED_INDEX = 1, PACKED_LENGTH do
-							local PACKED_ITEM = Item_1[PACKED_INDEX]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						end
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 						local PACKED_WHOLE = PACKED_LENGTH // 8
 						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 							local PACKED_BASE = PACKED_BYTE * 8
+							local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Item_1[PACKED_BASE + 1], Item_1[PACKED_BASE + 2], Item_1[PACKED_BASE + 3], Item_1[PACKED_BASE + 4]
+							local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Item_1[PACKED_BASE + 5], Item_1[PACKED_BASE + 6], Item_1[PACKED_BASE + 7], Item_1[PACKED_BASE + 8]
+							if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+								for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+									local PACKED_ITEM = Item_1[PACKED_INDEX]
+									if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+								end
+							end
 							local PACKED_BITS = 0
-							if Item_1[PACKED_BASE + 1] then PACKED_BITS += 1 end
-							if Item_1[PACKED_BASE + 2] then PACKED_BITS += 2 end
-							if Item_1[PACKED_BASE + 3] then PACKED_BITS += 4 end
-							if Item_1[PACKED_BASE + 4] then PACKED_BITS += 8 end
-							if Item_1[PACKED_BASE + 5] then PACKED_BITS += 16 end
-							if Item_1[PACKED_BASE + 6] then PACKED_BITS += 32 end
-							if Item_1[PACKED_BASE + 7] then PACKED_BITS += 64 end
-							if Item_1[PACKED_BASE + 8] then PACKED_BITS += 128 end
+							if PACKED_1 then PACKED_BITS += 1 end
+							if PACKED_2 then PACKED_BITS += 2 end
+							if PACKED_3 then PACKED_BITS += 4 end
+							if PACKED_4 then PACKED_BITS += 8 end
+							if PACKED_5 then PACKED_BITS += 16 end
+							if PACKED_6 then PACKED_BITS += 32 end
+							if PACKED_7 then PACKED_BITS += 64 end
+							if PACKED_8 then PACKED_BITS += 128 end
 							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 						end
 						if PACKED_LENGTH % 8 ~= 0 then
 							local PACKED_BASE = PACKED_WHOLE * 8
 							local PACKED_BITS = 0
 							for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-								if Item_1[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+								local PACKED_ITEM = Item_1[PACKED_BASE + PACKED_BIT + 1]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+								if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 							end
 							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 						end
@@ -13619,30 +13691,36 @@ local Returns = table.freeze({
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
 				do
 					local PACKED_LENGTH = #Value
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -13772,30 +13850,36 @@ local Returns = table.freeze({
 				buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value.List)
 				do
 					local PACKED_LENGTH = #Value.List
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value.List[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value.List[PACKED_BASE + 1], Value.List[PACKED_BASE + 2], Value.List[PACKED_BASE + 3], Value.List[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value.List[PACKED_BASE + 5], Value.List[PACKED_BASE + 6], Value.List[PACKED_BASE + 7], Value.List[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value.List[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value.List[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value.List[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value.List[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value.List[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value.List[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value.List[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value.List[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value.List[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value.List[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value.List[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -13811,30 +13895,36 @@ local Returns = table.freeze({
 				if #Value.Fixed ~= 3 then error(`Expected length of "Value.Fixed" to be equal to 3, got {#Value.Fixed} instead.`) end
 				do
 					local PACKED_LENGTH = 3
-					for PACKED_INDEX = 1, PACKED_LENGTH do
-						local PACKED_ITEM = Value.Fixed[PACKED_INDEX]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-					end
 					local PACKED_OFFSET = BLOCK_START + 3
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value.Fixed[PACKED_BASE + 1], Value.Fixed[PACKED_BASE + 2], Value.Fixed[PACKED_BASE + 3], Value.Fixed[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value.Fixed[PACKED_BASE + 5], Value.Fixed[PACKED_BASE + 6], Value.Fixed[PACKED_BASE + 7], Value.Fixed[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Value.Fixed[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
 						local PACKED_BITS = 0
-						if Value.Fixed[PACKED_BASE + 1] then PACKED_BITS += 1 end
-						if Value.Fixed[PACKED_BASE + 2] then PACKED_BITS += 2 end
-						if Value.Fixed[PACKED_BASE + 3] then PACKED_BITS += 4 end
-						if Value.Fixed[PACKED_BASE + 4] then PACKED_BITS += 8 end
-						if Value.Fixed[PACKED_BASE + 5] then PACKED_BITS += 16 end
-						if Value.Fixed[PACKED_BASE + 6] then PACKED_BITS += 32 end
-						if Value.Fixed[PACKED_BASE + 7] then PACKED_BITS += 64 end
-						if Value.Fixed[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
 						local PACKED_BASE = PACKED_WHOLE * 8
 						local PACKED_BITS = 0
 						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							if Value.Fixed[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							local PACKED_ITEM = Value.Fixed[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 						end
 						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
@@ -13947,30 +14037,36 @@ local Returns = table.freeze({
 					buffer.writeu16(SendBuffer, OFFSET_1, #Element_1)
 					do
 						local PACKED_LENGTH = #Element_1
-						for PACKED_INDEX = 1, PACKED_LENGTH do
-							local PACKED_ITEM = Element_1[PACKED_INDEX]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						end
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
 						local PACKED_WHOLE = PACKED_LENGTH // 8
 						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 							local PACKED_BASE = PACKED_BYTE * 8
+							local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Element_1[PACKED_BASE + 1], Element_1[PACKED_BASE + 2], Element_1[PACKED_BASE + 3], Element_1[PACKED_BASE + 4]
+							local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Element_1[PACKED_BASE + 5], Element_1[PACKED_BASE + 6], Element_1[PACKED_BASE + 7], Element_1[PACKED_BASE + 8]
+							if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+								for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+									local PACKED_ITEM = Element_1[PACKED_INDEX]
+									if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+								end
+							end
 							local PACKED_BITS = 0
-							if Element_1[PACKED_BASE + 1] then PACKED_BITS += 1 end
-							if Element_1[PACKED_BASE + 2] then PACKED_BITS += 2 end
-							if Element_1[PACKED_BASE + 3] then PACKED_BITS += 4 end
-							if Element_1[PACKED_BASE + 4] then PACKED_BITS += 8 end
-							if Element_1[PACKED_BASE + 5] then PACKED_BITS += 16 end
-							if Element_1[PACKED_BASE + 6] then PACKED_BITS += 32 end
-							if Element_1[PACKED_BASE + 7] then PACKED_BITS += 64 end
-							if Element_1[PACKED_BASE + 8] then PACKED_BITS += 128 end
+							if PACKED_1 then PACKED_BITS += 1 end
+							if PACKED_2 then PACKED_BITS += 2 end
+							if PACKED_3 then PACKED_BITS += 4 end
+							if PACKED_4 then PACKED_BITS += 8 end
+							if PACKED_5 then PACKED_BITS += 16 end
+							if PACKED_6 then PACKED_BITS += 32 end
+							if PACKED_7 then PACKED_BITS += 64 end
+							if PACKED_8 then PACKED_BITS += 128 end
 							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 						end
 						if PACKED_LENGTH % 8 ~= 0 then
 							local PACKED_BASE = PACKED_WHOLE * 8
 							local PACKED_BITS = 0
 							for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-								if Element_1[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+								local PACKED_ITEM = Element_1[PACKED_BASE + PACKED_BIT + 1]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+								if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
 							end
 							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 						end
