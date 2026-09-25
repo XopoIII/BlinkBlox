@@ -52,6 +52,15 @@ RunClosure("CLI --version prints a version", function()
 	assert(string.find(Result.stdout, "BlinkBlox", 1, true), `--version printed no version: {Result.stdout}`)
 end)
 
+--> The usage line named `blinkblox.exe` on every platform, although only the Windows release has the
+--> extension.
+RunClosure("CLI --help names the executable for this platform", function()
+	local Result = process.exec("lune", { "run", Compiler, "--", "--help" }, { cwd = "../src/CLI" })
+	assert(Result.ok, Result.stderr)
+	local Named = string.find(Result.stdout, "blinkblox.exe", 1, true) ~= nil
+	assert(Named == (process.os == "windows"), `--help named the wrong executable: {Result.stdout}`)
+end)
+
 RunClosure("CLI --version answers even when quiet", function()
 	local Result = process.exec("lune", { "run", Compiler, "--", "--version", "--quiet" }, { cwd = "../src/CLI" })
 	assert(Result.ok, Result.stderr)
