@@ -45,4 +45,22 @@ if [ "$status" -eq 0 ]; then
 	fi
 fi
 
+# The docs print the version in two spellings: the rokit pin `XopoIII/BlinkBlox@<version>`, and the
+# CLI's banner, `BlinkBlox <version>` on a line of its own. They sat at 0.33.0 through three releases
+# because nothing compared them; `lune run bump` rewrites them now (.lune/libs/docs_version.luau), and
+# this fails on one it missed. Prose naming a past release matches neither pattern.
+if [ -n "$CLI" ]; then
+	PINS="$(grep -rnoE 'XopoIII/BlinkBlox@[0-9]+\.[0-9]+\.[0-9]+' docs/src/content/docs || true)"
+	BANNERS="$(grep -rnE '^[[:space:]]*BlinkBlox [0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$' docs/src/content/docs || true)"
+	CURRENT="$(printf '%s' "$CLI" | sed 's/\./\\./g')"
+	STALE="$(printf '%s\n%s\n' "$PINS" "$BANNERS" | grep -E '[0-9]+\.[0-9]+\.[0-9]+' | grep -vE "[@ ]${CURRENT}[[:space:]]*\$" || true)"
+
+	if [ -n "$STALE" ]; then
+		echo "check-versions: the docs pin a version other than $CLI" >&2
+		printf '%s\n' "$STALE" | sed 's/^/  /' >&2
+		echo "  Run 'lune run bump <version>' rather than editing them by hand." >&2
+		status=1
+	fi
+fi
+
 exit "$status"

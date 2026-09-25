@@ -250,7 +250,9 @@ position, an aim direction -- where a stale packet would make something visibly 
 
 ## Benchmarks
 
-Measured in Studio on 0.36.2, an array of 1000 random booleans costs BlinkBlox 128.5 bytes an event
-after Roblox's compression, where Blink, zap, ByteNet and Packet spend about 193, because `boolean[]`
-is packed eight to a byte. Structs of plain `u8` fields cost every tool the same. [Benchmarks](/BlinkBlox/guides/benchmarks/) has the full numbers and how
-they were measured.
+An array of 1000 booleans is 128 bytes from BlinkBlox's encoder, where Blink, zap, ByteNet and Packet
+write 1003, because `boolean[]` is packed eight to a byte. With a different random array in every
+event, measured in Studio on 0.36.2 after Roblox's compression, that is 128.5 bytes an event for
+BlinkBlox and about 193 for the others: the compressor finds some of the bits a byte per boolean
+wastes, not all of them. Structs of plain `u8` fields cost every tool the same.
+[Benchmarks](/BlinkBlox/guides/benchmarks/) has the full numbers and how they were measured.
