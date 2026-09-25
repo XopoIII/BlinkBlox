@@ -182,10 +182,12 @@ that difference is about 15 KB a second of server upload.
 
 ## Unreliable events have a size limit
 
-Roblox drops an `UnreliableRemoteEvent` payload past roughly 900 bytes, silently and only under the
-conditions that produce a large packet. The compiler measures every `Unreliable` and
-`OrderedUnreliable` event, header included, against
-[`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) (900 by default):
+Roblox drops an `UnreliableRemoteEvent` whose payload is over 1000 bytes. Studio's Output says so,
+but a live game drops the event silently, and only when a value happens to be large. The payload is
+everything the call carries, as Roblox encodes it: BlinkBlox's buffer, the table of instances beside it, and the bytes describing
+each. The compiler measures the buffer of every `Unreliable` and `OrderedUnreliable` event, header
+included, against [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize). It is 900 by
+default, which leaves room for the rest:
 
 - an event whose **smallest** possible payload is over the limit is an error, `E3018`;
 - an event whose **largest** possible payload is over the limit is a warning, `W3019`, which names
@@ -232,7 +234,7 @@ position, an aim direction -- where a stale packet would make something visibly 
 - Use an `enum` for anything that is one of a known set of names.
 - Group booleans and optionals in one struct; they share bytes.
 - Use `vector<f16>` for directions, `CFrame<quat>` for poses that do not need to be exact.
-- Keep unreliable payloads bounded well under 900 bytes.
+- Keep unreliable payloads bounded well under `MaxUnreliableSize`.
 - Prefer one event with a struct over several events fired together: each event costs an index byte.
 
 ## Benchmarks

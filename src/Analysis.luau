@@ -23,9 +23,10 @@ type Declaration = any
 type Options = any
 type Event = any
 
---- Roblox drops an UnreliableRemoteEvent payload past roughly this many bytes. It does so silently
---- and intermittently, which is why the compiler refuses a schema that cannot fit instead of leaving
---- it to be discovered in production.
+--- The largest buffer an unreliable event may send, unless the schema says otherwise. Roblox drops an
+--- UnreliableRemoteEvent whose encoded payload passes 1000 bytes; this is the buffer's share of that,
+--- see Grammar.Options. A live game drops it without a word, which is why the compiler refuses a
+--- schema that cannot fit instead of leaving it to be discovered in production.
 local DEFAULT_MAX_UNRELIABLE_SIZE = 900
 
 --- Checks the rate limiting fields. Same file-scoping rule as AnalyzeUnreliableSizes: imported

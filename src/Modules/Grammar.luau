@@ -314,9 +314,12 @@ export type Options = {
 	InboundBytesPerSecond: number?,
 	InboundBurst: number?,
 
-	--> Largest payload an unreliable event may carry. Roblox drops an UnreliableRemoteEvent past
-	--> roughly 900 bytes, so this is a property of the platform rather than a preference -- it is
-	--> configurable only because that ceiling has moved before.
+	--> Largest buffer an unreliable event may send. Roblox drops an UnreliableRemoteEvent whose payload
+	--> passes 1000 bytes, and the payload is every argument of the call as Roblox encodes it: the
+	--> buffer, the instances table, and the bytes that describe each. This bounds the buffer alone,
+	--> so it sits below 1000 by what the rest costs, which Roblox does not document. The default of
+	--> 900 leaves 100 bytes for it until benchmark/probe measures the real figure. Configurable
+	--> because a platform's ceiling can move, and a game that sends no instances may want the room.
 	MaxUnreliableSize: number?,
 
 	--> Rate limiting. `DefaultRate` applies to every inbound event and function that does not set its

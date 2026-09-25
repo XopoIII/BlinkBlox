@@ -48,8 +48,9 @@ local DEFAULT_MAX_PACKET_SIZE = Grammar.DEFAULTS.MaxPacketSize
 local DEFAULT_MAX_EVENTS_PER_PACKET = 64
 local DEFAULT_MAX_INSTANCES_PER_PACKET = 256
 
---> OUTBOUND UNRELIABLE LIMIT. Roblox drops an UnreliableRemoteEvent payload past roughly this size,
---> silently. The compiler already refuses a schema whose unreliable events cannot fit (see the
+--> OUTBOUND UNRELIABLE LIMIT. Roblox drops an UnreliableRemoteEvent whose encoded payload passes 1000
+--> bytes, and in a live game says nothing; this is the buffer's share of that (see Grammar.Options,
+--> MaxUnreliableSize). The compiler already refuses a schema whose unreliable events cannot fit (see the
 --> parser's AnalyzeUnreliableSizes), but a bounded schema can still overflow at runtime -- a map with
 --> more entries than expected, a string longer than the game assumed -- and a dropped packet nobody
 --> is told about is the worst possible failure mode. This is the runtime half of that check.

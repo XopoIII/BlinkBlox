@@ -35,8 +35,9 @@ The reliability of the event.
   keeps one per player) and sends the batch once a frame. See
   [`ManualReplication`](/BlinkBlox/language/options/#manualreplication).
 - `Unreliable` -- may be lost, and may arrive out of order. Each `Fire` is sent at once, in a packet of
-  its own, and a payload may be at most 900 bytes by default. BlinkBlox enforces that at compile time
-  and again on send -- see [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize).
+  its own, and its buffer may be at most 900 bytes by default, leaving room under Roblox's 1000-byte
+  limit for how the call's arguments are encoded. BlinkBlox enforces that at compile time and again
+  on send -- see [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize).
 - `OrderedUnreliable` -- as `Unreliable`, plus a two-byte sequence number: a packet that arrives
   *after* a newer one is discarded rather than delivered late. Delivery is still not guaranteed and
   packets can still be lost -- what is guaranteed is that your listener never sees an older state

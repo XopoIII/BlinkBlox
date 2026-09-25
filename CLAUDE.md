@@ -295,6 +295,7 @@ needs, which is the actual objection.
 | Build release binaries | `lune run build` |
 | Time the generated modules | `lune run Runtime` (from `benchmark`) |
 | Time the compiler | `lune run Performance` (from `benchmark`) |
+| Measure the unreliable payload limit in Studio | `lune run Probe` (from `benchmark`) |
 | Docs, locally | `cd docs && npm install && npm run dev` |
 | Build the docs (dead links fail it) | `cd docs && npm run build` |
 
