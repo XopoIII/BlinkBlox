@@ -45,5 +45,7 @@ require("./DocExamples")
 --> missing output directory, and then recompile only Test.blink. Everything generated from the other
 --> schemas is gone afterwards, so any spec that reads a generated FILE has to have run already.
 require("./CommandLine")
+--> After it only because it is a CLI spec too; it compiles its own schema into test/Network/Verify.
+require("./Verify")
 
 return {}
