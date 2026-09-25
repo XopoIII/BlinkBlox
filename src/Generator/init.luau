@@ -32,6 +32,10 @@ local UNRELIABLE_INSTANCE_BYTES = Fragments.UNRELIABLE_INSTANCE_BYTES
 --> PlayerRemoving handler that clears their tables. Templates/Limits.luau holds them.
 local ServerParts = string.split(require("./Templates/Server"), "-- SPLIT --")
 
+--> The stream runtime: the server's half, then the client's. Spliced only into a module whose schema
+--> declares a stream.
+local StreamParts = string.split(require("./Templates/Stream"), "-- SPLIT --")
+
 local Sources = {
 	Base = require("./Templates/Base"),
 	Shared = { "", "" },
@@ -403,6 +407,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		State.UserTypes.DumpLines(),
 		State.Noop.DumpLines(),
 		string.split(Source[2], "\r"),
+		(if State.UsesStreams then { StreamParts[if State.Context == "Server" then 1 else 2] } else {}),
+		State.Streams.DumpLines(),
 		Replication.DumpLines(),
 		State.Reliables.Content,
 		State.Unreliables.Content,

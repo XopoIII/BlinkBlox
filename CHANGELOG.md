@@ -7,6 +7,54 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+Streams: an event the server sends on a schedule rather than on `Fire`. **The wire format does not
+change, and a schema that declares no stream compiles to the same bytes as 0.37.0**: every golden and
+the benchmark's modules are identical, and `WIRE_VERSION` stays 2. Declaring a stream changes that
+event's data, so its schema signature changes: **recompile both modules** of a schema that gains one.
+
+### Added
+
+- **`Stream: { Rate, Fast?, Keepalive?, Epsilon? }`** on an event (`language/streams`). The server
+  module gets `Set(Value)`, `Clear()`, `Urgent()` and `SetFast(Fast)` in place of the Fire family;
+  the client's listener gets `(Value?, ServerTime)`. The scheduler runs inside `StepReplication`, before
+  the reliable flush, and sends the latest state to every player at `Rate` a second (or `Fast` after
+  `SetFast(true)`), keeping the clock's overrun so ten a second is ten at sixty frames:
+  - the first state after the stream was idle goes at the next step, and `Urgent()` sends at the next
+    step and restarts the interval;
+  - a state the same as the last one sent is skipped -- numbers within `Epsilon`, a vector, Color3 or
+    CFrame per component, tables key by key all the way down, buffers byte by byte -- except the
+    first unchanged state after a change, which goes once so the clients learn the thing stopped;
+  - an unchanged state is sent again every `Keepalive` seconds, 1 by default;
+  - `Clear()` sends nil once, if the clients saw a state, and the stream is silent until the next
+    `Set`; `Set(nil)` throws;
+  - each packet carries the server's clock in milliseconds modulo 65536, two bytes, and the client
+    unwraps it to seconds nearest its own `GetServerTimeNow()`;
+  - a state that fails to send is reported once and stops the stream until the next `Set`.
+- The size analysis counts a stream's state in full, though it travels as optional: one that can never
+  fit beside the 6-byte header is `E3018`.
+- **`E3032`**: a stream that is not `From: Server` and `OrderedUnreliable`, is polled, streams an
+  optional, a type pack or a type that cannot be optional, or has a `Fast` no faster than `Rate`.
+- TypeScript declarations, edit-mode stubs and `Casing` (`set_fast` under `Snake`) for the four
+  members; `BLINK_STREAM` is a reserved type name. The Studio plugin completes the `Stream` block's
+  fields, on its own lines or on one. `Stream` is a field like `Rate`, so highlighting needs nothing.
+- A guide, `guides/streaming-state`, replacing a hand-rolled send loop with a stream.
+
+Interpolation is left to the game: the stream hands each state its server time, and what to buffer
+and how far behind to draw depends on what is drawn.
+
+### Downstream
+
+Grabby Pit's `Crawls` is this feature's model. With it the game can drop `World/CrawlSend.luau`
+whole, the stamp code in `World/HuntCrawl.stream` (`SnapshotBuffer.stamp`, `FireAll`, the `At`
+field), and `SnapshotBuffer.unwrap` with the client's call to it; `SnapshotBuffer.push`/`sample`
+stay, since interpolation is the game's. `CrawlPacket` goes, and `Crawls` becomes
+`Stream: { Rate: 10, Fast: 20, Keepalive: 1, Epsilon: 0.05 }, Data: CrawlHead[..16]`. Two behaviours
+differ: "still" is per axis rather than by distance, and any change -- a head turning for home, not
+only one moving -- is followed by one unchanged send. The last arm leaving is `Clear()`, received as
+nil rather than an empty list. No handler signature, `Reason` or refusal route changes.
+
 ## 0.37.0 — 2026-09-25
 
 A game can act on every packet the server refuses. **The wire format does not change, and neither

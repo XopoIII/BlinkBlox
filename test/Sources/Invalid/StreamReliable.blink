@@ -1,0 +1,12 @@
+-- expect E3032
+-- A stream sends the latest state, so a lost packet is replaced by the next: it is OrderedUnreliable.
+option ClientOutput = "../../Network/StreamReliableClient.luau"
+option ServerOutput = "../../Network/StreamReliableServer.luau"
+
+event Position {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Stream: { Rate: 10 },
+    Data: vector
+}

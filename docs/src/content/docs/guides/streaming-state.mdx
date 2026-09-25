@@ -1,0 +1,151 @@
+---
+title: Streaming state
+description: Replacing a hand-rolled send loop -- a rate, a changed-state check, a keepalive and a timestamp around an OrderedUnreliable event -- with a stream.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Anything the server moves and every client draws -- a creature, a platform, an arm reaching across the
+map -- ends up with the same code around an `OrderedUnreliable` event. This guide shows that code, and
+what is left of it once the event is a [stream](/BlinkBlox/language/streams/).
+
+## Before
+
+The schema carries the timestamp as a field of its own:
+
+```blink
+struct Head {
+    Id: u8,
+    At: vector<f24>,
+    Back: boolean
+}
+
+struct HeadPacket {
+    Stamp: u16,
+    Heads: Head[..16]
+}
+
+event Heads {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Data: HeadPacket
+}
+```
+
+And the server keeps a clock, a copy of what it last sent, and the rules for when to send:
+
+```luau
+local PUBLISH, PUBLISH_FAST, STILL, KEEPALIVE = 1 / 10, 1 / 20, 0.05, 1
+local clock, sinceSent, urgent, afterMotion = 0, 0, false, false
+local sent: { [number]: Vector3 } = {}
+local sentCount = 0
+
+RunService.Heartbeat:Connect(function(dt)
+    local heads = collectHeads()
+    if #heads == 0 then
+        if sentCount > 0 then
+            Net.Heads.FireAll({ Stamp = stamp(), Heads = {} }) -- once, when the last one goes
+        end
+        sentCount, clock, sinceSent = 0, 0, 0
+        return
+    end
+    clock += dt
+    sinceSent += dt
+    if not urgent and clock < (if fast then PUBLISH_FAST else PUBLISH) then
+        return
+    end
+    local forced = urgent
+    clock, urgent = 0, false
+    local changed, moved = compare(heads, sent, STILL) -- count, positions, flags
+    if not (forced or changed or afterMotion or sinceSent >= KEEPALIVE) then
+        return
+    end
+    afterMotion, sinceSent = moved, 0
+    remember(heads, sent)
+    Net.Heads.FireAll({ Stamp = math.floor(Workspace:GetServerTimeNow() * 1000) % 65536, Heads = heads })
+end)
+```
+
+The client undoes the stamp's wrap before it can use it:
+
+```luau
+Net.Heads.On(function(packet)
+    local now = Workspace:GetServerTimeNow() * 1000
+    local time = now - now % 65536 + packet.Stamp
+    if time > now + 32768 then time -= 65536 elseif time < now - 32768 then time += 65536 end
+    push(packet.Heads, time / 1000)
+end)
+```
+
+## After
+
+The stamp leaves the schema and the settings take its place:
+
+```blink
+struct Head {
+    Id: u8,
+    At: vector<f24>,
+    Back: boolean
+}
+
+event Heads {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Stream: { Rate: 10, Fast: 20, Keepalive: 1, Epsilon: 0.05 },
+    Data: Head[..16]
+}
+```
+
+The server says what the state is, whenever it changes or once a frame, and nothing else:
+
+```luau
+RunService.Heartbeat:Connect(function()
+    local heads = collectHeads()
+    if #heads == 0 then
+        Net.Heads.Clear()
+    else
+        Net.Heads.Set(heads)
+    end
+end)
+
+-- where the game used to raise its own flag
+Net.Heads.SetFast(lunging)
+Net.Heads.Urgent()
+```
+
+And the client receives the time already in seconds:
+
+```luau
+Net.Heads.On(function(heads, serverTime)
+    push(heads or {}, serverTime)
+end)
+```
+
+A packet is one byte larger: 6 bytes of header -- the index and sequence number, a byte of presence
+bits, the stamp -- where the hand-made version had 3 and the stamp inside the struct. The extra byte
+is the presence bit that tells a cleared stream from a state.
+
+## What changes, exactly
+
+The stream follows the hand-made rules closely, and differs from the version above in four places,
+each on purpose:
+
+- **Unchanged means within `Epsilon` per component**, where `compare` measured each head's distance
+  moved. A head moving diagonally counts as moved slightly later with the stream (at `Epsilon` on one
+  axis rather than `Epsilon` of distance); pick `Epsilon` a little smaller to match.
+- **Any change is followed by one unchanged send**, where `afterMotion` followed only a head that
+  moved. A flag that flips without a move costs one packet more.
+- **The clock keeps what it overran by**, where `clock = 0` threw it away, and a step within a
+  millionth of a second of the interval counts as due. Six frames of 1/60 add to a hair under 0.1, so
+  at 60 frames a second the hand-made loop sent every seventh frame, 8.6 times a second; the stream
+  sends every sixth, ten.
+- **An emptied set is `Clear`**, which the client receives as nil, sent once. `Set({})` is a state
+  like any other -- sent, then kept alive -- which is right for a list that is empty for now rather
+  than gone.
+
+<Aside>
+Interpolation stays the game's. The stream hands each state its server time; buffering the last few
+states per id and drawing one interval in the past is the same code before and after.
+</Aside>

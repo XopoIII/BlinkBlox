@@ -183,7 +183,7 @@ function Generators.Event(State: State, Event: Parser.Event)
 	local Casing = State.Casing
 	local StringBuilder = State.Builder
 
-	local IsPolling = Value.Call == "Polling" or State.Options.UsePolling
+	local IsPolling = not Value.Stream and (Value.Call == "Polling" or State.Options.UsePolling)
 
 	local _, Values = "", "Value: void"
 	if Value.Data then
@@ -203,7 +203,15 @@ function Generators.Event(State: State, Event: Parser.Event)
 	StringBuilder.Push(`export {GetPrefix(Indent)}const {Name}: \{`, 0, Indent)
 
 	if Value.From == State.Context then
-		if Value.From == "Server" then
+		if Value.Stream then
+			--> A stream's server sends on a schedule; the game hands it the state. The client listens to
+			--> the wire type, `(Value: T | undefined, ServerTime: number)`, like any event.
+			local StreamType = GetTypescriptType(State, Value.Stream.Value)
+			StringBuilder.Push(`{Casing.Set}: (Value: {StreamType}) => void`, 0, Indent + 1)
+			StringBuilder.Push(`{Casing.Clear}: () => void`, 0, Indent + 1)
+			StringBuilder.Push(`{Casing.Urgent}: () => void`, 0, Indent + 1)
+			StringBuilder.Push(`{Casing.SetFast}: (Fast: boolean) => void`, 0, Indent + 1)
+		elseif Value.From == "Server" then
 			StringBuilder.Push(`{Casing.Fire}: (Player: Player, {Values}) => void`, 0, Indent + 1)
 			StringBuilder.Push(`{Casing.FireAll}: ({Values}) => void`, 0, Indent + 1)
 			StringBuilder.Push(`{Casing.FireExcept}: (Except: Player, {Values}) => void`, 0, Indent + 1)

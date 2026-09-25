@@ -114,6 +114,7 @@ local Error = {
 	AnalyzeEnumSize = 3029,
 	AnalyzeChannelSize = 3030,
 	AnalyzeInstanceWithoutSlots = 3031,
+	AnalyzeInvalidStream = 3032,
 }
 
 Error.__index = Error

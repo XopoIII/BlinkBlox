@@ -1,0 +1,156 @@
+---
+title: Streams
+description: An event the server sends on a schedule -- the latest state, at a fixed rate, skipped while it has not changed, kept alive, and stamped with the server's clock.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A stream is an [event](/BlinkBlox/language/events/) the server sends on a schedule rather than on
+`Fire`. The game hands it the latest state with `Set`, as often as it likes; BlinkBlox sends that state
+to every player at the declared rate, skips a state equal to the last one sent, sends an unchanged one
+again every `Keepalive` seconds, and stamps each packet with the server's clock. The client's listener
+receives the state and the server time it was sent at, ready to interpolate between.
+
+It is the glue a game otherwise writes by hand around an `OrderedUnreliable` event: the send clock,
+the "has it changed" check, the keepalive, the one packet that says a moving thing stopped, and a
+wrapping timestamp. [Streaming state](/BlinkBlox/guides/streaming-state/) shows that code before and
+after.
+
+## Declaring a stream
+
+A stream is an event with a `Stream` field, a block of its own settings:
+
+```blink
+struct Head {
+    Id: u8,
+    At: vector<f24>,
+    Back: boolean
+}
+
+event Heads {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Stream: { Rate: 10, Fast: 20, Keepalive: 1, Epsilon: 0.05 },
+    Data: Head[..16]
+}
+```
+
+It is an event and not a declaration of its own so that it keeps everything an event has: its index on
+the unreliable channel, its per-player sequence number, `Call`, the size analysis and the schema
+signature.
+
+A stream must be `From: Server` and `Type: OrderedUnreliable` -- a stream is a current state, so a
+lost packet is replaced by the next and a late one must not overwrite a newer one. Its `Data` is one
+type that may be nil but is not itself optional, since nil is how a cleared stream arrives: use a
+struct for several values. It cannot be polled, and [`UsePolling`](/BlinkBlox/language/options/#usepolling)
+leaves it out, because the listener is what turns the stamp back into seconds. Each of these is
+`E3032`.
+
+| Setting | Required | Meaning |
+|---|---|---|
+| `Rate` | yes | Sends a second. Any number above zero, `2.5` included. |
+| `Fast` | no | The rate `SetFast(true)` switches to. Must be higher than `Rate`. |
+| `Keepalive` | no | Seconds before an unchanged state is sent again. Defaults to 1. |
+| `Epsilon` | no | How far a number may move and still count as unchanged. Absent means exact. |
+
+The settings are the server's alone: they are not part of the wire or the
+[schema signature](/BlinkBlox/language/options/#schema-signatures), so changing a rate does not break a
+client built before the change.
+
+## When a stream sends
+
+The scheduler runs inside `StepReplication` -- every `Heartbeat`, or whenever the game calls it under
+[`ManualReplication`](/BlinkBlox/language/options/#manualreplication) -- before the frame's reliable
+batch is flushed. Each step adds the time since the last one to the stream's clock. When the clock
+reaches the interval, `1 / Rate` (or `1 / Fast`), the step is due, and the clock keeps what it overran
+by, so a rate the frame rate does not divide still averages out to the rate. At sixty frames a second
+a rate of 10 sends every sixth frame and 20 every third. After a hitch longer than an interval the
+clock starts again rather than sending the missed steps. At most one packet goes per step, so a rate
+above the frame rate sends once a frame.
+
+A due step sends the state when any of these hold, and otherwise skips it:
+
+- it is the first state since the stream was idle, which goes at the very next step, not an interval
+  later;
+- it differs from the last state sent;
+- the last send carried a change: the first unchanged state after a change goes once, so the clients
+  learn the thing stopped rather than carry on at its last speed;
+- `Keepalive` seconds have passed since the last send, so a lost packet is replaced. A new player
+  hears an unchanged state at the latest this long after joining.
+
+`Urgent()` makes the next step send whatever the clock says, and restarts the interval from there.
+
+## When a state is the same
+
+Two states are the same when:
+
+- two numbers are within `Epsilon` of each other (`math.abs(A - B) <= Epsilon`);
+- two `vector`s or `Color3`s have each component within `Epsilon`, and two `CFrame`s each of the
+  twelve numbers `GetComponents` returns -- per component, not by distance, so a vector counts as
+  moved when any one axis moves past `Epsilon`;
+- two tables hold the same keys, and each key's values are the same by these rules -- so a struct,
+  array, map or set is compared all the way down, and building a new table each frame is fine;
+- two buffers hold the same bytes;
+- anything else -- a string, a boolean, an enum, an Instance -- is `==`.
+
+NaN is the same as nothing, so a state holding one is always sent. What was sent is copied, tables
+and buffers included, so a game that changes a table after `Set` is compared against the state as it
+went out.
+
+## Server
+
+| Member | Signature | Does |
+|---|---|---|
+| `Set` | `(Value: Data) -> ()` | Makes `Value` the state to stream. `Set(nil)` throws: use `Clear`. |
+| `Clear` | `() -> ()` | Stops the stream. If the clients were sent a state, one packet with nil goes at the next step; then nothing until the next `Set`. |
+| `Urgent` | `() -> ()` | Sends at the next step. |
+| `SetFast` | `(Fast: boolean) -> ()` | Switches between `Rate` and `Fast`. |
+
+A stream has no `Fire`, `FireAll`, `FireList` or `FireExcept`: every player is sent every state, each
+with their own sequence number. Between two steps the last call wins: a `Set` then a `Clear` clears
+(and sends nothing if the clients never saw a state), a `Clear` then a `Set` sends the new state.
+
+A state that fails to send -- an array past its bound, say -- is reported on a thread of its own, as
+`Stream "Heads" could not send its state: ...`, and the stream stops until the game calls `Set` again,
+since it would fail the same way at every step.
+
+## Client
+
+```luau
+Net.Heads.On(function(Heads: { Head }?, ServerTime: number)
+    -- Heads is nil once the server cleared the stream.
+end)
+```
+
+`ServerTime` is in seconds, on the clock `Workspace:GetServerTimeNow()` reads. On the wire it is the
+server's clock in milliseconds, rounded down, modulo 65536 -- two bytes -- and the client puts it back
+as the time nearest its own `GetServerTimeNow()`, which is right as long as the two are within 32.7
+seconds of each other: a ping is well inside that.
+
+<Aside>
+BlinkBlox hands over the time and does not interpolate. What to buffer (one position, or one per id in
+a list), how far behind to draw, and how far past the newest state to extrapolate are the game's
+decisions. Drawing about one interval in the past, `ServerTime` of the two states around
+`GetServerTimeNow() - 1 / Rate`, is the usual start.
+</Aside>
+
+## On the wire
+
+A stream's packet is an `OrderedUnreliable` event whose data is `(Value: Data?, ServerTime: u16)`:
+the index and sequence number (3 bytes), a byte of presence bits, the two-byte stamp, then the state.
+That is 6 bytes of header, and a cleared stream's packet is those 6 bytes alone.
+
+The [size analysis](/BlinkBlox/language/options/#maxunreliablesize) counts the state in full rather
+than as the optional it travels as, since every packet but the clear carries it: a state that can
+never fit beside the header is `E3018`, not a warning.
+
+```blink error
+event Snapshot {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Stream: { Rate: 10 },
+    Data: u8[980]
+}
+```

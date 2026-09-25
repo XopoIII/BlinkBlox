@@ -72,6 +72,18 @@ RunClosure("Completion offers keywords, primitives and declared names where each
 		{ Text = "event X {\n  Data: struct {\n    ty", Cursor = 34, Expect = "type" },
 		{ Text = "event X {\n  From: Client,\n}\nstr", Cursor = 32, Expect = "struct" },
 		{ Text = "scope S {\n  event X {\n    Ty", Cursor = 29, Expect = "Type" },
+		--> An event's `Stream` block takes its own fields, each once, on its own lines or on one, and
+		--> `Stream:` itself takes the block rather than a type.
+		{ Text = "event X {\n  St", Cursor = 15, Expect = "Stream" },
+		{ Text = "event X {\n  Stream: {\n    K", Cursor = 28, Expect = "Keepalive" },
+		{ Text = "event X {\n  Stream: {\n    Rate: 10,\n    R", Cursor = 42, Expect = "" },
+		{ Text = "event X {\n  Stream: { Rate: 10, E", Cursor = 34, Expect = "Epsilon" },
+		{ Text = "event X {\n  Stream: { F", Cursor = 24, Expect = "Fast" },
+		{ Text = "event X {\n  Stream: { Rate: 10, Fast: 2", Cursor = 40, Expect = "" },
+		{ Text = "event X {\n  Stream: u", Cursor = 22, Expect = "" },
+		{ Text = "event X {\n  Stream: { Rate: 10 },\n  D", Cursor = 38, Expect = "Data" },
+		--> A struct in Data is not a stream block, whatever it is called.
+		{ Text = "event X {\n  Data: struct {\n    Ra", Cursor = 34, Expect = "" },
 		--> Inside a struct, a field's name is the author's: keywords as before.
 		{ Text = "struct S {\n  Type: u", Cursor = 21, Expect = "u8,u16,u24,u32,unknown" },
 	}

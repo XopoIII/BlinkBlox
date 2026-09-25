@@ -121,6 +121,14 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 		--> event can carry, not the fewest, so it raises the maximum only: the minimum is what makes
 		--> E3018 an error, and an optional Instance must not make an event that can fit refuse to build.
 		local Minimum = Header + (if Measured then Measured.Min else 0)
+
+		--> A stream's state travels as optional, since nil is how a clear arrives, and an absent optional
+		--> costs nothing: measured as written, a state that can never fit would pass as one that might
+		--> not. Every packet but the clear carries it, so it counts in full.
+		local Stream = Event.Value.Stream
+		if Stream then
+			Minimum += Size.Sealed(Stream.Value).Min
+		end
 		local Maximum = Header + (if Measured then Measured.Max + Measured.Refs * INSTANCE_BYTES else 0)
 		local Identifier = Event.Tokens.Identifier
 
@@ -132,7 +140,11 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 				File
 			)
 				:Primary(Identifier, `Always at least {Minimum} bytes, the limit is {Limit}`)
-				:Note("Roblox drops unreliable payloads past this size. Send it as a Reliable event instead.")
+				:Note(
+					if Stream
+						then "Roblox drops unreliable payloads past this size. Stream a smaller state, or split it."
+						else "Roblox drops unreliable payloads past this size. Send it as a Reliable event instead."
+				)
 				:Emit()
 		end
 

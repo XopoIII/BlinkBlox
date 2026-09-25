@@ -28,6 +28,10 @@ export type Cases = {
 	Iter: string,
 	Read: string,
 	Write: string,
+	Set: string,
+	Clear: string,
+	Urgent: string,
+	SetFast: string,
 }
 
 export type Primitive = {
@@ -72,6 +76,10 @@ local Cases: { [string]: { string } } = {
 	Iter = { "Iter", "iter", "iter" },
 	Read = { "Read", "read", "read" },
 	Write = { "Write", "write", "write" },
+	Set = { "Set", "set", "set" },
+	Clear = { "Clear", "clear", "clear" },
+	Urgent = { "Urgent", "urgent", "urgent" },
+	SetFast = { "SetFast", "setFast", "set_fast" },
 }
 
 local Primitives: { [string]: Primitive } = {

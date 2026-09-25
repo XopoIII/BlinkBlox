@@ -84,6 +84,7 @@ Which members an event has depends on the side and on its [`From`](/BlinkBlox/la
 |---|---|---|
 | `From: Server` | `Fire`, `FireAll`, `FireList`, `FireExcept` | `On` and `Predict`, or `Iter` when polled |
 | `From: Client` | `On` and `Predict`, or `Iter` when polled | `Fire` |
+| [Stream](/BlinkBlox/language/streams/) | `Set`, `Clear`, `Urgent`, `SetFast` | `On`, never polled, with the state and the server time |
 
 `Predict` exists only with [`option Predict`](/BlinkBlox/language/options/#predict). An event is
 polled when it is declared `Call: Polling` or [`UsePolling`](/BlinkBlox/language/options/#usepolling)
@@ -214,6 +215,10 @@ your own declarations are never changed.
 | `Invoke` | `invoke` | `invoke` |
 | `Read` | `read` | `read` |
 | `Write` | `write` | `write` |
+| `Set` | `set` | `set` |
+| `Clear` | `clear` | `clear` |
+| `Urgent` | `urgent` | `urgent` |
+| `SetFast` | `setFast` | `set_fast` |
 | `StepReplication` | `stepReplication` | `step_replication` |
 | `SetRateLimitHandler` | `setRateLimitHandler` | `set_rate_limit_handler` |
 | `SetDecodeErrorHandler` | `setDecodeErrorHandler` | `set_decode_error_handler` |
@@ -230,6 +235,7 @@ Flipbook) -- no remotes exist, and both modules return stubs that keep the real 
 | `On` (events and functions) | does nothing and returns a disconnect function that does nothing |
 | `Iter`, `Next` | returns an iterator that ends at once, so a `for` loop runs zero times |
 | `Predict` | does nothing |
+| A stream's `Set`, `Clear`, `Urgent`, `SetFast` | do nothing |
 | `Invoke` | does nothing and returns `nil` |
 | `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | do nothing |
 | exported `Read`, `Write` | work normally |
@@ -248,7 +254,7 @@ its result (`:andThen(...)`) errors in a story. Guard it with `RunService:IsRunn
 | Name | Why |
 |---|---|
 | `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | Module members. A top-level event, function, scope or type may not take these names, nor, under `Camel` or `Snake` casing, the spelling the module gives them there (`stepReplication`, `step_replication`, ...) (`E3005`). |
-| `BLINK_ENTRY`, `BLINK_QUEUE`, `BLINK_BUFFER_SAVE`, `BLINK_INVOCATIONS`, `BLINK_DROP_REASON`, `BLINK_EVENTS_SYMBOL` | Types the module declares for itself. A top-level type of that name would redefine one (`E3005`). |
+| `BLINK_ENTRY`, `BLINK_QUEUE`, `BLINK_BUFFER_SAVE`, `BLINK_INVOCATIONS`, `BLINK_DROP_REASON`, `BLINK_EVENTS_SYMBOL`, `BLINK_STREAM` | Types the module declares for itself. A top-level type of that name would redefine one (`E3005`). |
 | Built-in Luau types: `any`, `never`, `number`, `thread` | A declared type is exported under its own name, and Luau refuses `export type number = number` (`E3005`, since 0.32.0). |
 | Roblox types the module uses: `Player`, `RemoteEvent`, `UnreliableRemoteEvent`, `Vector3`, and any class the schema names in `Instance(...)` | A top-level type of that name would refer to itself and shadow every use of the Roblox type in the module (`E3005`, since 0.32.0). A type inside a `scope` is exported with the scope's name in front, so it may take these names. |
 | BlinkBlox's own types: `boolean`, `buffer`, `string`, `unknown`, `Instance`, `CFrame`, `Color3`, `DateTime`, `BrickColor` and the rest | The parser reads them as primitives, so a declaration cannot be named after one (`E2002`). |

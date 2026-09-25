@@ -1,0 +1,12 @@
+-- expect E3032
+-- A stream is sent by the server's scheduler; a client has nothing to schedule it with.
+option ClientOutput = "../../Network/StreamFromClientClient.luau"
+option ServerOutput = "../../Network/StreamFromClientServer.luau"
+
+event Aim {
+    From: Client,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Stream: { Rate: 10 },
+    Data: vector
+}

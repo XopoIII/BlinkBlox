@@ -1,0 +1,12 @@
+-- expect E3032
+-- Fast is the rate SetFast(true) switches to; one no faster than Rate means nothing.
+option ClientOutput = "../../Network/StreamSlowFastClient.luau"
+option ServerOutput = "../../Network/StreamSlowFastServer.luau"
+
+event Position {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Stream: { Rate: 10, Fast: 10 },
+    Data: vector
+}

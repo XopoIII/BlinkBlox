@@ -128,6 +128,17 @@ export type Tuple = Node<"Tuple", {
 --- this Luau version does not parse).
 export type EventCall = "SingleSync" | "SingleAsync" | "ManySync" | "ManyAsync" | "Polling"
 
+--- An event's `Stream` block, with its defaults filled in. `Value` is the type the game streams; the
+--- event's `Data` is what goes on the wire, `(Value: Value?, ServerTime: u16)` -- nil once the stream
+--- is cleared, and the server's clock in milliseconds modulo 65536. See Parser/Streams.luau.
+export type StreamSettings = {
+	Rate: number,
+	Fast: number?,
+	Keepalive: number,
+	Epsilon: number,
+	Value: TypeNode,
+}
+
 export type Event = Node<
 	"Event",
 	{
@@ -141,6 +152,8 @@ export type Event = Node<
 		--> burst through. Absent means unlimited -- see the generator's rate limiting.
 		Rate: number?,
 		Burst: number?,
+		--> Set on a stream: the server sends the latest state on a schedule rather than on Fire.
+		Stream: StreamSettings?,
 	},
 	{
 		Identifier: Token,

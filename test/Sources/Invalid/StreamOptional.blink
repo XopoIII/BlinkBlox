@@ -1,0 +1,12 @@
+-- expect E3032
+-- A cleared stream arrives as nil, so the state itself cannot be optional as well.
+option ClientOutput = "../../Network/StreamOptionalClient.luau"
+option ServerOutput = "../../Network/StreamOptionalServer.luau"
+
+event Position {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Stream: { Rate: 10 },
+    Data: vector?
+}

@@ -8,6 +8,7 @@
 ---   Stream       looking at and consuming tokens
 ---   Document     a whole file: options, imports, top-level declarations, then analysis
 ---   Structures   events, functions and scope blocks
+---   Streams      an event's `Stream` block, and the wire type it gives the event
 ---   Types        the type grammar's keyword dispatch, and primitives
 ---   Collections  sets, maps, enums, tagged enums, type packs and structs
 ---   Ranges       ranges, array brackets, components and the optional mark
@@ -19,6 +20,7 @@ local _ = {
 	require("@self/Stream"),
 	require("@self/Document"),
 	require("@self/Structures"),
+	require("@self/Streams"),
 	require("@self/Types"),
 	require("@self/Collections"),
 	require("@self/Ranges"),
@@ -45,6 +47,7 @@ export type Generic = Class.Generic
 export type Tuple = Class.Tuple
 export type EventCall = Class.EventCall
 export type Event = Class.Event
+export type StreamSettings = Class.StreamSettings
 export type Function = Class.Function
 export type ScopeNode = Class.ScopeNode
 

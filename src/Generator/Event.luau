@@ -14,72 +14,22 @@ local Generators = require("./Generators")
 local Parser = require("../Parser")
 local Prefabs = require("./Prefabs")
 local Queues = require("./Queue")
+local Sends = require("./Send")
 local Serde = require("./Serde")
 local State = require("./State")
+local Streams = require("./Stream")
 local Util = require("./Util")
 
 type Type = Parser.TypeNode
 
-local RELIABLE_BODY = Fragments.RELIABLE_BODY
 local UNRELIABLE_BODY = Fragments.UNRELIABLE_BODY
 local Types = Prefabs.Types
 local RateGuardExpression = Decode.RateGuardExpression
 local OrderGuardExpression = Decode.OrderGuardExpression
 local Declarations = Serde
+local Broadcast = Sends.Broadcast
 
---- What a server send needs to know about the event it sends. `Ordered` is the event's index when it
---- is an ordered unreliable one, whose sequence number each send stamps per recipient.
-type Send = { IsReliable: boolean, WriteEvent: string, Name: string, Ordered: number? }
-
---- Stamps the recipient's own sequence number into an ordered packet. An unreliable server send always
---- starts from a fresh buffer, so the event sits at offset 0 and its sequence at offset 1.
-local function StampOrder(Target: Blocks.Block, Send: Send)
-	if Send.Ordered then
-		Target:Line(`buffer.writeu16(Buffer, 1, NextOrder(Player, {Send.Ordered}))`)
-	end
-end
-
---- The loop over the players a send reaches, leaving out `Except` when asked to.
-local function EachRecipient(Target: Blocks.Block, Recipients: string, SkipExcept: boolean?): Blocks.Block
-	local Loop = Target:Iterator("_", "Player", Recipients)
-	if SkipExcept then
-		Loop = Loop:Compare("Player", "Except", "Equals"):Line("continue"):End()
-	end
-
-	return Loop
-end
-
---- A server send to more than one player: FireAll, FireList and FireExcept. Each writes the event
---- once into a fresh buffer and hands it to every recipient; they differ only in who that is. An
---- unreliable FireAll hands it to `FireAllClients` instead of looping.
-local function Broadcast(
-	Fire: Blocks.Block,
-	Send: Send,
-	Recipients: string,
-	Options: { AllClients: boolean?, SkipExcept: boolean? }
-): Blocks.Block
-	Fire:Line("Load()")
-	Fire:Line(Send.WriteEvent)
-
-	if Send.IsReliable then
-		Fire:Line(RELIABLE_BODY.Header)
-		EachRecipient(Fire, Recipients, Options.SkipExcept):Lines(RELIABLE_BODY.Body, 2):End()
-	else
-		Fire:Line(`if not CheckUnreliableSize("{Send.Name}") then return end`)
-		Fire:Lines(UNRELIABLE_BODY, 1)
-
-		--> An ordered packet carries a different number to each player, so it is sent one by one.
-		if Options.AllClients and not Send.Ordered then
-			Fire:Line("Unreliable:FireAllClients(Buffer, SendInstances)")
-		else
-			local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept)
-			StampOrder(Loop, Send)
-			Loop:Line("Unreliable:FireClient(Player, Buffer, SendInstances)"):End()
-		end
-	end
-
-	return Fire:End()
-end
+type Send = Sends.Send
 
 function Declarations.Event(Declaration: Parser.Event)
 	local Value = Declaration.Value
@@ -95,7 +45,8 @@ function Declarations.Event(Declaration: Parser.Event)
 	if IsOrdered then
 		State.UsesOrdering = true
 	end
-	local IsPolling = (Value.Call == "Polling" or State.Options.UsePolling)
+	--> A stream always has a listener: it hands the game the stamp unwrapped, which a poll would not.
+	local IsPolling = not Value.Stream and (Value.Call == "Polling" or State.Options.UsePolling)
 	local IsSameContext = Value.From == State.Context
 
 	local Channel = IsUnreliable and State.Channels.Unreliable or State.Channels.Reliable
@@ -221,6 +172,9 @@ function Declarations.Event(Declaration: Parser.Event)
 		end
 
 		Block:Line(`local {InnerValues} = {Util.GetPath(Identifier, false, State.Scope)}()`)
+		if Value.Stream then
+			Streams.Unwrap(Block, InnerArguments)
+		end
 
 		--> The decode above has to happen either way: payloads are variable length, so skipping an
 		--> event without reading it would leave the cursor mid-event and turn the rest of the packet
@@ -432,6 +386,10 @@ function Declarations.Event(Declaration: Parser.Event)
 
 		State.Noop.Push(`{State.Casing.Fire} = NOOP`, 0, Indent + 1)
 		Body.PushLines(Fire.Content, 0, Indent + 1)
+	elseif Value.Stream then
+		--> Sent by the scheduler rather than by the game, so the server has Set and its friends in
+		--> place of the Fire family. See Stream.luau.
+		Streams.Server(Declaration, Index, Values, WriteEvent, Body, Indent)
 	else
 		local Send: Send = {
 			IsReliable = IsReliable,
@@ -449,7 +407,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Fire:Line(WriteEvent)
 			Fire:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
 			Fire:Lines(UNRELIABLE_BODY, 1)
-			StampOrder(Fire, Send)
+			Sends.StampOrder(Fire, Send)
 			Fire:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
 		end
 		Fire:End()

@@ -1,0 +1,38 @@
+-- Streams: an event the server sends on a schedule rather than on Fire. Camel casing and UsePolling
+-- are here to show that a stream's members follow the casing and that it is never polled.
+option Casing = Camel
+option UsePolling = true
+option ClientOutput = "../../Network/StreamClient.luau"
+option ServerOutput = "../../Network/StreamServer.luau"
+
+struct Head {
+	Id: u8,
+	Head: vector<f24>,
+	Back: boolean
+}
+
+event Heads {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Stream: { Rate: 10, Fast: 20, Keepalive: 1, Epsilon: 0.05 },
+	Data: Head[..16]
+}
+
+-- An ordinary ordered event beside it, polled, as UsePolling asks.
+event Aim {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Data: vector
+}
+
+scope World {
+	event Clock {
+		From: Server,
+		Type: OrderedUnreliable,
+		Call: ManyAsync,
+		Stream: { Rate: 2.5 },
+		Data: f64
+	}
+}

@@ -18,6 +18,9 @@ local fs = require("@lune/fs")
 
 export type Packet = { Buffer: buffer, Instances: { any } }
 
+--- A packet the server sent on the unreliable remote, and whom to.
+export type Outbound = { Player: any?, Buffer: buffer, Instances: { any } }
+
 export type Pair = {
 	Tree: any,
 	Server: any,
@@ -26,11 +29,23 @@ export type Pair = {
 	Sent: { Packet },
 	--- Hands the server a packet as though `Shared.Player` sent it.
 	Feed: (Reliable: boolean, Buffer: buffer, Instances: { any }?) -> (),
+	--- Every packet the server sent on the unreliable remote, oldest first. `Player` is nil for one
+	--- sent with FireAllClients.
+	Outbound: { Outbound },
+	--- Hands the client a packet the server sent, as the unreliable remote would. Nothing is delivered
+	--- otherwise, so a spec decides which packets arrive, and in what order.
+	Deliver: (Packet: Outbound) -> (),
 }
+
+local function Copy(Buffer: buffer): buffer
+	local Copied = buffer.create(buffer.len(Buffer))
+	buffer.copy(Copied, 0, Buffer)
+	return Copied
+end
 
 --- One remote for both sides: the server finds it and sets its signature on it, the client finds it
 --- and reads that signature back, and what the client fires lands in `Sent` rather than anywhere else.
-local function Remote(ClassName: string, Sent: { Packet })
+local function Remote(ClassName: string, Sent: { Packet }, Outbound: { Outbound }?)
 	local Stored: { [string]: any } = {}
 	return {
 		SetAttribute = function(_self, Name: string, Value: any)
@@ -43,12 +58,18 @@ local function Remote(ClassName: string, Sent: { Packet })
 			return Queried == ClassName
 		end,
 		FireServer = function(_self, Buffer: buffer, Instances: { any })
-			local Copy = buffer.create(buffer.len(Buffer))
-			buffer.copy(Copy, 0, Buffer)
-			table.insert(Sent, { Buffer = Copy, Instances = table.clone(Instances) })
+			table.insert(Sent, { Buffer = Copy(Buffer), Instances = table.clone(Instances) })
 		end,
-		FireClient = function() end,
-		FireAllClients = function() end,
+		FireClient = function(_self, Player: any, Buffer: buffer, Instances: { any })
+			if Outbound then
+				table.insert(Outbound, { Player = Player, Buffer = Copy(Buffer), Instances = table.clone(Instances) })
+			end
+		end,
+		FireAllClients = function(_self, Buffer: buffer, Instances: { any })
+			if Outbound then
+				table.insert(Outbound, { Player = nil, Buffer = Copy(Buffer), Instances = table.clone(Instances) })
+			end
+		end,
 		OnServerEvent = Shared.Signal.new(),
 		OnClientEvent = Shared.Signal.new(),
 	}
@@ -93,7 +114,8 @@ local function Build(Tree: any, Scope: string, WithClient: boolean?): Pair
 
 	local Sent: { Packet } = {}
 	local Reliable = Remote("RemoteEvent", Sent)
-	local Unreliable = Remote("UnreliableRemoteEvent", {})
+	local Outbound: { Outbound } = {}
+	local Unreliable = Remote("UnreliableRemoteEvent", {}, Outbound)
 	for _, Environment in { ServerEnvironment, ClientEnvironment } do
 		Environment.Instances[`{Scope}_BLINK_RELIABLE_REMOTE`] = Reliable
 		Environment.Instances[`{Scope}_BLINK_UNRELIABLE_REMOTE`] = Unreliable
@@ -129,6 +151,10 @@ local function Build(Tree: any, Scope: string, WithClient: boolean?): Pair
 		Feed = function(IsReliable: boolean, Buffer: buffer, Instances: { any }?)
 			local Target = if IsReliable then Reliable else Unreliable
 			Target.OnServerEvent:Fire(Shared.Player, Buffer, Instances or {})
+		end,
+		Outbound = Outbound,
+		Deliver = function(Packet: Outbound)
+			Unreliable.OnClientEvent:Fire(Packet.Buffer, Packet.Instances)
 		end,
 	}
 end
