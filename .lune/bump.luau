@@ -4,7 +4,8 @@
 -->
 --> The version lives in two places that must agree: build/.darklua.json, which darklua injects as
 --> `_G.VERSION` when bundling both the CLI and the Studio plugin, and pesde.toml, which carries it as
---> the package version.
+--> the package version. The docs print it too -- the rokit pin and the CLI's banner -- and are
+--> rewritten beside them (see libs/docs_version).
 -->
 --> The plugin once had a config of its own, and it was missed for five minor versions with nothing
 --> saying so. Everything the plugin generated went out stamped with a version the compiler had not
@@ -18,6 +19,7 @@
 --> there to answer.
 
 local darklua_version = require("./libs/darklua_version")
+local docs_version = require("./libs/docs_version")
 local pesde_version = require("./libs/pesde_version")
 local process = require("@lune/process")
 local stdio = require("@lune/stdio")
@@ -48,5 +50,6 @@ for _, config in DARKLUA_CONFIGS do
 end
 
 pesde_version.write_to(PESDE_CONFIG, new_version)
+docs_version.write_to(new_version)
 
 stdio.write(`bump: {curr_version} -> {new_version}\n`)

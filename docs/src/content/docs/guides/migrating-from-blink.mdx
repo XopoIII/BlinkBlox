@@ -148,6 +148,41 @@ the 1000-byte limit Roblox enforces; bound the field it names.
   stub, and `On` returns a disconnect function and `Iter` iterates zero times, so stories do not error.
   See [Generated API](/BlinkBlox/reference/generated-api/#edit-mode).
 
+## Upgrading from the fork's 0.26 or older
+
+A game already on this fork, from before the rename, has less to do than one coming from upstream,
+but more than a version bump. Everything below is in the [Changelog](/BlinkBlox/changelog/).
+
+- **Recompile both modules and ship them together.** 0.27.0 packed `boolean[]` eight to a byte and
+  moved `WIRE_VERSION` to 2, so a 0.26 client refuses a 0.27+ server at startup and the other way
+  round. See [Wire compatibility](/BlinkBlox/reference/wire-compatibility/).
+- **The inbound byte budget is on by default** (0.27.0). Each player's packets are charged against
+  [`InboundBytesPerSecond`](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst), which
+  defaults to `8 * MaxPacketSize` (65536 bytes a second), with a burst of one second of it. A packet
+  costs its size and never less than 128 bytes, so a client firing many small packets pays for each.
+  A game that sends more than that from one client must raise it. Refusals reach the rate-limit
+  handler with `Event` nil, which is why the handler's `Event` is `string?` since 0.27.0.
+- **The binary and release assets are renamed** from `blink` to `blinkblox` (0.28.0). Replace the
+  tool's line in `rokit.toml` with `blinkblox = "XopoIII/BlinkBlox@0.36.2"`, or run
+  `rokit add XopoIII/BlinkBlox blinkblox`, and update scripts that call `blink`. Rokit may ask you to
+  trust the tool again under its new name (`rokit trust XopoIII/BlinkBlox`). The remotes,
+  `_G._BLINK` and the `.blink` extension keep their names.
+- **Runtime messages start with `[BlinkBlox]:`** instead of `[Blink]:` (0.28.0). Update any log filter
+  or test that matches the old prefix.
+- **`Fire` throws on a length past its bound** (0.28.0), even with `WriteValidations` off: a string,
+  buffer or array longer than its declared bound, or a map with too many entries. Before, the length
+  prefix wrapped and the receiver decoded the rest of the packet from the wrong offset.
+- **What a client can make the server say is bounded** (0.29.0). The warnings about malformed,
+  oversized or refused packets, and calls to the decode-error handler, come at most once a second per
+  player and kind, instead of once per packet.
+- **The compiler refuses more** -- `E3004` for a set flag, enum value or variant named twice (0.29.0);
+  `E3030` for a 257th declaration on one channel (0.31.0); `E3005` for a type named after a built-in
+  Luau type or a Roblox type the module uses (0.32.0). See
+  [Schemas the compiler now refuses](#schemas-the-compiler-now-refuses).
+- **`MaxUnreliableSize` defaults to 980, up from 900, and counts 6 bytes for each Instance** an
+  unreliable event sends (0.36.0). An event carrying many Instances may now warn at compile time
+  (`W3019`) or be refused on send where it was not before; one carrying none has more room.
+
 <Aside type="tip">
 The upstream `rewrite` branch (Blink 1.0 pre-releases) is a different compiler with a different
 schema dialect and runtime. This page is about the 0.18.x line, which BlinkBlox continues.

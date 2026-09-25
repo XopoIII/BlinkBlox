@@ -327,6 +327,9 @@ warning that is tolerated once stops being read.
 
 The version is recorded in two files -- `build/.darklua.json` and `pesde.toml` -- and
 `lune run bump <version>` writes both. `scripts/check-versions.sh` fails the build if they disagree.
+The docs print it as well, as the rokit pin `XopoIII/BlinkBlox@<version>` and as the CLI's banner on
+a line of its own; they sat at 0.33.0 through three releases, so `bump` now rewrites them too
+(`.lune/libs/docs_version.luau`) and `check-versions.sh` fails on a stale one.
 The plugin used to have a third copy in `plugin/.darklua.json`, which sat five minor releases behind
 the compiler's, so everything the Studio plugin generated went out stamped with a version the compiler had
 not been for a year. The plugin now bundles with `build/.darklua.json` like the CLI, and that file is
