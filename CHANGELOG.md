@@ -7,6 +7,15 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.36.1 — 2026-09-25
+
+**The wire format does not change.**
+
+### Fixed
+
+- `--help` named the executable `blinkblox.exe` on every platform. Only the Windows release has the
+  extension; the usage line now names the one the running platform has.
+
 ## 0.36.0 — 2026-09-25
 
 The numbers 0.35.0 left open, measured on a Mac with Studio: the unreliable payload limit, and the

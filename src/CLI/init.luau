@@ -80,7 +80,8 @@ end
 
 local function PrintHelpMessage()
 	print(Color(Style("USAGE:", "bold"), "yellow"))
-	print("\tblinkblox.exe [CONFIG] [OPTIONS]")
+	--> The executable is only `blinkblox.exe` on Windows; every other release is plain `blinkblox`.
+	print(`\tblinkblox{if process.os == "windows" then ".exe" else ""} [CONFIG] [OPTIONS]`)
 	print(Color(Style("OPTIONS:", "bold"), "yellow"))
 
 	local Sorted: { Argument } = {}
