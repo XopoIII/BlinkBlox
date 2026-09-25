@@ -8,6 +8,9 @@
 # The same commands are available locally, and `lefthook.yml` runs them before a commit.
 name: Checks
 
+permissions:
+  contents: read
+
 on:
   pull_request:
   push:
