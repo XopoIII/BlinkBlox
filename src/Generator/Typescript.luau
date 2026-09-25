@@ -3,6 +3,7 @@
 local Parser = require("../Parser")
 local Settings = require("../Settings")
 
+local Lifecycle = require("./Lifecycle")
 local Prefabs = require("./Prefabs")
 local Util = require("./Util")
 
@@ -289,6 +290,17 @@ return function(FileContext: Context, AbstractSyntaxTree: AbstractSyntaxTree): s
 	StringBuilder.Push(`export declare const {Casing.StepReplication}: () => void`)
 	for _, Line in HandlerDeclarations(FileContext, Casing) do
 		StringBuilder.Push(Line)
+	end
+
+	--> The members Generator/Lifecycle adds, under the same conditions.
+	StringBuilder.Push(
+		`export declare const {Casing.Remotes}: \{ readonly Reliable: string; readonly Unreliable: string }`
+	)
+	if Lifecycle.Bounded(FileContext, Options) then
+		StringBuilder.Push(`export declare const {Casing.Connected}: boolean`)
+	end
+	if Lifecycle.Deferred(FileContext, Options) then
+		StringBuilder.Push(`export declare const {Casing.Start}: () => void`)
 	end
 
 	if _G.VERSION == nil then

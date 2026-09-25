@@ -51,6 +51,7 @@ const sidebar = [
 		label: 'Guides',
 		items: [
 			'guides/securing-the-server',
+			'guides/places-without-a-server',
 			'guides/bandwidth',
 			'guides/benchmarks',
 			'guides/migrating-from-blink',

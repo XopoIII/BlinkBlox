@@ -40,6 +40,7 @@ require("./Locals")
 require("./SharedModules")
 require("./Decoding")
 require("./BufferIntegrity")
+require("./Lifecycle")
 require("./DocExamples")
 
 --> LAST, and deliberately so: the CLI specs delete ../Network to prove the compiler recreates a

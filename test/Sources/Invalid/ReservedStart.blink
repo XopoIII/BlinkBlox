@@ -1,0 +1,12 @@
+-- expect E3005
+-- Under AutoStart = false the server module exports Start, so a declaration may not take its name.
+option AutoStart = false
+option ClientOutput = "../../Network/ReservedStartClient.luau"
+option ServerOutput = "../../Network/ReservedStartServer.luau"
+
+event Start {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

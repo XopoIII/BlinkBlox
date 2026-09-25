@@ -47,6 +47,12 @@ local MINIMUMS: { [string]: number } = {
 	MaxInstancesPerPacket = 0,
 }
 
+--- Options measured in seconds rather than counted, so a fraction is a real setting: a test place
+--- may want to give up on the server after half a second. Any value above zero is taken.
+local FRACTIONAL: { [string]: true } = {
+	ClientConnectTimeout = true,
+}
+
 local Utility = {}
 
 ---- Private Functions ----
@@ -141,8 +147,14 @@ function Utility.Parse(Reader: Reader): Options
 			--> Number tokens carry their text; every consumer of a numeric option wants the number.
 			local Numeric = tonumber(Value.Value)
 			local Minimum = MINIMUMS[Name] or 1
-			if not Numeric or Numeric < Minimum or not IsInteger(Numeric) then
-				local Expected = if Minimum == 1 then "a positive whole number" else `a whole number, {Minimum} or more`
+			local Invalid = if FRACTIONAL[Name]
+				then not Numeric or not (Numeric > 0) or Numeric == math.huge
+				else not Numeric or Numeric < Minimum or not IsInteger(Numeric)
+			if Invalid then
+				local Expected = if FRACTIONAL[Name]
+					then "a positive number of seconds"
+					elseif Minimum == 1 then "a positive whole number"
+					else `a whole number, {Minimum} or more`
 				Error.new(Error.ParserUnknownOption, Reader.Source, `Invalid value for option "{Name}"`, Reader.File)
 					:Primary(Value, `Expected {Expected}`)
 					:Emit()

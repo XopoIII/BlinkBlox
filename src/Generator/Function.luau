@@ -11,6 +11,7 @@ local Builder = require("../Modules/Builder")
 local Decode = require("./Decode")
 local Fragments = require("./Fragments")
 local Generators = require("./Generators")
+local Lifecycle = require("./Lifecycle")
 local Parser = require("../Parser")
 local Prefabs = require("./Prefabs")
 local Queues = require("./Queue")
@@ -354,7 +355,7 @@ function Declarations.Function(Declaration: Parser.Function)
 		end
 
 		Invoke:End()
-		State.Noop.Push(`{State.Casing.Invoke} = NOOP`, 0, Indent + 1)
+		State.Noop.Push(`{State.Casing.Invoke} = {Lifecycle.InvokeStub(State.Context, State.Options)}`, 0, Indent + 1)
 		Body.PushLines(Invoke.Content, 0, Indent + 1)
 	end
 

@@ -9,9 +9,10 @@ startup instead of misreading packets.
 
 ## Unreleased
 
-A check that committed output still matches its schema, and a game can hear which player's event set
-off a listener that threw. **The wire format does not change, and neither does the schema signature**:
-a module built from this release talks to a 0.37.0 one built from the same schema.
+A check that committed output still matches its schema, a game can hear which player's event set off
+a listener that threw, and a module can come up in a place where no server module runs. **The wire
+format does not change, and neither does the schema signature**: a module built from this release
+talks to a 0.37.0 one built from the same schema.
 
 ### Added
 
@@ -28,9 +29,6 @@ a module built from this release talks to a 0.37.0 one built from the same schem
   - Under `--json` the document gains a `verify` field, one `{ file, status, line }` per file, with
     `status` `"current"`, `"stale"` or `"missing"`; `success` is `false` when any is not current. The
     field is present only under `--verify`, and the format's `version` stays 1.
-- **Downstream**: Grabby Pit can replace `scripts/check-net-drift.sh` -- regenerate, then
-  `git diff` and a check for untracked files -- with `blinkblox net/Game.blink --verify`, run with
-  the same `--profile` its build uses.
 - **`SetListenerErrorHandler(Handler?)`** on the server module. A server listener that threw was
   caught -- a `Sync` one by the pcall that keeps the rest of the packet decoding -- and its error
   raised with nobody named, so a game that wanted the player and the event wrapped every listener in
@@ -53,9 +51,24 @@ a module built from this release talks to a 0.37.0 one built from the same schem
     listeners run what the trusted server sent, so their errors stay in the output. It is stubbed in
     edit mode, declared in the TypeScript output, follows `Casing` (`setListenerErrorHandler`,
     `set_listener_error_handler`), and is a reserved top-level name (`E3005`).
-- **For Grabby Pit:** the pcall its `Security/Guard` wraps around every listener, to log the player
-  and event and write a telemetry row, can go. Install one `SetListenerErrorHandler` that does both;
-  the report arrives already bounded to once a second per player and event, with the count.
+- **`option ClientConnectTimeout = <seconds>`**, any number above zero. The client module waits at
+  most that long for the remotes. When they do not come, requiring it still returns, with the
+  edit-mode stubs in place of the API -- `Fire` does nothing, listeners are never called, `Invoke`
+  fails at once with `The client is not connected to a server` -- and `Connected` false. When they
+  come, `Connected` is true. Remotes that appear after the timeout are not picked up: the module is
+  already cached, and the game reloads to try again. `Connected` exists only under the option;
+  without it the client waits for as long as it takes, as before.
+- **`option AutoStart = false`**: requiring the server module creates no remote and connects
+  neither the remotes nor `Heartbeat`. **`Start()`** does all three, and a second call does nothing.
+  Before it, `On` and the handler setters register as usual; a `Fire` is dropped, not queued, and
+  the first one warns once (`Something was sent before Start() was called, and was dropped.`); an
+  `Invoke` of a client fails at once instead of waiting out `InvocationTimeout`. The client module
+  ignores the option.
+- **`Remotes`** on both modules and their stubs: `{ Reliable = "<scope>_BLINK_RELIABLE_REMOTE",
+  Unreliable = "<scope>_BLINK_UNRELIABLE_REMOTE" }`, so no game spells the names out.
+- All three follow `Casing` (`remotes`, `start`, `connected`), are stubbed in edit mode, are declared
+  in the TypeScript output where they exist, and are offered by the Studio plugin's option
+  completion. Both options may sit under `@profile`.
 
 ### Changed
 
@@ -63,6 +76,26 @@ a module built from this release talks to a 0.37.0 one built from the same schem
   through `RunListener`, which calls it bare when no handler is installed. An event, function, scope
   or type may not be named `SetListenerErrorHandler`, and a type-pack element may not be named
   `ListenerFailed` or `RunListener`.
+- A top-level event, function, scope or exported type named `Remotes` -- in the spelling the casing
+  gives it -- is refused (`E3005`), as are `Start` under `AutoStart = false` and `Connected` under
+  `ClientConnectTimeout`. A plain type may keep the name. A schema that used one of these names has
+  to rename it.
+
+### Downstream
+
+Grabby Pit can drop several things it built for itself, once it is on this release:
+
+- `scripts/check-net-drift.sh` -- regenerate, then `git diff` and a check for untracked files: run
+  `blinkblox net/Game.blink --verify` instead, with the same `--profile` its build uses.
+- The pcall its `Security/Guard` wraps around every listener, to log the player and event and write a
+  telemetry row: install one `SetListenerErrorHandler` that does both; the report arrives already
+  bounded to once a second per player and event, with the count.
+- `client/Link.luau`'s hard-coded `<RemoteScope>_BLINK_RELIABLE_REMOTE` and its own 60-second wait:
+  set `option ClientConnectTimeout = 60` (or less) and require the client module directly, checking
+  `Connected` where the showroom needs to know. The eight client scripts can require it directly.
+  Anything that still needs a remote's name reads `Remotes`.
+- The three lazy requires of the server module: set `option AutoStart = false`, require it at the
+  top like any module, and call `Start()` in the real game's bootstrap only.
 
 ## 0.37.0 — 2026-09-25
 

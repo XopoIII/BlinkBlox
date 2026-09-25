@@ -22,7 +22,8 @@ A few rules hold for all of them:
   may each set `MaxPacketSize`, but not alongside an unmarked setting of it.
 - **Values are typed.** A boolean option takes `true` or `false`, a path takes a quoted string,
   `Casing` takes a bare word, and every **numeric option takes a positive whole number** -- `0`,
-  `-5` and `0.5` are all refused (`E2003`), except that `MaxInstancesPerPacket` may be `0`. An
+  `-5` and `0.5` are all refused (`E2003`), except that `MaxInstancesPerPacket` may be `0` and
+  `ClientConnectTimeout` takes any number of seconds above zero, `0.5` included. An
   unknown option name is refused too, with the list of
   the ones that exist.
 
@@ -39,6 +40,8 @@ A few rules hold for all of them:
 | `ManualReplication` | boolean | `false` | [Runtime behaviour](#manualreplication) |
 | `UsePolling` | boolean | `false` | [Runtime behaviour](#usepolling) |
 | `Predict` | boolean | `false` | [Runtime behaviour](#predict) |
+| `ClientConnectTimeout` | seconds | wait for ever | [Starting up](#clientconnecttimeout) |
+| `AutoStart` | boolean | `true` | [Starting up](#autostart) |
 | `WriteValidations` | boolean | `false` | [Validation](#writevalidations) |
 | `SyncValidation` | boolean | `true` | [Validation](#syncvalidation) |
 | `MaxUnreliableSize` | bytes | `980` | [Validation](#maxunreliablesize) |
@@ -110,6 +113,7 @@ option Casing = Camel
 | `SetDecodeErrorHandler` | `setDecodeErrorHandler` | `set_decode_error_handler` |
 | `SetPacketDropHandler` | `setPacketDropHandler` | `set_packet_drop_handler` |
 | `SetListenerErrorHandler` | `setListenerErrorHandler` | `set_listener_error_handler` |
+| `Remotes`, `Start`, `Connected` | `remotes`, `start`, `connected` | `remotes`, `start`, `connected` |
 
 ### `RemoteScope`
 Default: `""`
@@ -127,6 +131,9 @@ module with the same scope is already running in that Luau VM. So two schemas in
 that ships its own networking inside your game's, for instance -- need different scopes. The scope is
 already part of the remote names, so it is not part of the
 [schema signature](#schema-signatures): a client with the wrong scope never finds the remote at all.
+
+Both modules export the two names as `Remotes.Reliable` and `Remotes.Unreliable`, so code that has to
+find the remotes itself never spells them out.
 
 ### `FutureLibrary` and `PromiseLibrary`
 
@@ -234,6 +241,65 @@ Off by default because it is an entry point into your listeners that does not ex
 Enable it where you want it -- a `@profile("dev")` or `@profile("test")` setting is a good fit -- and
 leave it off in builds where you do not.
 </Aside>
+
+## Starting up
+
+Requiring the server module creates the remotes; requiring the client module waits for them. Two
+options change that, for places where no server module is ever required -- a showroom build, a test
+place. [Places without a server](/BlinkBlox/guides/places-without-a-server/) walks through both.
+
+### `ClientConnectTimeout`
+Default: none -- the client waits for the remotes for as long as it takes
+
+How many seconds the client module waits for the two remotes. Any number above zero is taken.
+
+```blink
+option ClientConnectTimeout = 10
+```
+
+If they have not appeared by then, requiring the client module still returns, with `Connected`
+false and the [edit-mode stubs](/BlinkBlox/reference/generated-api/#edit-mode) in place of the API:
+`Fire` does nothing, a listener is never called, and `Invoke` fails at once with
+`The client is not connected to a server`. When they appear in time, `Connected` is true and the
+module is the ordinary one. `Connected` exists only under this option.
+
+Remotes that appear after the timeout are not picked up. The module has been returned and cached by
+`require`, and a client that joined in half way would have missed what the server sent before it; a
+game that wants to connect later has to reload. The schema signature is still checked once the remotes
+are found, and a mismatch still errors.
+
+### `AutoStart`
+Default: `true`
+
+`AutoStart = false` makes requiring the server module free of side effects on the network: it
+creates no remote and connects neither the remotes nor `Heartbeat`. The game calls `Start()` in the
+build that should talk, and code shared with a build that should not can require the module anyway.
+
+```blink
+option AutoStart = false
+```
+
+```luau title="Server.server.luau"
+local Net = require(ServerScriptService.Network.Server)
+
+if not IsShowroom then
+    Net.Start()
+end
+```
+
+`Start` is idempotent: the first call creates the remotes, connects them and the Heartbeat, and a
+second call does nothing. Until it is called:
+
+- `On`, `SetRateLimitHandler` and the other setters register as usual, and take effect at `Start`.
+- Every `Fire` is **dropped**, not queued, and the first one warns once:
+  `Something was sent before Start() was called, and was dropped.` A build that never starts would
+  otherwise hold every player's events for as long as they stayed, and an event queued for a
+  minute is rarely still true when it arrives.
+- `Invoke` on a [server-to-client function](/BlinkBlox/language/functions/#from) fails at once with
+  `Cannot invoke <player> before Start() was called`, rather than waiting out `InvocationTimeout`.
+
+The option concerns the server module only. The client creates nothing; its counterpart is
+`ClientConnectTimeout`.
 
 ## Validation
 

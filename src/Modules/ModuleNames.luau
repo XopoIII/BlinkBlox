@@ -63,12 +63,34 @@ local function Check(Source: string, File: string?, Declarations: { Declaration 
 		Members[(Casing :: any)[Member]] = Member
 	end
 
+	--> Members the parser does not know about, so no spelling of them is refused before here: the
+	--> remote names every module exports, and the two that exist only under an option. A schema that
+	--> declared one of these before it became a member keeps compiling until it turns the option on.
+	local Added: { [string]: string } = { [Casing.Remotes] = "Remotes" }
+	if Options.AutoStart == false then
+		Added[Casing.Start] = "Start"
+	end
+	if Options.ClientConnectTimeout ~= nil then
+		Added[Casing.Connected] = "Connected"
+	end
+
 	for _, Declaration in Declarations do
 		local Name = Declaration.Name
 		local Kind = Declaration.Type
 		local Member = Members[Name]
 
-		if Member and (Name ~= Member or Kind == "Scope") then
+		--> Only what becomes a key of the module: a type that is not exported is a Luau type, which
+		--> lives in a namespace of its own.
+		local Keyed = Kind == "Event" or Kind == "Function" or Kind == "Scope" or Declaration.Value.Export == true
+		if Added[Name] and Keyed then
+			Refuse(
+				Source,
+				File,
+				Declaration,
+				`"{Name}" is the module's {Added[Name]}`,
+				"A top-level declaration becomes a member of the module, and this one would replace it. Rename it."
+			)
+		elseif Member and (Name ~= Member or Kind == "Scope") then
 			Refuse(
 				Source,
 				File,

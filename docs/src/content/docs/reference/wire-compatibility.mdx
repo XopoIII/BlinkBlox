@@ -32,7 +32,7 @@ creates it. The client compares it with its own when it is required:
 | Signatures match | Loads normally. |
 | Signatures differ | Errors on require: `This client was built from a different schema than the server (client ..., server ...). Recompile both sides from the same .blink file.` |
 | No signature on the remote | Waits up to five seconds for it, then errors: `The server did not publish a schema signature.` The server is a build from before 0.23.0, upstream Blink, or something else that created a remote with that name. |
-| The remotes do not exist | Waits for them indefinitely, as `WaitForChild` does. This is what a different `RemoteScope` looks like. |
+| The remotes do not exist | Waits for them indefinitely, as `WaitForChild` does. This is what a different `RemoteScope` looks like. Under [`ClientConnectTimeout`](/BlinkBlox/language/options/#clientconnecttimeout) it gives up after that many seconds and returns a module with `Connected` false. |
 
 ### What it covers
 
