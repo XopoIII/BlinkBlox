@@ -913,6 +913,14 @@ export type OptionalHoles = u8?[3]
 --> the infinities, and the subnormal that rounds up to the smallest normal number.
 export type HalfFloat = f16
 
+--> The 24-bit numbers, with public readers and writers. Floats24.luau reads every f24 pattern there
+--> is through `Float24`; the vector and the CFrame are there for their sizes, 9 and 16 bytes.
+export type Float24 = f24
+export type Unsigned24 = u24
+export type Signed24 = i24
+export type Vector24 = vector<f24>
+export type QuatCFrame24 = CFrame<f24, quat>
+
 --> Float ranges whose bounds the encoding cannot hold exactly. 0.3 is 0.30000001192092896 as an f32,
 --> above its own bound, and 0.1 as an f16 is 0.0999755859375, below it; the receiver has to check
 --> against the bounds as they would arrive, or it refuses the very values the range names.
@@ -953,4 +961,13 @@ export struct FlagCarrier {
     Flags: CollidingFlags,
     Text: string,
     Kind: enum { A, B },
+}
+
+--> f24 rounds to nearest where f16 truncates, so its bounds can narrow either way: 0.1 arrives a
+--> little below itself, and 0.7 a little above. The receiver checks the bounds narrowed the same way.
+event RangedFloat24 {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: f24(0.1..0.7)
 }

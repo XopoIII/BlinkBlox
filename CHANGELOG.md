@@ -7,6 +7,45 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.34.0 — 2026-09-25
+
+Three 24-bit number types, the one idea worth taking from reading 5uphi's Packet library. **No
+existing type's encoding changes**; only schemas that use the new types are affected.
+
+### Added
+
+- `u24` (0 to 16777215) and `i24` (-8388608 to 8388607) take three bytes, low byte first. Without a
+  range they wrap on send as `u16` and `i16` do.
+- `f24` takes three bytes: a sign, six bits of exponent biased by 31, and seventeen of mantissa, with
+  subnormals, both infinities, NaN and `-0`. It keeps 18 significant bits where `f16` keeps 11, and
+  it rounds to nearest where `f16` truncates. Between 512 and 1024 a value arrives within 0.002 of
+  itself, so it is the width for world positions: `vector<f24>` is 9 bytes where `vector` is 12, and
+  `CFrame<quat, f24>` is 16. Its largest finite value is 4294950912; anything that rounds past it is
+  infinity.
+- A range on `f24` is checked on receipt against its bounds as they arrive, as `f16` and `f32` ranges
+  are. Rounding can move a bound either way, and `f24(0.1..0.7)` accepts both.
+- Packet's own `f24` gets both edges wrong. A mantissa that rounds up to 2^17 is taken modulo the
+  field, so 1023.9999999 arrives as 512. A value below its smallest normal writes a negative exponent,
+  so 1e-10 arrives as about 1.8e9. Here the carry lands in the exponent, and the subnormals are
+  encoded.
+
+### Fixed
+
+- The Studio plugin's completion listed primitives of the same length in whatever order the settings
+  table happened to iterate. They now go in name order after length, so `u` offers
+  `u8, u16, u24, u32`.
+
+### Tests
+
+- `test/Floats24.luau` checks the f24 patterns against a decoder written from the format, not from
+  the compiler (`Generate.Float24FromBits`). It checks every pattern of the subnormals, the smallest
+  normals, `[1, 2)` and the largest binade, and the edges and a seeded sample of every other binade.
+  Each value must read as the format says and write back to itself. A value a quarter of the way
+  between two neighbours must arrive as the lower one, and three quarters as the upper one. It fails
+  with Packet's dropped carry put back, and with the subnormals left out.
+- The property specs draw and judge `u24`, `i24` and `f24`. The oracle decides what `f24` holds
+  exactly without using the compiler's code, and holds a narrowed value to half a unit.
+
 ## 0.33.0 — 2026-09-24
 
 A limit on the calls a server runs at once, and tests for the seams between events. **The wire format

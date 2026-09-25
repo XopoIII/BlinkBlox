@@ -161,12 +161,17 @@ RunClosure("A float range accepts the values it names once they are narrowed", f
 	--> are narrowed: 0.3 arrives as 0.30000001192092896, above `f32(0..0.3)`, and 0.1 as an f16
 	--> arrives as 0.0999755859375, below `f16(0.1..1)`. Each range refused its own bound.
 	local task = require("@lune/task")
-	local Seen32, Seen16 = 0, 0
+	local Seen32, Seen16, Seen24 = 0, 0, 0
 	local Disconnect32 = Server.RangedFloat32.On(function()
 		Seen32 += 1
 	end)
 	local Disconnect16 = Server.RangedFloat16.On(function()
 		Seen16 += 1
+	end)
+	--> f24 rounds to nearest, so of `f24(0.1..0.7)` the lower bound arrives below itself and the
+	--> upper one above.
+	local Disconnect24 = Server.RangedFloat24.On(function()
+		Seen24 += 1
 	end)
 
 	--> One per frame: a refused value drops the rest of its packet. The out-of-range ones may be refused
@@ -185,6 +190,15 @@ RunClosure("A float range accepts the values it names once they are narrowed", f
 			function()
 				pcall(Client.RangedFloat16.Fire, 1.5)
 			end,
+			function()
+				Client.RangedFloat24.Fire(0.1)
+			end,
+			function()
+				Client.RangedFloat24.Fire(0.7)
+			end,
+			function()
+				pcall(Client.RangedFloat24.Fire, 0.75)
+			end,
 		}
 	do
 		Send()
@@ -193,7 +207,9 @@ RunClosure("A float range accepts the values it names once they are narrowed", f
 
 	Disconnect32()
 	Disconnect16()
+	Disconnect24()
 
 	assert(Seen32 == 1, `f32(0..0.3) accepted {Seen32} of 0.3 and 0.4, expected only 0.3`)
 	assert(Seen16 == 1, `f16(0.1..1) accepted {Seen16} of 0.1 and 1.5, expected only 0.1`)
+	assert(Seen24 == 2, `f24(0.1..0.7) accepted {Seen24} of 0.1, 0.7 and 0.75, expected 0.1 and 0.7`)
 end)

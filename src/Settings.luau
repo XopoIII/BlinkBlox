@@ -91,6 +91,15 @@ local Primitives: { [string]: Primitive } = {
 		AllowedComponents = 0,
 		Bytes = 2,
 	},
+	u24 = {
+		Bounds = NumberRange.new(0, 16777215),
+		Integer = true,
+		Component = true,
+		AllowsRange = true,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 3,
+	},
 	u32 = {
 		Bounds = NumberRange.new(0, 4294967295),
 		Integer = true,
@@ -118,6 +127,15 @@ local Primitives: { [string]: Primitive } = {
 		AllowedComponents = 0,
 		Bytes = 2,
 	},
+	i24 = {
+		Bounds = NumberRange.new(-8388608, 8388607),
+		Integer = true,
+		Component = true,
+		AllowsRange = true,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 3,
+	},
 	i32 = {
 		Bounds = NumberRange.new(-2147483648, 2147483647),
 		Integer = true,
@@ -134,6 +152,16 @@ local Primitives: { [string]: Primitive } = {
 		AllowsOptional = true,
 		AllowedComponents = 0,
 		Bytes = 2,
+	},
+	--> Three bytes: a sign, six bits of exponent and seventeen of mantissa. The largest finite value is
+	--> (2 - 2^-17) * 2^31, and anything that rounds past it is infinity, as in f16.
+	f24 = {
+		Bounds = NumberRange.new(-4294950912, 4294950912),
+		Component = true,
+		AllowsRange = true,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 3,
 	},
 	--> Floats are bounded by infinity, not by the range of exact integers: an open side of `f32(0..)`
 	--> used to be filled with 2^24, which emitted a check refusing every value above it at runtime.

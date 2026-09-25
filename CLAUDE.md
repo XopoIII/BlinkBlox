@@ -244,6 +244,16 @@ the emitted text. Each fails when the bug it is about is put back: the 0.24 phan
 closed-up holes, the 0.26 channel with no refusal. `test/Isolated.luau` builds a server and client
 from a spec's own schema on remotes nothing else shares, for any spec that needs the bytes.
 
+0.34.0 came out of reading two devforum projects by 5uphi. Global Framework is not networking at all.
+Packet is a runtime library of the ByteNet/Warp kind, and its gaps are this fork's changelog run
+backwards again: a reply is matched by slot alone, whatever function it answers; an array's u16
+length sizes an allocation before its elements are read; Instances go unchecked; there is no schema
+signature; the budget is 8000 bytes per heartbeat. What it had that this fork lacked was 24-bit
+numbers, so `u24`, `i24` and `f24` were added. `vector<f24>` is 9 bytes where `vector` is 12, and at a
+thousand studs it is within 0.002. The idea was taken, not the code. Packet's own f24 drops the carry
+when a mantissa rounds up, so 1023.9999999 arrives as 512, and it has no subnormals. This one rounds
+to nearest where f16 truncates, and `test/Floats24.luau` fails with either Packet bug put back.
+
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of

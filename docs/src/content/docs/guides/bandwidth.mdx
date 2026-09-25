@@ -107,8 +107,10 @@ send, then add the range you mean.
 |---|---|---|
 | `u8`, `i8` | 1 | 0 to 255, -128 to 127 |
 | `u16`, `i16` | 2 | 0 to 65535, -32768 to 32767 |
+| `u24`, `i24` | 3 | 0 to 16777215, -8388608 to 8388607 |
 | `u32`, `i32` | 4 | 0 to about 4.29 billion, about +-2.1 billion |
 | `f16` | 2 | about +-65504, with 11 significant bits |
+| `f24` | 3 | about +-4.29e9, with 18 significant bits, rounded to nearest |
 | `f32` | 4 | Luau's `Vector3` precision |
 | `f64` | 8 | a Luau number, exactly |
 | `enum { ... }` | 1 | up to 256 values |
@@ -121,6 +123,10 @@ top of its range it is 32. It suits directions, normalised values, small offsets
 does not suit world positions, where a character a thousand studs from the origin would move in
 half-stud steps.
 
+**`f24`** is the width for world positions. It keeps 18 significant bits and rounds to nearest: every
+integer up to 262144 is exact, and a value between 512 and 1024 arrives within 0.002 of itself,
+between 8192 and 16384 within 0.032. `vector<f24>` is 9 bytes where `vector` is 12.
+
 An `enum` costs one byte however long its names are. A state sent as `string` costs its length plus
 a prefix every time.
 
@@ -132,11 +138,13 @@ first) and one for its position (the last):
 | Type | Bytes | Notes |
 |---|---|---|
 | `vector` | 12 | three `f32` |
+| `vector<f24>` | 9 | see `f24` above |
 | `vector<f16>` | 6 | see `f16` above |
 | `vector<i16>` | 6 | whole numbers only, each within -32768..32767 |
 | `CFrame` | 24 | `f32` position, three `f32` Euler angles |
 | `CFrame<f16, f32>` | 18 | `f16` rotation, `f32` position |
 | `CFrame<quat>` | 19 | `f32` position, 7-byte quaternion rotation |
+| `CFrame<quat, f24>` | 16 | `f24` position, 7-byte quaternion rotation |
 | `CFrame<quat, f16>` | 13 | `f16` position, 7-byte quaternion rotation |
 
 `CFrame<quat>` encodes the rotation as the three smallest components of a unit quaternion, in 7 bytes
@@ -231,7 +239,8 @@ position, an aim direction -- where a stale packet would make something visibly 
 - Use `u8`/`u16` and a range for counts, health, ammo and ids; `f64` only for values that need it.
 - Use an `enum` for anything that is one of a known set of names.
 - Group booleans and optionals in one struct; they share bytes.
-- Use `vector<f16>` for directions, `CFrame<quat>` for poses that do not need to be exact.
+- Use `vector<f16>` for directions, `vector<f24>` for world positions, and `CFrame<quat>` for poses
+  that do not need to be exact.
 - Keep unreliable payloads bounded well under 900 bytes.
 - Prefer one event with a struct over several events fired together: each event costs an index byte.
 

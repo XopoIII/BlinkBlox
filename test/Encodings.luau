@@ -203,3 +203,51 @@ RunClosure("A set flag named like a reader's local leaves no global behind", fun
 		ErrorPrint(`Failed "Colliding flags": reading wrote the global(s) {table.concat(Leaked, ", ")}.`)
 	end
 end)
+
+RunClosure("24-bit numbers take three bytes, low byte first", function()
+	local Unsigned = Server.Unsigned24.Write(0x123456)
+	if buffer.len(Unsigned) ~= 3 or buffer.readu8(Unsigned, 0) ~= 0x56 or buffer.readu8(Unsigned, 2) ~= 0x12 then
+		ErrorPrint(`Failed "24-bit integers": 0x123456 was not written as 56 34 12.`)
+	end
+
+	--> Two's complement: the sign is the top bit of the high byte.
+	local Signed = Server.Signed24.Write(-2)
+	if buffer.readu16(Signed, 0) ~= 0xFFFE or buffer.readu8(Signed, 2) ~= 0xFF then
+		ErrorPrint(`Failed "24-bit integers": -2 was not written as FE FF FF.`)
+	end
+
+	for _, Case in
+		{
+			{ "Unsigned24", 0 },
+			{ "Unsigned24", 16777215 },
+			{ "Unsigned24", 65536 },
+			{ "Signed24", -8388608 },
+			{ "Signed24", 8388607 },
+			{ "Signed24", -65536 },
+			{ "Signed24", -1 },
+		}
+	do
+		local Got = Server[Case[1]].Read(Server[Case[1]].Write(Case[2]))
+		if Got ~= Case[2] then
+			ErrorPrint(`Failed "24-bit integers": {Case[1]} {Case[2]} came back as {Got}.`)
+		end
+	end
+
+	--> The point of f24: a position in nine bytes, and a whole CFrame in sixteen.
+	local Position = roblox.Vector3.new(1000.25, -20.5, 3.75)
+	local Vector = Server.Vector24.Write(Position)
+	if buffer.len(Vector) ~= 9 or Server.Vector24.Read(Vector) ~= Position then
+		ErrorPrint(`Failed "f24 vectors": took {buffer.len(Vector)} bytes, expected 9, or lost the value.`)
+	end
+
+	local Sample = roblox.CFrame.new(Position) * roblox.CFrame.fromOrientation(0.3, -1.2, 2.5)
+	local Encoded = Server.QuatCFrame24.Write(Sample)
+	local Got = Server.QuatCFrame24.Read(Encoded)
+	if
+		buffer.len(Encoded) ~= 16
+		or Got.Position ~= Position
+		or (Got.LookVector - Sample.LookVector).Magnitude > 1e-3
+	then
+		ErrorPrint(`Failed "f24 CFrames": took {buffer.len(Encoded)} bytes, expected 16, or lost the value.`)
+	end
+end)
