@@ -48,8 +48,35 @@ type BufferSave = {
     Size: number, 
     Cursor: number, 
     Buffer: buffer, 
-    Instances: {Instance}
+    Instances: {Instance},
+    --> Consecutive flushes that used under a quarter of Buffer; see ShouldShrink.
+    Underused: number?
 }
+
+--> Whether a send buffer that has just been flushed should be let go, given how many flushes in a row
+--> have now used under a quarter of it.
+-->
+--> Buffers are kept between flushes so that a steady sender grows its buffer once rather than every
+--> frame. They used to be let go outright past 4 KB, which meant the heaviest senders -- the ones the
+--> keeping was for -- regrew theirs from 64 bytes on every flush, twenty-odd `buffer.create` and
+--> `buffer.copy` a frame for a 600 KB batch. Now a buffer is let go only once it has been mostly empty
+--> for a second's worth of flushes: a burst is not held for the session, and a steady load keeps its
+--> buffer for as long as it lasts.
+local SHRINK_ABOVE = 4096
+local SHRINK_AFTER = 60
+
+local function ShouldShrink(Size: number, Used: number, Underused: number): (boolean, number)
+    if Size <= SHRINK_ABOVE or Used * 4 >= Size then
+        return false, 0
+    end
+
+    Underused += 1
+    if Underused >= SHRINK_AFTER then
+        return true, 0
+    end
+
+    return false, Underused
+end
 
 local function Read(Bytes: number)
     local Offset = RecieveCursor
@@ -399,11 +426,13 @@ function SerdesFunctions.Generics_WriteEVENT_Snapshot(Value: { Sequence: number,
 		-- Value.Data.Data: Data
 		-- Value.Data.Data.id: id
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Data.Data.id)
-		-- Value.Data.Data.pos: pos
-		local Vector = Value.Data.Data.pos
-		buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-		buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-		buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+		do
+			-- Value.Data.Data.pos: pos
+			local Vector = Value.Data.Data.pos
+			buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+		end
 		-- Value.Data.Data.angle: angle
 		buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.Data.Data.angle)
 	elseif Value.Data.Type == "Fragment" then
@@ -418,11 +447,13 @@ function SerdesFunctions.Generics_WriteEVENT_Snapshot(Value: { Sequence: number,
 		-- Value.Data.Data: Data
 		-- Value.Data.Data.id: id
 		buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Data.Data.id)
-		-- Value.Data.Data.pos: pos
-		local Vector = Value.Data.Data.pos
-		buffer.writef32(SendBuffer, BLOCK_START + 3, Vector.X)
-		buffer.writef32(SendBuffer, BLOCK_START + 7, Vector.Y)
-		buffer.writef32(SendBuffer, BLOCK_START + 11, Vector.Z)
+		do
+			-- Value.Data.Data.pos: pos
+			local Vector = Value.Data.Data.pos
+			buffer.writef32(SendBuffer, BLOCK_START + 3, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 7, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 11, Vector.Z)
+		end
 		-- Value.Data.Data.angle: angle
 		buffer.writeu16(SendBuffer, BLOCK_START + 15, Value.Data.Data.angle)
 	else
@@ -449,11 +480,13 @@ function SerdesFunctions.Example_WriteEVENT_Snapshot(Value: { Sequence: number, 
 		-- Value.Data.Data: Data
 		-- Value.Data.Data.id: id
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Data.Data.id)
-		-- Value.Data.Data.pos: pos
-		local Vector = Value.Data.Data.pos
-		buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-		buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-		buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+		do
+			-- Value.Data.Data.pos: pos
+			local Vector = Value.Data.Data.pos
+			buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+		end
 		-- Value.Data.Data.angle: angle
 		buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.Data.Data.angle)
 	elseif Value.Data.Type == "Fragment" then
@@ -468,11 +501,13 @@ function SerdesFunctions.Example_WriteEVENT_Snapshot(Value: { Sequence: number, 
 		-- Value.Data.Data: Data
 		-- Value.Data.Data.id: id
 		buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Data.Data.id)
-		-- Value.Data.Data.pos: pos
-		local Vector = Value.Data.Data.pos
-		buffer.writef32(SendBuffer, BLOCK_START + 3, Vector.X)
-		buffer.writef32(SendBuffer, BLOCK_START + 7, Vector.Y)
-		buffer.writef32(SendBuffer, BLOCK_START + 11, Vector.Z)
+		do
+			-- Value.Data.Data.pos: pos
+			local Vector = Value.Data.Data.pos
+			buffer.writef32(SendBuffer, BLOCK_START + 3, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 7, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 11, Vector.Z)
+		end
 		-- Value.Data.Data.angle: angle
 		buffer.writeu16(SendBuffer, BLOCK_START + 15, Value.Data.Data.angle)
 	else
@@ -499,14 +534,16 @@ if not RunService:IsRunning() then
 					-- Read BLOCK: 15 bytes
 					local BLOCK_START = Read(15)
 					-- Value: Entity
-					local Value = {} :: any
+					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -528,11 +565,13 @@ if not RunService:IsRunning() then
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)
@@ -562,14 +601,16 @@ if not RunService:IsRunning() then
 					-- Read BLOCK: 15 bytes
 					local BLOCK_START = Read(15)
 					-- Value: Entity
-					local Value = {} :: any
+					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -591,11 +632,13 @@ if not RunService:IsRunning() then
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)
@@ -688,23 +731,28 @@ local function ReportDecodeFailure(Event: string?, Failure: unknown)
     warn(`[BlinkBlox]: Dropped a packet that could not be decoded, at event "{Event or "unknown"}": {Failure}`)
 end
 
+local SendUnderused = 0
+
 local function StepReplication()
-    if SendCursor <= 0 then
-        return
+    local Used = SendCursor
+    if Used > 0 then
+        local Buffer = buffer.create(Used)
+        buffer.copy(Buffer, 0, SendBuffer, 0, Used)
+        Reliable:FireServer(Buffer, SendInstances)
+
+        SendCursor = 0
+        SendOffset = 0
+        table.clear(SendInstances)
     end
 
-    local Buffer = buffer.create(SendCursor)
-    buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-    Reliable:FireServer(Buffer, SendInstances)
-
-    --> Kept for the next frame, as the server keeps each player's; see its StepReplication.
-    SendCursor = 0
-    SendOffset = 0
-    if SendSize > 4096 then
+    --> Kept for the next frame, as the server keeps each player's. Checked on a frame that sent
+    --> nothing as well, or a client that went quiet after a burst would hold the burst's buffer.
+    local Shrink
+    Shrink, SendUnderused = ShouldShrink(SendSize, Used, SendUnderused)
+    if Shrink then
         SendSize = 64
         SendBuffer = buffer.create(64)
     end
-    table.clear(SendInstances)
 end
 RunService.Heartbeat:Connect(StepReplication)
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -718,15 +766,17 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	while (RecieveCursor < Size) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
-		end)
+	end
+	while (RecieveCursor < Size) do
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
 			break
@@ -744,15 +794,17 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	while (RecieveCursor < Size) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
-		end)
+	end
+	while (RecieveCursor < Size) do
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
 			break
@@ -780,14 +832,16 @@ local Returns = table.freeze({
 					-- Read BLOCK: 15 bytes
 					local BLOCK_START = Read(15)
 					-- Value: Entity
-					local Value = {} :: any
+					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -809,11 +863,13 @@ local Returns = table.freeze({
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)
@@ -856,14 +912,16 @@ local Returns = table.freeze({
 					-- Read BLOCK: 15 bytes
 					local BLOCK_START = Read(15)
 					-- Value: Entity
-					local Value = {} :: any
+					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -885,11 +943,13 @@ local Returns = table.freeze({
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)

@@ -102,8 +102,8 @@ misbehaved at runtime -- usually silently -- and is refused at compile time inst
 | `E3030` | More than 256 reliable events and functions, or more than 256 unreliable events. | Each channel numbers its declarations with one byte; upstream sent the 257th as the first. |
 | `E2003` | A numeric option that is not a positive whole number, or an unknown `Casing`. | Fix the value. |
 
-New warnings are worth reading too. `W3019` means an unreliable event may exceed the ~900-byte limit
-Roblox enforces; bound the field it names.
+New warnings are worth reading too. `W3019` means an unreliable event may exceed its budget under
+the 1000-byte limit Roblox enforces; bound the field it names.
 
 ## What a running game will notice
 

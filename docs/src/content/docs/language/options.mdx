@@ -290,12 +290,16 @@ The check costs one `coroutine.status` per packet, which is why it is on by defa
 ### `MaxUnreliableSize`
 Default: `900` bytes
 
-The largest payload an unreliable event may carry, counting its one-byte event id and, for
+The largest buffer an unreliable event may send, counting its one-byte event id and, for
 `OrderedUnreliable`, its two-byte sequence number.
 
-Roblox drops an `UnreliableRemoteEvent` payload past roughly this size. It does so silently, and only
-under the conditions that produce a large packet, so the failure shows up in production for some
-players and never in testing.
+Roblox drops an `UnreliableRemoteEvent` whose payload is over
+[1000 bytes](https://create.roblox.com/docs/reference/engine/classes/UnreliableRemoteEvent). Studio's
+Output reports it, but a live game drops the event silently, and only when a value happens to be
+large. So the failure shows up in production for some players and never in testing. That payload is
+everything the call carries, as Roblox encodes it: the buffer, the table of instances sent beside it,
+and the bytes that describe each. This option bounds the buffer alone, so it has to sit below 1000.
+The default of 900 leaves 100 bytes for the rest. Roblox does not say what the rest costs.
 
 BlinkBlox checks this twice. At compile time it measures every unreliable event: one that can **never**
 fit is a hard error (`E3018`), and one that merely **might not** is a warning (`W3019`) naming the

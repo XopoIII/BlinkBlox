@@ -117,24 +117,6 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		then "RecieveCursor < Size and Player.Parent ~= nil"
 		else "RecieveCursor < Size"
 
-	State.Reliables = State.Reliables:While(Condition)
-	State.Unreliables = State.Unreliables:While(Condition)
-
-	if State.Context == "Server" then
-		local function EmitEventCap(Channel: Blocks.Block)
-			Channel:Line("DecodedEvents += 1")
-			Channel:Line(`if DecodedEvents > {MaxEvents} then`)
-			Channel:Line(
-				`\tif ShouldReport(Player, "Events") then warn(\`[BlinkBlox]: Dropped the rest of a packet from \{Player.Name\}, too many events.\`) end`
-			)
-			Channel:Line("\tbreak")
-			Channel:Line("end")
-		end
-
-		EmitEventCap(State.Reliables)
-		EmitEventCap(State.Unreliables)
-	end
-
 	--> A TRUNCATED packet defeats every limit above, because it is SMALLER than a legitimate one: two
 	--> bytes tagged as a five-byte event make `buffer.readu16` throw from inside the remote's
 	--> connection, where no user pcall can reach it. `Read` advances the cursor without a bounds
@@ -147,19 +129,22 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> cursor pointing mid-event, and a client built from a different schema than the server decodes
 	--> every index one event out. Without this the user gets a raw `buffer access out of bounds` from
 	--> inside OnClientEvent, which is what upstream issue #26 and the devforum report were.
-	--> Measured at +109ns per decoded event, against ~20ns for the buffer read it guards -- real, and
-	--> irrelevant next to the listener dispatch that follows it.
 	-->
-	--> `Decoding` carries the index out of the pcall, so a failure can name the event it happened in.
-	local function OpenDecode(Channel: Blocks.Block)
+	--> Each event is decoded by one call of `DecodeEvent` under its own pcall. The function is made
+	--> once per packet, ahead of the loop. It used to be a closure written inside the loop, so every
+	--> event allocated a fresh closure and the upvalues it captured before a byte of it was read --
+	--> a quarter of what a one-byte event cost the server to decode. `Decoding` carries the index
+	--> out of the pcall, so a failure can name the event it happened in.
+	local function OpenDecode(Channel: Blocks.Block): Blocks.Block
 		Channel:Line("local Decoding = -1")
-		Channel:Line("local Parsed: boolean, Failure: any = pcall(function()")
-		Types.u8.Read("Index", Channel)
-		Channel:Line("Decoding = Index")
+		local Decoder = Channel:Scope("local function DecodeEvent()")
+		Types.u8.Read("Index", Decoder)
+		Decoder:Line("Decoding = Index")
+		return Decoder
 	end
 
-	OpenDecode(State.Reliables)
-	OpenDecode(State.Unreliables)
+	State.Reliables = OpenDecode(State.Reliables)
+	State.Unreliables = OpenDecode(State.Unreliables)
 
 	--> Replication
 	local Replication = Builder.new()
@@ -217,23 +202,36 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	State.Reliables = CloseIndex(State.Reliables, State.Channels.Reliable.Listening)
 	State.Unreliables = CloseIndex(State.Unreliables, State.Channels.Unreliable.Listening)
 
-	--> Close the decode function opened above and act on its result. What is said about it, and to
-	--> whom, is ReportDecodeFailure's business: the server is silent unless the game installed a
-	--> handler, the client warns. See the two templates.
-	local function CloseDecode(Channel: Blocks.Block, Name: string)
+	--> Close the decode function opened above, then decode the packet one event at a time and act on
+	--> each result. What is said about a failure, and to whom, is ReportDecodeFailure's business: the
+	--> server is silent unless the game installed a handler, the client warns. See the two templates.
+	local function CloseDecode(Channel: Blocks.Block, Name: string): Blocks.Block
+		local Connection = Channel:End()
+		local Loop = Connection:While(Condition)
+
+		--> The event cap; see MaxEvents above.
+		if State.Context == "Server" then
+			Loop:Line("DecodedEvents += 1")
+			Loop:Line(`if DecodedEvents > {MaxEvents} then`)
+			Loop:Line(
+				`\tif ShouldReport(Player, "Events") then warn(\`[BlinkBlox]: Dropped the rest of a packet from \{Player.Name\}, too many events.\`) end`
+			)
+			Loop:Line("\tbreak")
+			Loop:Line("end")
+		end
+
 		local Sender = if State.Context == "Server" then `Player, "{Name}", ` else ""
-		Channel:Line("end)")
-		Channel:Line("if not Parsed then")
-		Channel:Line(`\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], Failure)`)
-		Channel:Line("\tbreak")
-		Channel:Line("end")
+		Loop:Line("Decoding = -1")
+		Loop:Line("local Parsed: boolean, Failure: any = pcall(DecodeEvent)")
+		Loop:Line("if not Parsed then")
+		Loop:Line(`\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], Failure)`)
+		Loop:Line("\tbreak")
+		Loop:Line("end")
+		return Loop:End()
 	end
 
-	CloseDecode(State.Reliables, "Reliable")
-	CloseDecode(State.Unreliables, "Unreliable")
-
-	State.Reliables = State.Reliables:End():End()
-	State.Unreliables = State.Unreliables:End():End()
+	State.Reliables = CloseDecode(State.Reliables, "Reliable"):End()
+	State.Unreliables = CloseDecode(State.Unreliables, "Unreliable"):End()
 
 	State.Noop.Push(`\})`, 0, 1)
 	State.Noop.Push(`return Returns :: {EVENTS_TYPE}`, 0, 1)

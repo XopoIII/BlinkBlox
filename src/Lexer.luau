@@ -173,6 +173,67 @@ local SKIPPED_TOKENS = {
 	Whitespace = true,
 }
 
+--> The first item of a rule's pattern -- a class such as `%a` or `[%a_]`, or one literal character --
+--> or nil when the rule could begin with more than that item can match: the item is optional, or
+--> the pattern opens with something this does not read. Nil is always safe; it only means the rule
+--> is tried whatever the first character is.
+local function FirstItem(Pattern: string): string?
+	local Rest = string.sub(Pattern, 2)
+	if string.sub(Rest, 1, 1) == "(" then
+		Rest = string.sub(Rest, 2)
+	end
+
+	local First = string.sub(Rest, 1, 1)
+	local Length: number
+	if First == "%" then
+		Length = 2
+	elseif First == "[" then
+		Length = 2
+		if string.sub(Rest, Length, Length) == "^" then
+			Length += 1
+		end
+		if string.sub(Rest, Length, Length) == "]" then
+			Length += 1
+		end
+		while Length <= #Rest and string.sub(Rest, Length, Length) ~= "]" do
+			Length += if string.sub(Rest, Length, Length) == "%" then 2 else 1
+		end
+	elseif First == "" or First == "(" or First == "." then
+		return nil
+	else
+		Length = 1
+	end
+
+	local Quantifier = string.sub(Rest, Length + 1, Length + 1)
+	if Quantifier == "?" or Quantifier == "*" or Quantifier == "-" then
+		return nil
+	end
+
+	return string.sub(Rest, 1, Length)
+end
+
+--> For each first byte, the rules that can match a token starting with it, in the order `TOKENS`
+--> gives them. Every rule used to be tried at every token, so an identifier -- the commonest token,
+--> matched by the last rule -- cost thirty failed pattern searches first.
+local RULES_BY_BYTE: { [number]: { TokenRule } } = {}
+do
+	local Items = {}
+	for Index, Rule in TOKENS do
+		Items[Index] = FirstItem(Rule[1] :: string)
+	end
+
+	for Byte = 0, 255 do
+		local Rules = {}
+		for Index, Rule in TOKENS do
+			local Item = Items[Index]
+			if Item == nil or string.find(string.char(Byte), `^{Item}`) then
+				table.insert(Rules, Rule)
+			end
+		end
+		RULES_BY_BYTE[Byte] = Rules
+	end
+end
+
 local Lexer = {}
 Lexer.__index = Lexer
 
@@ -208,90 +269,96 @@ function Lexer.Initialize(self: Lexer, Source: string, File: string?)
 end
 
 function Lexer.GetNextToken(self: Lexer, DontAdvanceCursor: boolean?, StartAt: number?): Token
-	if self.Cursor > self.Size then
-		return {
-			Type = "EndOfFile",
-			Value = "",
-			Start = #self.Source,
-			End = #self.Source,
-		}
-	end
-
 	local Source = self.Source
+	local Size = self.Size
 	local Position = StartAt or self.Cursor
 	local IsHighlighting = (self.Mode == "Highlighting")
 
-	local function Match(Pattern: string): (string?, number, number)
-		local Start, End = string.find(Source, Pattern, Position)
-		if not Start or not End then
-			return nil, Position, Position
+	--> A loop rather than a call per skipped token: whitespace and comments are matched, stepped
+	--> over, and the search starts again from where they end.
+	while true do
+		if self.Cursor > Size then
+			return {
+				Type = "EndOfFile",
+				Value = "",
+				Start = #Source,
+				End = #Source,
+			}
 		end
 
-		local Text = string.sub(Source, Start, End)
-		return Text, Position, math.min(Position + #Text, self.Size)
-	end
+		local Skipped = false
+		for _, Rule in RULES_BY_BYTE[string.byte(Source, Position) or 0] do
+			--> A rule is a fixed pair: the pattern, then either a type or a transformer (see TokenRule).
+			local Pattern = Rule[1] :: string
+			local Type = Rule[2] :: Types | TokenTransformer
 
-	for _, Rule in TOKENS do
-		--> A rule is a fixed pair: the pattern, then either a type or a transformer (see TokenRule).
-		local Pattern = Rule[1] :: string
-		local Type = Rule[2] :: Types | TokenTransformer
+			local MatchStart, MatchEnd = string.find(Source, Pattern, Position)
 
-		local Text, Start, End = Match(Pattern)
+			--> Couldn't match this pattern, continue.
+			if not MatchStart or not MatchEnd then
+				continue
+			end
 
-		--> Couldn't match this pattern, continue.
-		if not Text then
+			local Text = string.sub(Source, MatchStart, MatchEnd)
+			local Start = Position
+			local End = math.min(Position + #Text, Size)
+
+			local IsSkipped = SKIPPED_TOKENS[Type] and not IsHighlighting
+			if not DontAdvanceCursor or IsSkipped then
+				Position += #Text
+				self.Cursor = Position
+			end
+
+			--> Whitespace matched, skip token.
+			--> We don't want to skip whitespaces in highlighting mode.
+			if IsSkipped then
+				Skipped = true
+				break
+			end
+
+			local Value: string | boolean = Text
+			if type(Type) == "function" then
+				--> Only overwrite the type when highlighting
+				local TrueType, TrueValue = Type(Text)
+
+				Type = TrueType
+				Value = if IsHighlighting then Text else TrueValue
+			end
+
+			return {
+				Type = Type :: Types,
+				--> `true`/`false` genuinely arrive here as booleans, which `Parser.Options` relies on when
+				--> it stores an option straight into a boolean field. Every other reader treats `Value` as
+				--> a string, so the cast keeps that widening in this one place instead of in the type.
+				Value = Value :: string,
+				Start = Start,
+				End = End,
+			}
+		end
+
+		if Skipped then
 			continue
 		end
 
-		if not DontAdvanceCursor or (SKIPPED_TOKENS[Type] and not IsHighlighting) then
-			Position += #Text
-			self.Cursor = Position
+		if not IsHighlighting then
+			Error.new(Error.LexerUnexpectedToken, self.Source, "Unexpected token", self.File)
+				:Primary({ Start = self.Cursor, End = self.Cursor }, `Unexpected token`)
+				:Emit()
 		end
 
-		--> Whitespace matched, skip token.
-		--> We don't want to skip whitespaces in highlighting mode.
-		if SKIPPED_TOKENS[Type] and not IsHighlighting then
-			return self:GetNextToken(DontAdvanceCursor)
-		end
-
-		local Value: string | boolean = Text
-		if type(Type) == "function" then
-			--> Only overwrite the type when highlighting
-			local TrueType, TrueValue = Type(Text)
-
-			Type = TrueType
-			Value = if IsHighlighting then Text else TrueValue
+		--> Attempt to recover the lexer
+		local Symbol = string.sub(Source, Position, Position)
+		if DontAdvanceCursor ~= true then
+			self.Cursor += 1
 		end
 
 		return {
-			Type = Type :: Types,
-			--> `true`/`false` genuinely arrive here as booleans, which `Parser.Options` relies on when
-			--> it stores an option straight into a boolean field. Every other reader treats `Value` as
-			--> a string, so the cast keeps that widening in this one place instead of in the type.
-			Value = Value :: string,
-			Start = Start,
-			End = End,
+			Type = "Unknown",
+			Value = Symbol,
+			Start = Position,
+			End = Position,
 		}
 	end
-
-	if not IsHighlighting then
-		Error.new(Error.LexerUnexpectedToken, self.Source, "Unexpected token", self.File)
-			:Primary({ Start = self.Cursor, End = self.Cursor }, `Unexpected token`)
-			:Emit()
-	end
-
-	--> Attempt to recover the lexer
-	local Symbol = string.sub(self.Source, Position, Position)
-	if DontAdvanceCursor ~= true then
-		self.Cursor += 1
-	end
-
-	return {
-		Type = "Unknown",
-		Value = Symbol,
-		Start = Position,
-		End = Position,
-	}
 end
 
 return Lexer

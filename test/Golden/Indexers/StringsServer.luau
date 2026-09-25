@@ -49,8 +49,35 @@ type BufferSave = {
     Size: number, 
     Cursor: number, 
     Buffer: buffer, 
-    Instances: {Instance}
+    Instances: {Instance},
+    --> Consecutive flushes that used under a quarter of Buffer; see ShouldShrink.
+    Underused: number?
 }
+
+--> Whether a send buffer that has just been flushed should be let go, given how many flushes in a row
+--> have now used under a quarter of it.
+-->
+--> Buffers are kept between flushes so that a steady sender grows its buffer once rather than every
+--> frame. They used to be let go outright past 4 KB, which meant the heaviest senders -- the ones the
+--> keeping was for -- regrew theirs from 64 bytes on every flush, twenty-odd `buffer.create` and
+--> `buffer.copy` a frame for a 600 KB batch. Now a buffer is let go only once it has been mostly empty
+--> for a second's worth of flushes: a burst is not held for the session, and a steady load keeps its
+--> buffer for as long as it lasts.
+local SHRINK_ABOVE = 4096
+local SHRINK_AFTER = 60
+
+local function ShouldShrink(Size: number, Used: number, Underused: number): (boolean, number)
+    if Size <= SHRINK_ABOVE or Used * 4 >= Size then
+        return false, 0
+    end
+
+    Underused += 1
+    if Underused >= SHRINK_AFTER then
+        return true, 0
+    end
+
+    return false, Underused
+end
 
 local function Read(Bytes: number)
     local Offset = RecieveCursor
@@ -805,7 +832,18 @@ local function SavePlayerBuffer(Player: Player)
         return
     end
 
-    PlayersMap[Player] = Save()
+    --> Written into the entry the player already has, rather than a new one each time: this runs on
+    --> every reliable send to a player, and the entry also carries its shrink count.
+    local Entry = PlayersMap[Player]
+    if Entry == nil then
+        PlayersMap[Player] = Save()
+        return
+    end
+
+    Entry.Size = SendSize
+    Entry.Cursor = SendCursor
+    Entry.Buffer = SendBuffer
+    Entry.Instances = SendInstances
 end
 
 local function StepReplication()
@@ -818,24 +856,27 @@ local function StepReplication()
             continue
         end
 
-        if Send.Cursor <= 0 then
-            continue
-        end
+        local Used = Send.Cursor
+        if Used > 0 then
+            local Buffer = buffer.create(Used)
+            buffer.copy(Buffer, 0, Send.Buffer, 0, Used)
+            Reliable:FireClient(Player, Buffer, Send.Instances)
 
-        local Buffer = buffer.create(Send.Cursor)
-        buffer.copy(Buffer, 0, Send.Buffer, 0, Send.Cursor)
-        Reliable:FireClient(Player, Buffer, Send.Instances)
+            Send.Cursor = 0
+            table.clear(Send.Instances)
+        end
 
         --> The buffer this player's writes grew is kept for the next frame rather than regrown from
         --> 64 bytes every Heartbeat: only the exact-size copy above goes on the wire, and every writer
-        --> writes whole bytes, so what is left past the cursor is never read. One that a burst grew
-        --> past 4 KB is let go, so a single large frame is not held for the rest of the session.
-        Send.Cursor = 0
-        if Send.Size > 4096 then
+        --> writes whole bytes, so what is left past the cursor is never read. One that has sat mostly
+        --> empty for a second is let go, so a burst is not held for the rest of the session; see
+        --> ShouldShrink.
+        local Shrink, Underused = ShouldShrink(Send.Size, Used, Send.Underused or 0)
+        Send.Underused = Underused
+        if Shrink then
             Send.Size = 64
             Send.Buffer = buffer.create(64)
         end
-        table.clear(Send.Instances)
     end
 end
 RunService.Heartbeat:Connect(StepReplication)
@@ -866,20 +907,22 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	end
 	SerdesThread = coroutine.running()
 	local DecodedEvents = 0
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
+		error("[BlinkBlox]: This channel receives no events.")
+	end
+	while (RecieveCursor < Size and Player.Parent ~= nil) do
 		DecodedEvents += 1
 		if DecodedEvents > 64 then
 			if ShouldReport(Player, "Events") then warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`) end
 			break
 		end
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
-		end)
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
 			break
@@ -913,20 +956,22 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 	SerdesThread = coroutine.running()
 	local DecodedEvents = 0
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
+		error("[BlinkBlox]: This channel receives no events.")
+	end
+	while (RecieveCursor < Size and Player.Parent ~= nil) do
 		DecodedEvents += 1
 		if DecodedEvents > 64 then
 			if ShouldReport(Player, "Events") then warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`) end
 			break
 		end
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
-		end)
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
 			break

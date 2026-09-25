@@ -254,6 +254,25 @@ thousand studs it is within 0.002. The idea was taken, not the code. Packet's ow
 when a mantissa rounds up, so 1023.9999999 arrives as 512, and it has no subnormals. This one rounds
 to nearest where f16 truncates, and `test/Floats24.luau` fails with either Packet bug put back.
 
+0.35.0 was about performance, and it began with the benchmark, because the benchmark could not see
+it. Studio caps the frame rate at 60, so Entities showed only that BlinkBlox kept up. Studio compiles
+LocalScripts natively where most clients do not. And every event carried the same data, which Roblox's
+zstd compression squeezed to nothing, so the Kbps column measured the compressor: all three tools read
+42 on Entities. `benchmark/Runtime.luau` now times fire, flush and decode on Lune, natively compiled
+and interpreted. It loads the modules into the real global environment, because Lune deoptimises a
+chunk given a custom one. Studio's harness gained random payloads, a fire-time column and macOS
+support. What the numbers found: a send buffer past 4 KB was let go at every flush, so the heaviest
+senders regrew theirs from 64 bytes every frame; `boolean[]` went a bit at a time; a decoded struct
+was built as `{}` and rehashed four times on the way to six fields; and every decoded event
+allocated a closure. Decoding structs is four times faster natively and `boolean[]` three times. On
+the compiler side, 90% of parse time was generic substitution deep-copying the declaring scope's
+whole symbol table, and parsing went from 166 ms to 12 ms. A reused parser also kept every tree it
+had parsed, which is how the plugin's editor had leaked 16 MB a parse on a schema using
+`@profile`. Constant offsets in array loops and branchless boolean packing were measured and
+dropped: the first was slower natively, the second no faster. Reviewing 0.34.0's f24 turned up that
+a struct of 50 CFrames failed to load at all -- every field's locals stayed live, past Luau's 200 --
+so each field of a struct is now scoped (`src/Generator/Scope.luau`).
+
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of
@@ -286,6 +305,9 @@ needs, which is the actual objection.
 | Compile a schema | `lune run init <path-to-.blink> -- --yes` (from `src/CLI`) |
 | Check a schema, diagnostics as JSON | `lune run init <path-to-.blink> -- --check --json` (from `src/CLI`) |
 | Build release binaries | `lune run build` |
+| Time the generated modules | `lune run Runtime` (from `benchmark`) |
+| Time the compiler | `lune run Performance` (from `benchmark`) |
+| Measure the unreliable payload limit in Studio | `lune run Probe` (from `benchmark`) |
 | Docs, locally | `cd docs && npm install && npm run dev` |
 | Build the docs (dead links fail it) | `cd docs && npm run build` |
 

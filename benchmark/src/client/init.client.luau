@@ -34,6 +34,9 @@ type Benchmark = {
 	Recieve: number,
 	Bandwidth: { number },
 	Framerate: { number },
+	--> Milliseconds of CPU each frame's thousand fires took. Unlike the frame rate this is not capped
+	--> by Studio's 60 FPS, so it still tells two tools apart when both reach the cap.
+	FireTime: { number },
 }
 
 type Results = {
@@ -68,7 +71,9 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 	local Framerates = {}
 
 	local Sent = 0
-	local Data = Benches[Bench]
+	local FireTimes = {}
+	local Pool = Benches[Bench]
+	local PoolSize = #Pool
 	local Events = Modes[Tool]
 
 	local Event = Events[Bench]
@@ -98,10 +103,12 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 			Frames = 0
 		end
 
+		local Start = os.clock()
 		for Index = 1, 1000 do
+			Method(Pool[Sent % PoolSize + 1])
 			Sent += 1
-			Method(Data)
 		end
+		table.insert(FireTimes, (os.clock() - Start) * 1000)
 	end)
 
 	task.wait(10)
@@ -110,16 +117,19 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 
 	--> Generate results
 	table.sort(Bandwidth)
+	table.sort(FireTimes)
 	table.sort(Framerates, function(a, b)
 		return a > b
 	end)
 
 	local FrameratePercentiles = {}
 	local BandwidthPercentiles = {}
+	local FireTimePercentiles = {}
 
 	for _, Percentage in { 50, 0, 80, 90, 95, 100 } do
 		table.insert(BandwidthPercentiles, Percentile(Bandwidth, Percentage))
 		table.insert(FrameratePercentiles, Percentile(Framerates, Percentage))
+		table.insert(FireTimePercentiles, Percentile(FireTimes, Percentage))
 	end
 
 	return {
@@ -127,6 +137,7 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 		Recieve = 0,
 		Bandwidth = BandwidthPercentiles,
 		Framerate = FrameratePercentiles,
+		FireTime = FireTimePercentiles,
 	}
 end
 

@@ -43,7 +43,9 @@ local function CompareValues(a, b): boolean
 end
 
 local Recieved = {}
-for Name, Data in Benches do
+for Name, Pool in Benches do
+	--> Every tool fires the pool from its first payload, so that is the one the first event carries.
+	local Data = Pool[1]
 	local BenchRecieved = {}
 	Recieved[Name] = BenchRecieved
 

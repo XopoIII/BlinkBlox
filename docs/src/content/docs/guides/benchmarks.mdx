@@ -1,9 +1,54 @@
 ---
 title: Benchmarks
-description: Frame rate and bandwidth of BlinkBlox 0.29.0 against plain remotes, zap and ByteNet, measured in Studio.
+description: What BlinkBlox's generated code costs to fire, flush and decode, measured on Lune, and its frame rate and bandwidth against plain remotes, zap and ByteNet in Studio.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+
+There are two benchmarks, and they answer different questions.
+
+- **The runtime benchmark** times BlinkBlox's generated code on its own, on
+  [Lune](https://lune-org.github.io/docs), without Roblox. It is reproducible on any machine and
+  separates the three things the code does: firing events, flushing them into a packet, and the
+  server decoding that packet.
+- **The Studio benchmark** puts BlinkBlox next to plain remotes, zap and ByteNet inside Roblox
+  Studio, and reports frame rate and bandwidth.
+
+## The generated code, on Lune
+
+Each frame fires 1000 events from the client, flushes them into one packet, and hands that packet
+to the server. The times below are medians in milliseconds per frame, from 100 frames, and "bytes"
+is the size of one event on the wire before Roblox compresses it. `Booleans` is `boolean[0..1000]`
+holding 1000 values; `Entities` is 100 structs of six `u8` fields. The `Random` variants send a
+thousand different payloads a frame instead of one payload a thousand times, and `Tiny` is a single
+`u8`, where an event's cost is its framing rather than its data.
+
+Natively compiled, as a Roblox server runs the module:
+
+| Bench | Fire 0.34.0 | Fire 0.35.0 | Decode 0.34.0 | Decode 0.35.0 | Bytes |
+|---|---|---|---|---|---|
+| Booleans | 11.9 | **5.5** | 21.7 | **6.5** | 128 |
+| Entities | 4.6 | **3.9** | 73.3 | **17.0** | 603 |
+| BooleansRandom | 21.2 | **14.1** | 23.9 | **9.4** | 128 |
+| EntitiesRandom | 9.3 | **6.9** | 91.1 | **30.0** | 603 |
+| Tiny | 0.13 | 0.15 | 0.43 | **0.28** | 2 |
+
+Interpreted, as most Roblox clients run it:
+
+| Bench | Fire 0.34.0 | Fire 0.35.0 | Decode 0.34.0 | Decode 0.35.0 |
+|---|---|---|---|---|
+| Booleans | 64.3 | **24.9** | 79.7 | **32.5** |
+| Entities | 23.3 | 23.1 | 93.7 | **46.7** |
+| BooleansRandom | 64.6 | **33.4** | 80.5 | **33.4** |
+| EntitiesRandom | 29.9 | 28.9 | 102.2 | **57.5** |
+| Tiny | 0.26 | 0.25 | 0.69 | **0.49** |
+
+A difference of a few hundredths of a millisecond, like Tiny's fire, is noise on this machine.
+The run was made on 2026-09-25 with Lune 0.10.5 on an Intel Xeon at 2.8 GHz. The flush, which
+copies the batch into an exact-size buffer, took under 0.25 ms in every case. The
+[changelog](/BlinkBlox/changelog/) says what changed in 0.35.0.
+
+## Against other tools, in Studio
 
 Each tool fires the same event 1000 times a frame, with the same data, for ten seconds, and every
 tool received everything it sent. The numbers below are medians. The percentiles, and the harness
@@ -11,9 +56,10 @@ itself, are in
 [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
 
 The run was made on 2026-09-24 on an Apple M1 with 16 GB of memory, in Roblox Studio. The versions
-were BlinkBlox 0.29.0, zap 0.6.29 and ByteNet 0.4.3.
+were BlinkBlox 0.29.0, zap 0.6.29 and ByteNet 0.4.3. It predates both the random benches and the
+fire-time column the harness now records.
 
-## Booleans
+### Booleans
 
 The payload is an array of 1000 `true` values: `boolean[0..1000]`.
 
@@ -28,7 +74,7 @@ BlinkBlox sends about 2.7 times less data than zap or ByteNet here, because
 [`boolean[]`](/BlinkBlox/language/types/#arrays-of-booleans) is packed eight elements to a byte. The
 other two spend a whole byte on each boolean.
 
-## Entities
+### Entities
 
 The payload is 100 structs of six `u8` fields each: an id, a position, an orientation and an
 animation.
@@ -48,8 +94,21 @@ frame rate is where they differ: the generated serialisers cost less per event.
 <Aside type="caution" title="60 FPS is Studio's cap">
 Studio does not render faster than 60 frames a second. A tool at 60 FPS is limited by the cap, not by
 its own cost, so the Entities result shows only that BlinkBlox kept up. It does not show by how much.
+The harness now also records the CPU time a frame's fires took, which the cap does not hide.
 </Aside>
 
+<Aside type="caution" title="Identical events compress to nothing">
+Roblox compresses a remote's buffers with zstd before they go out. When every event in a packet is the
+same, the packet compresses to almost nothing, and the bandwidth reported measures the compressor
+rather than the encoding. That is why all three tools read about 42 Kbps on Entities. The
+`BooleansRandom` and `EntitiesRandom` benches send a different payload in every event, which leaves
+the compressor nothing to find.
+</Aside>
+
+- **Studio runs LocalScripts natively compiled, and most clients do not.** Studio compiles the
+  client's code to native instructions, but Roblox's documentation describes native code generation
+  as a server feature. So every tool looks faster in Studio than on a player's device. The Lune
+  benchmark reports both.
 - **The inbound limits are raised for the run.**
   [`benchmark/definitions/Definition.blink`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/definitions/Definition.blink)
   sets the following options far above their defaults:
@@ -69,6 +128,12 @@ its own cost, so the Entities result shows only that BlinkBlox kept up. It does 
 
 ## Running them yourself
 
-The harness lives in [`benchmark/`](https://github.com/XopoIII/BlinkBlox/tree/main/benchmark). For
-now it is Windows-only: it uses 7-Zip, `wmic` and `build.bat` to fetch the tools and to record the
-machine's specs. On other systems, fetch the tools by hand and fill in the specs yourself.
+The harness lives in [`benchmark/`](https://github.com/XopoIII/BlinkBlox/tree/main/benchmark) and
+runs on Windows, macOS and Linux.
+
+- `lune run Runtime` times the generated code. `lune run Runtime -- Entities` runs only the benches
+  whose name contains `Entities`, and `--frames 50` makes the run shorter.
+- `lune run Performance` times the compiler itself: lexing, parsing and generating the test schema.
+- `lune run build --download --run` fetches zap, BlinkBlox and ByteNet for the machine it runs on,
+  builds the Studio place, runs it with `run-in-roblox`, and writes `Benchmarks.md`. Without
+  `--download` it reuses the tools it has; without `--run` it only builds the place.

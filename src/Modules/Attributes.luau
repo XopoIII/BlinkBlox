@@ -85,6 +85,19 @@ function Attributes.new(Profile: string?): State
 	}
 end
 
+--- Forgets what an earlier parse left in `State`, for a parser that is given another document.
+---
+--- The plugin's editor keeps one parser and parses the document again on every change. `Excluded`
+--- used to outlive each of those parses, and every declaration in it holds its scope and through it
+--- the whole tree, so each parse kept the one before it alive: 16 MB a parse of the test schema,
+--- without end. A parse that failed inside a statement's attribute left `Pending` or `Excluding` set
+--- as well, and the next parse began already inside it.
+function Attributes.Reset(State: State)
+	State.Excluding = nil
+	State.Pending = nil
+	table.clear(State.Excluded)
+end
+
 --- Reads any attributes at the cursor into `Pending`, without applying them.
 function Attributes.Read(Reader: Reader)
 	local State = Reader.Attributes

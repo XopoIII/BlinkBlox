@@ -68,22 +68,27 @@ local function ReportDecodeFailure(Event: string?, Failure: unknown)
     warn(`[BlinkBlox]: Dropped a packet that could not be decoded, at event "{Event or "unknown"}": {Failure}`)
 end
 
+local SendUnderused = 0
+
 local function StepReplication()
-    if SendCursor <= 0 then
-        return
+    local Used = SendCursor
+    if Used > 0 then
+        local Buffer = buffer.create(Used)
+        buffer.copy(Buffer, 0, SendBuffer, 0, Used)
+        Reliable:FireServer(Buffer, SendInstances)
+
+        SendCursor = 0
+        SendOffset = 0
+        table.clear(SendInstances)
     end
 
-    local Buffer = buffer.create(SendCursor)
-    buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-    Reliable:FireServer(Buffer, SendInstances)
-
-    --> Kept for the next frame, as the server keeps each player's; see its StepReplication.
-    SendCursor = 0
-    SendOffset = 0
-    if SendSize > 4096 then
+    --> Kept for the next frame, as the server keeps each player's. Checked on a frame that sent
+    --> nothing as well, or a client that went quiet after a burst would hold the burst's buffer.
+    local Shrink
+    Shrink, SendUnderused = ShouldShrink(SendSize, Used, SendUnderused)
+    if Shrink then
         SendSize = 64
         SendBuffer = buffer.create(64)
     end
-    table.clear(SendInstances)
 end
 ]]

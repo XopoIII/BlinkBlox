@@ -1,8 +1,19 @@
 # Benchmarks
 ## Methodology
-Benchmarks are done by firing the event 1000 times per frame with the same data every frame for 10 seconds. 
+Each tool fires an event 1000 times a frame for 10 seconds. Each bench is a pool of payloads, fired in turn:
+`Booleans` and `Entities` send the same payload every time, and `BooleansRandom` and `EntitiesRandom` send a thousand
+different ones a frame. Roblox compresses a remote's buffers with zstd, so identical events compress to almost nothing
+and their bandwidth measures the compressor; the random benches leave it nothing to find.
 
-BlinkBlox's inbound limits are raised in the definition file for this, since a live server's defaults refuse most of what the benchmark sends -- that is what they are for. Studio caps the framerate at 60, so a tool at 60 FPS is bounded by the cap, not by its own cost.
+`Fire ms` is the CPU time a frame's thousand fires took on the client. Studio caps the framerate at 60, so a tool at
+60 FPS is bounded by the cap, not by its own cost, and this column still tells such tools apart. Studio compiles
+LocalScripts natively, which most clients do not, so every tool looks faster here than on a player's device.
+
+BlinkBlox's inbound limits are raised in the definition file for this, since a live server's defaults refuse most of
+what the benchmark sends -- that is what they are for.
+
+What BlinkBlox's generated code costs on its own, without Studio -- fire, flush and decode, natively compiled and
+interpreted -- is measured by `lune run Runtime` in this directory.
 
 Source code can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src).  
 Data used for benchmarks can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches).   

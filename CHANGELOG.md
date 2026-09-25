@@ -7,6 +7,81 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.35.0 — 2026-09-25
+
+Performance, measured before it was changed, and a benchmark that measures the right thing. **The
+wire format does not change.**
+
+### Changed
+
+The generated code is faster on both sides. Each change was kept only if `benchmark/Runtime.luau`
+showed it was faster. Medians for 1000 events a frame, natively compiled, 0.34.0 then 0.35.0:
+
+| Bench | Fire (ms) | Decode (ms) |
+|---|---|---|
+| `boolean[0..1000]` | 11.9 → 5.5 | 21.7 → 6.5 |
+| 100 structs of six `u8` | 4.6 → 3.9 | 73.3 → 17.0 |
+| one `u8` | unchanged | 0.43 → 0.28 |
+
+Interpreted code, which is what most clients run, fires and decodes `boolean[]` between 1.9 and 2.6
+times faster, and decodes structs between 1.8 and 2 times faster.
+
+- A send buffer that grew past 4 KB was let go at every flush. The senders that most needed their
+  buffer kept, the heavy ones, regrew it from 64 bytes every frame instead: 23 allocations and copies
+  a frame at 600 KB. A buffer is now let go only after 60 flushes in a row that each used under a
+  quarter of it. A reliable send on the server updates the player's saved buffer in place instead of
+  allocating a new one.
+- `boolean[]` is packed and unpacked a byte at a time, with eight elements unrolled against constant
+  masks. It used to be a bit at a time, with a modulo, a shift and a branch for every element, and
+  the reader appended each one with `table.insert`.
+- A decoded struct is created with a slot for each field its reader always assigns. It used to be
+  created as `{}` and then filled in, which rehashed the table four times for six fields.
+- The function that decodes one event is made once per packet. It used to be a new closure for every
+  event.
+- The compiler parses ten times faster: 166 ms to 12 ms for the test schema. Substituting a generic
+  argument copied the scope the template was declared in, and with it the symbol table of the whole
+  schema, once for each argument. The lexer tried every rule at every token. It now tries only the
+  rules that can match the token's first byte. Its output is unchanged, checked over every schema in
+  the repository and 3000 random inputs. Lexing went from 9.5 ms to 3.2 ms.
+
+### Fixed
+
+- A wide struct generated a module that failed to load with "Out of local registers". Luau allows a
+  function 200 locals, and every local a serialiser declared for a field stayed live until the
+  function returned: a struct of 50 `CFrame` fields, about 200 strings or arrays, or about 66
+  `vector<f16>` or `vector<f24>` fields was enough. Each field's locals now end with the field, and a
+  bitfield that several fields share is declared at the top of its block. The half-float and 24-bit
+  float readers also shared one local per scope instead of one per value. A struct of 240 fields of
+  every such kind now loads and arrives intact, alone, in an array and in a map
+  (`test/Locals.luau`).
+
+- The Studio plugin's editor leaked memory on every parse of a schema that uses `@profile`. The
+  editor keeps one parser for the document, and the parser never cleared its record of excluded
+  declarations. Each record held its whole tree, so every parse kept the one before it alive: 16 MB
+  a parse of the test schema.
+- In the same editor, a parse that failed inside an attribute left that attribute open. The next
+  parse started inside it: if `@profile("dev")` was half-typed, the declaration after it was
+  excluded.
+
+- Every page and comment said Roblox drops an unreliable payload past "roughly 900 bytes". Roblox
+  documents 1000, and counts every argument of the call as Roblox encodes it, while
+  `MaxUnreliableSize` bounds BlinkBlox's buffer alone. The default stays 900, which leaves 100 bytes
+  for the encoding, until `benchmark/Probe.luau` measures what the encoding really costs in Studio.
+
+### Benchmarks
+
+- `benchmark/Runtime.luau` times the generated code without Roblox. It separates a frame's fires,
+  the flush and the server's decode, runs the code both natively compiled and interpreted, and
+  reports the bytes each event takes on the wire.
+- The Studio benchmark was measuring Roblox's compression more than the encoding. It sent the same
+  data in every event, which Roblox's zstd compression shrank to almost nothing. `BooleansRandom`
+  and `EntitiesRandom` now send a thousand different payloads a frame.
+- A new column records the CPU time a frame's fires took. Studio's 60 FPS cap does not hide it.
+- The harness runs on macOS and Linux as well as Windows. It no longer depends on `wmic`, 7-Zip or
+  `build.bat`: `lune run build` replaces the batch file.
+- `benchmark/Performance.luau` had been timing the rendering of the test schema's warnings on every
+  parse. It now warms up and reports p99.
+
 ## 0.34.0 — 2026-09-25
 
 Three 24-bit number types, the one idea worth taking from reading 5uphi's Packet library. **No

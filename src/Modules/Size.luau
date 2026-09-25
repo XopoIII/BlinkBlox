@@ -4,10 +4,11 @@
 
 --- Static size analysis: how many bytes a type can occupy on the wire, at least and at most.
 ---
---- It exists for one reason. Roblox drops an UnreliableRemoteEvent payload past roughly 900 bytes,
---- silently and only sometimes -- under load, for some players. A schema that can exceed that is
---- broken in a way that no test in the game will reproduce, so the compiler has to say so before
---- the schema ships rather than after.
+--- It exists for one reason. Roblox drops an UnreliableRemoteEvent whose payload passes 1000 bytes,
+--- and says so only in Studio's Output: in a live game the event just never arrives, and only when a
+--- value happens to be large. A schema that can exceed its budget is broken in a way that no test in
+--- the game will reproduce, so the compiler has to say so before the schema ships rather than after.
+--- The budget is `MaxUnreliableSize`; see Grammar.Options for why it sits below 1000.
 ---
 --- The numbers here MUST track what `src/Generator/Prefabs/` actually emits. They are checked
 --- against it rather than trusted: the suite serialises every exported type and asserts the measured

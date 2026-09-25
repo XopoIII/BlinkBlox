@@ -95,7 +95,10 @@ Types.f16 = {
 	Read = function(Variable: string, Block: Block)
 		Types.u16.Read("Encoded", Block)
 		Block:Declare(Variable, true)
-		Block:Line(`local MantissaExponent = Encoded % 0x8000`)
+		--> Declared through the block, as `Encoded` is, so every half float read in one scope shares one
+		--> local. A `local` line per read ran a struct of about seventy `vector<f16>` fields past Luau's
+		--> 200 locals a function, and the generated module failed to load.
+		Block:Line(`{Block:Declare("MantissaExponent")} = Encoded % 0x8000`)
 		Block
 			:Compare("MantissaExponent", "0b0_11111_0000000000 ", "Equals")
 			:Compare("Encoded // 0x8000", "1", "Equals")
@@ -195,7 +198,8 @@ Types.f24 = {
 	Read = function(Variable: string, Block: Block)
 		Types.u24.Read("Encoded", Block)
 		Block:Declare(Variable, true)
-		Block:Line(`local MantissaExponent = Encoded % 0x800000`)
+		--> One local per scope, shared, for the reason given in f16's reader.
+		Block:Line(`{Block:Declare("MantissaExponent")} = Encoded % 0x800000`)
 		Block:Compare("MantissaExponent", "0x7E0000", "Equals")
 			:Line(`{Variable} = if Encoded >= 0x800000 then -math.huge else math.huge`)
 			:Branch("Conditional", "MantissaExponent", "0x7E0000", "Greater")

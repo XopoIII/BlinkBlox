@@ -49,8 +49,35 @@ type BufferSave = {
     Size: number, 
     Cursor: number, 
     Buffer: buffer, 
-    Instances: {Instance}
+    Instances: {Instance},
+    --> Consecutive flushes that used under a quarter of Buffer; see ShouldShrink.
+    Underused: number?
 }
+
+--> Whether a send buffer that has just been flushed should be let go, given how many flushes in a row
+--> have now used under a quarter of it.
+-->
+--> Buffers are kept between flushes so that a steady sender grows its buffer once rather than every
+--> frame. They used to be let go outright past 4 KB, which meant the heaviest senders -- the ones the
+--> keeping was for -- regrew theirs from 64 bytes on every flush, twenty-odd `buffer.create` and
+--> `buffer.copy` a frame for a 600 KB batch. Now a buffer is let go only once it has been mostly empty
+--> for a second's worth of flushes: a burst is not held for the session, and a steady load keeps its
+--> buffer for as long as it lasts.
+local SHRINK_ABOVE = 4096
+local SHRINK_AFTER = 60
+
+local function ShouldShrink(Size: number, Used: number, Underused: number): (boolean, number)
+    if Size <= SHRINK_ABOVE or Used * 4 >= Size then
+        return false, 0
+    end
+
+    Underused += 1
+    if Underused >= SHRINK_AFTER then
+        return true, 0
+    end
+
+    return false, Underused
+end
 
 local function Read(Bytes: number)
     local Offset = RecieveCursor
@@ -378,54 +405,60 @@ function SerdesFunctions.ReadEVENT_Snapshot(): ({ Sequence: number, Ack: number,
 	-- Read BLOCK: 5 bytes
 	local BLOCK_START = Read(5)
 	-- Value: Snapshot
-	local Value = {} :: any
+	local Value = {Sequence = false, Ack = false, Data = false} :: any
 	-- Value.Sequence: Sequence
 	Value.Sequence = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	-- Value.Ack: Ack
 	Value.Ack = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
-	-- Value.Data: Data
-	local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
-	Value.Data = true :: any
-	if Tag == 0 then
-		-- Read BLOCK: 15 bytes
-		local BLOCK_START = Read(15)
-		-- Value.Data: Single
-		Value.Data = {} :: any
-		-- Value.Data.Data: Data
-		Value.Data.Data = {} :: any
-		-- Value.Data.Data.id: id
-		Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		-- Value.Data.Data.pos: pos
-		local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-		local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-		local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-		Value.Data.Data.pos = Vector3.new(X, Y, Z)
-		-- Value.Data.Data.angle: angle
-		Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
-		Value.Data.Type = "Single"
-	elseif Tag == 1 then
-		-- Read BLOCK: 17 bytes
-		local BLOCK_START = Read(17)
-		-- Value.Data: Fragment
-		Value.Data = {} :: any
-		-- Value.Data.Fragment: Fragment
-		Value.Data.Fragment = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		-- Value.Data.Fragments: Fragments
-		Value.Data.Fragments = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-		-- Value.Data.Data: Data
-		Value.Data.Data = {} :: any
-		-- Value.Data.Data.id: id
-		Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-		-- Value.Data.Data.pos: pos
-		local X = buffer.readf32(RecieveBuffer, BLOCK_START + 3)
-		local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 7)
-		local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 11)
-		Value.Data.Data.pos = Vector3.new(X, Y, Z)
-		-- Value.Data.Data.angle: angle
-		Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 15)
-		Value.Data.Type = "Fragment"
-	else
-		error(`Unexpected variant: {Tag}`)
+	do
+		-- Value.Data: Data
+		local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
+		Value.Data = true :: any
+		if Tag == 0 then
+			-- Read BLOCK: 15 bytes
+			local BLOCK_START = Read(15)
+			-- Value.Data: Single
+			Value.Data = {Data = false} :: any
+			-- Value.Data.Data: Data
+			Value.Data.Data = {id = false, pos = false, angle = false} :: any
+			-- Value.Data.Data.id: id
+			Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			do
+				-- Value.Data.Data.pos: pos
+				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+				Value.Data.Data.pos = Vector3.new(X, Y, Z)
+			end
+			-- Value.Data.Data.angle: angle
+			Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
+			Value.Data.Type = "Single"
+		elseif Tag == 1 then
+			-- Read BLOCK: 17 bytes
+			local BLOCK_START = Read(17)
+			-- Value.Data: Fragment
+			Value.Data = {Fragment = false, Fragments = false, Data = false} :: any
+			-- Value.Data.Fragment: Fragment
+			Value.Data.Fragment = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Value.Data.Fragments: Fragments
+			Value.Data.Fragments = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			-- Value.Data.Data: Data
+			Value.Data.Data = {id = false, pos = false, angle = false} :: any
+			-- Value.Data.Data.id: id
+			Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+			do
+				-- Value.Data.Data.pos: pos
+				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 3)
+				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 7)
+				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 11)
+				Value.Data.Data.pos = Vector3.new(X, Y, Z)
+			end
+			-- Value.Data.Data.angle: angle
+			Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 15)
+			Value.Data.Type = "Fragment"
+		else
+			error(`Unexpected variant: {Tag}`)
+		end
 	end
 	return Value
 end
@@ -448,14 +481,16 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 15 bytes
 				local BLOCK_START = Read(15)
 				-- Value: Entity
-				local Value = {} :: any
+				local Value = {id = false, pos = false, angle = false} :: any
 				-- Value.id: id
 				Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				-- Value.pos: pos
-				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-				Value.pos = Vector3.new(X, Y, Z)
+				do
+					-- Value.pos: pos
+					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+					Value.pos = Vector3.new(X, Y, Z)
+				end
 				-- Value.angle: angle
 				Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 				return Value
@@ -477,11 +512,13 @@ if not RunService:IsRunning() then
 				-- Value: Entity
 				-- Value.id: id
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-				-- Value.pos: pos
-				local Vector = Value.pos
-				buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-				buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-				buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+				do
+					-- Value.pos: pos
+					local Vector = Value.pos
+					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+				end
 				-- Value.angle: angle
 				buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 				local Result = buffer.create(SendCursor)
@@ -883,7 +920,18 @@ local function SavePlayerBuffer(Player: Player)
         return
     end
 
-    PlayersMap[Player] = Save()
+    --> Written into the entry the player already has, rather than a new one each time: this runs on
+    --> every reliable send to a player, and the entry also carries its shrink count.
+    local Entry = PlayersMap[Player]
+    if Entry == nil then
+        PlayersMap[Player] = Save()
+        return
+    end
+
+    Entry.Size = SendSize
+    Entry.Cursor = SendCursor
+    Entry.Buffer = SendBuffer
+    Entry.Instances = SendInstances
 end
 
 local function StepReplication()
@@ -896,24 +944,27 @@ local function StepReplication()
             continue
         end
 
-        if Send.Cursor <= 0 then
-            continue
-        end
+        local Used = Send.Cursor
+        if Used > 0 then
+            local Buffer = buffer.create(Used)
+            buffer.copy(Buffer, 0, Send.Buffer, 0, Used)
+            Reliable:FireClient(Player, Buffer, Send.Instances)
 
-        local Buffer = buffer.create(Send.Cursor)
-        buffer.copy(Buffer, 0, Send.Buffer, 0, Send.Cursor)
-        Reliable:FireClient(Player, Buffer, Send.Instances)
+            Send.Cursor = 0
+            table.clear(Send.Instances)
+        end
 
         --> The buffer this player's writes grew is kept for the next frame rather than regrown from
         --> 64 bytes every Heartbeat: only the exact-size copy above goes on the wire, and every writer
-        --> writes whole bytes, so what is left past the cursor is never read. One that a burst grew
-        --> past 4 KB is let go, so a single large frame is not held for the rest of the session.
-        Send.Cursor = 0
-        if Send.Size > 4096 then
+        --> writes whole bytes, so what is left past the cursor is never read. One that has sat mostly
+        --> empty for a second is let go, so a burst is not held for the rest of the session; see
+        --> ShouldShrink.
+        local Shrink, Underused = ShouldShrink(Send.Size, Used, Send.Underused or 0)
+        Send.Underused = Underused
+        if Shrink then
             Send.Size = 64
             Send.Buffer = buffer.create(64)
         end
-        table.clear(Send.Instances)
     end
 end
 RunService.Heartbeat:Connect(StepReplication)
@@ -944,20 +995,22 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	end
 	SerdesThread = coroutine.running()
 	local DecodedEvents = 0
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
+		error("[BlinkBlox]: This channel receives no events.")
+	end
+	while (RecieveCursor < Size and Player.Parent ~= nil) do
 		DecodedEvents += 1
 		if DecodedEvents > 64 then
 			if ShouldReport(Player, "Events") then warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`) end
 			break
 		end
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
-		end)
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
 			break
@@ -991,16 +1044,10 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 	SerdesThread = coroutine.running()
 	local DecodedEvents = 0
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		DecodedEvents += 1
-		if DecodedEvents > 64 then
-			if ShouldReport(Player, "Events") then warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`) end
-			break
-		end
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -1013,7 +1060,15 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		else
 			error("[BlinkBlox]: Unknown event index.")
 		end
-		end)
+	end
+	while (RecieveCursor < Size and Player.Parent ~= nil) do
+		DecodedEvents += 1
+		if DecodedEvents > 64 then
+			if ShouldReport(Player, "Events") then warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`) end
+			break
+		end
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
 			break
@@ -1040,14 +1095,16 @@ local Returns = table.freeze({
 				-- Read BLOCK: 15 bytes
 				local BLOCK_START = Read(15)
 				-- Value: Entity
-				local Value = {} :: any
+				local Value = {id = false, pos = false, angle = false} :: any
 				-- Value.id: id
 				Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				-- Value.pos: pos
-				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-				Value.pos = Vector3.new(X, Y, Z)
+				do
+					-- Value.pos: pos
+					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+					Value.pos = Vector3.new(X, Y, Z)
+				end
 				-- Value.angle: angle
 				Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 				return Value
@@ -1069,11 +1126,13 @@ local Returns = table.freeze({
 				-- Value: Entity
 				-- Value.id: id
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-				-- Value.pos: pos
-				local Vector = Value.pos
-				buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-				buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-				buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+				do
+					-- Value.pos: pos
+					local Vector = Value.pos
+					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+				end
 				-- Value.angle: angle
 				buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 				local Result = buffer.create(SendCursor)

@@ -12,6 +12,7 @@ local Size = require("../Modules/Size")
 
 local Blocks = require("./Blocks")
 local Prefabs = require("./Prefabs")
+local Scope = require("./Scope")
 local State = require("./State")
 local Util = require("./Util")
 
@@ -167,14 +168,34 @@ function Serde.Map(Declaration: Parser.Map, Read: Blocks.Block, Write: Blocks.Bl
 	Write:Line(`buffer.writeu16(SendBuffer, {ElementsAllocation}, {ElementsVariable})`)
 end
 
+--- A decoded struct is created with a slot for every field its reader always assigns, rather than
+--- empty: a table built as `{}` and then given six fields rehashed four times on the way, 0 to 1 to
+--- 2 to 4 to 8, and that measured five times the cost of one made at its size -- the most expensive
+--- line of the server's decode loop for an array of structs. The placeholders are written over at
+--- once. An optional field gets none, because its reader assigns nothing when the value is absent
+--- and a placeholder would then be decoded as a value.
 function Serde.Struct(Declaration: Parser.Struct, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
 	local Value = Declaration.Value
-	Read:Line(`{Read:Declare(Variable)} = \{\} :: any`)
 
+	local Slots = {}
+	for _, Field in Value.Values do
+		if Field.Type ~= "Optional" then
+			local Name = Field.Name
+			table.insert(Slots, if Util.IsValidIdentifier(Name) then `{Name} = false` else `["{Name}"] = false`)
+		end
+	end
+
+	Read:Line(`{Read:Declare(Variable)} = \{{table.concat(Slots, ", ")}\} :: any`)
+
+	--> Each field in a scope of its own, so that its locals end with it; see Scope.luau.
 	for _, Field in Value.Values do
 		local Name = Field.Name
 		local FieldVariable = `{Variable}{FormatIndex(Name)}`
-		Serde.Emit(Field :: Type, Read, Write, FieldVariable)
+		Scope(Read, function()
+			Scope(Write, function()
+				Serde.Emit(Field :: Type, Read, Write, FieldVariable)
+			end)
+		end)
 	end
 end
 
@@ -227,6 +248,11 @@ end
 --- one byte per boolean. Here the whole array is one run of bytes. A variable length reserves its
 --- run at runtime, after the block's fixed bytes, the way a string does; a fixed one reserves it in
 --- the block. Each side runs in a `do` scope, so two such arrays in one struct do not redeclare.
+---
+--- Both sides go a byte at a time, eight elements unrolled against constant masks, and finish the
+--- last partial byte with a short loop. The loop they replace went an element at a time and paid a
+--- modulo, a shift and a branch for every boolean -- a million of them a frame at the benchmark's
+--- load -- and the reader appended each one with `table.insert`.
 function Serde.PackedBooleans(Read: Blocks.Block, Write: Blocks.Block, Variable: string, Fixed: number?)
 	local Bytes = if Fixed then math.ceil(Fixed / 8) else nil
 	if Bytes == 0 then
@@ -239,36 +265,50 @@ function Serde.PackedBooleans(Read: Blocks.Block, Write: Blocks.Block, Variable:
 
 	Read:Line("do")
 	Read:Line(`\tlocal PACKED_OFFSET = {ReadOffset}`)
-	Read:Line("\tlocal PACKED_BITS = 0")
-	Read:Line("\tfor Index = 0, Length - 1 do")
-	Read:Line("\t\tif Index % 8 == 0 then")
-	Read:Line("\t\t\tPACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)")
+	Read:Line("\tlocal PACKED_WHOLE = Length // 8")
+	Read:Line("\tfor PACKED_BYTE = 0, PACKED_WHOLE - 1 do")
+	Read:Line("\t\tlocal PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)")
+	Read:Line("\t\tlocal PACKED_BASE = PACKED_BYTE * 8")
+	for Bit = 0, 7 do
+		Read:Line(`\t\t{Variable}[PACKED_BASE + {Bit + 1}] = bit32.btest(PACKED_BITS, {bit32.lshift(1, Bit)})`)
+	end
+	Read:Line("\tend")
+	Read:Line("\tif Length % 8 ~= 0 then")
+	Read:Line("\t\tlocal PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)")
+	Read:Line("\t\tlocal PACKED_BASE = PACKED_WHOLE * 8")
+	Read:Line("\t\tfor PACKED_BIT = 0, Length % 8 - 1 do")
+	Read:Line(`\t\t\t{Variable}[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))`)
 	Read:Line("\t\tend")
-	Read:Line(`\t\ttable.insert({Variable}, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))`)
 	Read:Line("\tend")
 	Read:Line("end")
 
 	Write:Line("do")
 	Write:Line(`\tlocal PACKED_LENGTH = {Fixed or `#{Variable}`}`)
-	Write:Line(`\tlocal PACKED_OFFSET = {WriteOffset}`)
-	Write:Line("\tlocal PACKED_BITS = 0")
-	Write:Line("\tfor Index = 0, PACKED_LENGTH - 1 do")
-	Write:Line(`\t\tlocal PACKED_ITEM = {Variable}[Index + 1]`)
 	if State.Options.WriteValidations then
+		Write:Line("\tfor PACKED_INDEX = 1, PACKED_LENGTH do")
+		Write:Line(`\t\tlocal PACKED_ITEM = {Variable}[PACKED_INDEX]`)
 		Write:Line(
-			`\t\tif typeof(PACKED_ITEM) ~= "boolean" then error(\`Expected {Variable}[\{Index + 1}] to be of type boolean, got \{type(PACKED_ITEM)} instead.\`) end`
+			`\t\tif typeof(PACKED_ITEM) ~= "boolean" then error(\`Expected {Variable}[\{PACKED_INDEX}] to be of type boolean, got \{type(PACKED_ITEM)} instead.\`) end`
 		)
+		Write:Line("\tend")
 	end
-	Write:Line("\t\tif PACKED_ITEM then")
-	Write:Line("\t\t\tPACKED_BITS += bit32.lshift(1, Index % 8)")
-	Write:Line("\t\tend")
-	Write:Line("\t\tif Index % 8 == 7 then")
-	Write:Line("\t\t\tbuffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)")
-	Write:Line("\t\t\tPACKED_BITS = 0")
-	Write:Line("\t\tend")
+	Write:Line(`\tlocal PACKED_OFFSET = {WriteOffset}`)
+	Write:Line("\tlocal PACKED_WHOLE = PACKED_LENGTH // 8")
+	Write:Line("\tfor PACKED_BYTE = 0, PACKED_WHOLE - 1 do")
+	Write:Line("\t\tlocal PACKED_BASE = PACKED_BYTE * 8")
+	Write:Line("\t\tlocal PACKED_BITS = 0")
+	for Bit = 0, 7 do
+		Write:Line(`\t\tif {Variable}[PACKED_BASE + {Bit + 1}] then PACKED_BITS += {bit32.lshift(1, Bit)} end`)
+	end
+	Write:Line("\t\tbuffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)")
 	Write:Line("\tend")
 	Write:Line("\tif PACKED_LENGTH % 8 ~= 0 then")
-	Write:Line("\t\tbuffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)")
+	Write:Line("\t\tlocal PACKED_BASE = PACKED_WHOLE * 8")
+	Write:Line("\t\tlocal PACKED_BITS = 0")
+	Write:Line("\t\tfor PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do")
+	Write:Line(`\t\t\tif {Variable}[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end`)
+	Write:Line("\t\tend")
+	Write:Line("\t\tbuffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)")
 	Write:Line("\tend")
 	Write:Line("end")
 end

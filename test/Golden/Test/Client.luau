@@ -48,8 +48,35 @@ type BufferSave = {
     Size: number, 
     Cursor: number, 
     Buffer: buffer, 
-    Instances: {Instance}
+    Instances: {Instance},
+    --> Consecutive flushes that used under a quarter of Buffer; see ShouldShrink.
+    Underused: number?
 }
+
+--> Whether a send buffer that has just been flushed should be let go, given how many flushes in a row
+--> have now used under a quarter of it.
+-->
+--> Buffers are kept between flushes so that a steady sender grows its buffer once rather than every
+--> frame. They used to be let go outright past 4 KB, which meant the heaviest senders -- the ones the
+--> keeping was for -- regrew theirs from 64 bytes on every flush, twenty-odd `buffer.create` and
+--> `buffer.copy` a frame for a 600 KB batch. Now a buffer is let go only once it has been mostly empty
+--> for a second's worth of flushes: a burst is not held for the session, and a steady load keeps its
+--> buffer for as long as it lasts.
+local SHRINK_ABOVE = 4096
+local SHRINK_AFTER = 60
+
+local function ShouldShrink(Size: number, Used: number, Underused: number): (boolean, number)
+    if Size <= SHRINK_ABOVE or Used * 4 >= Size then
+        return false, 0
+    end
+
+    Underused += 1
+    if Underused >= SHRINK_AFTER then
+        return true, 0
+    end
+
+    return false, Underused
+end
 
 local function Read(Bytes: number)
     local Offset = RecieveCursor
@@ -683,7 +710,7 @@ function SerdesFunctions.Indexers_ReadEVENT_TestEvent(): ({ ["z z"]: number, ["1
 	local BLOCK_START = Read(7)
 	-- Value: TestEvent
 	-- Value1: TestEvent
-	local Value1 = {} :: any
+	local Value1 = {["z z"] = false, ["1 1"] = false, ["2 2"] = false, ["3 3"] = false} :: any
 	-- Value1["z z"]: z z
 	Value1["z z"] = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	-- Value1["1 1"]: 1 1
@@ -711,7 +738,7 @@ function SerdesFunctions.Indexers_ReadEVENT_TestEvent(): ({ ["z z"]: number, ["1
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value4: c c
-		Value4 = {} :: any
+		Value4 = {Test = false} :: any
 		-- Value4.Test: Test
 		Value4.Test = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Value4.Type = "c c"
@@ -832,11 +859,12 @@ end
 function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 	-- Allocate BLOCK: 20 bytes
 	local BLOCK_START = Allocate(20)
+	local BITFIELD_0
 	-- EVENT_ClientPollEvent (5)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 5)
 	-- Value: ClientPollEvent
 	-- Value.Field: Field
-	local BITFIELD_0 = 0
+	BITFIELD_0 = 0
 	if Value.Field ~= nil then BITFIELD_0 += 0x01 end
 	if Value.Field ~= nil then
 		-- Allocate BLOCK: 1 bytes
@@ -897,23 +925,25 @@ function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Flo
 		error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value.Nested.Guh)
-	-- Value.Nested.Array: Array
-	-- START ARRAY
-	if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
-		-- Allocate BLOCK: 1 bytes
-	local ARRAY_START_1 = Allocate(1 * 10)
-	for Index = 1, 10 do
-		local Item_1 = Value.Nested.Array[Index]
-		-- Item_1: Array
-		if typeof(Item_1) ~= "number" then
-			error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+	do
+		-- Value.Nested.Array: Array
+		-- START ARRAY
+		if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
+			-- Allocate BLOCK: 1 bytes
+		local ARRAY_START_1 = Allocate(1 * 10)
+		for Index = 1, 10 do
+			local Item_1 = Value.Nested.Array[Index]
+			-- Item_1: Array
+			if typeof(Item_1) ~= "number" then
+				error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+			end
+			-- Allocate 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
 		end
-		-- Allocate 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Nested.OptionalArray: OptionalArray
 	if Value.Nested.OptionalArray ~= nil then BITFIELD_0 += 0x04 end
 	if Value.Nested.OptionalArray ~= nil then
@@ -935,29 +965,31 @@ function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Flo
 		end
 		-- END ARRAY
 	end
-	-- Value.Map: Map
-	local Elements_1 = 0
-	for Key_1, Element_1 in Value.Map do
-		Elements_1 += 1
-		-- Key_1: GenericMap
-		if typeof(Key_1) ~= "string" then
-			error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+	do
+		-- Value.Map: Map
+		local Elements_1 = 0
+		for Key_1, Element_1 in Value.Map do
+			Elements_1 += 1
+			-- Key_1: GenericMap
+			if typeof(Key_1) ~= "string" then
+				error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+			end
+			local Length = #Key_1
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			local OFFSET_0 = Allocate(2)
+			buffer.writeu16(SendBuffer, OFFSET_0, Length)
+			Allocate(Length)
+			buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+			-- Element_1: GenericMap
+			if typeof(Element_1) ~= "number" then
+				error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
+			end
+			local OFFSET_1 = Allocate(8)
+			buffer.writef64(SendBuffer, OFFSET_1, Element_1)
 		end
-		local Length = #Key_1
-		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-		local OFFSET_0 = Allocate(2)
-		buffer.writeu16(SendBuffer, OFFSET_0, Length)
-		Allocate(Length)
-		buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
-		-- Element_1: GenericMap
-		if typeof(Element_1) ~= "number" then
-			error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
-		end
-		local OFFSET_1 = Allocate(8)
-		buffer.writef64(SendBuffer, OFFSET_1, Element_1)
+		if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+		buffer.writeu16(SendBuffer, BLOCK_START + 4, Elements_1)
 	end
-	if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
-	buffer.writeu16(SendBuffer, BLOCK_START + 4, Elements_1)
 	-- Value.Data: Data
 	if typeof(Value.Data) ~= "number" then
 		error(`Expected Value.Data to be of type number, got {type(Value.Data)} instead.`)
@@ -969,24 +1001,26 @@ function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Flo
 		error(`Expected Value.Struct.Data to be of type number, got {type(Value.Struct.Data)} instead.`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 7, Value.Struct.Data)
-	-- Value.Struct.Array: Array
-	-- START ARRAY
-	if not (#Value.Struct.Array <= 65535) then error(`Expected "#Value.Struct.Array" to be smaller than or equal to 65535, got {#Value.Struct.Array} instead.`) end
-	buffer.writeu16(SendBuffer, BLOCK_START + 8, #Value.Struct.Array)
-		-- Allocate BLOCK: 1 bytes
-	local ARRAY_START_1 = Allocate(1 * #Value.Struct.Array)
-	for Index = 1, #Value.Struct.Array do
-		local Item_1 = Value.Struct.Array[Index]
-		-- Item_1: Array
-		if typeof(Item_1) ~= "number" then
-			error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+	do
+		-- Value.Struct.Array: Array
+		-- START ARRAY
+		if not (#Value.Struct.Array <= 65535) then error(`Expected "#Value.Struct.Array" to be smaller than or equal to 65535, got {#Value.Struct.Array} instead.`) end
+		buffer.writeu16(SendBuffer, BLOCK_START + 8, #Value.Struct.Array)
+			-- Allocate BLOCK: 1 bytes
+		local ARRAY_START_1 = Allocate(1 * #Value.Struct.Array)
+		for Index = 1, #Value.Struct.Array do
+			local Item_1 = Value.Struct.Array[Index]
+			-- Item_1: Array
+			if typeof(Item_1) ~= "number" then
+				error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+			end
+			-- Allocate 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
 		end
-		-- Allocate 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Struct.Optional: Optional
 	if Value.Struct.Optional ~= nil then BITFIELD_0 += 0x08 end
 	if Value.Struct.Optional ~= nil then
@@ -1016,15 +1050,17 @@ function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Flo
 		-- END ARRAY
 	end
 	-- Value.Struct.Nested: Nested
-	-- Value.Struct.Nested.Value: Value
-	if typeof(Value.Struct.Nested.Value) ~= "string" then
-		error(`Expected Value.Struct.Nested.Value to be of type string, got {type(Value.Struct.Nested.Value)} instead.`)
+	do
+		-- Value.Struct.Nested.Value: Value
+		if typeof(Value.Struct.Nested.Value) ~= "string" then
+			error(`Expected Value.Struct.Nested.Value to be of type string, got {type(Value.Struct.Nested.Value)} instead.`)
+		end
+		local Length = #Value.Struct.Nested.Value
+		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+		buffer.writeu16(SendBuffer, BLOCK_START + 10, Length)
+		Allocate(Length)
+		buffer.writestring(SendBuffer, SendOffset, Value.Struct.Nested.Value, Length)
 	end
-	local Length = #Value.Struct.Nested.Value
-	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-	buffer.writeu16(SendBuffer, BLOCK_START + 10, Length)
-	Allocate(Length)
-	buffer.writestring(SendBuffer, SendOffset, Value.Struct.Nested.Value, Length)
 	-- Value.AnotherNested: AnotherNested
 	-- Value.AnotherNested.Value: Value
 	if typeof(Value.AnotherNested.Value) ~= "number" then
@@ -1037,11 +1073,12 @@ end
 function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 	-- Allocate BLOCK: 20 bytes
 	local BLOCK_START = Allocate(20)
+	local BITFIELD_0
 	-- EVENT_ClientUnreliablePollEvent (3)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
 	-- Value: ClientUnreliablePollEvent
 	-- Value.Field: Field
-	local BITFIELD_0 = 0
+	BITFIELD_0 = 0
 	if Value.Field ~= nil then BITFIELD_0 += 0x01 end
 	if Value.Field ~= nil then
 		-- Allocate BLOCK: 1 bytes
@@ -1102,23 +1139,25 @@ function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: nu
 		error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value.Nested.Guh)
-	-- Value.Nested.Array: Array
-	-- START ARRAY
-	if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
-		-- Allocate BLOCK: 1 bytes
-	local ARRAY_START_1 = Allocate(1 * 10)
-	for Index = 1, 10 do
-		local Item_1 = Value.Nested.Array[Index]
-		-- Item_1: Array
-		if typeof(Item_1) ~= "number" then
-			error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+	do
+		-- Value.Nested.Array: Array
+		-- START ARRAY
+		if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
+			-- Allocate BLOCK: 1 bytes
+		local ARRAY_START_1 = Allocate(1 * 10)
+		for Index = 1, 10 do
+			local Item_1 = Value.Nested.Array[Index]
+			-- Item_1: Array
+			if typeof(Item_1) ~= "number" then
+				error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+			end
+			-- Allocate 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
 		end
-		-- Allocate 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Nested.OptionalArray: OptionalArray
 	if Value.Nested.OptionalArray ~= nil then BITFIELD_0 += 0x04 end
 	if Value.Nested.OptionalArray ~= nil then
@@ -1140,29 +1179,31 @@ function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: nu
 		end
 		-- END ARRAY
 	end
-	-- Value.Map: Map
-	local Elements_1 = 0
-	for Key_1, Element_1 in Value.Map do
-		Elements_1 += 1
-		-- Key_1: GenericMap
-		if typeof(Key_1) ~= "string" then
-			error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+	do
+		-- Value.Map: Map
+		local Elements_1 = 0
+		for Key_1, Element_1 in Value.Map do
+			Elements_1 += 1
+			-- Key_1: GenericMap
+			if typeof(Key_1) ~= "string" then
+				error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+			end
+			local Length = #Key_1
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			local OFFSET_0 = Allocate(2)
+			buffer.writeu16(SendBuffer, OFFSET_0, Length)
+			Allocate(Length)
+			buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+			-- Element_1: GenericMap
+			if typeof(Element_1) ~= "number" then
+				error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
+			end
+			local OFFSET_1 = Allocate(8)
+			buffer.writef64(SendBuffer, OFFSET_1, Element_1)
 		end
-		local Length = #Key_1
-		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-		local OFFSET_0 = Allocate(2)
-		buffer.writeu16(SendBuffer, OFFSET_0, Length)
-		Allocate(Length)
-		buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
-		-- Element_1: GenericMap
-		if typeof(Element_1) ~= "number" then
-			error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
-		end
-		local OFFSET_1 = Allocate(8)
-		buffer.writef64(SendBuffer, OFFSET_1, Element_1)
+		if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+		buffer.writeu16(SendBuffer, BLOCK_START + 4, Elements_1)
 	end
-	if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
-	buffer.writeu16(SendBuffer, BLOCK_START + 4, Elements_1)
 	-- Value.Data: Data
 	if typeof(Value.Data) ~= "number" then
 		error(`Expected Value.Data to be of type number, got {type(Value.Data)} instead.`)
@@ -1174,24 +1215,26 @@ function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: nu
 		error(`Expected Value.Struct.Data to be of type number, got {type(Value.Struct.Data)} instead.`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 7, Value.Struct.Data)
-	-- Value.Struct.Array: Array
-	-- START ARRAY
-	if not (#Value.Struct.Array <= 65535) then error(`Expected "#Value.Struct.Array" to be smaller than or equal to 65535, got {#Value.Struct.Array} instead.`) end
-	buffer.writeu16(SendBuffer, BLOCK_START + 8, #Value.Struct.Array)
-		-- Allocate BLOCK: 1 bytes
-	local ARRAY_START_1 = Allocate(1 * #Value.Struct.Array)
-	for Index = 1, #Value.Struct.Array do
-		local Item_1 = Value.Struct.Array[Index]
-		-- Item_1: Array
-		if typeof(Item_1) ~= "number" then
-			error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+	do
+		-- Value.Struct.Array: Array
+		-- START ARRAY
+		if not (#Value.Struct.Array <= 65535) then error(`Expected "#Value.Struct.Array" to be smaller than or equal to 65535, got {#Value.Struct.Array} instead.`) end
+		buffer.writeu16(SendBuffer, BLOCK_START + 8, #Value.Struct.Array)
+			-- Allocate BLOCK: 1 bytes
+		local ARRAY_START_1 = Allocate(1 * #Value.Struct.Array)
+		for Index = 1, #Value.Struct.Array do
+			local Item_1 = Value.Struct.Array[Index]
+			-- Item_1: Array
+			if typeof(Item_1) ~= "number" then
+				error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+			end
+			-- Allocate 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
 		end
-		-- Allocate 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Struct.Optional: Optional
 	if Value.Struct.Optional ~= nil then BITFIELD_0 += 0x08 end
 	if Value.Struct.Optional ~= nil then
@@ -1221,15 +1264,17 @@ function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: nu
 		-- END ARRAY
 	end
 	-- Value.Struct.Nested: Nested
-	-- Value.Struct.Nested.Value: Value
-	if typeof(Value.Struct.Nested.Value) ~= "string" then
-		error(`Expected Value.Struct.Nested.Value to be of type string, got {type(Value.Struct.Nested.Value)} instead.`)
+	do
+		-- Value.Struct.Nested.Value: Value
+		if typeof(Value.Struct.Nested.Value) ~= "string" then
+			error(`Expected Value.Struct.Nested.Value to be of type string, got {type(Value.Struct.Nested.Value)} instead.`)
+		end
+		local Length = #Value.Struct.Nested.Value
+		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+		buffer.writeu16(SendBuffer, BLOCK_START + 10, Length)
+		Allocate(Length)
+		buffer.writestring(SendBuffer, SendOffset, Value.Struct.Nested.Value, Length)
 	end
-	local Length = #Value.Struct.Nested.Value
-	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-	buffer.writeu16(SendBuffer, BLOCK_START + 10, Length)
-	Allocate(Length)
-	buffer.writestring(SendBuffer, SendOffset, Value.Struct.Nested.Value, Length)
 	-- Value.AnotherNested: AnotherNested
 	-- Value.AnotherNested.Value: Value
 	if typeof(Value.AnotherNested.Value) ~= "number" then
@@ -1256,10 +1301,11 @@ end
 function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 	-- Read BLOCK: 19 bytes
 	local BLOCK_START = Read(19)
+	local BITFIELD_0
 	-- Value: ServerPollEvent
-	local Value = {} :: any
+	local Value = {Enum = false, Nested = false, Map = false, Data = false, Struct = false, AnotherNested = false} :: any
 	-- Value.Field: Field
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
@@ -1296,39 +1342,43 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 			Value.Float16Field = if Encoded // 0x8000 == 1 then -Result else Result
 		end
 	end
-	-- Value.Enum: Enum
-	Value.Enum = true :: any
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-	if Index == 0 then
-		Value.Enum = "A"
-	elseif Index == 1 then
-		Value.Enum = "B"
-	elseif Index == 2 then
-		Value.Enum = "C"
-	elseif Index == 3 then
-		Value.Enum = "D"
-	else
-		error(`Unexpected enum: {Index}`)
+	do
+		-- Value.Enum: Enum
+		Value.Enum = true :: any
+		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+		if Index == 0 then
+			Value.Enum = "A"
+		elseif Index == 1 then
+			Value.Enum = "B"
+		elseif Index == 2 then
+			Value.Enum = "C"
+		elseif Index == 3 then
+			Value.Enum = "D"
+		else
+			error(`Unexpected enum: {Index}`)
+		end
 	end
 	-- Value.Nested: Nested
-	Value.Nested = {} :: any
+	Value.Nested = {Guh = false, Array = false} :: any
 	-- Value.Nested.Guh: Guh
 	Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-	-- Value.Nested.Array: Array
-	-- START ARRAY
-	local Length = 10
-	Value.Nested.Array = table.create(Length)
-		-- Read BLOCK: 1 bytes
-	local ARRAY_START_1 = Read(1 * Length)
-	for Slot_1 = 1, Length do
-		-- Item_1: Array
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		Value.Nested.Array[Slot_1] = Item_1
+	do
+		-- Value.Nested.Array: Array
+		-- START ARRAY
+		local Length = 10
+		Value.Nested.Array = table.create(Length)
+			-- Read BLOCK: 1 bytes
+		local ARRAY_START_1 = Read(1 * Length)
+		for Slot_1 = 1, Length do
+			-- Item_1: Array
+			-- Read 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+			Value.Nested.Array[Slot_1] = Item_1
+		end
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Nested.OptionalArray: OptionalArray
 	if bit32.btest(BITFIELD_0, 0x04) == true then
 		-- Value.Nested.OptionalArray: OptionalArray
@@ -1347,51 +1397,55 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 		end
 		-- END ARRAY
 	end
-	-- Value.Map: Map
-	Value.Map = {}
-	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
-	for _ = 1, Elements_1 do
-		-- Key_1: GenericMap
-		local OFFSET_0 = Read(2)
-		local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-		-- Element_1: GenericMap
-		local OFFSET_1 = Read(8)
-		local Element_1 = buffer.readf64(RecieveBuffer, OFFSET_1)
-		Value.Map[Key_1] = Element_1
+	do
+		-- Value.Map: Map
+		Value.Map = {}
+		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
+		for _ = 1, Elements_1 do
+			-- Key_1: GenericMap
+			local OFFSET_0 = Read(2)
+			local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			-- Element_1: GenericMap
+			local OFFSET_1 = Read(8)
+			local Element_1 = buffer.readf64(RecieveBuffer, OFFSET_1)
+			Value.Map[Key_1] = Element_1
+		end
 	end
 	-- Value.Data: Data
 	Value.Data = buffer.readu8(RecieveBuffer, BLOCK_START + 5)
 	-- Value.Struct: Struct
-	Value.Struct = {} :: any
+	Value.Struct = {Data = false, Array = false, Nested = false} :: any
 	-- Value.Struct.Data: Data
 	Value.Struct.Data = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
-	-- Value.Struct.Array: Array
-	-- START ARRAY
-	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 7)
-	if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
-	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	Value.Struct.Array = table.create(Length)
-		-- Read BLOCK: 1 bytes
-	local ARRAY_START_1 = Read(1 * Length)
-	for Slot_1 = 1, Length do
-		-- Item_1: Array
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		Value.Struct.Array[Slot_1] = Item_1
+	do
+		-- Value.Struct.Array: Array
+		-- START ARRAY
+		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 7)
+		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+		Value.Struct.Array = table.create(Length)
+			-- Read BLOCK: 1 bytes
+		local ARRAY_START_1 = Read(1 * Length)
+		for Slot_1 = 1, Length do
+			-- Item_1: Array
+			-- Read 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+			Value.Struct.Array[Slot_1] = Item_1
+		end
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Struct.Optional: Optional
 	if bit32.btest(BITFIELD_0, 0x08) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Struct.Optional: Optional
 		-- START ARRAY
-		Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 		if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Optional" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -1411,13 +1465,15 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 		-- END ARRAY
 	end
 	-- Value.Struct.Nested: Nested
-	Value.Struct.Nested = {} :: any
-	-- Value.Struct.Nested.Value: Value
-	Length = buffer.readu16(RecieveBuffer, BLOCK_START + 9)
-	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Nested.Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	Value.Struct.Nested.Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	Value.Struct.Nested = {Value = false} :: any
+	do
+		-- Value.Struct.Nested.Value: Value
+		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 9)
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Nested.Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+		Value.Struct.Nested.Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	end
 	-- Value.AnotherNested: AnotherNested
-	Value.AnotherNested = {} :: any
+	Value.AnotherNested = {Value = false} :: any
 	-- Value.AnotherNested.Value: Value
 	Value.AnotherNested.Value = buffer.readf64(RecieveBuffer, BLOCK_START + 11)
 	return Value
@@ -1426,10 +1482,11 @@ end
 function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 	-- Read BLOCK: 19 bytes
 	local BLOCK_START = Read(19)
+	local BITFIELD_0
 	-- Value: ServerUnreliablePollEvent
-	local Value = {} :: any
+	local Value = {Enum = false, Nested = false, Map = false, Data = false, Struct = false, AnotherNested = false} :: any
 	-- Value.Field: Field
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
@@ -1466,39 +1523,43 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 			Value.Float16Field = if Encoded // 0x8000 == 1 then -Result else Result
 		end
 	end
-	-- Value.Enum: Enum
-	Value.Enum = true :: any
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-	if Index == 0 then
-		Value.Enum = "A"
-	elseif Index == 1 then
-		Value.Enum = "B"
-	elseif Index == 2 then
-		Value.Enum = "C"
-	elseif Index == 3 then
-		Value.Enum = "D"
-	else
-		error(`Unexpected enum: {Index}`)
+	do
+		-- Value.Enum: Enum
+		Value.Enum = true :: any
+		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+		if Index == 0 then
+			Value.Enum = "A"
+		elseif Index == 1 then
+			Value.Enum = "B"
+		elseif Index == 2 then
+			Value.Enum = "C"
+		elseif Index == 3 then
+			Value.Enum = "D"
+		else
+			error(`Unexpected enum: {Index}`)
+		end
 	end
 	-- Value.Nested: Nested
-	Value.Nested = {} :: any
+	Value.Nested = {Guh = false, Array = false} :: any
 	-- Value.Nested.Guh: Guh
 	Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-	-- Value.Nested.Array: Array
-	-- START ARRAY
-	local Length = 10
-	Value.Nested.Array = table.create(Length)
-		-- Read BLOCK: 1 bytes
-	local ARRAY_START_1 = Read(1 * Length)
-	for Slot_1 = 1, Length do
-		-- Item_1: Array
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		Value.Nested.Array[Slot_1] = Item_1
+	do
+		-- Value.Nested.Array: Array
+		-- START ARRAY
+		local Length = 10
+		Value.Nested.Array = table.create(Length)
+			-- Read BLOCK: 1 bytes
+		local ARRAY_START_1 = Read(1 * Length)
+		for Slot_1 = 1, Length do
+			-- Item_1: Array
+			-- Read 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+			Value.Nested.Array[Slot_1] = Item_1
+		end
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Nested.OptionalArray: OptionalArray
 	if bit32.btest(BITFIELD_0, 0x04) == true then
 		-- Value.Nested.OptionalArray: OptionalArray
@@ -1517,51 +1578,55 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 		end
 		-- END ARRAY
 	end
-	-- Value.Map: Map
-	Value.Map = {}
-	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
-	for _ = 1, Elements_1 do
-		-- Key_1: GenericMap
-		local OFFSET_0 = Read(2)
-		local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-		-- Element_1: GenericMap
-		local OFFSET_1 = Read(8)
-		local Element_1 = buffer.readf64(RecieveBuffer, OFFSET_1)
-		Value.Map[Key_1] = Element_1
+	do
+		-- Value.Map: Map
+		Value.Map = {}
+		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
+		for _ = 1, Elements_1 do
+			-- Key_1: GenericMap
+			local OFFSET_0 = Read(2)
+			local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			-- Element_1: GenericMap
+			local OFFSET_1 = Read(8)
+			local Element_1 = buffer.readf64(RecieveBuffer, OFFSET_1)
+			Value.Map[Key_1] = Element_1
+		end
 	end
 	-- Value.Data: Data
 	Value.Data = buffer.readu8(RecieveBuffer, BLOCK_START + 5)
 	-- Value.Struct: Struct
-	Value.Struct = {} :: any
+	Value.Struct = {Data = false, Array = false, Nested = false} :: any
 	-- Value.Struct.Data: Data
 	Value.Struct.Data = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
-	-- Value.Struct.Array: Array
-	-- START ARRAY
-	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 7)
-	if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
-	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	Value.Struct.Array = table.create(Length)
-		-- Read BLOCK: 1 bytes
-	local ARRAY_START_1 = Read(1 * Length)
-	for Slot_1 = 1, Length do
-		-- Item_1: Array
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		Value.Struct.Array[Slot_1] = Item_1
+	do
+		-- Value.Struct.Array: Array
+		-- START ARRAY
+		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 7)
+		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+		Value.Struct.Array = table.create(Length)
+			-- Read BLOCK: 1 bytes
+		local ARRAY_START_1 = Read(1 * Length)
+		for Slot_1 = 1, Length do
+			-- Item_1: Array
+			-- Read 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+			Value.Struct.Array[Slot_1] = Item_1
+		end
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Struct.Optional: Optional
 	if bit32.btest(BITFIELD_0, 0x08) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Struct.Optional: Optional
 		-- START ARRAY
-		Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 		if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Optional" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -1581,13 +1646,15 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 		-- END ARRAY
 	end
 	-- Value.Struct.Nested: Nested
-	Value.Struct.Nested = {} :: any
-	-- Value.Struct.Nested.Value: Value
-	Length = buffer.readu16(RecieveBuffer, BLOCK_START + 9)
-	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Nested.Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	Value.Struct.Nested.Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	Value.Struct.Nested = {Value = false} :: any
+	do
+		-- Value.Struct.Nested.Value: Value
+		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 9)
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Nested.Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+		Value.Struct.Nested.Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	end
 	-- Value.AnotherNested: AnotherNested
-	Value.AnotherNested = {} :: any
+	Value.AnotherNested = {Value = false} :: any
 	-- Value.AnotherNested.Value: Value
 	Value.AnotherNested.Value = buffer.readf64(RecieveBuffer, BLOCK_START + 11)
 	return Value
@@ -1786,16 +1853,20 @@ function SerdesFunctions.ReadEVENT_DynamicMap(): ({[number]: { Static: number, D
 		local OFFSET_0 = Read(1)
 		local Key_1 = buffer.readu8(RecieveBuffer, OFFSET_0)
 		-- Element_1: DynamicMap
-		local Element_1 = {} :: any
-		-- Element_1.Static: Static
-		local OFFSET_1 = Read(1)
-		Element_1.Static = buffer.readu8(RecieveBuffer, OFFSET_1)
-		-- Element_1.Dynamic: Dynamic
-		local OFFSET_2 = Read(2)
-		local Length = buffer.readu16(RecieveBuffer, OFFSET_2)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1.Dynamic" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Element_1.Dynamic = buffer.create(Length)
-		buffer.copy(Element_1.Dynamic, 0, RecieveBuffer, Read(Length), Length)
+		local Element_1 = {Static = false, Dynamic = false} :: any
+		do
+			-- Element_1.Static: Static
+			local OFFSET_1 = Read(1)
+			Element_1.Static = buffer.readu8(RecieveBuffer, OFFSET_1)
+		end
+		do
+			-- Element_1.Dynamic: Dynamic
+			local OFFSET_2 = Read(2)
+			local Length = buffer.readu16(RecieveBuffer, OFFSET_2)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1.Dynamic" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			Element_1.Dynamic = buffer.create(Length)
+			buffer.copy(Element_1.Dynamic, 0, RecieveBuffer, Read(Length), Length)
+		end
 		Value[Key_1] = Element_1
 	end
 	return Value
@@ -1810,20 +1881,24 @@ function SerdesFunctions.ReadEVENT_DynamicArray(): ({ { Static: number, Dynamic:
 	local ARRAY_START_1 = Read(3 * Length)
 	for Slot_1 = 1, Length do
 		-- Item_1: DynamicArray
-		local Item_1 = {} :: any
-		-- Item_1.Static: Static
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		Item_1.Static = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		-- Item_1.Dynamic: Dynamic
-		-- Read 2
-		local OPERATION_OFFSET_1 = ARRAY_START_1
-		ARRAY_START_1 += 2
-		local Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_1)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1.Dynamic" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Item_1.Dynamic = buffer.create(Length)
-		buffer.copy(Item_1.Dynamic, 0, RecieveBuffer, Read(Length), Length)
+		local Item_1 = {Static = false, Dynamic = false} :: any
+		do
+			-- Item_1.Static: Static
+			-- Read 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			Item_1.Static = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+		end
+		do
+			-- Item_1.Dynamic: Dynamic
+			-- Read 2
+			local OPERATION_OFFSET_1 = ARRAY_START_1
+			ARRAY_START_1 += 2
+			local Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_1)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1.Dynamic" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			Item_1.Dynamic = buffer.create(Length)
+			buffer.copy(Item_1.Dynamic, 0, RecieveBuffer, Read(Length), Length)
+		end
 		Value[Slot_1] = Item_1
 	end
 	-- END ARRAY
@@ -1840,11 +1915,13 @@ function SerdesFunctions.ReadEVENT_PlayerEvent(): ({ Type: "Join", Name: string,
 		-- Read BLOCK: 10 bytes
 		local BLOCK_START = Read(10)
 		-- Value: Join
-		Value = {} :: any
-		-- Value.Name: Name
-		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
+		Value = {Name = false, UserId = false} :: any
+		do
+			-- Value.Name: Name
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			Value.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
+		end
 		-- Value.UserId: UserId
 		Value.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
 		Value.Type = "Join"
@@ -1852,19 +1929,21 @@ function SerdesFunctions.ReadEVENT_PlayerEvent(): ({ Type: "Join", Name: string,
 		-- Read BLOCK: 10 bytes
 		local BLOCK_START = Read(10)
 		-- Value: Chat
-		Value = {} :: any
+		Value = {UserId = false, Message = false} :: any
 		-- Value.UserId: UserId
 		Value.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-		-- Value.Message: Message
-		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
+		do
+			-- Value.Message: Message
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			Value.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
+		end
 		Value.Type = "Chat"
 	elseif Tag == 2 then
 		-- Read BLOCK: 8 bytes
 		local BLOCK_START = Read(8)
 		-- Value: Leave
-		Value = {} :: any
+		Value = {UserId = false} :: any
 		-- Value.UserId: UserId
 		Value.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 		Value.Type = "Leave"
@@ -1885,21 +1964,32 @@ function SerdesFunctions.WriteEVENT_Booleans(Value: { boolean }): ()
 	buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value)
 	do
 		local PACKED_LENGTH = #Value
+		for PACKED_INDEX = 1, PACKED_LENGTH do
+			local PACKED_ITEM = Value[PACKED_INDEX]
+			if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+		end
 		local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-		local PACKED_BITS = 0
-		for Index = 0, PACKED_LENGTH - 1 do
-			local PACKED_ITEM = Value[Index + 1]
-			if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-			if PACKED_ITEM then
-				PACKED_BITS += bit32.lshift(1, Index % 8)
-			end
-			if Index % 8 == 7 then
-				buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-				PACKED_BITS = 0
-			end
+		local PACKED_WHOLE = PACKED_LENGTH // 8
+		for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+			local PACKED_BASE = PACKED_BYTE * 8
+			local PACKED_BITS = 0
+			if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
+			if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
+			if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
+			if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
+			if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
+			if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
+			if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
+			if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+			buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 		end
 		if PACKED_LENGTH % 8 ~= 0 then
-			buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+			local PACKED_BASE = PACKED_WHOLE * 8
+			local PACKED_BITS = 0
+			for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+				if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+			end
+			buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 		end
 	end
 	-- END ARRAY
@@ -1908,30 +1998,33 @@ end
 function SerdesFunctions.ReadEVENT_Generic(): ({ Data: number, Array: { number }, Optional: number?, Nested: { Value: number } })
 	-- Read BLOCK: 5 bytes
 	local BLOCK_START = Read(5)
+	local BITFIELD_0
 	-- Value: Generic
-	local Value = {} :: any
+	local Value = {Data = false, Array = false, Nested = false} :: any
 	-- Value.Data: Data
 	Value.Data = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	-- Value.Array: Array
-	-- START ARRAY
-	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
-	if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
-	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	Value.Array = table.create(Length)
-		-- Read BLOCK: 1 bytes
-	local ARRAY_START_1 = Read(1 * Length)
-	for Slot_1 = 1, Length do
-		-- Item_1: Array
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		Value.Array[Slot_1] = Item_1
+	do
+		-- Value.Array: Array
+		-- START ARRAY
+		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+		Value.Array = table.create(Length)
+			-- Read BLOCK: 1 bytes
+		local ARRAY_START_1 = Read(1 * Length)
+		for Slot_1 = 1, Length do
+			-- Item_1: Array
+			-- Read 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+			Value.Array[Slot_1] = Item_1
+		end
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Optional: Optional
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
@@ -1939,7 +2032,7 @@ function SerdesFunctions.ReadEVENT_Generic(): ({ Data: number, Array: { number }
 		Value.Optional = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	end
 	-- Value.Nested: Nested
-	Value.Nested = {} :: any
+	Value.Nested = {Value = false} :: any
 	-- Value.Nested.Value: Value
 	Value.Nested.Value = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
 	return Value
@@ -1948,9 +2041,10 @@ end
 function SerdesFunctions.ReadEVENT_GenericArray(): ({ { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local BITFIELD_0
 	-- Value: GenericArray
 	local Value
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
@@ -1963,53 +2057,62 @@ function SerdesFunctions.ReadEVENT_GenericArray(): ({ { Data: number, Array: { n
 		Value = table.create(Length)
 			-- Read BLOCK: 5 bytes
 		local ARRAY_START_2 = Read(5 * Length)
+		local BITFIELD_0
 		for Slot_2 = 1, Length do
 			-- Item_2: GenericArray
-			local Item_2 = {} :: any
-			-- Item_2.Data: Data
-			-- Read 1
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			Item_2.Data = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			-- Item_2.Array: Array
-			-- START ARRAY
-			-- Read 2
-			local OPERATION_OFFSET_1 = ARRAY_START_2
-			ARRAY_START_2 += 2
-			Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_1)
-			if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
-			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-			Item_2.Array = table.create(Length)
-				-- Read BLOCK: 1 bytes
-			local ARRAY_START_3 = Read(1 * Length)
-			for Slot_3 = 1, Length do
-				-- Item_3: Array
+			local Item_2 = {Data = false, Array = false, Nested = false} :: any
+			do
+				-- Item_2.Data: Data
 				-- Read 1
-				local OPERATION_OFFSET_0 = ARRAY_START_3
-				ARRAY_START_3 += 1
-				local Item_3 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-				Item_2.Array[Slot_3] = Item_3
+				local OPERATION_OFFSET_0 = ARRAY_START_2
+				ARRAY_START_2 += 1
+				Item_2.Data = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
 			end
-			-- END ARRAY
-			-- Item_2.Optional: Optional
-			-- Read 1
-			local OPERATION_OFFSET_2 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			local BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2)
-			if bit32.btest(BITFIELD_0, 0x01) == true then
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
+			do
+				-- Item_2.Array: Array
+				-- START ARRAY
+				-- Read 2
+				local OPERATION_OFFSET_1 = ARRAY_START_2
+				ARRAY_START_2 += 2
+				Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_1)
+				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Item_2.Array = table.create(Length)
+					-- Read BLOCK: 1 bytes
+				local ARRAY_START_3 = Read(1 * Length)
+				for Slot_3 = 1, Length do
+					-- Item_3: Array
+					-- Read 1
+					local OPERATION_OFFSET_0 = ARRAY_START_3
+					ARRAY_START_3 += 1
+					local Item_3 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+					Item_2.Array[Slot_3] = Item_3
+				end
+				-- END ARRAY
+			end
+			do
 				-- Item_2.Optional: Optional
-				Item_2.Optional = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				-- Read 1
+				local OPERATION_OFFSET_2 = ARRAY_START_2
+				ARRAY_START_2 += 1
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2)
+				if bit32.btest(BITFIELD_0, 0x01) == true then
+					-- Read BLOCK: 1 bytes
+					local BLOCK_START = Read(1)
+					-- Item_2.Optional: Optional
+					Item_2.Optional = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				end
 			end
 			-- Item_2.Nested: Nested
-			Item_2.Nested = {} :: any
-			-- Item_2.Nested.Value: Value
-			-- Read 1
-			local OPERATION_OFFSET_3 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			Item_2.Nested.Value = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_3)
+			Item_2.Nested = {Value = false} :: any
+			do
+				-- Item_2.Nested.Value: Value
+				-- Read 1
+				local OPERATION_OFFSET_3 = ARRAY_START_2
+				ARRAY_START_2 += 1
+				Item_2.Nested.Value = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_3)
+			end
 			Value[Slot_2] = Item_2
 		end
 		-- END ARRAY
@@ -2049,20 +2152,22 @@ function SerdesFunctions.ReadEVENT_MapStructEvent(): ({ Map: {[string]: number} 
 	-- Read BLOCK: 2 bytes
 	local BLOCK_START = Read(2)
 	-- Value: MapStructEvent
-	local Value = {} :: any
-	-- Value.Map: Map
-	Value.Map = {}
-	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-	for _ = 1, Elements_1 do
-		-- Key_1: Map
-		local OFFSET_0 = Read(2)
-		local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-		-- Element_1: Map
-		local OFFSET_1 = Read(1)
-		local Element_1 = buffer.readu8(RecieveBuffer, OFFSET_1)
-		Value.Map[Key_1] = Element_1
+	local Value = {Map = false} :: any
+	do
+		-- Value.Map: Map
+		Value.Map = {}
+		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		for _ = 1, Elements_1 do
+			-- Key_1: Map
+			local OFFSET_0 = Read(2)
+			local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			-- Element_1: Map
+			local OFFSET_1 = Read(1)
+			local Element_1 = buffer.readu8(RecieveBuffer, OFFSET_1)
+			Value.Map[Key_1] = Element_1
+		end
 	end
 	return Value
 end
@@ -2106,9 +2211,10 @@ end
 function SerdesFunctions.ReadEVENT_MapReferenceEvent(): ({[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local BITFIELD_0
 	-- Value: MapReferenceEvent
 	local Value
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
@@ -2174,9 +2280,10 @@ end
 function SerdesFunctions.ReadEVENT_OptionalPrimitive(): (number?)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local BITFIELD_0
 	-- Value: OptionalPrimitive
 	local Value
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
@@ -2317,16 +2424,18 @@ end
 function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local BITFIELD_0
 	-- Value: Reference
 	local Value
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 3 bytes
 		local BLOCK_START = Read(3)
+		local BITFIELD_0
 		-- Value: Reference
-		Value = {} :: any
+		Value = {Enum = false, Nested = false} :: any
 		-- Value.Field: Field
-		local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		if bit32.btest(BITFIELD_0, 0x01) == true then
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
@@ -2363,39 +2472,43 @@ function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field:
 				Value.Float16Field = if Encoded // 0x8000 == 1 then -Result else Result
 			end
 		end
-		-- Value.Enum: Enum
-		Value.Enum = true :: any
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-		if Index == 0 then
-			Value.Enum = "A"
-		elseif Index == 1 then
-			Value.Enum = "B"
-		elseif Index == 2 then
-			Value.Enum = "C"
-		elseif Index == 3 then
-			Value.Enum = "D"
-		else
-			error(`Unexpected enum: {Index}`)
+		do
+			-- Value.Enum: Enum
+			Value.Enum = true :: any
+			local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			if Index == 0 then
+				Value.Enum = "A"
+			elseif Index == 1 then
+				Value.Enum = "B"
+			elseif Index == 2 then
+				Value.Enum = "C"
+			elseif Index == 3 then
+				Value.Enum = "D"
+			else
+				error(`Unexpected enum: {Index}`)
+			end
 		end
 		-- Value.Nested: Nested
-		Value.Nested = {} :: any
+		Value.Nested = {Guh = false, Array = false} :: any
 		-- Value.Nested.Guh: Guh
 		Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-		-- Value.Nested.Array: Array
-		-- START ARRAY
-		local Length = 10
-		Value.Nested.Array = table.create(Length)
-			-- Read BLOCK: 1 bytes
-		local ARRAY_START_2 = Read(1 * Length)
-		for Slot_2 = 1, Length do
-			-- Item_2: Array
-			-- Read 1
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			Value.Nested.Array[Slot_2] = Item_2
+		do
+			-- Value.Nested.Array: Array
+			-- START ARRAY
+			local Length = 10
+			Value.Nested.Array = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_2 = Read(1 * Length)
+			for Slot_2 = 1, Length do
+				-- Item_2: Array
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_2
+				ARRAY_START_2 += 1
+				local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				Value.Nested.Array[Slot_2] = Item_2
+			end
+			-- END ARRAY
 		end
-		-- END ARRAY
 		-- Value.Nested.OptionalArray: OptionalArray
 		if bit32.btest(BITFIELD_0, 0x04) == true then
 			-- Value.Nested.OptionalArray: OptionalArray
@@ -2425,19 +2538,22 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 	local Value = table.create(Length)
 		-- Read BLOCK: 3 bytes
 	local ARRAY_START_1 = Read(3 * Length)
+	local BITFIELD_0
 	for Slot_1 = 1, Length do
 		-- Item_1: ReferenceArray
-		local Item_1 = {} :: any
-		-- Item_1.Field: Field
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		if bit32.btest(BITFIELD_0, 0x01) == true then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+		local Item_1 = {Enum = false, Nested = false} :: any
+		do
 			-- Item_1.Field: Field
-			Item_1.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Read 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+			if bit32.btest(BITFIELD_0, 0x01) == true then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Item_1.Field: Field
+				Item_1.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			end
 		end
 		-- Item_1.Float16Field: Float16Field
 		if bit32.btest(BITFIELD_0, 0x02) == true then
@@ -2469,45 +2585,51 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 				Item_1.Float16Field = if Encoded // 0x8000 == 1 then -Result else Result
 			end
 		end
-		-- Item_1.Enum: Enum
-		Item_1.Enum = true :: any
-		-- Read 1
-		local OPERATION_OFFSET_1 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local Index = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_1)
-		if Index == 0 then
-			Item_1.Enum = "A"
-		elseif Index == 1 then
-			Item_1.Enum = "B"
-		elseif Index == 2 then
-			Item_1.Enum = "C"
-		elseif Index == 3 then
-			Item_1.Enum = "D"
-		else
-			error(`Unexpected enum: {Index}`)
+		do
+			-- Item_1.Enum: Enum
+			Item_1.Enum = true :: any
+			-- Read 1
+			local OPERATION_OFFSET_1 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			local Index = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_1)
+			if Index == 0 then
+				Item_1.Enum = "A"
+			elseif Index == 1 then
+				Item_1.Enum = "B"
+			elseif Index == 2 then
+				Item_1.Enum = "C"
+			elseif Index == 3 then
+				Item_1.Enum = "D"
+			else
+				error(`Unexpected enum: {Index}`)
+			end
 		end
 		-- Item_1.Nested: Nested
-		Item_1.Nested = {} :: any
-		-- Item_1.Nested.Guh: Guh
-		-- Read 1
-		local OPERATION_OFFSET_2 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		Item_1.Nested.Guh = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2)
-		-- Item_1.Nested.Array: Array
-		-- START ARRAY
-		local Length = 10
-		Item_1.Nested.Array = table.create(Length)
-			-- Read BLOCK: 1 bytes
-		local ARRAY_START_2 = Read(1 * Length)
-		for Slot_2 = 1, Length do
-			-- Item_2: Array
+		Item_1.Nested = {Guh = false, Array = false} :: any
+		do
+			-- Item_1.Nested.Guh: Guh
 			-- Read 1
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			Item_1.Nested.Array[Slot_2] = Item_2
+			local OPERATION_OFFSET_2 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			Item_1.Nested.Guh = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2)
 		end
-		-- END ARRAY
+		do
+			-- Item_1.Nested.Array: Array
+			-- START ARRAY
+			local Length = 10
+			Item_1.Nested.Array = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_2 = Read(1 * Length)
+			for Slot_2 = 1, Length do
+				-- Item_2: Array
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_2
+				ARRAY_START_2 += 1
+				local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				Item_1.Nested.Array[Slot_2] = Item_2
+			end
+			-- END ARRAY
+		end
 		-- Item_1.Nested.OptionalArray: OptionalArray
 		if bit32.btest(BITFIELD_0, 0x04) == true then
 			-- Item_1.Nested.OptionalArray: OptionalArray
@@ -2535,16 +2657,18 @@ end
 function SerdesFunctions.ReadEVENT_ReferenceOptional(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local BITFIELD_0
 	-- Value: ReferenceOptional
 	local Value
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 3 bytes
 		local BLOCK_START = Read(3)
+		local BITFIELD_0
 		-- Value: ReferenceOptional
-		Value = {} :: any
+		Value = {Enum = false, Nested = false} :: any
 		-- Value.Field: Field
-		local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		if bit32.btest(BITFIELD_0, 0x01) == true then
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
@@ -2581,39 +2705,43 @@ function SerdesFunctions.ReadEVENT_ReferenceOptional(): ({ Field: number?, Float
 				Value.Float16Field = if Encoded // 0x8000 == 1 then -Result else Result
 			end
 		end
-		-- Value.Enum: Enum
-		Value.Enum = true :: any
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-		if Index == 0 then
-			Value.Enum = "A"
-		elseif Index == 1 then
-			Value.Enum = "B"
-		elseif Index == 2 then
-			Value.Enum = "C"
-		elseif Index == 3 then
-			Value.Enum = "D"
-		else
-			error(`Unexpected enum: {Index}`)
+		do
+			-- Value.Enum: Enum
+			Value.Enum = true :: any
+			local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			if Index == 0 then
+				Value.Enum = "A"
+			elseif Index == 1 then
+				Value.Enum = "B"
+			elseif Index == 2 then
+				Value.Enum = "C"
+			elseif Index == 3 then
+				Value.Enum = "D"
+			else
+				error(`Unexpected enum: {Index}`)
+			end
 		end
 		-- Value.Nested: Nested
-		Value.Nested = {} :: any
+		Value.Nested = {Guh = false, Array = false} :: any
 		-- Value.Nested.Guh: Guh
 		Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-		-- Value.Nested.Array: Array
-		-- START ARRAY
-		local Length = 10
-		Value.Nested.Array = table.create(Length)
-			-- Read BLOCK: 1 bytes
-		local ARRAY_START_2 = Read(1 * Length)
-		for Slot_2 = 1, Length do
-			-- Item_2: Array
-			-- Read 1
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			Value.Nested.Array[Slot_2] = Item_2
+		do
+			-- Value.Nested.Array: Array
+			-- START ARRAY
+			local Length = 10
+			Value.Nested.Array = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_2 = Read(1 * Length)
+			for Slot_2 = 1, Length do
+				-- Item_2: Array
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_2
+				ARRAY_START_2 += 1
+				local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				Value.Nested.Array[Slot_2] = Item_2
+			end
+			-- END ARRAY
 		end
-		-- END ARRAY
 		-- Value.Nested.OptionalArray: OptionalArray
 		if bit32.btest(BITFIELD_0, 0x04) == true then
 			-- Value.Nested.OptionalArray: OptionalArray
@@ -2660,6 +2788,7 @@ end
 function SerdesFunctions.ReadEVENT_Tuple(): (number, ("A" | "B" | "C" | "D"), number?, Instance, Instance?, { number })
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local BITFIELD_0
 	-- Value: Tuple
 	-- Value1: Tuple
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2679,7 +2808,7 @@ function SerdesFunctions.ReadEVENT_Tuple(): (number, ("A" | "B" | "C" | "D"), nu
 	end
 	-- Value3: Tuple
 	local Value3
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
@@ -2721,6 +2850,7 @@ end
 function SerdesFunctions.ReadEVENT_TupleUnreliable(): (number, ("A" | "B" | "C" | "D"), number?, Instance, Instance?)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local BITFIELD_0
 	-- Value: TupleUnreliable
 	-- Value1: TupleUnreliable
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2740,7 +2870,7 @@ function SerdesFunctions.ReadEVENT_TupleUnreliable(): (number, ("A" | "B" | "C" 
 	end
 	-- Value3: TupleUnreliable
 	local Value3
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
@@ -2767,6 +2897,7 @@ end
 function SerdesFunctions.WriteFUNCTION_DATA_TupleFunction(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, InvocationIdentifier: number): ()
 	-- Allocate BLOCK: 5 bytes
 	local BLOCK_START = Allocate(5)
+	local BITFIELD_0
 	-- FUNCTION_DATA_TupleFunction (42)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 42)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
@@ -2789,7 +2920,7 @@ function SerdesFunctions.WriteFUNCTION_DATA_TupleFunction(Value1: number, Value2
 		error(`Unexpected enum: {Value2}, expected one of "A" or "B" or "C" or "D".`)
 	end
 	-- Value3: TupleFunction
-	local BITFIELD_0 = 0
+	BITFIELD_0 = 0
 	if Value3 ~= nil then BITFIELD_0 += 0x01 end
 	if Value3 ~= nil then
 		-- Allocate BLOCK: 2 bytes
@@ -2817,6 +2948,7 @@ end
 function SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction(): (Instance?, Instance, number?, ("A" | "B" | "C" | "D"), number)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local BITFIELD_0
 	-- Value: TupleFunction
 	-- Value1: TupleFunction
 	local Value1
@@ -2834,7 +2966,7 @@ function SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction(): (Instance?, Instan
 	if typeof(Value2) ~= "Instance" then error(`Expected an Instance, got {typeof(Value2)} instead.`) end
 	-- Value3: TupleFunction
 	local Value3
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
@@ -2915,32 +3047,36 @@ function SerdesFunctions.Issue33_ReadEVENT_Event(): ({[("One" | "Two")]: number}
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value2: Variant
-		Value2 = {} :: any
-		-- Value2.field: field
-		Value2.field = true :: any
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		if Index == 0 then
-			Value2.field = "One"
-		elseif Index == 1 then
-			Value2.field = "Two"
-		else
-			error(`Unexpected enum: {Index}`)
+		Value2 = {field = false} :: any
+		do
+			-- Value2.field: field
+			Value2.field = true :: any
+			local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if Index == 0 then
+				Value2.field = "One"
+			elseif Index == 1 then
+				Value2.field = "Two"
+			else
+				error(`Unexpected enum: {Index}`)
+			end
 		end
 		Value2.Tag = "Variant"
 	else
 		error(`Unexpected variant: {Tag}`)
 	end
 	-- Value3: Event
-	local Value3 = {} :: any
-	-- Value3.field: field
-	Value3.field = true :: any
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-	if Index == 0 then
-		Value3.field = "One"
-	elseif Index == 1 then
-		Value3.field = "Two"
-	else
-		error(`Unexpected enum: {Index}`)
+	local Value3 = {field = false} :: any
+	do
+		-- Value3.field: field
+		Value3.field = true :: any
+		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+		if Index == 0 then
+			Value3.field = "One"
+		elseif Index == 1 then
+			Value3.field = "Two"
+		else
+			error(`Unexpected enum: {Index}`)
+		end
 	end
 	return Value1, Value2, Value3
 end
@@ -2957,6 +3093,7 @@ end
 function SerdesFunctions.ReadEVENT_NamedTuple(): (number, string, number?)
 	-- Read BLOCK: 11 bytes
 	local BLOCK_START = Read(11)
+	local BITFIELD_0
 	-- Value: NamedTuple
 	-- Value1: NamedTuple
 	local Value1 = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
@@ -2966,7 +3103,7 @@ function SerdesFunctions.ReadEVENT_NamedTuple(): (number, string, number?)
 	local Value2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 	-- Value3: NamedTuple
 	local Value3
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 10)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 10)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
@@ -3170,12 +3307,13 @@ end
 function SerdesFunctions.ReadEVENT_QueuedHoles(): (number, number?, number?, number, number?)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local BITFIELD_0
 	-- Value: QueuedHoles
 	-- Value1: QueuedHoles
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	-- Value2: QueuedHoles
 	local Value2
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
@@ -4248,7 +4386,7 @@ if not RunService:IsRunning() then
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
 				local Y
-				local MantissaExponent = Encoded % 0x8000
+				MantissaExponent = Encoded % 0x8000
 				if MantissaExponent == 0b0_11111_0000000000  then
 					if Encoded // 0x8000 == 1 then
 						Y = -math.huge
@@ -4273,7 +4411,7 @@ if not RunService:IsRunning() then
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
 				local Z
-				local MantissaExponent = Encoded % 0x8000
+				MantissaExponent = Encoded % 0x8000
 				if MantissaExponent == 0b0_11111_0000000000  then
 					if Encoded // 0x8000 == 1 then
 						Z = -math.huge
@@ -4442,7 +4580,7 @@ if not RunService:IsRunning() then
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
 				local Y
-				local MantissaExponent = Encoded % 0x8000
+				MantissaExponent = Encoded % 0x8000
 				if MantissaExponent == 0b0_11111_0000000000  then
 					if Encoded // 0x8000 == 1 then
 						Y = -math.huge
@@ -4467,7 +4605,7 @@ if not RunService:IsRunning() then
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
 				local Z
-				local MantissaExponent = Encoded % 0x8000
+				MantissaExponent = Encoded % 0x8000
 				if MantissaExponent == 0b0_11111_0000000000  then
 					if Encoded // 0x8000 == 1 then
 						Z = -math.huge
@@ -5145,9 +5283,10 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeOptionalByte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local BITFIELD_0
 				-- Value: SizeOptionalByte
 				local Value
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if bit32.btest(BITFIELD_0, 0x01) == true then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
@@ -5170,8 +5309,9 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
+				local BITFIELD_0
 				-- Value: SizeOptionalByte
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value ~= nil then BITFIELD_0 += 0x01 end
 				if Value ~= nil then
 					-- Allocate BLOCK: 1 bytes
@@ -5254,12 +5394,13 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeStruct)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local BITFIELD_0
 				-- Value: SizeStruct
-				local Value = {} :: any
+				local Value = {A = false, B = false, C = false} :: any
 				-- Value.A: A
 				Value.A = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				-- Value.B: B
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				Value.B = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.C: C
 				Value.C = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
@@ -5279,6 +5420,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
+				local BITFIELD_0
 				-- Value: SizeStruct
 				-- Value.A: A
 				if typeof(Value.A) ~= "number" then
@@ -5289,7 +5431,7 @@ if not RunService:IsRunning() then
 				if typeof(Value.B) ~= "boolean" then
 					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.B then BITFIELD_0 += 0x01 end
 				-- Value.C: C
 				if typeof(Value.C) ~= "number" then
@@ -5688,10 +5830,11 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (BitsOne)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local BITFIELD_0
 				-- Value: BitsOne
-				local Value = {} :: any
+				local Value = {A = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				return Value
 			end)
@@ -5709,12 +5852,13 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
+				local BITFIELD_0
 				-- Value: BitsOne
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
 				local Result = buffer.create(SendCursor)
@@ -5738,10 +5882,11 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (BitsSeven)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local BITFIELD_0
 				-- Value: BitsSeven
-				local Value = {} :: any
+				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
 				Value.B = bit32.btest(BITFIELD_0, 0x02)
@@ -5771,12 +5916,13 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
+				local BITFIELD_0
 				-- Value: BitsSeven
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
@@ -5830,10 +5976,11 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (BitsEight)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local BITFIELD_0
 				-- Value: BitsEight
-				local Value = {} :: any
+				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
 				Value.B = bit32.btest(BITFIELD_0, 0x02)
@@ -5865,12 +6012,13 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
+				local BITFIELD_0
 				-- Value: BitsEight
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
@@ -5929,10 +6077,12 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (BitsNine)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local BITFIELD_1
+				local BITFIELD_0
 				-- Value: BitsNine
-				local Value = {} :: any
+				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
 				Value.B = bit32.btest(BITFIELD_0, 0x02)
@@ -5949,7 +6099,7 @@ if not RunService:IsRunning() then
 				-- Value.H: H
 				Value.H = bit32.btest(BITFIELD_0, 0x80)
 				-- Value.I: I
-				local BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				Value.I = bit32.btest(BITFIELD_1, 0x01)
 				return Value
 			end)
@@ -5967,12 +6117,14 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 2 bytes
 				local BLOCK_START = Allocate(2)
+				local BITFIELD_1
+				local BITFIELD_0
 				-- Value: BitsNine
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
@@ -6014,7 +6166,7 @@ if not RunService:IsRunning() then
 					error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
-				local BITFIELD_1 = 0
+				BITFIELD_1 = 0
 				if Value.I then BITFIELD_1 += 0x01 end
 				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1)
 				local Result = buffer.create(SendCursor)
@@ -6038,10 +6190,13 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (BitsSeventeen)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local BITFIELD_2
+				local BITFIELD_1
+				local BITFIELD_0
 				-- Value: BitsSeventeen
-				local Value = {} :: any
+				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false, J = false, K = false, L = false, M = false, N = false, O = false, P = false, Q = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
 				Value.B = bit32.btest(BITFIELD_0, 0x02)
@@ -6058,7 +6213,7 @@ if not RunService:IsRunning() then
 				-- Value.H: H
 				Value.H = bit32.btest(BITFIELD_0, 0x80)
 				-- Value.I: I
-				local BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				Value.I = bit32.btest(BITFIELD_1, 0x01)
 				-- Value.J: J
 				Value.J = bit32.btest(BITFIELD_1, 0x02)
@@ -6075,7 +6230,7 @@ if not RunService:IsRunning() then
 				-- Value.P: P
 				Value.P = bit32.btest(BITFIELD_1, 0x80)
 				-- Value.Q: Q
-				local BITFIELD_2 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+				BITFIELD_2 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 				Value.Q = bit32.btest(BITFIELD_2, 0x01)
 				return Value
 			end)
@@ -6093,12 +6248,15 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 3 bytes
 				local BLOCK_START = Allocate(3)
+				local BITFIELD_2
+				local BITFIELD_1
+				local BITFIELD_0
 				-- Value: BitsSeventeen
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
@@ -6140,7 +6298,7 @@ if not RunService:IsRunning() then
 					error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
-				local BITFIELD_1 = 0
+				BITFIELD_1 = 0
 				if Value.I then BITFIELD_1 += 0x01 end
 				-- Value.J: J
 				if typeof(Value.J) ~= "boolean" then
@@ -6182,7 +6340,7 @@ if not RunService:IsRunning() then
 					error(`Expected Value.Q to be of type boolean, got {type(Value.Q)} instead.`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1)
-				local BITFIELD_2 = 0
+				BITFIELD_2 = 0
 				if Value.Q then BITFIELD_2 += 0x01 end
 				buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_2)
 				local Result = buffer.create(SendCursor)
@@ -6206,10 +6364,11 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (BitsMixed)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local BITFIELD_0
 				-- Value: BitsMixed
-				local Value = {} :: any
+				local Value = {A = false, C = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
 				if bit32.btest(BITFIELD_0, 0x02) == true then
@@ -6243,12 +6402,13 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
+				local BITFIELD_0
 				-- Value: BitsMixed
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.B: B
 				if Value.B ~= nil then BITFIELD_0 += 0x02 end
@@ -6308,12 +6468,25 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 						end
-						table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 					end
 				end
 				-- END ARRAY
@@ -6339,21 +6512,32 @@ if not RunService:IsRunning() then
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
 				do
 					local PACKED_LENGTH = #Value
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -6384,12 +6568,25 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = BLOCK_START + 0
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 						end
-						table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 					end
 				end
 				-- END ARRAY
@@ -6414,21 +6611,32 @@ if not RunService:IsRunning() then
 				if #Value ~= 10 then error(`Expected length of "Value" to be equal to 10, got {#Value} instead.`) end
 				do
 					local PACKED_LENGTH = 10
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = BLOCK_START + 0
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -6463,12 +6671,25 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 						end
-						table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 					end
 				end
 				-- END ARRAY
@@ -6496,21 +6717,32 @@ if not RunService:IsRunning() then
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
 				do
 					local PACKED_LENGTH = #Value
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -6557,12 +6789,25 @@ if not RunService:IsRunning() then
 					local Item_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_BITS = 0
-						for Index = 0, Length - 1 do
-							if Index % 8 == 0 then
-								PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 							end
-							table.insert(Item_1, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 						end
 					end
 					-- END ARRAY
@@ -6602,21 +6847,32 @@ if not RunService:IsRunning() then
 					buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
 					do
 						local PACKED_LENGTH = #Item_1
+						for PACKED_INDEX = 1, PACKED_LENGTH do
+							local PACKED_ITEM = Item_1[PACKED_INDEX]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						end
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-						local PACKED_BITS = 0
-						for Index = 0, PACKED_LENGTH - 1 do
-							local PACKED_ITEM = Item_1[Index + 1]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							if PACKED_ITEM then
-								PACKED_BITS += bit32.lshift(1, Index % 8)
-							end
-							if Index % 8 == 7 then
-								buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-								PACKED_BITS = 0
-							end
+						local PACKED_WHOLE = PACKED_LENGTH // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BASE = PACKED_BYTE * 8
+							local PACKED_BITS = 0
+							if Item_1[PACKED_BASE + 1] then PACKED_BITS += 1 end
+							if Item_1[PACKED_BASE + 2] then PACKED_BITS += 2 end
+							if Item_1[PACKED_BASE + 3] then PACKED_BITS += 4 end
+							if Item_1[PACKED_BASE + 4] then PACKED_BITS += 8 end
+							if Item_1[PACKED_BASE + 5] then PACKED_BITS += 16 end
+							if Item_1[PACKED_BASE + 6] then PACKED_BITS += 32 end
+							if Item_1[PACKED_BASE + 7] then PACKED_BITS += 64 end
+							if Item_1[PACKED_BASE + 8] then PACKED_BITS += 128 end
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 						end
 						if PACKED_LENGTH % 8 ~= 0 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							local PACKED_BITS = 0
+							for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+								if Item_1[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							end
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 						end
 					end
 					-- END ARRAY
@@ -6652,12 +6908,25 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 						end
-						table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 					end
 				end
 				-- END ARRAY
@@ -6683,21 +6952,32 @@ if not RunService:IsRunning() then
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
 				do
 					local PACKED_LENGTH = #Value
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -6722,46 +7002,77 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedBeside)
 				-- Read BLOCK: 5 bytes
 				local BLOCK_START = Read(5)
+				local BITFIELD_0
 				-- Value: PackedBeside
-				local Value = {} :: any
+				local Value = {A = false, List = false, B = false, Fixed = false, C = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
-				-- Value.List: List
-				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
-				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.List = table.create(Length)
 				do
-					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					-- Value.List: List
+					-- START ARRAY
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.List = table.create(Length)
+					do
+						local PACKED_OFFSET = Read((Length + 7) // 8)
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
 						end
-						table.insert(Value.List, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
+						end
 					end
+					-- END ARRAY
 				end
-				-- END ARRAY
 				-- Value.B: B
 				Value.B = bit32.btest(BITFIELD_0, 0x02)
-				-- Value.Fixed: Fixed
-				-- START ARRAY
-				local Length = 3
-				Value.Fixed = table.create(Length)
 				do
-					local PACKED_OFFSET = BLOCK_START + 3
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					-- Value.Fixed: Fixed
+					-- START ARRAY
+					local Length = 3
+					Value.Fixed = table.create(Length)
+					do
+						local PACKED_OFFSET = BLOCK_START + 3
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
 						end
-						table.insert(Value.Fixed, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
+						end
 					end
+					-- END ARRAY
 				end
-				-- END ARRAY
 				-- Value.C: C
 				Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
 				return Value
@@ -6780,12 +7091,13 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 5 bytes
 				local BLOCK_START = Allocate(5)
+				local BITFIELD_0
 				-- Value: PackedBeside
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.List: List
 				-- START ARRAY
@@ -6793,21 +7105,32 @@ if not RunService:IsRunning() then
 				buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value.List)
 				do
 					local PACKED_LENGTH = #Value.List
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value.List[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value.List[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value.List[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value.List[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value.List[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value.List[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value.List[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value.List[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value.List[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value.List[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value.List[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -6821,21 +7144,32 @@ if not RunService:IsRunning() then
 				if #Value.Fixed ~= 3 then error(`Expected length of "Value.Fixed" to be equal to 3, got {#Value.Fixed} instead.`) end
 				do
 					local PACKED_LENGTH = 3
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value.Fixed[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = BLOCK_START + 3
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value.Fixed[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value.Fixed[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value.Fixed[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value.Fixed[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value.Fixed[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value.Fixed[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value.Fixed[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value.Fixed[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value.Fixed[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value.Fixed[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -6885,12 +7219,25 @@ if not RunService:IsRunning() then
 					local Element_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_BITS = 0
-						for Index = 0, Length - 1 do
-							if Index % 8 == 0 then
-								PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 							end
-							table.insert(Element_1, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 						end
 					end
 					-- END ARRAY
@@ -6933,21 +7280,32 @@ if not RunService:IsRunning() then
 					buffer.writeu16(SendBuffer, OFFSET_1, #Element_1)
 					do
 						local PACKED_LENGTH = #Element_1
+						for PACKED_INDEX = 1, PACKED_LENGTH do
+							local PACKED_ITEM = Element_1[PACKED_INDEX]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						end
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-						local PACKED_BITS = 0
-						for Index = 0, PACKED_LENGTH - 1 do
-							local PACKED_ITEM = Element_1[Index + 1]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							if PACKED_ITEM then
-								PACKED_BITS += bit32.lshift(1, Index % 8)
-							end
-							if Index % 8 == 7 then
-								buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-								PACKED_BITS = 0
-							end
+						local PACKED_WHOLE = PACKED_LENGTH // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BASE = PACKED_BYTE * 8
+							local PACKED_BITS = 0
+							if Element_1[PACKED_BASE + 1] then PACKED_BITS += 1 end
+							if Element_1[PACKED_BASE + 2] then PACKED_BITS += 2 end
+							if Element_1[PACKED_BASE + 3] then PACKED_BITS += 4 end
+							if Element_1[PACKED_BASE + 4] then PACKED_BITS += 8 end
+							if Element_1[PACKED_BASE + 5] then PACKED_BITS += 16 end
+							if Element_1[PACKED_BASE + 6] then PACKED_BITS += 32 end
+							if Element_1[PACKED_BASE + 7] then PACKED_BITS += 64 end
+							if Element_1[PACKED_BASE + 8] then PACKED_BITS += 128 end
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 						end
 						if PACKED_LENGTH % 8 ~= 0 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							local PACKED_BITS = 0
+							for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+								if Element_1[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							end
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 						end
 					end
 					-- END ARRAY
@@ -6984,18 +7342,20 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
+				local BITFIELD_0
 				for Slot_1 = 1, Length do
 					-- Item_1: PackedOptional
 					local Item_1
 					-- Read 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					local BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
 					if bit32.btest(BITFIELD_0, 0x01) == true then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
+						local BITFIELD_0
 						-- Item_1: PackedOptional
-						local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+						BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 						Item_1 = bit32.btest(BITFIELD_0, 0x01)
 					end
 					Value[Slot_1] = Item_1
@@ -7023,26 +7383,30 @@ if not RunService:IsRunning() then
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
 					-- Allocate BLOCK: 1 bytes
 				local ARRAY_START_1 = Allocate(1 * #Value)
+				local BITFIELD_0_OFFSET
+				local BITFIELD_0
 				for Index = 1, #Value do
 					local Item_1 = Value[Index]
 					-- Item_1: PackedOptional
 					-- Allocate 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					local BITFIELD_0 = 0
+					BITFIELD_0 = 0
+					BITFIELD_0_OFFSET = OPERATION_OFFSET_0
 					if Item_1 ~= nil then BITFIELD_0 += 0x01 end
 					if Item_1 ~= nil then
 						-- Allocate BLOCK: 1 bytes
 						local BLOCK_START = Allocate(1)
+						local BITFIELD_0
 						-- Item_1: PackedOptional
 						if typeof(Item_1) ~= "boolean" then
 							error(`Expected Item_1 to be of type boolean, got {type(Item_1)} instead.`)
 						end
-						local BITFIELD_0 = 0
+						BITFIELD_0 = 0
 						if Item_1 then BITFIELD_0 += 0x01 end
 						buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
 					end
-					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, BITFIELD_0)
+					buffer.writeu8(SendBuffer, BITFIELD_0_OFFSET, BITFIELD_0)
 				end
 				-- END ARRAY
 				local Result = buffer.create(SendCursor)
@@ -7186,61 +7550,71 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
 				-- Value: Standalone
-				local Value = {} :: any
+				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
 				Value.One = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				-- Value.Two: Two
 				Value.Two = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				-- Value.Three: Three
 				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				-- Value.Event: Event
-				local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-				Value.Event = true :: any
-				if Tag == 0 then
-					-- Read BLOCK: 10 bytes
-					local BLOCK_START = Read(10)
-					-- Value.Event: Join
-					Value.Event = {} :: any
-					-- Value.Event.Name: Name
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
-					Value.Event.Type = "Join"
-				elseif Tag == 1 then
-					-- Read BLOCK: 10 bytes
-					local BLOCK_START = Read(10)
-					-- Value.Event: Chat
-					Value.Event = {} :: any
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-					-- Value.Event.Message: Message
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					Value.Event.Type = "Chat"
-				elseif Tag == 2 then
-					-- Read BLOCK: 8 bytes
-					local BLOCK_START = Read(8)
-					-- Value.Event: Leave
-					Value.Event = {} :: any
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-					Value.Event.Type = "Leave"
-				else
-					error(`Unexpected variant: {Tag}`)
+				do
+					-- Value.Event: Event
+					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					Value.Event = true :: any
+					if Tag == 0 then
+						-- Read BLOCK: 10 bytes
+						local BLOCK_START = Read(10)
+						-- Value.Event: Join
+						Value.Event = {Name = false, UserId = false} :: any
+						do
+							-- Value.Event.Name: Name
+							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+							Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
+						end
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
+						Value.Event.Type = "Join"
+					elseif Tag == 1 then
+						-- Read BLOCK: 10 bytes
+						local BLOCK_START = Read(10)
+						-- Value.Event: Chat
+						Value.Event = {UserId = false, Message = false} :: any
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+						do
+							-- Value.Event.Message: Message
+							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+							Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
+						end
+						Value.Event.Type = "Chat"
+					elseif Tag == 2 then
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
+						-- Value.Event: Leave
+						Value.Event = {UserId = false} :: any
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+						Value.Event.Type = "Leave"
+					else
+						error(`Unexpected variant: {Tag}`)
+					end
 				end
 				-- Value.Nested: Nested
-				Value.Nested = {} :: any
-				-- Value.Nested.Four: Four
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				-- Value.Nested.Five: Five
-				Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				Value.Nested = {Four = false, Five = false} :: any
+				do
+					-- Value.Nested.Four: Four
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
+				do
+					-- Value.Nested.Five: Five
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -7279,15 +7653,17 @@ if not RunService:IsRunning() then
 					-- Allocate BLOCK: 10 bytes
 					local BLOCK_START = Allocate(10)
 					-- Value.Event: Join
-					-- Value.Event.Name: Name
-					if typeof(Value.Event.Name) ~= "string" then
-						error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+					do
+						-- Value.Event.Name: Name
+						if typeof(Value.Event.Name) ~= "string" then
+							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+						end
+						local Length = #Value.Event.Name
+						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+						Allocate(Length)
+						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					end
-					local Length = #Value.Event.Name
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
@@ -7303,15 +7679,17 @@ if not RunService:IsRunning() then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
-					-- Value.Event.Message: Message
-					if typeof(Value.Event.Message) ~= "string" then
-						error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+					do
+						-- Value.Event.Message: Message
+						if typeof(Value.Event.Message) ~= "string" then
+							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+						end
+						local Length = #Value.Event.Message
+						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+						buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
+						Allocate(Length)
+						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
-					local Length = #Value.Event.Message
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 				elseif Value.Event.Type == "Leave" then
 					buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
 					-- Allocate BLOCK: 8 bytes
@@ -7326,24 +7704,28 @@ if not RunService:IsRunning() then
 					error(`Unexpected variant: {Value.Event.Type}`)
 				end
 				-- Value.Nested: Nested
-				-- Value.Nested.Four: Four
-				if typeof(Value.Nested.Four) ~= "string" then
-					error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+				do
+					-- Value.Nested.Four: Four
+					if typeof(Value.Nested.Four) ~= "string" then
+						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+					end
+					local Length = #Value.Nested.Four
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
 				end
-				local Length = #Value.Nested.Four
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
-				-- Value.Nested.Five: Five
-				if typeof(Value.Nested.Five) ~= "string" then
-					error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+				do
+					-- Value.Nested.Five: Five
+					if typeof(Value.Nested.Five) ~= "string" then
+						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+					end
+					local Length = #Value.Nested.Five
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
-				local Length = #Value.Nested.Five
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -7641,13 +8023,14 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
+				local BITFIELD_0
 				for Slot_1 = 1, Length do
 					-- Item_1: OptionalHoles
 					local Item_1
 					-- Read 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					local BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
 					if bit32.btest(BITFIELD_0, 0x01) == true then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
@@ -7676,13 +8059,16 @@ if not RunService:IsRunning() then
 				for Key in Value do if type(Key) == "number" and Key > 3 then error(`Expected "Value" to hold at most 3 elements, got one at index {Key} instead.`) end end
 					-- Allocate BLOCK: 1 bytes
 				local ARRAY_START_1 = Allocate(1 * 3)
+				local BITFIELD_0_OFFSET
+				local BITFIELD_0
 				for Index = 1, 3 do
 					local Item_1 = Value[Index]
 					-- Item_1: OptionalHoles
 					-- Allocate 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					local BITFIELD_0 = 0
+					BITFIELD_0 = 0
+					BITFIELD_0_OFFSET = OPERATION_OFFSET_0
 					if Item_1 ~= nil then BITFIELD_0 += 0x01 end
 					if Item_1 ~= nil then
 						-- Allocate BLOCK: 1 bytes
@@ -7693,7 +8079,7 @@ if not RunService:IsRunning() then
 						end
 						buffer.writeu8(SendBuffer, BLOCK_START + 0, Item_1)
 					end
-					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, BITFIELD_0)
+					buffer.writeu8(SendBuffer, BITFIELD_0_OFFSET, BITFIELD_0)
 				end
 				-- END ARRAY
 				local Result = buffer.create(SendCursor)
@@ -7991,7 +8377,7 @@ if not RunService:IsRunning() then
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
 				local Y
-				local MantissaExponent = Encoded % 0x800000
+				MantissaExponent = Encoded % 0x800000
 				if MantissaExponent == 0x7E0000 then
 					Y = if Encoded >= 0x800000 then -math.huge else math.huge
 				elseif MantissaExponent > 0x7E0000 then
@@ -8007,7 +8393,7 @@ if not RunService:IsRunning() then
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
 				local Z
-				local MantissaExponent = Encoded % 0x800000
+				MantissaExponent = Encoded % 0x800000
 				if MantissaExponent == 0x7E0000 then
 					Z = if Encoded >= 0x800000 then -math.huge else math.huge
 				elseif MantissaExponent > 0x7E0000 then
@@ -8137,7 +8523,7 @@ if not RunService:IsRunning() then
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
 				local Y
-				local MantissaExponent = Encoded % 0x800000
+				MantissaExponent = Encoded % 0x800000
 				if MantissaExponent == 0x7E0000 then
 					Y = if Encoded >= 0x800000 then -math.huge else math.huge
 				elseif MantissaExponent > 0x7E0000 then
@@ -8153,7 +8539,7 @@ if not RunService:IsRunning() then
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
 				local Z
-				local MantissaExponent = Encoded % 0x800000
+				MantissaExponent = Encoded % 0x800000
 				if MantissaExponent == 0x7E0000 then
 					Z = if Encoded >= 0x800000 then -math.huge else math.huge
 				elseif MantissaExponent > 0x7E0000 then
@@ -8288,25 +8674,31 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				-- Value: FlagCarrier
-				local Value = {} :: any
-				-- Value.Flags: Flags
-				Value.Flags = {}
-				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.Flags.Length = bit32.btest(SET_BITS, 0x1);
-				Value.Flags.Index = bit32.btest(SET_BITS, 0x2);
-				-- Value.Text: Text
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Text" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Text = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				-- Value.Kind: Kind
-				Value.Kind = true :: any
-				local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-				if Index == 0 then
-					Value.Kind = "A"
-				elseif Index == 1 then
-					Value.Kind = "B"
-				else
-					error(`Unexpected enum: {Index}`)
+				local Value = {Flags = false, Text = false, Kind = false} :: any
+				do
+					-- Value.Flags: Flags
+					Value.Flags = {}
+					local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					Value.Flags.Length = bit32.btest(SET_BITS, 0x1);
+					Value.Flags.Index = bit32.btest(SET_BITS, 0x2);
+				end
+				do
+					-- Value.Text: Text
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Text" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Text = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
+				do
+					-- Value.Kind: Kind
+					Value.Kind = true :: any
+					local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					if Index == 0 then
+						Value.Kind = "A"
+					elseif Index == 1 then
+						Value.Kind = "B"
+					else
+						error(`Unexpected enum: {Index}`)
+					end
 				end
 				return Value
 			end)
@@ -8325,20 +8717,24 @@ if not RunService:IsRunning() then
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
 				-- Value: FlagCarrier
-				-- Value.Flags: Flags
-				local SET_BITS = 0
-				if Value.Flags.Length == true then SET_BITS += 0x1 end
-				if Value.Flags.Index == true then SET_BITS += 0x2 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, SET_BITS)
-				-- Value.Text: Text
-				if typeof(Value.Text) ~= "string" then
-					error(`Expected Value.Text to be of type string, got {type(Value.Text)} instead.`)
+				do
+					-- Value.Flags: Flags
+					local SET_BITS = 0
+					if Value.Flags.Length == true then SET_BITS += 0x1 end
+					if Value.Flags.Index == true then SET_BITS += 0x2 end
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, SET_BITS)
 				end
-				local Length = #Value.Text
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Text, Length)
+				do
+					-- Value.Text: Text
+					if typeof(Value.Text) ~= "string" then
+						error(`Expected Value.Text to be of type string, got {type(Value.Text)} instead.`)
+					end
+					local Length = #Value.Text
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Text, Length)
+				end
 				-- Value.Kind: Kind
 				if Value.Kind == "A" then
 					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
@@ -8430,23 +8826,28 @@ local function ReportDecodeFailure(Event: string?, Failure: unknown)
     warn(`[BlinkBlox]: Dropped a packet that could not be decoded, at event "{Event or "unknown"}": {Failure}`)
 end
 
+local SendUnderused = 0
+
 local function StepReplication()
-    if SendCursor <= 0 then
-        return
+    local Used = SendCursor
+    if Used > 0 then
+        local Buffer = buffer.create(Used)
+        buffer.copy(Buffer, 0, SendBuffer, 0, Used)
+        Reliable:FireServer(Buffer, SendInstances)
+
+        SendCursor = 0
+        SendOffset = 0
+        table.clear(SendInstances)
     end
 
-    local Buffer = buffer.create(SendCursor)
-    buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-    Reliable:FireServer(Buffer, SendInstances)
-
-    --> Kept for the next frame, as the server keeps each player's; see its StepReplication.
-    SendCursor = 0
-    SendOffset = 0
-    if SendSize > 4096 then
+    --> Kept for the next frame, as the server keeps each player's. Checked on a frame that sent
+    --> nothing as well, or a client that went quiet after a burst would hold the burst's buffer.
+    local Shrink
+    Shrink, SendUnderused = ShouldShrink(SendSize, Used, SendUnderused)
+    if Shrink then
         SendSize = 64
         SendBuffer = buffer.create(64)
     end
-    table.clear(SendInstances)
 end
 RunService.Heartbeat:Connect(StepReplication)
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -8460,11 +8861,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	while (RecieveCursor < Size) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 2 then
@@ -9111,7 +9511,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		else
 			error("[BlinkBlox]: Unknown event index.")
 		end
-		end)
+	end
+	while (RecieveCursor < Size) do
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
 			break
@@ -9129,11 +9532,10 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	while (RecieveCursor < Size) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -9214,7 +9616,10 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		else
 			error("[BlinkBlox]: Unknown event index.")
 		end
-		end)
+	end
+	while (RecieveCursor < Size) do
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
 			break
@@ -10170,7 +10575,7 @@ local Returns = table.freeze({
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
 				local Y
-				local MantissaExponent = Encoded % 0x8000
+				MantissaExponent = Encoded % 0x8000
 				if MantissaExponent == 0b0_11111_0000000000  then
 					if Encoded // 0x8000 == 1 then
 						Y = -math.huge
@@ -10195,7 +10600,7 @@ local Returns = table.freeze({
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
 				local Z
-				local MantissaExponent = Encoded % 0x8000
+				MantissaExponent = Encoded % 0x8000
 				if MantissaExponent == 0b0_11111_0000000000  then
 					if Encoded // 0x8000 == 1 then
 						Z = -math.huge
@@ -10364,7 +10769,7 @@ local Returns = table.freeze({
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
 				local Y
-				local MantissaExponent = Encoded % 0x8000
+				MantissaExponent = Encoded % 0x8000
 				if MantissaExponent == 0b0_11111_0000000000  then
 					if Encoded // 0x8000 == 1 then
 						Y = -math.huge
@@ -10389,7 +10794,7 @@ local Returns = table.freeze({
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
 				local Z
-				local MantissaExponent = Encoded % 0x8000
+				MantissaExponent = Encoded % 0x8000
 				if MantissaExponent == 0b0_11111_0000000000  then
 					if Encoded // 0x8000 == 1 then
 						Z = -math.huge
@@ -11067,9 +11472,10 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeOptionalByte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local BITFIELD_0
 				-- Value: SizeOptionalByte
 				local Value
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if bit32.btest(BITFIELD_0, 0x01) == true then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
@@ -11092,8 +11498,9 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
+				local BITFIELD_0
 				-- Value: SizeOptionalByte
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value ~= nil then BITFIELD_0 += 0x01 end
 				if Value ~= nil then
 					-- Allocate BLOCK: 1 bytes
@@ -11176,12 +11583,13 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeStruct)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local BITFIELD_0
 				-- Value: SizeStruct
-				local Value = {} :: any
+				local Value = {A = false, B = false, C = false} :: any
 				-- Value.A: A
 				Value.A = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				-- Value.B: B
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				Value.B = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.C: C
 				Value.C = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
@@ -11201,6 +11609,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
+				local BITFIELD_0
 				-- Value: SizeStruct
 				-- Value.A: A
 				if typeof(Value.A) ~= "number" then
@@ -11211,7 +11620,7 @@ local Returns = table.freeze({
 				if typeof(Value.B) ~= "boolean" then
 					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.B then BITFIELD_0 += 0x01 end
 				-- Value.C: C
 				if typeof(Value.C) ~= "number" then
@@ -11623,10 +12032,11 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (BitsOne)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local BITFIELD_0
 				-- Value: BitsOne
-				local Value = {} :: any
+				local Value = {A = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				return Value
 			end)
@@ -11644,12 +12054,13 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
+				local BITFIELD_0
 				-- Value: BitsOne
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
 				local Result = buffer.create(SendCursor)
@@ -11673,10 +12084,11 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (BitsSeven)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local BITFIELD_0
 				-- Value: BitsSeven
-				local Value = {} :: any
+				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
 				Value.B = bit32.btest(BITFIELD_0, 0x02)
@@ -11706,12 +12118,13 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
+				local BITFIELD_0
 				-- Value: BitsSeven
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
@@ -11765,10 +12178,11 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (BitsEight)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local BITFIELD_0
 				-- Value: BitsEight
-				local Value = {} :: any
+				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
 				Value.B = bit32.btest(BITFIELD_0, 0x02)
@@ -11800,12 +12214,13 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
+				local BITFIELD_0
 				-- Value: BitsEight
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
@@ -11864,10 +12279,12 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (BitsNine)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local BITFIELD_1
+				local BITFIELD_0
 				-- Value: BitsNine
-				local Value = {} :: any
+				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
 				Value.B = bit32.btest(BITFIELD_0, 0x02)
@@ -11884,7 +12301,7 @@ local Returns = table.freeze({
 				-- Value.H: H
 				Value.H = bit32.btest(BITFIELD_0, 0x80)
 				-- Value.I: I
-				local BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				Value.I = bit32.btest(BITFIELD_1, 0x01)
 				return Value
 			end)
@@ -11902,12 +12319,14 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 2 bytes
 				local BLOCK_START = Allocate(2)
+				local BITFIELD_1
+				local BITFIELD_0
 				-- Value: BitsNine
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
@@ -11949,7 +12368,7 @@ local Returns = table.freeze({
 					error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
-				local BITFIELD_1 = 0
+				BITFIELD_1 = 0
 				if Value.I then BITFIELD_1 += 0x01 end
 				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1)
 				local Result = buffer.create(SendCursor)
@@ -11973,10 +12392,13 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (BitsSeventeen)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local BITFIELD_2
+				local BITFIELD_1
+				local BITFIELD_0
 				-- Value: BitsSeventeen
-				local Value = {} :: any
+				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false, J = false, K = false, L = false, M = false, N = false, O = false, P = false, Q = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
 				Value.B = bit32.btest(BITFIELD_0, 0x02)
@@ -11993,7 +12415,7 @@ local Returns = table.freeze({
 				-- Value.H: H
 				Value.H = bit32.btest(BITFIELD_0, 0x80)
 				-- Value.I: I
-				local BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				Value.I = bit32.btest(BITFIELD_1, 0x01)
 				-- Value.J: J
 				Value.J = bit32.btest(BITFIELD_1, 0x02)
@@ -12010,7 +12432,7 @@ local Returns = table.freeze({
 				-- Value.P: P
 				Value.P = bit32.btest(BITFIELD_1, 0x80)
 				-- Value.Q: Q
-				local BITFIELD_2 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+				BITFIELD_2 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 				Value.Q = bit32.btest(BITFIELD_2, 0x01)
 				return Value
 			end)
@@ -12028,12 +12450,15 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 3 bytes
 				local BLOCK_START = Allocate(3)
+				local BITFIELD_2
+				local BITFIELD_1
+				local BITFIELD_0
 				-- Value: BitsSeventeen
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
@@ -12075,7 +12500,7 @@ local Returns = table.freeze({
 					error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
-				local BITFIELD_1 = 0
+				BITFIELD_1 = 0
 				if Value.I then BITFIELD_1 += 0x01 end
 				-- Value.J: J
 				if typeof(Value.J) ~= "boolean" then
@@ -12117,7 +12542,7 @@ local Returns = table.freeze({
 					error(`Expected Value.Q to be of type boolean, got {type(Value.Q)} instead.`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1)
-				local BITFIELD_2 = 0
+				BITFIELD_2 = 0
 				if Value.Q then BITFIELD_2 += 0x01 end
 				buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_2)
 				local Result = buffer.create(SendCursor)
@@ -12141,10 +12566,11 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (BitsMixed)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local BITFIELD_0
 				-- Value: BitsMixed
-				local Value = {} :: any
+				local Value = {A = false, C = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
 				if bit32.btest(BITFIELD_0, 0x02) == true then
@@ -12178,12 +12604,13 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
+				local BITFIELD_0
 				-- Value: BitsMixed
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.B: B
 				if Value.B ~= nil then BITFIELD_0 += 0x02 end
@@ -12243,12 +12670,25 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 						end
-						table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 					end
 				end
 				-- END ARRAY
@@ -12274,21 +12714,32 @@ local Returns = table.freeze({
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
 				do
 					local PACKED_LENGTH = #Value
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -12319,12 +12770,25 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = BLOCK_START + 0
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 						end
-						table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 					end
 				end
 				-- END ARRAY
@@ -12349,21 +12813,32 @@ local Returns = table.freeze({
 				if #Value ~= 10 then error(`Expected length of "Value" to be equal to 10, got {#Value} instead.`) end
 				do
 					local PACKED_LENGTH = 10
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = BLOCK_START + 0
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -12398,12 +12873,25 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 						end
-						table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 					end
 				end
 				-- END ARRAY
@@ -12431,21 +12919,32 @@ local Returns = table.freeze({
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
 				do
 					local PACKED_LENGTH = #Value
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -12492,12 +12991,25 @@ local Returns = table.freeze({
 					local Item_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_BITS = 0
-						for Index = 0, Length - 1 do
-							if Index % 8 == 0 then
-								PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 							end
-							table.insert(Item_1, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 						end
 					end
 					-- END ARRAY
@@ -12537,21 +13049,32 @@ local Returns = table.freeze({
 					buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
 					do
 						local PACKED_LENGTH = #Item_1
+						for PACKED_INDEX = 1, PACKED_LENGTH do
+							local PACKED_ITEM = Item_1[PACKED_INDEX]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						end
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-						local PACKED_BITS = 0
-						for Index = 0, PACKED_LENGTH - 1 do
-							local PACKED_ITEM = Item_1[Index + 1]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							if PACKED_ITEM then
-								PACKED_BITS += bit32.lshift(1, Index % 8)
-							end
-							if Index % 8 == 7 then
-								buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-								PACKED_BITS = 0
-							end
+						local PACKED_WHOLE = PACKED_LENGTH // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BASE = PACKED_BYTE * 8
+							local PACKED_BITS = 0
+							if Item_1[PACKED_BASE + 1] then PACKED_BITS += 1 end
+							if Item_1[PACKED_BASE + 2] then PACKED_BITS += 2 end
+							if Item_1[PACKED_BASE + 3] then PACKED_BITS += 4 end
+							if Item_1[PACKED_BASE + 4] then PACKED_BITS += 8 end
+							if Item_1[PACKED_BASE + 5] then PACKED_BITS += 16 end
+							if Item_1[PACKED_BASE + 6] then PACKED_BITS += 32 end
+							if Item_1[PACKED_BASE + 7] then PACKED_BITS += 64 end
+							if Item_1[PACKED_BASE + 8] then PACKED_BITS += 128 end
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 						end
 						if PACKED_LENGTH % 8 ~= 0 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							local PACKED_BITS = 0
+							for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+								if Item_1[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							end
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 						end
 					end
 					-- END ARRAY
@@ -12587,12 +13110,25 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 						end
-						table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 					end
 				end
 				-- END ARRAY
@@ -12618,21 +13154,32 @@ local Returns = table.freeze({
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
 				do
 					local PACKED_LENGTH = #Value
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -12657,46 +13204,77 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedBeside)
 				-- Read BLOCK: 5 bytes
 				local BLOCK_START = Read(5)
+				local BITFIELD_0
 				-- Value: PackedBeside
-				local Value = {} :: any
+				local Value = {A = false, List = false, B = false, Fixed = false, C = false} :: any
 				-- Value.A: A
-				local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
-				-- Value.List: List
-				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
-				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.List = table.create(Length)
 				do
-					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					-- Value.List: List
+					-- START ARRAY
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.List = table.create(Length)
+					do
+						local PACKED_OFFSET = Read((Length + 7) // 8)
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
 						end
-						table.insert(Value.List, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
+						end
 					end
+					-- END ARRAY
 				end
-				-- END ARRAY
 				-- Value.B: B
 				Value.B = bit32.btest(BITFIELD_0, 0x02)
-				-- Value.Fixed: Fixed
-				-- START ARRAY
-				local Length = 3
-				Value.Fixed = table.create(Length)
 				do
-					local PACKED_OFFSET = BLOCK_START + 3
-					local PACKED_BITS = 0
-					for Index = 0, Length - 1 do
-						if Index % 8 == 0 then
-							PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+					-- Value.Fixed: Fixed
+					-- START ARRAY
+					local Length = 3
+					Value.Fixed = table.create(Length)
+					do
+						local PACKED_OFFSET = BLOCK_START + 3
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
 						end
-						table.insert(Value.Fixed, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
+						end
 					end
+					-- END ARRAY
 				end
-				-- END ARRAY
 				-- Value.C: C
 				Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
 				return Value
@@ -12715,12 +13293,13 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 5 bytes
 				local BLOCK_START = Allocate(5)
+				local BITFIELD_0
 				-- Value: PackedBeside
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				local BITFIELD_0 = 0
+				BITFIELD_0 = 0
 				if Value.A then BITFIELD_0 += 0x01 end
 				-- Value.List: List
 				-- START ARRAY
@@ -12728,21 +13307,32 @@ local Returns = table.freeze({
 				buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value.List)
 				do
 					local PACKED_LENGTH = #Value.List
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value.List[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value.List[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value.List[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value.List[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value.List[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value.List[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value.List[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value.List[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value.List[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value.List[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value.List[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -12756,21 +13346,32 @@ local Returns = table.freeze({
 				if #Value.Fixed ~= 3 then error(`Expected length of "Value.Fixed" to be equal to 3, got {#Value.Fixed} instead.`) end
 				do
 					local PACKED_LENGTH = 3
+					for PACKED_INDEX = 1, PACKED_LENGTH do
+						local PACKED_ITEM = Value.Fixed[PACKED_INDEX]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+					end
 					local PACKED_OFFSET = BLOCK_START + 3
-					local PACKED_BITS = 0
-					for Index = 0, PACKED_LENGTH - 1 do
-						local PACKED_ITEM = Value.Fixed[Index + 1]
-						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-						if PACKED_ITEM then
-							PACKED_BITS += bit32.lshift(1, Index % 8)
-						end
-						if Index % 8 == 7 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-							PACKED_BITS = 0
-						end
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_BITS = 0
+						if Value.Fixed[PACKED_BASE + 1] then PACKED_BITS += 1 end
+						if Value.Fixed[PACKED_BASE + 2] then PACKED_BITS += 2 end
+						if Value.Fixed[PACKED_BASE + 3] then PACKED_BITS += 4 end
+						if Value.Fixed[PACKED_BASE + 4] then PACKED_BITS += 8 end
+						if Value.Fixed[PACKED_BASE + 5] then PACKED_BITS += 16 end
+						if Value.Fixed[PACKED_BASE + 6] then PACKED_BITS += 32 end
+						if Value.Fixed[PACKED_BASE + 7] then PACKED_BITS += 64 end
+						if Value.Fixed[PACKED_BASE + 8] then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
 					if PACKED_LENGTH % 8 ~= 0 then
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							if Value.Fixed[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
 				end
 				-- END ARRAY
@@ -12820,12 +13421,25 @@ local Returns = table.freeze({
 					local Element_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_BITS = 0
-						for Index = 0, Length - 1 do
-							if Index % 8 == 0 then
-								PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 							end
-							table.insert(Element_1, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 						end
 					end
 					-- END ARRAY
@@ -12868,21 +13482,32 @@ local Returns = table.freeze({
 					buffer.writeu16(SendBuffer, OFFSET_1, #Element_1)
 					do
 						local PACKED_LENGTH = #Element_1
+						for PACKED_INDEX = 1, PACKED_LENGTH do
+							local PACKED_ITEM = Element_1[PACKED_INDEX]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						end
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-						local PACKED_BITS = 0
-						for Index = 0, PACKED_LENGTH - 1 do
-							local PACKED_ITEM = Element_1[Index + 1]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{Index + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							if PACKED_ITEM then
-								PACKED_BITS += bit32.lshift(1, Index % 8)
-							end
-							if Index % 8 == 7 then
-								buffer.writeu8(SendBuffer, PACKED_OFFSET + Index // 8, PACKED_BITS)
-								PACKED_BITS = 0
-							end
+						local PACKED_WHOLE = PACKED_LENGTH // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BASE = PACKED_BYTE * 8
+							local PACKED_BITS = 0
+							if Element_1[PACKED_BASE + 1] then PACKED_BITS += 1 end
+							if Element_1[PACKED_BASE + 2] then PACKED_BITS += 2 end
+							if Element_1[PACKED_BASE + 3] then PACKED_BITS += 4 end
+							if Element_1[PACKED_BASE + 4] then PACKED_BITS += 8 end
+							if Element_1[PACKED_BASE + 5] then PACKED_BITS += 16 end
+							if Element_1[PACKED_BASE + 6] then PACKED_BITS += 32 end
+							if Element_1[PACKED_BASE + 7] then PACKED_BITS += 64 end
+							if Element_1[PACKED_BASE + 8] then PACKED_BITS += 128 end
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 						end
 						if PACKED_LENGTH % 8 ~= 0 then
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_LENGTH // 8, PACKED_BITS)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							local PACKED_BITS = 0
+							for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+								if Element_1[PACKED_BASE + PACKED_BIT + 1] then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+							end
+							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 						end
 					end
 					-- END ARRAY
@@ -12919,18 +13544,20 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
+				local BITFIELD_0
 				for Slot_1 = 1, Length do
 					-- Item_1: PackedOptional
 					local Item_1
 					-- Read 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					local BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
 					if bit32.btest(BITFIELD_0, 0x01) == true then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
+						local BITFIELD_0
 						-- Item_1: PackedOptional
-						local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+						BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 						Item_1 = bit32.btest(BITFIELD_0, 0x01)
 					end
 					Value[Slot_1] = Item_1
@@ -12958,26 +13585,30 @@ local Returns = table.freeze({
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
 					-- Allocate BLOCK: 1 bytes
 				local ARRAY_START_1 = Allocate(1 * #Value)
+				local BITFIELD_0_OFFSET
+				local BITFIELD_0
 				for Index = 1, #Value do
 					local Item_1 = Value[Index]
 					-- Item_1: PackedOptional
 					-- Allocate 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					local BITFIELD_0 = 0
+					BITFIELD_0 = 0
+					BITFIELD_0_OFFSET = OPERATION_OFFSET_0
 					if Item_1 ~= nil then BITFIELD_0 += 0x01 end
 					if Item_1 ~= nil then
 						-- Allocate BLOCK: 1 bytes
 						local BLOCK_START = Allocate(1)
+						local BITFIELD_0
 						-- Item_1: PackedOptional
 						if typeof(Item_1) ~= "boolean" then
 							error(`Expected Item_1 to be of type boolean, got {type(Item_1)} instead.`)
 						end
-						local BITFIELD_0 = 0
+						BITFIELD_0 = 0
 						if Item_1 then BITFIELD_0 += 0x01 end
 						buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
 					end
-					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, BITFIELD_0)
+					buffer.writeu8(SendBuffer, BITFIELD_0_OFFSET, BITFIELD_0)
 				end
 				-- END ARRAY
 				local Result = buffer.create(SendCursor)
@@ -13180,61 +13811,71 @@ local Returns = table.freeze({
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
 				-- Value: Standalone
-				local Value = {} :: any
+				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
 				Value.One = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				-- Value.Two: Two
 				Value.Two = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				-- Value.Three: Three
 				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				-- Value.Event: Event
-				local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-				Value.Event = true :: any
-				if Tag == 0 then
-					-- Read BLOCK: 10 bytes
-					local BLOCK_START = Read(10)
-					-- Value.Event: Join
-					Value.Event = {} :: any
-					-- Value.Event.Name: Name
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
-					Value.Event.Type = "Join"
-				elseif Tag == 1 then
-					-- Read BLOCK: 10 bytes
-					local BLOCK_START = Read(10)
-					-- Value.Event: Chat
-					Value.Event = {} :: any
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-					-- Value.Event.Message: Message
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					Value.Event.Type = "Chat"
-				elseif Tag == 2 then
-					-- Read BLOCK: 8 bytes
-					local BLOCK_START = Read(8)
-					-- Value.Event: Leave
-					Value.Event = {} :: any
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-					Value.Event.Type = "Leave"
-				else
-					error(`Unexpected variant: {Tag}`)
+				do
+					-- Value.Event: Event
+					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					Value.Event = true :: any
+					if Tag == 0 then
+						-- Read BLOCK: 10 bytes
+						local BLOCK_START = Read(10)
+						-- Value.Event: Join
+						Value.Event = {Name = false, UserId = false} :: any
+						do
+							-- Value.Event.Name: Name
+							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+							Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
+						end
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
+						Value.Event.Type = "Join"
+					elseif Tag == 1 then
+						-- Read BLOCK: 10 bytes
+						local BLOCK_START = Read(10)
+						-- Value.Event: Chat
+						Value.Event = {UserId = false, Message = false} :: any
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+						do
+							-- Value.Event.Message: Message
+							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+							Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
+						end
+						Value.Event.Type = "Chat"
+					elseif Tag == 2 then
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
+						-- Value.Event: Leave
+						Value.Event = {UserId = false} :: any
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+						Value.Event.Type = "Leave"
+					else
+						error(`Unexpected variant: {Tag}`)
+					end
 				end
 				-- Value.Nested: Nested
-				Value.Nested = {} :: any
-				-- Value.Nested.Four: Four
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				-- Value.Nested.Five: Five
-				Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				Value.Nested = {Four = false, Five = false} :: any
+				do
+					-- Value.Nested.Four: Four
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
+				do
+					-- Value.Nested.Five: Five
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -13273,15 +13914,17 @@ local Returns = table.freeze({
 					-- Allocate BLOCK: 10 bytes
 					local BLOCK_START = Allocate(10)
 					-- Value.Event: Join
-					-- Value.Event.Name: Name
-					if typeof(Value.Event.Name) ~= "string" then
-						error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+					do
+						-- Value.Event.Name: Name
+						if typeof(Value.Event.Name) ~= "string" then
+							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+						end
+						local Length = #Value.Event.Name
+						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+						Allocate(Length)
+						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					end
-					local Length = #Value.Event.Name
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
@@ -13297,15 +13940,17 @@ local Returns = table.freeze({
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
-					-- Value.Event.Message: Message
-					if typeof(Value.Event.Message) ~= "string" then
-						error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+					do
+						-- Value.Event.Message: Message
+						if typeof(Value.Event.Message) ~= "string" then
+							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+						end
+						local Length = #Value.Event.Message
+						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+						buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
+						Allocate(Length)
+						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
-					local Length = #Value.Event.Message
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 				elseif Value.Event.Type == "Leave" then
 					buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
 					-- Allocate BLOCK: 8 bytes
@@ -13320,24 +13965,28 @@ local Returns = table.freeze({
 					error(`Unexpected variant: {Value.Event.Type}`)
 				end
 				-- Value.Nested: Nested
-				-- Value.Nested.Four: Four
-				if typeof(Value.Nested.Four) ~= "string" then
-					error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+				do
+					-- Value.Nested.Four: Four
+					if typeof(Value.Nested.Four) ~= "string" then
+						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+					end
+					local Length = #Value.Nested.Four
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
 				end
-				local Length = #Value.Nested.Four
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
-				-- Value.Nested.Five: Five
-				if typeof(Value.Nested.Five) ~= "string" then
-					error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+				do
+					-- Value.Nested.Five: Five
+					if typeof(Value.Nested.Five) ~= "string" then
+						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+					end
+					local Length = #Value.Nested.Five
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
-				local Length = #Value.Nested.Five
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -15041,13 +15690,14 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
+				local BITFIELD_0
 				for Slot_1 = 1, Length do
 					-- Item_1: OptionalHoles
 					local Item_1
 					-- Read 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					local BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
 					if bit32.btest(BITFIELD_0, 0x01) == true then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
@@ -15076,13 +15726,16 @@ local Returns = table.freeze({
 				for Key in Value do if type(Key) == "number" and Key > 3 then error(`Expected "Value" to hold at most 3 elements, got one at index {Key} instead.`) end end
 					-- Allocate BLOCK: 1 bytes
 				local ARRAY_START_1 = Allocate(1 * 3)
+				local BITFIELD_0_OFFSET
+				local BITFIELD_0
 				for Index = 1, 3 do
 					local Item_1 = Value[Index]
 					-- Item_1: OptionalHoles
 					-- Allocate 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					local BITFIELD_0 = 0
+					BITFIELD_0 = 0
+					BITFIELD_0_OFFSET = OPERATION_OFFSET_0
 					if Item_1 ~= nil then BITFIELD_0 += 0x01 end
 					if Item_1 ~= nil then
 						-- Allocate BLOCK: 1 bytes
@@ -15093,7 +15746,7 @@ local Returns = table.freeze({
 						end
 						buffer.writeu8(SendBuffer, BLOCK_START + 0, Item_1)
 					end
-					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, BITFIELD_0)
+					buffer.writeu8(SendBuffer, BITFIELD_0_OFFSET, BITFIELD_0)
 				end
 				-- END ARRAY
 				local Result = buffer.create(SendCursor)
@@ -15391,7 +16044,7 @@ local Returns = table.freeze({
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
 				local Y
-				local MantissaExponent = Encoded % 0x800000
+				MantissaExponent = Encoded % 0x800000
 				if MantissaExponent == 0x7E0000 then
 					Y = if Encoded >= 0x800000 then -math.huge else math.huge
 				elseif MantissaExponent > 0x7E0000 then
@@ -15407,7 +16060,7 @@ local Returns = table.freeze({
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
 				local Z
-				local MantissaExponent = Encoded % 0x800000
+				MantissaExponent = Encoded % 0x800000
 				if MantissaExponent == 0x7E0000 then
 					Z = if Encoded >= 0x800000 then -math.huge else math.huge
 				elseif MantissaExponent > 0x7E0000 then
@@ -15537,7 +16190,7 @@ local Returns = table.freeze({
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
 				local Y
-				local MantissaExponent = Encoded % 0x800000
+				MantissaExponent = Encoded % 0x800000
 				if MantissaExponent == 0x7E0000 then
 					Y = if Encoded >= 0x800000 then -math.huge else math.huge
 				elseif MantissaExponent > 0x7E0000 then
@@ -15553,7 +16206,7 @@ local Returns = table.freeze({
 				end
 				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
 				local Z
-				local MantissaExponent = Encoded % 0x800000
+				MantissaExponent = Encoded % 0x800000
 				if MantissaExponent == 0x7E0000 then
 					Z = if Encoded >= 0x800000 then -math.huge else math.huge
 				elseif MantissaExponent > 0x7E0000 then
@@ -15752,25 +16405,31 @@ local Returns = table.freeze({
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				-- Value: FlagCarrier
-				local Value = {} :: any
-				-- Value.Flags: Flags
-				Value.Flags = {}
-				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.Flags.Length = bit32.btest(SET_BITS, 0x1);
-				Value.Flags.Index = bit32.btest(SET_BITS, 0x2);
-				-- Value.Text: Text
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Text" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Text = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				-- Value.Kind: Kind
-				Value.Kind = true :: any
-				local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-				if Index == 0 then
-					Value.Kind = "A"
-				elseif Index == 1 then
-					Value.Kind = "B"
-				else
-					error(`Unexpected enum: {Index}`)
+				local Value = {Flags = false, Text = false, Kind = false} :: any
+				do
+					-- Value.Flags: Flags
+					Value.Flags = {}
+					local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					Value.Flags.Length = bit32.btest(SET_BITS, 0x1);
+					Value.Flags.Index = bit32.btest(SET_BITS, 0x2);
+				end
+				do
+					-- Value.Text: Text
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Text" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Text = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
+				do
+					-- Value.Kind: Kind
+					Value.Kind = true :: any
+					local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					if Index == 0 then
+						Value.Kind = "A"
+					elseif Index == 1 then
+						Value.Kind = "B"
+					else
+						error(`Unexpected enum: {Index}`)
+					end
 				end
 				return Value
 			end)
@@ -15789,20 +16448,24 @@ local Returns = table.freeze({
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
 				-- Value: FlagCarrier
-				-- Value.Flags: Flags
-				local SET_BITS = 0
-				if Value.Flags.Length == true then SET_BITS += 0x1 end
-				if Value.Flags.Index == true then SET_BITS += 0x2 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, SET_BITS)
-				-- Value.Text: Text
-				if typeof(Value.Text) ~= "string" then
-					error(`Expected Value.Text to be of type string, got {type(Value.Text)} instead.`)
+				do
+					-- Value.Flags: Flags
+					local SET_BITS = 0
+					if Value.Flags.Length == true then SET_BITS += 0x1 end
+					if Value.Flags.Index == true then SET_BITS += 0x2 end
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, SET_BITS)
 				end
-				local Length = #Value.Text
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Text, Length)
+				do
+					-- Value.Text: Text
+					if typeof(Value.Text) ~= "string" then
+						error(`Expected Value.Text to be of type string, got {type(Value.Text)} instead.`)
+					end
+					local Length = #Value.Text
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Text, Length)
+				end
 				-- Value.Kind: Kind
 				if Value.Kind == "A" then
 					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)

@@ -1,0 +1,29 @@
+{
+  "name": "probe",
+  "emitLegacyScripts": false,
+  "tree": {
+    "$className": "DataModel",
+    "Players": {
+      "$properties": {
+        "CharacterAutoLoads": false
+      }
+    },
+    "ServerScriptService": {
+      "Probe": {
+        "$path": "Server.server.luau"
+      }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Probe": {
+          "$path": "Client.client.luau"
+        }
+      }
+    },
+    "ReplicatedStorage": {
+      "ProbeCommon": {
+        "$path": "Common.luau"
+      }
+    }
+  }
+}

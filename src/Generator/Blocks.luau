@@ -54,6 +54,8 @@ export type Block = typeof(setmetatable(
 		Operation: Operation,
 		Variables: { [string]: boolean },
 		OperationOffset: number,
+		--> Lines `_lineFront` has put at the top of the block, which Scope.luau has to count past.
+		FrontInserted: number,
 
 		--> Bit packing state. A boolean, or an optional's presence flag, costs one BIT rather than a
 		--> whole byte: the block reserves a byte on the first bit and keeps filling it until either
@@ -84,6 +86,7 @@ function Block.new<Parent>(Parent: Block?, Unique: string?): Block
 			},
 			Variables = {},
 			OperationOffset = 0,
+			FrontInserted = 0,
 
 			BitCursor = 0,
 			BitCount = 0,
@@ -142,7 +145,15 @@ end
 
 function Block._lineFront(self: Block, Text: string, Indent: number?): Block
 	table.insert(self.Content, self.Cursor, `{string.rep("\t", Indent or self.Indent)}{Text}\n`)
+	self.FrontInserted += 1
 	return self
+end
+
+--- Declares `Name` at the top of the block rather than where it is first assigned, so it outlives any
+--- scope Scope.luau opens around the field that assigns it. A loop block's top is above its `for` line, as its allocation
+--- header is.
+function Block._declareFront(self: Block, Name: string)
+	self:_lineFront(`local {Name}`, if self.Unique ~= DEFAULT_UNIQUE then self.Indent - 1 else self.Indent)
 end
 
 --- Writes out the byte a write-side bitfield has been filling, and closes the current bit scope.
@@ -194,17 +205,29 @@ function Block.Bit(self: Block, Method: Method): (string, string)
 		local Offset = self:_operation(Method, 1)
 		local Accumulator = `BITFIELD_{self.BitCount}`
 
+		--> Declared at the top of the block: the fields that share this byte may each sit in a scope of
+		--> their own (see Scope.luau), and the byte is written out after the last of them.
+		self:_declareFront(Accumulator)
+		if Method == "Read" then
+			self:Line(`{Accumulator} = buffer.readu8({RECIEVE_BUFFER}, {Offset})`)
+		else
+			self:Line(`{Accumulator} = 0`)
+
+			--> In a loop or an unsafe block the offset is a local declared where it was reserved, which
+			--> may be inside such a scope too; the flush needs it after that scope ends.
+			if string.match(Offset, "^[%a_][%w_]*$") then
+				local Held = `{Accumulator}_OFFSET`
+				self:_declareFront(Held)
+				self:Line(`{Held} = {Offset}`)
+				Offset = Held
+			end
+		end
+
 		self.BitCount += 1
 		self.BitMethod = Method
 		self.BitOffset = Offset
 		self.BitAccumulator = Accumulator
 		self.BitCursor = 0
-
-		if Method == "Read" then
-			self:Line(`local {Accumulator} = buffer.readu8({RECIEVE_BUFFER}, {Offset})`)
-		else
-			self:Line(`local {Accumulator} = 0`)
-		end
 	end
 
 	local Mask = BIT_MASKS[self.BitCursor + 1]
@@ -323,6 +346,12 @@ end
 
 function Block.While(self: Block, Condition: string): Block
 	self:Line(`while ({Condition}) do`)
+	return Block.new(self)
+end
+
+--- A scope of its own under `Header`, such as a local function: closed by `End` like any other.
+function Block.Scope(self: Block, Header: string): Block
+	self:Line(Header)
 	return Block.new(self)
 end
 

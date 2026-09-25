@@ -141,7 +141,7 @@ RunClosure("Inbound packets are bounded", function()
 			["oversized packet check"] = "if buffer.len(Buffer) >",
 			["instance count check"] = "if #Instances >",
 			["decoded event counter"] = "DecodedEvents += 1",
-			["decode pcall"] = "local Parsed: boolean, Failure: any = pcall(function()",
+			["decode pcall"] = "local Parsed: boolean, Failure: any = pcall(DecodeEvent)",
 			["decode failure is reported"] = `ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)`,
 			["unknown event id stops the packet"] = `error("[BlinkBlox]: Unknown event index.")`,
 		}
@@ -374,7 +374,8 @@ RunClosure("Invocation slots are recycled", function()
 end)
 
 RunClosure("Oversized unreliable payloads are dropped, not sent", function()
-	--> Roblox drops an unreliable payload past ~900 bytes silently. The compiler refuses schemas that
+	--> Roblox drops an unreliable payload past 1000 bytes, silently in a live game, and the buffer's
+	--> share of that is MaxUnreliableSize, 900 by default. The compiler refuses schemas that
 	--> can never fit and warns about the ones that might not, but a bounded schema can still overflow
 	--> at runtime -- a string longer than the game assumed -- and that packet would vanish with
 	--> nobody told which event lost it.
