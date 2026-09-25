@@ -288,4 +288,30 @@ RunClosure("Packed boolean arrays", function()
 			ErrorPrint(`Failed "Packed boolean arrays": {Shape.Name} did not survive the round trip.`)
 		end
 	end
+
+	--> Under WriteValidations a non-boolean is refused by the index of the first one, whether it sits
+	--> in a whole byte, which is tested eight elements at once, or in the partial byte at the end.
+	local Refusals = {
+		{ Index = 3, Count = 16, Expected = "Value[3] to be of type boolean, got number" },
+		{ Index = 12, Count = 16, Expected = "Value[12] to be of type boolean, got string" },
+		{ Index = 18, Count = 19, Expected = "Value[18] to be of type boolean, got table" },
+	}
+	local Wrong: { [number]: any } = { [3] = 1, [12] = "true", [18] = {} }
+
+	for _, Refusal in Refusals do
+		local Value = Pattern(Refusal.Count) :: { any }
+		Value[Refusal.Index] = Wrong[Refusal.Index]
+		if Refusal.Index == 3 then
+			--> A later bad element in the same byte must not be the one named.
+			Value[5] = "later"
+		end
+
+		local Success, Result = pcall(Client.PackedBooleans.Write, Value :: any)
+		if Success or not string.find(tostring(Result), Refusal.Expected, 1, true) then
+			ErrorPrint(
+				`Failed "Packed boolean arrays": a non-boolean at {Refusal.Index} was reported as `
+					.. `{if Success then "nothing" else tostring(Result)}, expected "{Refusal.Expected}".`
+			)
+		end
+	end
 end)
