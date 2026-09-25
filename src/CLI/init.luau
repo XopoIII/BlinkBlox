@@ -48,6 +48,10 @@ local ARGUMENTS: { [string]: Argument } = {
 		Aliases = { "--check" },
 		Description = "Check [CONFIG] for errors and warnings without writing any files",
 	},
+	Verify = {
+		Aliases = { "--verify" },
+		Description = "Compare the files [CONFIG] would generate with the ones on disk, writing nothing; exit 1 if any differ",
+	},
 	Json = {
 		Aliases = { "--json" },
 		Description = "Print diagnostics as one JSON document on standard output, and nothing else",
@@ -161,6 +165,12 @@ if Arguments.Json and Arguments.Watch then
 	process.exit(1)
 end
 
+--> A verify answers once, about the files on disk now; watching would answer about none of them.
+if Arguments.Verify and Arguments.Watch then
+	print(Color(`"--verify" cannot be combined with "--watch"`, "red"))
+	process.exit(1)
+end
+
 --> `--json` owns standard output: a banner in front of the document is a document nothing parses.
 if Arguments.Json then
 	Arguments.Silent = true
@@ -204,6 +214,7 @@ if not Arguments.Watch then
 		Profile = Profile,
 		Check = Arguments.Check,
 		Json = Arguments.Json,
+		Verify = Arguments.Verify,
 	}
 
 	Compile.Compile(Path, CompileOptions)

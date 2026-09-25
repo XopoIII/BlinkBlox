@@ -61,7 +61,8 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
   `u24`, `i24` and `f24` fill the gap between 16 and 32 bits, so `vector<f24>` is 9 bytes instead of
   12. An unreliable event that cannot fit is refused at compile time.
 - **Tooling.** The CLI has watch mode and `@profile` builds that keep debug remotes out of release,
-  and `--check --json` reports every diagnostic as JSON for editors and AI assistants. The generated
+  `--check --json` reports every diagnostic as JSON for editors and AI assistants, and `--verify`
+  fails a pre-commit hook or CI step when the committed modules no longer match the schema. The generated
   modules pass their own `--!strict`. You also get TypeScript definitions and a Studio plugin with
   live diagnostics.
 

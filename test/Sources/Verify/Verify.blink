@@ -1,0 +1,23 @@
+--> Compiled by test/Verify.luau, which checks `--verify` against the files a real build writes. It
+--> names every kind of output -- server, client, types and both declarations -- so each is compared,
+--> and a dev-only event so the profile changes what is compared. Kept out of test/Sources itself so
+--> the golden run does not pick it up.
+option ServerOutput = "../../Network/Verify/Server.luau"
+option ClientOutput = "../../Network/Verify/Client.luau"
+option TypesOutput = "../../Network/Verify/Types.luau"
+option Typescript = true
+
+@profile("dev")
+event DevOnlyGiveMoney {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u32
+}
+
+event Ping {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

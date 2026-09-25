@@ -7,6 +7,30 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+A check that committed output still matches its schema. **The wire format, the schema signature and
+the generated modules do not change.**
+
+### Added
+
+- **`--verify`** compiles in memory exactly as a real build would -- the same output paths, the same
+  `--profile` -- writes nothing, and compares every file it would write with the file on disk, byte
+  for byte. It exits with `0` when all match and `1` when any is stale or missing, printing each one
+  with the first line that differs, even under `--quiet`. A game that commits its generated modules
+  used to check them by regenerating into the working tree and asking git for a diff, which rewrote
+  files under the caller and needed a repository.
+  - Only the files the compiler would write are compared. The compiler never deletes in an output
+    folder, so another file there is not an error.
+  - It implies `--check`: no module, no output directory, never a prompt. With `--watch` it is
+    refused.
+  - Under `--json` the document gains a `verify` field, one `{ file, status, line }` per file, with
+    `status` `"current"`, `"stale"` or `"missing"`; `success` is `false` when any is not current. The
+    field is present only under `--verify`, and the format's `version` stays 1.
+- **Downstream**: Grabby Pit can replace `scripts/check-net-drift.sh` -- regenerate, then
+  `git diff` and a check for untracked files -- with `blinkblox net/Game.blink --verify`, run with
+  the same `--profile` its build uses.
+
 ## 0.37.0 — 2026-09-25
 
 A game can act on every packet the server refuses. **The wire format does not change, and neither
