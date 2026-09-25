@@ -18,6 +18,7 @@ local Queues = require("./Queue")
 local Send = require("./Send")
 local Serde = require("./Serde")
 local State = require("./State")
+local Streams = require("./Stream")
 local Traffic = require("./Traffic")
 local Util = require("./Util")
 
@@ -43,7 +44,8 @@ function Declarations.Event(Declaration: Parser.Event)
 	if IsOrdered then
 		State.UsesOrdering = true
 	end
-	local IsPolling = (Value.Call == "Polling" or State.Options.UsePolling)
+	--> A stream always has a listener: it hands the game the stamp unwrapped, which a poll would not.
+	local IsPolling = not Value.Stream and (Value.Call == "Polling" or State.Options.UsePolling)
 	local IsSameContext = Value.From == State.Context
 
 	local Channel = IsUnreliable and State.Channels.Unreliable or State.Channels.Reliable
@@ -157,6 +159,9 @@ function Declarations.Event(Declaration: Parser.Event)
 		Traffic.Start(Block, Counters, IsOrdered)
 		Block:Line(`local {InnerValues} = {Util.GetPath(Identifier, false, State.Scope)}()`)
 		Traffic.Received(Block, Counters)
+		if Value.Stream then
+			Streams.Unwrap(Block, InnerArguments)
+		end
 
 		--> The decode above has to happen either way: payloads are variable length, so skipping an
 		--> event without reading it would leave the cursor mid-event and turn the rest of the packet
@@ -369,6 +374,10 @@ function Declarations.Event(Declaration: Parser.Event)
 
 		State.Noop.Push(`{State.Casing.Fire} = NOOP`, 0, Indent + 1)
 		Body.PushLines(Fire.Content, 0, Indent + 1)
+	elseif Value.Stream then
+		--> Sent by the scheduler rather than by the game, so the server has Set and its friends in
+		--> place of the Fire family. See Stream.luau.
+		Streams.Server(Declaration, Index, Values, WriteEvent, Body, Indent, Counters)
 	else
 		local Outgoing: Send.Send = {
 			IsReliable = IsReliable,

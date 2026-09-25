@@ -11,11 +11,12 @@ startup instead of misreading packets.
 
 A check that committed output still matches its schema, a game can hear which player's event set off
 a listener that threw, a module can come up in a place where no server module runs, a game can see
-what its own networking costs, event by event, and a schema's numbers say what the game had been
-saying by hand around them. **The wire format does not change, and `WIRE_VERSION` stays 2.** The
-schema signature changes only for a schema that gives a number a scale; a module built from this
-release talks to a 0.37.0 one built from the same schema otherwise, and with the new options off the
-generated modules are what they were.
+what its own networking costs, event by event, a schema's numbers say what the game had been saying
+by hand around them, and an event can be a stream the server sends on a schedule. **The wire format
+does not change, and `WIRE_VERSION` stays 2.** A schema that uses none of this compiles to the same
+modules as 0.37.0 apart from the new members, and a module built from it talks to a 0.37.0 one built
+from the same schema. The schema signature changes only where a number gains a scale or an event
+becomes a stream: **recompile both modules** of such a schema.
 
 ### Added
 
@@ -122,6 +123,41 @@ generated modules are what they were.
 - The Studio plugin offers `saturate` inside a number's brackets, and the docs' grammar highlights it.
 - `test/Numbers.luau` and `test/NumberLimits.luau` check exact bytes and values; `test/Oracle.luau`
   and `test/Generate.luau` learnt both modifiers, so the property draws cover them.
+- **`Stream: { Rate, Fast?, Keepalive?, Epsilon? }`** on an event (`language/streams`). The server
+  module gets `Set(Value)`, `Clear()`, `Urgent()` and `SetFast(Fast)` in place of the Fire family;
+  the client's listener gets `(Value?, ServerTime)`. The scheduler runs inside `StepReplication`, before
+  the reliable flush, and sends the latest state to every player at `Rate` a second (or `Fast` after
+  `SetFast(true)`), keeping the clock's overrun so ten a second is ten at sixty frames:
+  - the first state after the stream was idle goes at the next step, and `Urgent()` sends at the next
+    step and restarts the interval;
+  - a state the same as the last one sent is skipped -- numbers within `Epsilon`, a vector, Color3 or
+    CFrame per component, tables key by key all the way down, buffers byte by byte -- except the
+    first unchanged state after a change, which goes once so the clients learn the thing stopped;
+  - an unchanged state is sent again every `Keepalive` seconds, 1 by default;
+  - `Clear()` sends nil once, if the clients saw a state, and the stream is silent until the next
+    `Set`; `Set(nil)` throws;
+  - each packet carries the server's clock in milliseconds modulo 65536, two bytes, and the client
+    unwraps it to seconds nearest its own `GetServerTimeNow()`;
+  - a state that fails to send is reported once and stops the stream until the next `Set`;
+  - interpolation is left to the game: the stream hands each state its server time, and what to
+    buffer and how far behind to draw depends on what is drawn.
+- The size analysis counts a stream's state in full, though it travels as optional: one that can never
+  fit beside the 6-byte header is `E3018`.
+- **`E3033`**: a stream that is not `From: Server` and `OrderedUnreliable`, is polled, streams an
+  optional, a type pack or a type that cannot be optional, or has a `Fast` no faster than `Rate`.
+- TypeScript declarations, edit-mode stubs and `Casing` (`set_fast` under `Snake`) for the four
+  members; `BLINK_STREAM` is a reserved type name. The Studio plugin completes the `Stream` block's
+  fields, on its own lines or on one. `Stream` is a field like `Rate`, so highlighting needs nothing.
+- A guide, `guides/streaming-state`, replacing a hand-rolled send loop with a stream.
+- Where the features meet: under `TrafficStats` a stream's scheduled sends are counted as a
+  `FireList` to every player is, once per recipient, under the stream's name in `Events` and on the
+  unreliable channel; under `ExportLimits` a stream's `Limits` entry holds the bounds of the type it
+  streams, not of its wire pack; a scaled number in a stream's state is compared against the last one
+  sent in real units, so `Epsilon` is in the schema's units too; and under `AutoStart = false` the
+  scheduler, which runs inside `StepReplication`, does not run before `Start()` connects the
+  Heartbeat -- a game that steps replication itself before then has its stream sends dropped, as a
+  `Fire` would be. `test/Crossings.luau` checks each of these, and `test/Sources/Crossing.blink`
+  puts them all in one schema in front of the goldens and the type gate.
 
 ### Changed
 
@@ -149,20 +185,32 @@ Grabby Pit can drop several things it built for itself, once it is on this relea
   Anything that still needs a remote's name reads `Remotes`.
 - The three lazy requires of the server module: set `option AutoStart = false`, require it at the
   top like any module, and call `Start()` in the real game's bootstrap only.
-- `option TrafficStats`: turn it on in `net/Game.blink` and read `GetTrafficStats()` on the server to split
-  its `DataSendKbps` by event. Nothing it uses today changes: no handler, reason or refusal moves, and
-  a schema that compiled under 0.37.0 compiles the same.
+- Guessing which event costs what out of `DataSendKbps`: set `option TrafficStats = true` in
+  `net/Game.blink` and read `GetTrafficStats()` on the server to split it by event. Nothing it uses
+  today changes: no handler, reason or refusal moves, and a schema that compiled under 0.37.0
+  compiles the same.
 - **PerfProbe's `whole()` and its `* 10`**: declare the tenths fields `u16<0.1, saturate>`
   (`FrameP50`, `FrameP95`, `ReceiveKbps`, `ReceivePeakKbps`, `SendKbps`, `WorldTenths`) and the rest
   `u16<saturate>` / `u8<saturate>`, send the raw numbers, and drop the `/ 10` in `World/Net.luau`.
 - **`Tally`'s `math.min(n, 255)`**: `Count: u8<saturate>(1..255)`.
 - **`HuntCrawl`'s `if #heads == 16`**: set `option ExportLimits = true` and compare with
-  `Wire.Limits.CrawlPacket.Heads.Length.Max`.
+  `Wire.Limits.CrawlPacket.Heads.Length.Max` -- or, once `Crawls` is a stream (below), with
+  `Wire.Limits.Crawls.Length.Max`.
+- A scale changes `PerfReport`'s signature and `saturate` changes none, so both modules are rebuilt
+  together, as after any schema change. Since `saturate` sends NaN as the nearest value to zero, a
+  PerfProbe reading that came out NaN now arrives as 0, where `whole()` handed the writer NaN
+  (`math.clamp` passes it through).
+- **`Crawls`**, the model for streams: the game can drop `World/CrawlSend.luau` whole, the stamp
+  code in `World/HuntCrawl.stream` (`SnapshotBuffer.stamp`, `FireAll`, the `At` field), and
+  `SnapshotBuffer.unwrap` with the client's call to it; `SnapshotBuffer.push`/`sample` stay, since
+  interpolation is the game's. `CrawlPacket` goes, and `Crawls` becomes
+  `Stream: { Rate: 10, Fast: 20, Keepalive: 1, Epsilon: 0.05 }, Data: CrawlHead[..16]`. Two
+  behaviours differ: "still" is per axis rather than by distance, and any change -- a head turning
+  for home, not only one moving -- is followed by one unchanged send. The last arm leaving is
+  `Clear()`, received as nil rather than an empty list. With `TrafficStats` on, its sends are counted
+  under `Events.Crawls` and on the unreliable channel.
 
-A scale changes `PerfReport`'s signature and `saturate` changes none, so both modules are rebuilt
-together, as after any schema change. Since `saturate` sends NaN as the nearest value to zero, a
-PerfProbe reading that came out NaN now arrives as 0, where `whole()` handed the writer NaN
-(`math.clamp` passes it through).
+No handler signature, `Reason` or refusal route changes in any of this.
 
 ## 0.37.0 — 2026-09-25
 

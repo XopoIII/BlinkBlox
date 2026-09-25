@@ -1,0 +1,12 @@
+-- expect E3033
+-- A polled stream would hand the game the raw two-byte stamp; its listener gets it in seconds.
+option ClientOutput = "../../Network/StreamPolledClient.luau"
+option ServerOutput = "../../Network/StreamPolledServer.luau"
+
+event Position {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: Polling,
+    Stream: { Rate: 10 },
+    Data: vector
+}

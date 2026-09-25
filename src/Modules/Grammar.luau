@@ -34,6 +34,9 @@ export type EventOption = {
 	--- `Values` cannot express that: it is checked with `table.find`, so a rate of 5 would have to be
 	--- listed alongside every other rate anyone might want.
 	Numeric: true?,
+	--- Field whose value is a braced block of fields of its own, parsed against this list: an
+	--- event's `Stream: { Rate: 10 }`.
+	Fields: { EventOption }?,
 }
 
 export type Bucket = "Types" | "Scopes"
@@ -96,6 +99,21 @@ Grammar.DEFAULTS = {
 	UnreliableInstanceBytes = 6,
 }
 
+--- The fields of an event's `Stream` block (docs/src/content/docs/language/streams.mdx): the rate
+--- the server sends at, the faster rate `SetFast(true)` switches to, how long a state that has not
+--- changed waits before it is sent again, and how far a number may move before it counts as changed.
+--- Nested in the event rather than a declaration of its own, so a stream keeps everything an event
+--- already has -- its channel index, its sequence number, `Call`, the size analysis, the signature.
+Grammar.STREAM = {
+	{ Key = "Rate", Type = "Number", Values = {}, Numeric = true },
+	{ Key = "Fast", Type = "Number", Values = {}, Optional = true, Numeric = true },
+	{ Key = "Keepalive", Type = "Number", Values = {}, Optional = true, Numeric = true },
+	{ Key = "Epsilon", Type = "Number", Values = {}, Optional = true, Numeric = true },
+} :: { EventOption }
+
+--- Seconds a stream waits before it sends an unchanged state again, when its block does not say.
+Grammar.STREAM_KEEPALIVE = 1
+
 Grammar.EVENT = {
 	{ Key = "From", Type = "Identifier", Values = { "Client", "Server" } },
 	{ Key = "Type", Type = "Identifier", Values = { "Reliable", "Unreliable", "OrderedUnreliable" } },
@@ -103,6 +121,7 @@ Grammar.EVENT = {
 	{ Key = "Poll", Type = "Boolean", Values = { true, false }, Optional = true },
 	{ Key = "Rate", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Burst", Type = "Number", Values = {}, Optional = true, Numeric = true },
+	{ Key = "Stream", Type = "OpenBraces", Values = {}, Optional = true, Fields = Grammar.STREAM },
 	{ Key = "Data", Type = "Identifier", Values = {}, Optional = true },
 } :: { EventOption }
 

@@ -7,7 +7,8 @@
 ---
 --- Its shape mirrors the schema. A declaration is keyed by its name, a scope nests its own, a struct
 --- keys its fields, a tagged enum its variants, a type pack its named elements (or their positions),
---- and a function its `Data` and `Return`. What sits at the bottom is a range, `{ Min, Max }`:
+--- a function its `Data` and `Return`, and a stream the type it streams rather than its wire pack.
+--- What sits at the bottom is a range, `{ Min, Max }`:
 ---
 ---   a number with a range, a scale or `saturate`   its bounds in the schema's units, plus `Step`
 ---                                                   for a scaled one
@@ -138,7 +139,10 @@ function Limits.Declarations(Declarations: { Parser.Declaration }, Word: (string
 			local Inner = Limits.Declarations(Value.Values, Word)
 			Add(Declaration.Name, if Inner.Entries and #Inner.Entries > 0 then Inner else nil)
 		elseif Kind == "Event" then
-			Add(Declaration.Name, if Value.Data then Limits.Of(Value.Data, Word) else nil)
+			--> A stream's `Data` is its wire pack, `(Value: T?, ServerTime: u16)`; the schema declared `T`,
+			--> and the table mirrors the schema.
+			local Data = if Value.Stream then Value.Stream.Value else Value.Data
+			Add(Declaration.Name, if Data then Limits.Of(Data, Word) else nil)
 		elseif Kind == "Function" then
 			local Parts = {}
 			for _, Part in { "Data", "Return" } do

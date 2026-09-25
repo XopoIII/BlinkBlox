@@ -163,7 +163,8 @@ Net.Limits.Crawls.Heads.Length.Max -- 16, the event's data
 
 The table mirrors the schema. A declaration is keyed by its name and a scope nests its own; a struct
 keys its fields, a tagged enum its variants, a type pack its named elements or their positions, and a
-function its `Data` and `Return`. At the bottom is a range, `{ Min, Max }`:
+function its `Data` and `Return`. A [stream](/BlinkBlox/language/streams/) holds the bounds of the type
+it streams, not of the `(Value, ServerTime)` it travels as. At the bottom is a range, `{ Min, Max }`:
 
 | Declared | What `{ Min, Max }` holds |
 |---|---|

@@ -29,6 +29,7 @@ local MODULE_TYPES = {
 	BLINK_TRAFFIC_COUNTS = true,
 	BLINK_TRAFFIC_STATS = true,
 	BLINK_EVENTS_SYMBOL = true,
+	BLINK_STREAM = true,
 }
 
 --- The token naming a top-level declaration, wherever its kind keeps it.

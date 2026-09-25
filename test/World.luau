@@ -134,6 +134,12 @@ local function Load(World: World, Path: string, Side: "Server" | "Client", Heart
 				return true
 			end,
 		},
+		--> What a stream stamps its packets with, on the mock clock like every other spec's.
+		Workspace = {
+			GetServerTimeNow = function(_self): number
+				return Shared.Os.clock()
+			end,
+		},
 		Players = {
 			PlayerRemoving = Shared.Signal.new(),
 			MaxPlayers = 1,

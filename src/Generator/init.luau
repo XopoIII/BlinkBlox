@@ -32,6 +32,10 @@ local DEFAULT_MAX_EVENTS_PER_PACKET = Fragments.DEFAULT_MAX_EVENTS_PER_PACKET
 local DEFAULT_MAX_UNRELIABLE_SIZE = Fragments.DEFAULT_MAX_UNRELIABLE_SIZE
 local UNRELIABLE_INSTANCE_BYTES = Fragments.UNRELIABLE_INSTANCE_BYTES
 
+--> The stream runtime: the server's half, then the client's. Spliced only into a module whose schema
+--> declares a stream.
+local StreamParts = string.split(require("./Templates/Stream"), "-- SPLIT --")
+
 --> The client's and the server's halves depend on the options; Lifecycle assembles them.
 local Sources = {
 	Base = require("./Templates/Base"),
@@ -429,6 +433,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Preamble,
 		State.Noop.DumpLines(),
 		string.split(Traffic.Template(Source[2]), "\r"),
+		(if State.UsesStreams then { StreamParts[if State.Context == "Server" then 1 else 2] } else {}),
+		State.Streams.DumpLines(),
 		Lifecycle.Connections(
 			State.Context,
 			State.Options,

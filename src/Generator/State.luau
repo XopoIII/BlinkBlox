@@ -30,6 +30,8 @@ export type State = {
 	UserTypes: Builder.Builder,
 	LuauTypes: Builder.Builder,
 	Return: Builder.Builder,
+	--- Each stream's scheduler entry and the send it calls, emitted after the stream runtime.
+	Streams: Builder.Builder,
 
 	--- The decode branch each channel's next event is added to; reassigned as events are added.
 	Reliables: Blocks.Block,
@@ -38,6 +40,10 @@ export type State = {
 	--- Set when the schema declares at least one OrderedUnreliable event, so the sequence
 	--- bookkeeping is emitted only where something uses it.
 	UsesOrdering: boolean,
+
+	--- Set when the schema declares a stream, so the stream runtime (Templates/Stream.luau) is
+	--- emitted only where something uses it.
+	UsesStreams: boolean,
 
 	--- Set when this side's module invokes a function whose Yield is Future or Promise -- only the
 	--- invoking side does -- so the library is required only by a module that calls into it. A
@@ -67,11 +73,13 @@ local State: State = {
 	UserTypes = Builder.new(),
 	LuauTypes = Builder.new(),
 	Return = Builder.new(),
+	Streams = Builder.new(),
 
 	Reliables = nil :: any,
 	Unreliables = nil :: any,
 
 	UsesOrdering = false,
+	UsesStreams = false,
 	UsesFuture = false,
 	UsesPromise = false,
 	RateSlots = {},
@@ -89,10 +97,12 @@ function State.Reset()
 	State.UserTypes = Builder.new()
 	State.LuauTypes = Builder.new()
 	State.Return = Builder.new()
+	State.Streams = Builder.new()
 
 	table.clear(State.RateSlots)
 	table.clear(Prefabs.Required)
 	State.UsesOrdering = false
+	State.UsesStreams = false
 	State.UsesFuture = false
 	State.UsesPromise = false
 

@@ -103,6 +103,9 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 
 			--> Stored as a number: every consumer does arithmetic with it.
 			Value = Numeric
+		elseif Option.Fields then
+			--> A block of fields of its own, `Stream: { Rate: 10 }`, checked the same way as this one.
+			Value = self:Structure(Name, Option.Fields)
 		elseif Option.Key ~= "Data" and Option.Key ~= "Return" then
 			local Token = self:Consume(Option.Type)
 			Value = Token.Value
@@ -149,6 +152,11 @@ function Parser.Event(self: Parser, Name: Token): Event
 		Call = "Polling"
 	end
 
+	local Data, Stream = Structure.Data, nil
+	if Structure.Stream then
+		Data, Stream = self:StreamData(Name, Structure)
+	end
+
 	return {
 		Type = "Event",
 		Name = Name.Value,
@@ -156,9 +164,10 @@ function Parser.Event(self: Parser, Name: Token): Event
 			From = Structure.From,
 			Type = Structure.Type,
 			Call = Call,
-			Data = Structure.Data,
+			Data = Data,
 			Rate = Structure.Rate,
 			Burst = Structure.Burst,
+			Stream = Stream,
 		},
 		Tokens = {
 			Identifier = Name,

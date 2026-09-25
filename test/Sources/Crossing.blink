@@ -1,0 +1,44 @@
+-- Where the features of one release meet, reviewed as a golden and held to the type gate: a stream
+-- whose state carries fixed-point and saturating numbers, counted by TrafficStats, bounded in the
+-- exported Limits, on a server that waits for Start and a client that gives up on the remotes.
+-- Snake casing, so every one of their members is spelled the way the casing gives it.
+-- test/Crossings.luau runs the same combinations.
+option RemoteScope = "Crossing"
+option Casing = Snake
+option TrafficStats = true
+option ExportLimits = true
+option AutoStart = false
+option ClientConnectTimeout = 2.5
+option Typescript = true
+option ClientOutput = "../../Network/CrossingClient.luau"
+option ServerOutput = "../../Network/CrossingServer.luau"
+
+struct Crawl {
+	Id: u8,
+	Speed: u16<0.1>(0..100),
+	Heat: u8<saturate>(1..200)
+}
+
+event Crawls {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Stream: { Rate: 10, Fast: 20, Epsilon: 0.5 },
+	Data: Crawl[..16]
+}
+
+event Tick {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: ManySync,
+	Stream: { Rate: 5 },
+	Data: u16<0.01, saturate>
+}
+
+event Ready {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Rate: 10,
+	Data: u8
+}
