@@ -18,7 +18,9 @@ return {
 
 		return Merged
 	end,
-	DeepClone = function(Table: { [any]: any }): { [any]: any }
+	--- A copy of `Table` and everything it reaches, except the values of any key in `Shared`, which the
+	--- copy refers to rather than copies.
+	DeepClone = function(Table: { [any]: any }, Shared: { [any]: true }?): { [any]: any }
 		local Cache = {}
 
 		local function Clone(Original: any): any
@@ -33,7 +35,11 @@ return {
 				Cache[Original] = Copy
 
 				for Key, Value in Original do
-					Copy[Clone(Key)] = Clone(Value)
+					if Shared and Shared[Key] then
+						Copy[Key] = Value
+					else
+						Copy[Clone(Key)] = Clone(Value)
+					end
 				end
 			end
 

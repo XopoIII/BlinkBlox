@@ -135,8 +135,15 @@ function Parser.GetGenerics(self: Parser): Generics?
 	return Generics
 end
 
+--> What a generic's substitution refers to rather than copies. A declared type records the scope it
+--> was declared in, and that scope holds the symbol table of everything declared beside it; copying
+--> it with the node copied the schema's whole symbol table for every generic argument substituted.
+--> That was nine tenths of the time Test.blink took to parse. A scope is shared by every node in it,
+--> never owned by one, so a copy of a node belongs to the same one.
+local SHARED: { [any]: true } = { Scope = true }
+
 function Parser.ReplaceGenerics(self: Parser, Of: TypeNode): TypeNode
-	local Clone = Table.DeepClone(Of) :: Struct
+	local Clone = Table.DeepClone(Of, SHARED) :: Struct
 	local Generics = Clone.Value.Generics :: Generics
 	local Replacements: { [string]: TypeNode } = {}
 
@@ -154,7 +161,7 @@ function Parser.ReplaceGenerics(self: Parser, Of: TypeNode): TypeNode
 		Replacements[Key] = Declaration
 
 		for _, Generic in List do
-			local Replacement = Table.DeepClone(Declaration)
+			local Replacement = Table.DeepClone(Declaration, SHARED)
 
 			Generic.Type = Replacement.Type
 			Generic.Value = Replacement.Value
@@ -191,7 +198,7 @@ function Parser.ReplaceGenerics(self: Parser, Of: TypeNode): TypeNode
 			return
 		end
 
-		local Replacement = Table.DeepClone(Declaration)
+		local Replacement = Table.DeepClone(Declaration, SHARED)
 
 		Type.Type = Replacement.Type
 		Type.Value = Replacement.Value
