@@ -364,6 +364,10 @@ local Events: any = {
     Unreliable = table.create(256)
 }
 
+--> Counts disconnects from Many events, so a dispatch can tell in one comparison whether a listener
+--> it is about to call may have gone since it started. See `Each` in src/Generator/Listeners.luau.
+local ListenerEpoch = 0
+
 local Queue: any = {
     Reliable = table.create(256),
     Unreliable = table.create(256)
@@ -822,7 +826,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			if OrderAccept(0, OrderIdentifier) == true then
 				if Events.Unreliable[0] ~= nil then
 					SerdesEvent = "Crawls"
-					local ListenerRan, ListenerFailure = pcall(Events.Unreliable[0], Value1, Value2)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[0], Value1, Value2)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
@@ -836,9 +840,11 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			TrafficCounters[16] += 1
 			Value2 = UnwrapStamp(Value2)
 			if OrderAccept(1, OrderIdentifier) == true then
+				local Epoch = ListenerEpoch
 				for _, Listener in Events.Unreliable[1] do
+					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[1], Listener) == nil then continue end
 					SerdesEvent = "Tick"
-					local ListenerRan, ListenerFailure = pcall(Listener, Value1, Value2)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value1, Value2)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
@@ -902,6 +908,7 @@ local Returns = table.freeze({
 					local Listeners = table.clone(Events.Unreliable[1])
 					table.remove(Listeners, Index)
 					Events.Unreliable[1] = Listeners
+					ListenerEpoch += 1
 				end
 			end
 		end

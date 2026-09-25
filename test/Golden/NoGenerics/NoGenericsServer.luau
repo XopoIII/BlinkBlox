@@ -365,6 +365,10 @@ local Events: any = {
     Unreliable = table.create(256)
 }
 
+--> Counts disconnects from Many events, so a dispatch can tell in one comparison whether a listener
+--> it is about to call may have gone since it started. See `Each` in src/Generator/Listeners.luau.
+local ListenerEpoch = 0
+
 local Queue: any = {
     Reliable = table.create(256),
     Unreliable = table.create(256)
@@ -3767,7 +3771,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyEvent()
 			if Events.Reliable[4] ~= nil then
 				SerdesEvent = "ClientEmptyEvent"
-				local ListenerRan, ListenerFailure = pcall(Events.Reliable[4], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[4], Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "ClientEmptyEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[4] < 256 then
@@ -3806,7 +3810,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local Value: number = SerdesFunctions.ReadEVENT_ReliableClient()
 			if Events.Reliable[24] ~= nil then
 				SerdesEvent = "ReliableClient"
-				local ListenerRan, ListenerFailure = pcall(Events.Reliable[24], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[24], Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "ReliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[24] < 256 then
@@ -3916,14 +3920,14 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyUnreliableEvent()
 			if Events.Unreliable[4] ~= nil then
 				SerdesEvent = "ClientEmptyUnreliableEvent"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[4], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[4], Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "ClientEmptyUnreliableEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 12 then
 			local Value: number = SerdesFunctions.ReadEVENT_UnreliableClient()
 			if Events.Unreliable[12] ~= nil then
 				SerdesEvent = "UnreliableClient"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[12], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[12], Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "UnreliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		else
@@ -4848,10 +4852,12 @@ local Returns = table.freeze({
 				warn("[BlinkBlox]: \"ClientEmptyEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
 			Events.Reliable[4] = Listener
-			for Index, Arguments in Queue.Reliable[4] do
-				RunListener("ClientEmptyEvent", Listener, table.unpack(Arguments, 1, Arguments.n))
-			end
+			local Pending = Queue.Reliable[4]
 			Queue.Reliable[4] = {}
+			for _, Arguments in Pending do
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+				if not ListenerRan and not ListenerFailed(Arguments[1], "ClientEmptyEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+			end
 			return function (): ()
 				if Events.Reliable[4] == Listener then
 					Events.Reliable[4] = nil
@@ -5360,10 +5366,11 @@ local Returns = table.freeze({
 				warn("[BlinkBlox]: \"Booleans\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
 			Events.Reliable[14] = Listener
-			for Index, Arguments in Queue.Reliable[14] do
+			local Pending = Queue.Reliable[14]
+			Queue.Reliable[14] = {}
+			for _, Arguments in Pending do
 				Spawn(RunListener, "Booleans", Listener, table.unpack(Arguments, 1, Arguments.n))
 			end
-			Queue.Reliable[14] = {}
 			return function (): ()
 				if Events.Reliable[14] == Listener then
 					Events.Reliable[14] = nil
@@ -6000,10 +6007,12 @@ local Returns = table.freeze({
 				warn("[BlinkBlox]: \"ReliableClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
 			Events.Reliable[24] = Listener
-			for Index, Arguments in Queue.Reliable[24] do
-				RunListener("ReliableClient", Listener, table.unpack(Arguments, 1, Arguments.n))
-			end
+			local Pending = Queue.Reliable[24]
 			Queue.Reliable[24] = {}
+			for _, Arguments in Pending do
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+				if not ListenerRan and not ListenerFailed(Arguments[1], "ReliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+			end
 			return function (): ()
 				if Events.Reliable[24] == Listener then
 					Events.Reliable[24] = nil

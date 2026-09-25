@@ -365,6 +365,10 @@ local Events: any = {
     Unreliable = table.create(256)
 }
 
+--> Counts disconnects from Many events, so a dispatch can tell in one comparison whether a listener
+--> it is about to call may have gone since it started. See `Each` in src/Generator/Listeners.luau.
+local ListenerEpoch = 0
+
 local Queue: any = {
     Reliable = table.create(256),
     Unreliable = table.create(256)
@@ -1141,7 +1145,7 @@ local function Listen()
 				if RateAccept(Player, 1, 10, 10, "Ready") == true then
 					if Events.Reliable[1] ~= nil then
 						SerdesEvent = "Ready"
-						local ListenerRan, ListenerFailure = pcall(Events.Reliable[1], Player, Value)
+						local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[1], Player, Value)
 						if not ListenerRan and not ListenerFailed(Player, "Ready", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 					else
 						if #Queue.Reliable[1] < 256 then
@@ -1389,10 +1393,12 @@ local Returns = table.freeze({
 				warn("[BlinkBlox]: \"Ready\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
 			Events.Reliable[1] = Listener
-			for Index, Arguments in Queue.Reliable[1] do
-				RunListener("Ready", Listener, table.unpack(Arguments, 1, Arguments.n))
-			end
+			local Pending = Queue.Reliable[1]
 			Queue.Reliable[1] = {}
+			for _, Arguments in Pending do
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+				if not ListenerRan and not ListenerFailed(Arguments[1], "Ready", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+			end
 			return function (): ()
 				if Events.Reliable[1] == Listener then
 					Events.Reliable[1] = nil

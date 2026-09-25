@@ -176,3 +176,72 @@ RunClosure("A Sync listener that throws costs nothing but its own call", functio
 	assert(Second == 2, `the listener after the one that threw ran {Second} time(s), expected 2`)
 	assert(#Raised == 2 and string.find(Raised[1], "a bug in the game", 1, true), "the listener's error was not raised")
 end)
+
+--> Connecting replays the queue to the new listener. The network path guards a Sync listener's call,
+--> and the replay did not: a listener that threw on a queued event threw out of `.On`, after it had
+--> been bound and before the queue was cleared. The caller never got its disconnect, the events after
+--> the failing one were never delivered, and the next `.On` was handed the same queue again.
+RunClosure("A Sync listener that throws on a queued event still connects, and the queue is spent once", function()
+	local Raised: { string } = {}
+	Shared.Task.spawn = function(Function, ...)
+		if Function == error then
+			table.insert(Raised, tostring((...)))
+			return nil :: any
+		end
+
+		return task.spawn(Function, ...)
+	end
+
+	Server.QueuedHoles.FireAll(1, nil, nil, 4, nil)
+	Server.QueuedHoles.FireAll(2, nil, nil, 4, nil)
+	task.wait(1 / 30)
+
+	local Seen: { number } = {}
+	local Connected, Disconnect = pcall(Client.QueuedHoles.On, function(Value: number)
+		table.insert(Seen, Value)
+		if Value == 1 then
+			error("a bug in the game")
+		end
+	end)
+	Shared.Task.spawn = nil :: any
+
+	assert(Connected, `connecting threw: {Disconnect}`)
+	Disconnect()
+
+	assert(#Seen == 2, `the queue replayed {#Seen} of 2 events`)
+	assert(#Raised == 1 and string.find(Raised[1], "a bug in the game", 1, true), "the listener's error was not raised")
+
+	local Again = 0
+	local DisconnectAgain = Client.QueuedHoles.On(function()
+		Again += 1
+	end)
+	DisconnectAgain()
+
+	assert(Again == 0, `a second listener was replayed {Again} event(s) the first had already been given`)
+end)
+
+--> A dispatch walks the list of listeners it started with, which is what lets a listener disconnect
+--> itself safely. It also meant that a listener disconnected by an EARLIER one in the same dispatch
+--> still ran. RBXScriptSignal skips it, and so does every Luau signal written after it.
+RunClosure("A listener disconnected by another during dispatch does not run", function()
+	local Seen: { string } = {}
+	local DisconnectSecond: () -> ()
+	local DisconnectFirst = Client.ManyReliableSync.On(function()
+		table.insert(Seen, "first")
+		DisconnectSecond()
+	end)
+	DisconnectSecond = Client.ManyReliableSync.On(function()
+		table.insert(Seen, "second")
+	end)
+	local DisconnectThird = Client.ManyReliableSync.On(function()
+		table.insert(Seen, "third")
+	end)
+
+	Server.ManyReliableSync.FireAll(1)
+	task.wait(1 / 30)
+	DisconnectFirst()
+	DisconnectThird()
+
+	local Order = table.concat(Seen, ", ")
+	assert(Order == "first, third", `one fire reached {Order}, expected first, third`)
+end)

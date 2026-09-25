@@ -365,6 +365,10 @@ local Events: any = {
     Unreliable = table.create(256)
 }
 
+--> Counts disconnects from Many events, so a dispatch can tell in one comparison whether a listener
+--> it is about to call may have gone since it started. See `Each` in src/Generator/Listeners.luau.
+local ListenerEpoch = 0
+
 local Queue: any = {
     Reliable = table.create(256),
     Unreliable = table.create(256)
@@ -1336,14 +1340,14 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Generics_ReadEVENT_Snapshot()
 			if Events.Unreliable[0] ~= nil then
 				SerdesEvent = "Snapshot"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[0], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[0], Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "Snapshot", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 1 then
 			local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Example_ReadEVENT_Snapshot()
 			if Events.Unreliable[1] ~= nil then
 				SerdesEvent = "Snapshot"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[1], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[1], Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "Snapshot", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		else

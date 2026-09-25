@@ -365,6 +365,10 @@ local Events: any = {
     Unreliable = table.create(256)
 }
 
+--> Counts disconnects from Many events, so a dispatch can tell in one comparison whether a listener
+--> it is about to call may have gone since it started. See `Each` in src/Generator/Listeners.luau.
+local ListenerEpoch = 0
+
 local Queue: any = {
     Reliable = table.create(256),
     Unreliable = table.create(256)
@@ -1260,9 +1264,11 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local Value: number = SerdesFunctions.ReadEVENT_Byte()
 			TrafficCounters[12] += 1
 			if #Events.Reliable[0] > 0 then
+				local Epoch = ListenerEpoch
 				for _, Listener in Events.Reliable[0] do
+					if ListenerEpoch ~= Epoch and table.find(Events.Reliable[0], Listener) == nil then continue end
 					SerdesEvent = "Byte"
-					local ListenerRan, ListenerFailure = pcall(Listener, Player, Value)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Player, Value)
 					if not ListenerRan and not ListenerFailed(Player, "Byte", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 				end
 			else
@@ -1276,9 +1282,11 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			TrafficCounters[31] += RecieveCursor - TrafficStart
 			TrafficCounters[32] += 1
 			if #Events.Reliable[2] > 0 then
+				local Epoch = ListenerEpoch
 				for _, Listener in Events.Reliable[2] do
+					if ListenerEpoch ~= Epoch and table.find(Events.Reliable[2], Listener) == nil then continue end
 					SerdesEvent = "Note"
-					local ListenerRan, ListenerFailure = pcall(Listener, Player, Value)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Player, Value)
 					if not ListenerRan and not ListenerFailed(Player, "Note", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 				end
 			else
@@ -1367,9 +1375,11 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		if Index == 1 then
 			local Value: number = SerdesFunctions.ReadEVENT_Ping()
 			TrafficCounters[24] += 1
+			local Epoch = ListenerEpoch
 			for _, Listener in Events.Unreliable[1] do
+				if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[1], Listener) == nil then continue end
 				SerdesEvent = "Ping"
-				local ListenerRan, ListenerFailure = pcall(Listener, Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "Ping", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		else
@@ -1414,16 +1424,19 @@ local Returns = table.freeze({
 			local Listeners = table.clone(Events.Reliable[0])
 			table.insert(Listeners, Listener)
 			Events.Reliable[0] = Listeners
-			for Index, Arguments in Queue.Reliable[0] do
-				RunListener("Byte", Listener, table.unpack(Arguments, 1, Arguments.n))
-			end
+			local Pending = Queue.Reliable[0]
 			Queue.Reliable[0] = {}
+			for _, Arguments in Pending do
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+				if not ListenerRan and not ListenerFailed(Arguments[1], "Byte", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+			end
 			return function (): ()
 				local Index = table.find(Events.Reliable[0], Listener)
 				if Index ~= nil then
 					local Listeners = table.clone(Events.Reliable[0])
 					table.remove(Listeners, Index)
 					Events.Reliable[0] = Listeners
+					ListenerEpoch += 1
 				end
 			end
 		end
@@ -1548,6 +1561,7 @@ local Returns = table.freeze({
 					local Listeners = table.clone(Events.Unreliable[1])
 					table.remove(Listeners, Index)
 					Events.Unreliable[1] = Listeners
+					ListenerEpoch += 1
 				end
 			end
 		end
@@ -1616,16 +1630,19 @@ local Returns = table.freeze({
 			local Listeners = table.clone(Events.Reliable[2])
 			table.insert(Listeners, Listener)
 			Events.Reliable[2] = Listeners
-			for Index, Arguments in Queue.Reliable[2] do
-				RunListener("Note", Listener, table.unpack(Arguments, 1, Arguments.n))
-			end
+			local Pending = Queue.Reliable[2]
 			Queue.Reliable[2] = {}
+			for _, Arguments in Pending do
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+				if not ListenerRan and not ListenerFailed(Arguments[1], "Note", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+			end
 			return function (): ()
 				local Index = table.find(Events.Reliable[2], Listener)
 				if Index ~= nil then
 					local Listeners = table.clone(Events.Reliable[2])
 					table.remove(Listeners, Index)
 					Events.Reliable[2] = Listeners
+					ListenerEpoch += 1
 				end
 			end
 		end

@@ -11,7 +11,7 @@ local Builder = require("../Modules/Builder")
 local Decode = require("./Decode")
 local Fragments = require("./Fragments")
 local Generators = require("./Generators")
-local Listeners = require("./Listener")
+local Listeners = require("./Listeners")
 local Parser = require("../Parser")
 local Prefabs = require("./Prefabs")
 local Queues = require("./Queue")
@@ -141,12 +141,12 @@ function Declarations.Event(Declaration: Parser.Event)
 		local ContextArguments = `Listener: ({State.Context == "Server" and "Player: Player, " or ""}{Values}) -> ()`
 		local Sender = if State.Context == "Server" then "Player, " else ""
 
-		local ListenerOptions: Listeners.Options = {
+		local Event: Listeners.Event = {
 			Name = Declaration.Name,
 			Context = State.Context,
+			Connection = Connection,
 			IsSync = IsSync,
-			Path = IsSingle and Connection or "Listener",
-			Validate = IsSync and State.Options.SyncValidation == true,
+			Validating = State.Options.SyncValidation == true,
 		}
 
 		--> Read before the payload, because that is the order it was written in. The DECISION comes
@@ -185,6 +185,7 @@ function Declarations.Event(Declaration: Parser.Event)
 				:Line(`local Listeners = table.clone({Connection})`)
 				:Line("table.remove(Listeners, Index)")
 				:Line(`{Connection} = Listeners`)
+				:Line("ListenerEpoch += 1")
 				:End()
 		end
 
@@ -195,12 +196,12 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> predicted locally is delivered exactly as one received from the network would be.
 		local function Deliver(Target: Blocks.Block, Payload: string)
 			local ListenerArguments = `{Sender}{Payload}`
-			local Call = Listeners.Call(ListenerOptions, ListenerArguments)
+			local Call = Listeners.Call(Event, Connection, ListenerArguments, "Player", true)
 			if not IsReliable then
 				if IsSingle then
 					Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent):End()
 				else
-					Target:Iterator("_", "Listener", Connection):Lines(Call.Content, Target.Indent):End()
+					Listeners.Each(Target, Event, ListenerArguments)
 				end
 
 				return
@@ -210,10 +211,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			if IsSingle then
 				Bound = Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent)
 			else
-				Bound = Target:Compare(`#{Connection}`, "0", "Greater")
-					:Iterator("_", "Listener", Connection)
-					:Lines(Call.Content, Target.Indent + 1)
-					:End()
+				Bound = Listeners.Each(Target:Compare(`#{Connection}`, "0", "Greater"), Event, ListenerArguments)
 			end
 
 			Queues.Enqueue(Bound:Branch("Default"), State.Context, Queue, ListenerArguments, Declaration.Name):End()
@@ -222,11 +220,11 @@ function Declarations.Event(Declaration: Parser.Event)
 		Deliver(Block, InnerArguments)
 
 		if IsReliable then
-			Listener = BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true))
-				:Iterator("Index", "Arguments", Queue)
-				:Line(Listeners.Replay(ListenerOptions))
-				:End()
-				:Line(`{Queue} = \{}`)
+			Listener = Listeners.Replay(
+				BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true)),
+				Event,
+				Queue
+			)
 				:Lines(Disconnect.Content, 1)
 				:End()
 		else

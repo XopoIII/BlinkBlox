@@ -364,6 +364,10 @@ local Events: any = {
     Unreliable = table.create(256)
 }
 
+--> Counts disconnects from Many events, so a dispatch can tell in one comparison whether a listener
+--> it is about to call may have gone since it started. See `Each` in src/Generator/Listeners.luau.
+local ListenerEpoch = 0
+
 local Queue: any = {
     Reliable = table.create(256),
     Unreliable = table.create(256)
@@ -608,7 +612,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			local Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number } = SerdesFunctions.ReadEVENT_TestEvent()
 			if Events.Unreliable[0] ~= nil then
 				SerdesEvent = "TestEvent"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[0], Value1, Value2, Value3, Value4)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[0], Value1, Value2, Value3, Value4)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		else

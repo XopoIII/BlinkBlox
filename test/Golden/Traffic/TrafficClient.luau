@@ -364,6 +364,10 @@ local Events: any = {
     Unreliable = table.create(256)
 }
 
+--> Counts disconnects from Many events, so a dispatch can tell in one comparison whether a listener
+--> it is about to call may have gone since it started. See `Each` in src/Generator/Listeners.luau.
+local ListenerEpoch = 0
+
 local Queue: any = {
     Reliable = table.create(256),
     Unreliable = table.create(256)
@@ -801,9 +805,11 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		if Index == 0 then
 			local Value: number = SerdesFunctions.ReadEVENT_Blip()
 			TrafficCounters[20] += 1
+			local Epoch = ListenerEpoch
 			for _, Listener in Events.Unreliable[0] do
+				if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[0], Listener) == nil then continue end
 				SerdesEvent = "Blip"
-				local ListenerRan, ListenerFailure = pcall(Listener, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 2 then
@@ -813,9 +819,11 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			local Value: number = SerdesFunctions.ReadEVENT_Seq()
 			TrafficCounters[28] += 1
 			if OrderAccept(2, OrderIdentifier) == true then
+				local Epoch = ListenerEpoch
 				for _, Listener in Events.Unreliable[2] do
+					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[2], Listener) == nil then continue end
 					SerdesEvent = "Seq"
-					local ListenerRan, ListenerFailure = pcall(Listener, Value)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
@@ -828,9 +836,11 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			TrafficCounters[35] += RecieveCursor - TrafficStart
 			TrafficCounters[36] += 1
 			if OrderAccept(3, OrderIdentifier) == true then
+				local Epoch = ListenerEpoch
 				for _, Listener in Events.Unreliable[3] do
+					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[3], Listener) == nil then continue end
 					SerdesEvent = "Trail"
-					local ListenerRan, ListenerFailure = pcall(Listener, Value)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
@@ -883,10 +893,11 @@ local Returns = table.freeze({
 				warn("[BlinkBlox]: \"Push\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
 			Events.Reliable[1] = Listener
-			for Index, Arguments in Queue.Reliable[1] do
+			local Pending = Queue.Reliable[1]
+			Queue.Reliable[1] = {}
+			for _, Arguments in Pending do
 				Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
 			end
-			Queue.Reliable[1] = {}
 			return function (): ()
 				if Events.Reliable[1] == Listener then
 					Events.Reliable[1] = nil
@@ -905,6 +916,7 @@ local Returns = table.freeze({
 					local Listeners = table.clone(Events.Unreliable[0])
 					table.remove(Listeners, Index)
 					Events.Unreliable[0] = Listeners
+					ListenerEpoch += 1
 				end
 			end
 		end
@@ -939,6 +951,7 @@ local Returns = table.freeze({
 					local Listeners = table.clone(Events.Unreliable[2])
 					table.remove(Listeners, Index)
 					Events.Unreliable[2] = Listeners
+					ListenerEpoch += 1
 				end
 			end
 		end
@@ -966,6 +979,7 @@ local Returns = table.freeze({
 					local Listeners = table.clone(Events.Unreliable[3])
 					table.remove(Listeners, Index)
 					Events.Unreliable[3] = Listeners
+					ListenerEpoch += 1
 				end
 			end
 		end

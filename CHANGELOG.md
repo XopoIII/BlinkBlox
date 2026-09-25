@@ -7,7 +7,7 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
-## Unreleased
+## 0.38.0 — 2026-09-26
 
 A check that committed output still matches its schema, a game can hear which player's event set off
 a listener that threw, a module can come up in a place where no server module runs, a game can see
@@ -47,8 +47,7 @@ becomes a stream: **recompile both modules** of such a schema.
     of that second counted into the next call. A player who has already left is reported at once
     with `Count` 1.
   - It runs on a thread of its own, so one that yields or throws does not disturb decoding.
-  - With a handler installed the server prints none of those errors, and a `Sync` listener replayed
-    from the queue no longer throws into the code that called `.On`. Without one, nothing changes: a
+  - With a handler installed the server prints none of those errors. Without one, nothing changes: a
     `Sync` listener's error is raised on a thread of its own, an `Async` one's on the thread it ran
     on, and a function's is the same `"Name" encountered an error, ...` warning.
   - The client module has it too, accepted and ignored, as it has `SetRateLimitHandler`: a client's
@@ -161,8 +160,9 @@ becomes a stream: **recompile both modules** of such a schema.
 
 ### Changed
 
-- An `Async` listener on the server, and every listener replayed from the server's queue, is called
-  through `RunListener`, which calls it bare when no handler is installed. An event, function, scope
+- An `Async` listener on the server, live or replayed from the queue, is called through
+  `RunListener`, which calls it bare when no handler is installed. A replayed `Sync` one is guarded
+  as on receipt, which 0.37.1 made true on both sides. An event, function, scope
   or type may not be named `SetListenerErrorHandler`, and a type-pack element may not be named
   `ListenerFailed` or `RunListener`.
 - A top-level event, function, scope or exported type named `Remotes` -- in the spelling the casing
@@ -211,6 +211,28 @@ Grabby Pit can drop several things it built for itself, once it is on this relea
   under `Events.Crawls` and on the unreliable channel.
 
 No handler signature, `Reason` or refusal route changes in any of this.
+## 0.37.1 — 2026-09-25
+
+Two listener fixes, found by setting this fork's dispatch beside the Luau signal libraries
+(stravant/goodsignal, jiwonz/luau-signal) and Roblox's own reactive `signals`. None of them was worth
+taking as a library: goodsignal's reused runner thread is what `Spawn` has done since 0.23.0, and
+`signals` is reactive state, not events. **The wire format and the schema signature do not change**;
+regenerate to pick the fixes up.
+
+### Fixed
+
+- **A queue replayed to a `Sync` listener was unguarded.** When `On` connected, each event queued
+  before it was handed to the listener in a bare call, where one arriving later is caught and
+  reported on a thread of its own. A listener that threw on a queued event threw out of `On` after it
+  had been bound: the caller never got its disconnect, the rest of the queue was never delivered, and
+  the next `On` was handed the same queue again. The queue is now taken before the first event is
+  replayed, and each call is guarded as on receipt.
+- **A listener disconnected during a dispatch was still called.** A `Many` event's dispatch walks the
+  list it started with, which is what makes a self-disconnecting listener safe; it also reached a
+  listener that an earlier one had just disconnected. It is now passed over, as `RBXScriptSignal`
+  does. The check costs one comparison per listener until something disconnects mid-dispatch.
+  Grabby Pit: a listener that disconnects a later one of the same event now stops that one receiving
+  the event in flight, where it used to receive it once more.
 
 ## 0.37.0 — 2026-09-25
 

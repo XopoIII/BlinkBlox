@@ -103,6 +103,80 @@ return function(Pair: Isolated.Pair, Kit: Kit)
 		end
 	end)
 
+	--> 0.37.1 guarded the replay, and 0.38.0's handler routed it through `RunListener`, which calls a
+	--> listener bare with no handler installed. Merged, a Sync listener replayed on the server is
+	--> guarded either way: with no handler its error is raised on a thread of its own, and `.On` still
+	--> connects, hands the rest of the queue over, and spends it once.
+	RunClosure("Without a handler, a Sync listener that throws on a replayed event still connects", function()
+		Kit.Reset()
+
+		Kit.Send("Late", 150, 2)
+		Kit.Settle()
+
+		local Seen: { number } = {}
+		local Connected, Disconnect = pcall(Server.Late.On, function(_Player, Value)
+			table.insert(Seen, Value)
+			if Value >= 100 then
+				error(`Late refused {Value}`, 0)
+			end
+		end)
+
+		if not Connected then
+			ErrorPrint(`Failed "Replay, no handler": connecting threw {Disconnect}.`)
+			return
+		end
+
+		Disconnect()
+		local Again = 0
+		Server.Late.On(function()
+			Again += 1
+		end)()
+
+		if #Seen ~= 2 or Again ~= 0 then
+			ErrorPrint(`Failed "Replay, no handler": replayed {#Seen} of 2, then {Again} again, expected 2 then 0.`)
+		end
+
+		if #Kit.Raised ~= 1 or Kit.Raised[1] ~= "Late refused 150" then
+			ErrorPrint(`Failed "Replay, no handler": raised [{table.concat(Kit.Raised, " | ")}].`)
+		end
+	end)
+
+	--> The server's dispatch skips a listener disconnected mid-dispatch as the client's does, and a
+	--> listener after it that throws is still reported against the player who sent the event.
+	RunClosure("On the server, a listener disconnected mid-dispatch is skipped, and the next is reported", function()
+		Kit.Reset()
+		local Reports = Kit.Record()
+
+		local Order: { string } = {}
+		local DisconnectSecond: () -> ()
+		local DisconnectFirst = Server.SyncMany.On(function()
+			table.insert(Order, "first")
+			DisconnectSecond()
+		end)
+		DisconnectSecond = Server.SyncMany.On(function()
+			table.insert(Order, "second")
+		end)
+		local DisconnectThird = Server.SyncMany.On(function(_Player, Value)
+			table.insert(Order, "third")
+			error(`third refused {Value}`, 0)
+		end)
+
+		Kit.Send("SyncMany", 5)
+		Kit.Settle()
+		DisconnectFirst()
+		DisconnectThird()
+		Server.SetListenerErrorHandler(nil)
+
+		if table.concat(Order, ", ") ~= "first, third" then
+			ErrorPrint(`Failed "Server skip": one event reached {table.concat(Order, ", ")}, expected first, third.`)
+		end
+
+		local Report = Reports[1]
+		if #Reports ~= 1 or Report.Player ~= Shared.Player or Report.Failure ~= "third refused 5" then
+			ErrorPrint(`Failed "Server skip": {#Reports} report(s), expected third's, against the sender.`)
+		end
+	end)
+
 	RunClosure("A listener that throws after its player left is reported at once, each time", function()
 		Kit.Reset()
 		local Reports = Kit.Record()
