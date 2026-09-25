@@ -14,7 +14,7 @@ local Decode = {}
 --- spends a token from it. Returns nil when nothing limits this declaration, in which case no guard
 --- is emitted at all -- an unlimited schema produces exactly the code it always did.
 ---
---- Server-only: the client trusts the server, and the bucket state lives in the server template.
+--- Server-only: the client trusts the server, and the bucket state lives in Templates/Limits.luau.
 function Decode.RateGuardExpression(Value: { Rate: number?, Burst: number? }, Name: string): string?
 	if State.Context ~= "Server" then
 		return nil

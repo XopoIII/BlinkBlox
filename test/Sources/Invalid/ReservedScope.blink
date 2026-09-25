@@ -1,0 +1,8 @@
+-- expect E3005
+-- A scope is a member of the module like an event, so it may not take a member's name either.
+option ClientOutput = "../../Network/ReservedScopeClient.luau"
+option ServerOutput = "../../Network/ReservedScopeServer.luau"
+
+scope StepReplication {
+    type Inner = u8
+}

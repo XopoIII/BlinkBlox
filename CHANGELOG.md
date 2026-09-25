@@ -7,12 +7,39 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
-## Unreleased
+## 0.37.0 — 2026-09-25
 
-**The wire format does not change.**
+A game can act on every packet the server refuses. **The wire format does not change, and neither
+does the schema signature**: a 0.37.0 module talks to a 0.36.x one built from the same schema, and
+`WIRE_VERSION` stays 2.
 
 ### Added
 
+- **`SetPacketDropHandler(Handler?)`** on the server module. A packet the server refuses before it
+  decodes it, or cuts short at the event cap, used to be a warning and nothing more: the output could
+  see the player, the game could not, so a modified client could be read about and never struck or
+  banned. The handler is called as `(Player, Reason, Refused, Detail)`:
+  - `Reason` is `"Malformed"` (the remote's arguments are not a buffer and a table), `"Oversized"`
+    (over `MaxPacketSize`), `"Budget"` (over the inbound byte budget), `"Instances"` (over
+    `MaxInstancesPerPacket`) or `"Events"` (`MaxEventsPerPacket` events decoded, the rest dropped).
+  - `Refused` is how many packets of that reason the call stands for. It is called at most once a
+    second per player and reason, on the schedule the warnings already kept.
+  - `Detail` is the packet's length in bytes for `Oversized` and `Budget`, its instance count for
+    `Instances`, the events decoded for `Events`, and 0 for `Malformed`.
+  - It runs on a thread of its own, so one that yields or throws does not disturb decoding.
+  - With a handler installed those warnings are not printed, and `Budget` goes to it instead of to
+    the rate-limit handler. Without one, nothing changes: the same warnings, word for word, and
+    `Budget` still reaches `SetRateLimitHandler` with `Event` nil.
+  - The client module has it too, accepted and ignored, as it has `SetRateLimitHandler`. It is
+    stubbed in edit mode, follows `Casing` (`setPacketDropHandler`, `set_packet_drop_handler`), and
+    is a reserved top-level name (`E3005`).
+- **`MaxInstancesPerPacket` may be 0**, for a game whose clients send no Instance: the server then
+  refuses any packet carrying one before reading it. Every other numeric option is still at least 1.
+- **`E3031`**: with `MaxInstancesPerPacket = 0`, a client-sent declaration that carries an `Instance`
+  or `unknown` is refused, since none of its packets could arrive. Client-sent means the data of a
+  `From: Client` event or function, and the return of a `From: Server` function, which the client
+  sends back on the same remote. An offending declaration in an imported file is reported at its
+  `import`.
 - The Studio plugin's editor completes more than keywords and types. `option` is offered at the
   start of a line, followed by every option's name and, where the language fixes it, its value.
   Inside an `event` or a `function` a line starts with the fields it takes and has not been given
@@ -29,8 +56,26 @@ startup instead of misreading packets.
 
 ### Fixed
 
+- The TypeScript declarations had no `SetRateLimitHandler` or `SetDecodeErrorHandler`, so a
+  roblox-ts project reached them through a cast. They are declared now, beside
+  `SetPacketDropHandler`, in the module's `Casing`.
 - `--help` said `--compact` prints the full message after the compacted one. It prints only the one
   line.
+- Under `option Casing = Camel` or `Snake`, a top-level event, function or scope named in that
+  spelling of a module member -- `stepReplication`, `set_packet_drop_handler` -- compiled and replaced
+  the member in the returned table, since the reserved check compared the `Pascal` spelling only. And
+  a `scope StepReplication` passed even under `Pascal`, since scopes were never checked. Both are
+  `E3005` now; a name in some other casing's spelling still compiles, since it collides with nothing.
+- A top-level type named `Entry`, `Queue`, `BufferSave`, `Invocations` or `DropReason` redefined a type
+  alias the runtime declares for itself, and the generated module failed its own `--!strict` check.
+  The runtime's aliases are spelled `BLINK_*` now, and a type of one of those names is `E3005`.
+
+### Changed
+
+- The server's limits -- rate buckets, calls in flight, the inbound budget and how refusals are
+  reported -- moved from `src/Templates/Server.luau`, which had reached the 500-line cap, into
+  `src/Templates/Limits.luau`. Apart from the new handler, the generated module holds the same code,
+  in a different order.
 
 ### Documentation
 
@@ -40,10 +85,11 @@ startup instead of misreading packets.
   the names `E3005` covers, and the release `E3030` arrived in. What they had left out: `Concurrency`
   in the server's check order and the rate-limit handler, send-side length checks below a minimum,
   `f24`'s subnormals, trailing commas and strict modules. The version strings, the benchmark tables
-  and the wire table are brought up to 0.36.2.
+  and the wire table are brought up to date.
 - `llms-full.txt` and `llms-small.txt` follow the sidebar's order, with the benchmarks and the
   changelog last in the full file and left out of the small one. The small one keeps its notes,
   which carry rules, and `llms.txt` carries a short brief.
+
 
 ## 0.36.2 — 2026-09-25
 

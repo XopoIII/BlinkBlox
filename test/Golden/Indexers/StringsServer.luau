@@ -34,18 +34,18 @@ local RecieveInstanceCursor = 0
 
 local Null = newproxy()
 
-type Entry = {
+type BLINK_ENTRY = {
     value: any,
-    next: Entry?
+    next: BLINK_ENTRY?
 }
 
-type Queue = {
-    head: Entry?,
-    tail: Entry?,
+type BLINK_QUEUE = {
+    head: BLINK_ENTRY?,
+    tail: BLINK_ENTRY?,
     count: number
 }
 
-type BufferSave = {
+type BLINK_BUFFER_SAVE = {
     Size: number, 
     Cursor: number, 
     Buffer: buffer, 
@@ -85,7 +85,7 @@ local function Read(Bytes: number)
     return Offset
 end
 
-local function Save(): BufferSave
+local function Save(): BLINK_BUFFER_SAVE
     return {
         Size = SendSize,
         Cursor = SendCursor,
@@ -94,7 +94,7 @@ local function Save(): BufferSave
     }
 end
 
-local function Load(Save: BufferSave?)
+local function Load(Save: BLINK_BUFFER_SAVE?)
     if Save then
         SendSize = Save.Size
         SendCursor = Save.Cursor
@@ -157,7 +157,7 @@ local function Allocate(Bytes: number)
     return SendOffset
 end
 
-local function CreateQueue(): Queue
+local function CreateQueue(): BLINK_QUEUE
     return {
         head = nil,
         tail = nil,
@@ -165,7 +165,7 @@ local function CreateQueue(): Queue
     }
 end
 
-local function Pop(queue: Queue): any
+local function Pop(queue: BLINK_QUEUE): any
     local head = queue.head
     if head == nil then
         return
@@ -181,8 +181,8 @@ local function Pop(queue: Queue): any
     return head.value
 end
 
-local function Push(queue: Queue, value: any)
-    local entry: Entry = {
+local function Push(queue: BLINK_QUEUE, value: any)
+    local entry: BLINK_ENTRY = {
         value = value,
         next = nil
     }
@@ -254,7 +254,7 @@ end
 --> the moment the call is settled, so a timer only ever fires for the call that armed it. At most
 --> thirty-two calls are outstanding at once, as before: more than that with none answered is
 --> already pathological, and failing here beats queueing without bound.
-type Invocations = {
+type BLINK_INVOCATIONS = {
     Next: number,
     Outstanding: number,
     --> The function index each claimed id was claimed for.
@@ -263,7 +263,7 @@ type Invocations = {
     Timers: {[number]: thread},
 }
 
-local function CreateInvocations(): Invocations
+local function CreateInvocations(): BLINK_INVOCATIONS
     return {
         Next = 0,
         Outstanding = 0,
@@ -273,7 +273,7 @@ local function CreateInvocations(): Invocations
     }
 end
 
-local function ClaimInvocation(State: Invocations, Index: number): number
+local function ClaimInvocation(State: BLINK_INVOCATIONS, Index: number): number
     if State.Outstanding >= 32 then
         error("[BlinkBlox]: 32 calls are already awaiting a response, this call has been dropped.")
     end
@@ -291,7 +291,7 @@ end
 
 --> Settles a call: its id goes back and its timer is cancelled. Safe to call twice, and on a state
 --> that is already gone -- a player who left takes theirs with them.
-local function ReleaseInvocation(State: Invocations?, Identifier: number)
+local function ReleaseInvocation(State: BLINK_INVOCATIONS?, Identifier: number)
     if not State or State.Claimed[Identifier] == nil then
         return
     end
@@ -307,7 +307,7 @@ local function ReleaseInvocation(State: Invocations?, Identifier: number)
     end
 end
 
-local function ParkInvocation(State: Invocations?, Identifier: number, Thread: thread)
+local function ParkInvocation(State: BLINK_INVOCATIONS?, Identifier: number, Thread: thread)
     if State and State.Claimed[Identifier] ~= nil then
         State.Threads[Identifier] = Thread
     end
@@ -316,7 +316,7 @@ end
 --> The caller an answer is for, settled on the way out -- or nil when the id is not outstanding or
 --> was claimed by a different function. That second case is what a hostile client answering one
 --> function's call with another function's reply runs into.
-local function TakeInvocation(State: Invocations?, Identifier: number, Index: number): thread?
+local function TakeInvocation(State: BLINK_INVOCATIONS?, Identifier: number, Index: number): thread?
     if not State or State.Claimed[Identifier] ~= Index then
         return nil
     end
@@ -335,7 +335,7 @@ end
 --> be the callee, since a client that never replies is ordinary: it left, it crashed, it was
 --> exploited. `Expired` runs after the caller has been failed; the server uses it to let go of a
 --> player who is gone.
-local function TimeoutInvocation(State: Invocations, Identifier: number, Seconds: number, Name: string, Expired: (() -> ())?)
+local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Name: string, Expired: (() -> ())?)
     local Thread = State.Threads[Identifier]
     if not Thread then
         return
@@ -444,6 +444,7 @@ if not RunService:IsRunning() then
 		StepReplication = NOOP,
 		SetRateLimitHandler = NOOP,
 		SetDecodeErrorHandler = NOOP,
+		SetPacketDropHandler = NOOP,
 	TestEvent = {
 		Fire = NOOP,
 		FireAll = NOOP,
@@ -489,7 +490,7 @@ end
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
 
-local PlayersMap: {[Player]: BufferSave} = {}
+local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
 
 --> How many rows a polled event's queue holds on the server before it stops taking more. Clients fill
 --> it, and a game that polls an event rarely, or has not got round to polling it at all, would let
@@ -551,87 +552,62 @@ local function ShouldReport(Player: Player, Kind: string): boolean
     return true
 end
 
---> INVOCATION STATE FOR FUNCTIONS THE SERVER CALLS, one set per player rather than the single set
---> Base.luau gives a client. Three separate reasons, and the second is the one that matters.
--->
---> Capacity: that set holds thirty-two outstanding calls in total. A server asking every client a
---> question would exhaust it on the thirty-third player and stay exhausted.
--->
---> Identity: the invocation id is a u8, and the reply carries it back. With one id space shared
---> across players, a reply from player A tagged with an id belonging to a call made to player B would
---> resume B's caller with A's data -- a client choosing which of the server's suspended threads to
---> answer, and what to tell it. Keying by player makes that impossible rather than merely checked:
---> an id from A can only ever be looked up in A's own set.
--->
---> Lifetime: a player who leaves owes an answer to every call outstanding to them, and those callers
---> have to be failed rather than left to sit out the timeout.
-local PlayerInvocations: {[Player]: Invocations} = {}
+--> PACKET REFUSALS, for the game to act on. A packet refused before it is decoded -- malformed
+--> arguments, oversized, over the inbound budget, too many instances -- or cut short by the event cap
+--> is something only a modified client sends, and a game may want to strike or ban for it. The
+--> warning alone told the output, not the game. `Refused` is how many packets of that kind the call
+--> stands for, once a second per player and reason. `Detail` is the packet's byte length for
+--> Oversized and Budget, its instance count for Instances, the events decoded for Events, 0 otherwise.
+--> With a handler installed the warnings are not printed, and Budget no longer reaches the rate-limit
+--> handler: the game has said where it wants to hear about packets.
+type BLINK_DROP_REASON = "Malformed" | "Oversized" | "Budget" | "Instances" | "Events"
+local DropHandler: ((Player: Player, Reason: BLINK_DROP_REASON, Refused: number, Detail: number) -> ())? = nil
+local Drops: {[Player]: {[string]: number}} = {}
 
-local function InvokePlayer(Player: Player, Index: number): number
-    --> Checked before an id is claimed. A player who already left gets no answer from anyone, and
-    --> PlayerRemoving has cleared their set, so claiming here would put back a set nothing removes
-    --> again and park the caller for the whole timeout to learn what is already known.
-    if not Player:IsDescendantOf(Players) then
-        error(`[BlinkBlox]: Cannot invoke {Player.Name}, they are no longer in the game.`)
-    end
-
-    local State = PlayerInvocations[Player]
-    if not State then
-        State = CreateInvocations()
-        PlayerInvocations[Player] = State
-    end
-
-    return ClaimInvocation(State, Index)
+local function SetPacketDropHandler(Handler: ((Player: Player, Reason: BLINK_DROP_REASON, Refused: number, Detail: number) -> ())?)
+    DropHandler = Handler
 end
 
---> The per-player TimeoutInvocation. A call made while the player was on their way out -- from a
---> PlayerRemoving handler, or a caller retrying the failure it was just handed -- recreates a set
---> PlayerRemoving has already cleared, and nothing else would ever remove it. The timer is the one
---> thing certain to run afterwards, so it is what lets go.
-local function TimeoutPlayerInvocation(Player: Player, Identifier: number, Seconds: number, Name: string)
-    local State = PlayerInvocations[Player]
-    if not State then
+--> The warnings as they were before the handler existed, word for word. Budget has its own, in
+--> InboundAccept, since it names the budget.
+local DROP_WARNINGS: {[string]: string} = {
+    Malformed = "Dropped a malformed packet from %s.",
+    Oversized = "Dropped an oversized packet from %s.",
+    Instances = "Dropped a packet with too many instances from %s.",
+    Events = "Dropped the rest of a packet from %s, too many events.",
+}
+
+local function ReportDrop(Player: Player, Reason: BLINK_DROP_REASON, Detail: number)
+    local Counts = Drops[Player]
+    if not Counts then
+        if Player.Parent == nil then
+            return
+        end
+
+        Counts = {}
+        Drops[Player] = Counts
+    end
+
+    local Refused = (Counts[Reason] or 0) + 1
+    if not ShouldReport(Player, Reason) then
+        Counts[Reason] = Refused
         return
     end
 
-    TimeoutInvocation(State, Identifier, Seconds, `"{Name}" was never answered by {Player.Name}`, function()
-        if not Player:IsDescendantOf(Players) and PlayerInvocations[Player] == State then
-            PlayerInvocations[Player] = nil
-        end
-    end)
-end
-
-Players.PlayerRemoving:Connect(function(Player)
-    PlayersMap[Player] = nil
-    RateBuckets[Player] = nil
-    InboundBudgets[Player] = nil
-    Reports[Player] = nil
-    InFlight[Player] = nil
-    InFlightRefused[Player] = nil
-
-    --> Every call outstanding to this player is now unanswerable. Failing them here rather than
-    --> leaving them to time out matters because the thread on the other end is game code holding a
-    --> lock, a queue slot or a yielded request handler. Their timers go with them.
-    local State = PlayerInvocations[Player]
-    PlayerInvocations[Player] = nil
-
-    if State then
-        local Threads = table.clone(State.Threads)
-        for Identifier in table.clone(State.Claimed) do
-            ReleaseInvocation(State, Identifier)
-        end
-
-        for _, Thread in Threads do
-            if coroutine.status(Thread) == "suspended" then
-                task.spawn(Thread, false)
-            end
-        end
+    Counts[Reason] = 0
+    local Handler = DropHandler
+    if Handler then
+        --> Spawned: a handler that throws or yields must not reach back into the connection.
+        Spawn(Handler, Player, Reason, Refused, Detail)
+    else
+        warn(`[BlinkBlox]: {string.format(DROP_WARNINGS[Reason], Player.Name)}`)
     end
-end)
+end
 
 --> Installs the callback told about refused events: at most once per player per event per second,
 --> with `Refused` the number of refusals that report stands for. `Event` is nil when what was refused
---> was whole packets over the inbound budget rather than one event. Nothing is kicked automatically:
+--> was whole packets over the inbound budget rather than one event, which is reported here only while
+--> no packet-drop handler is installed. Nothing is kicked automatically:
 --> a false positive under server lag would eject a legitimate player, and whether that is the right
 --> response is a decision only the game can make.
 local function SetRateLimitHandler(Handler: ((Player: Player, Event: string?, Refused: number) -> ())?)
@@ -665,7 +641,8 @@ end
 --> lookup rather than a decode. The burst is a whole second of budget because the clock here is the
 --> server's: after a hitch Roblox delivers the queued packets together, and a refused reliable packet
 --> takes every event in it along. Reported on the same once-a-second schedule as RateAccept.
-local function InboundAccept(Player: Player, Cost: number, Rate: number, Burst: number): boolean
+local function InboundAccept(Player: Player, Length: number, Floor: number, Rate: number, Burst: number): boolean
+    local Cost = math.max(Length, Floor)
     if Player.Parent == nil then
         InboundBudgets[Player] = nil
         return false
@@ -696,12 +673,20 @@ local function InboundAccept(Player: Player, Cost: number, Rate: number, Burst: 
 
     Budget[3] = Now
     Budget[4] = 0
-    warn(`[BlinkBlox]: Dropped packets from {Player.Name} over the inbound budget of {Rate} bytes a second, {Refused} refused.`)
 
+    --> Spawned, either handler: this runs in the remote's connection, outside any pcall, and a
+    --> throwing handler would take the connection's thread with it.
+    local Dropped = DropHandler
+    if Dropped then
+        Spawn(Dropped, Player, "Budget" :: BLINK_DROP_REASON, Refused, Length)
+        return false
+    end
+
+    --> Without a packet-drop handler, as before it existed: a warning, and the rate-limit handler
+    --> with `Event` nil. Kept so a game written against 0.27 to 0.36 hears what it always heard.
+    warn(`[BlinkBlox]: Dropped packets from {Player.Name} over the inbound budget of {Rate} bytes a second, {Refused} refused.`)
     local Handler = RateHandler
     if Handler then
-        --> Spawned: this runs in the remote's connection, outside any pcall, and a throwing handler
-        --> would take the connection's thread with it.
         Spawn(Handler, Player, nil, Refused)
     end
 
@@ -824,6 +809,86 @@ local function ConcurrencyRelease(Player: Player, Index: number)
     end
 end
 
+
+--> INVOCATION STATE FOR FUNCTIONS THE SERVER CALLS, one set per player rather than the single set
+--> Base.luau gives a client. Three separate reasons, and the second is the one that matters.
+-->
+--> Capacity: that set holds thirty-two outstanding calls in total. A server asking every client a
+--> question would exhaust it on the thirty-third player and stay exhausted.
+-->
+--> Identity: the invocation id is a u8, and the reply carries it back. With one id space shared
+--> across players, a reply from player A tagged with an id belonging to a call made to player B would
+--> resume B's caller with A's data -- a client choosing which of the server's suspended threads to
+--> answer, and what to tell it. Keying by player makes that impossible rather than merely checked:
+--> an id from A can only ever be looked up in A's own set.
+-->
+--> Lifetime: a player who leaves owes an answer to every call outstanding to them, and those callers
+--> have to be failed rather than left to sit out the timeout.
+local PlayerInvocations: {[Player]: BLINK_INVOCATIONS} = {}
+
+local function InvokePlayer(Player: Player, Index: number): number
+    --> Checked before an id is claimed. A player who already left gets no answer from anyone, and
+    --> PlayerRemoving has cleared their set, so claiming here would put back a set nothing removes
+    --> again and park the caller for the whole timeout to learn what is already known.
+    if not Player:IsDescendantOf(Players) then
+        error(`[BlinkBlox]: Cannot invoke {Player.Name}, they are no longer in the game.`)
+    end
+
+    local State = PlayerInvocations[Player]
+    if not State then
+        State = CreateInvocations()
+        PlayerInvocations[Player] = State
+    end
+
+    return ClaimInvocation(State, Index)
+end
+
+--> The per-player TimeoutInvocation. A call made while the player was on their way out -- from a
+--> PlayerRemoving handler, or a caller retrying the failure it was just handed -- recreates a set
+--> PlayerRemoving has already cleared, and nothing else would ever remove it. The timer is the one
+--> thing certain to run afterwards, so it is what lets go.
+local function TimeoutPlayerInvocation(Player: Player, Identifier: number, Seconds: number, Name: string)
+    local State = PlayerInvocations[Player]
+    if not State then
+        return
+    end
+
+    TimeoutInvocation(State, Identifier, Seconds, `"{Name}" was never answered by {Player.Name}`, function()
+        if not Player:IsDescendantOf(Players) and PlayerInvocations[Player] == State then
+            PlayerInvocations[Player] = nil
+        end
+    end)
+end
+
+Players.PlayerRemoving:Connect(function(Player)
+    PlayersMap[Player] = nil
+    RateBuckets[Player] = nil
+    InboundBudgets[Player] = nil
+    Reports[Player] = nil
+    Drops[Player] = nil
+    InFlight[Player] = nil
+    InFlightRefused[Player] = nil
+
+    --> Every call outstanding to this player is now unanswerable. Failing them here rather than
+    --> leaving them to time out matters because the thread on the other end is game code holding a
+    --> lock, a queue slot or a yielded request handler. Their timers go with them.
+    local State = PlayerInvocations[Player]
+    PlayerInvocations[Player] = nil
+
+    if State then
+        local Threads = table.clone(State.Threads)
+        for Identifier in table.clone(State.Claimed) do
+            ReleaseInvocation(State, Identifier)
+        end
+
+        for _, Thread in Threads do
+            if coroutine.status(Thread) == "suspended" then
+                task.spawn(Thread, false)
+            end
+        end
+    end
+end)
+
 --> Writing a player's buffer back is only safe while that player is still in the game.
 --> A listener can yield between Load and Save -- a datastore call, a task.wait, any async work --
 --> and the player may leave inside that window. PlayerRemoving has already cleared their entry by
@@ -885,18 +950,18 @@ end
 RunService.Heartbeat:Connect(StepReplication)
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
 	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
-		if ShouldReport(Player, "Malformed") then warn(`[BlinkBlox]: Dropped a malformed packet from {Player.Name}.`) end
+		ReportDrop(Player, "Malformed", 0)
 		return
 	end
 	if buffer.len(Buffer) > 8192 then
-		if ShouldReport(Player, "Oversized") then warn(`[BlinkBlox]: Dropped an oversized packet from {Player.Name}.`) end
+		ReportDrop(Player, "Oversized", buffer.len(Buffer))
 		return
 	end
-	if not InboundAccept(Player, math.max(buffer.len(Buffer), 128), 65536, 65536) then
+	if not InboundAccept(Player, buffer.len(Buffer), 128, 65536, 65536) then
 		return
 	end
 	if #Instances > 256 then
-		if ShouldReport(Player, "Instances") then warn(`[BlinkBlox]: Dropped a packet with too many instances from {Player.Name}.`) end
+		ReportDrop(Player, "Instances", #Instances)
 		return
 	end
 	RecieveCursor = 0
@@ -921,7 +986,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	while (RecieveCursor < Size and Player.Parent ~= nil) do
 		DecodedEvents += 1
 		if DecodedEvents > 64 then
-			if ShouldReport(Player, "Events") then warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`) end
+			ReportDrop(Player, "Events", 64)
 			break
 		end
 		Decoding = -1
@@ -934,18 +999,18 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 end)
 Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
 	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
-		if ShouldReport(Player, "Malformed") then warn(`[BlinkBlox]: Dropped a malformed packet from {Player.Name}.`) end
+		ReportDrop(Player, "Malformed", 0)
 		return
 	end
 	if buffer.len(Buffer) > 8192 then
-		if ShouldReport(Player, "Oversized") then warn(`[BlinkBlox]: Dropped an oversized packet from {Player.Name}.`) end
+		ReportDrop(Player, "Oversized", buffer.len(Buffer))
 		return
 	end
-	if not InboundAccept(Player, math.max(buffer.len(Buffer), 128), 65536, 65536) then
+	if not InboundAccept(Player, buffer.len(Buffer), 128, 65536, 65536) then
 		return
 	end
 	if #Instances > 256 then
-		if ShouldReport(Player, "Instances") then warn(`[BlinkBlox]: Dropped a packet with too many instances from {Player.Name}.`) end
+		ReportDrop(Player, "Instances", #Instances)
 		return
 	end
 	RecieveCursor = 0
@@ -970,7 +1035,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	while (RecieveCursor < Size and Player.Parent ~= nil) do
 		DecodedEvents += 1
 		if DecodedEvents > 64 then
-			if ShouldReport(Player, "Events") then warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`) end
+			ReportDrop(Player, "Events", 64)
 			break
 		end
 		Decoding = -1
@@ -989,6 +1054,8 @@ local Returns = table.freeze({
 	SetRateLimitHandler = SetRateLimitHandler,
 
 	SetDecodeErrorHandler = SetDecodeErrorHandler,
+
+	SetPacketDropHandler = SetPacketDropHandler,
 
 	TestEvent = {
 		Fire = function(Player: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()

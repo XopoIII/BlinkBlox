@@ -187,6 +187,7 @@ Grammar.RESERVED = {
 	StepReplication = true,
 	SetRateLimitHandler = true,
 	SetDecodeErrorHandler = true,
+	SetPacketDropHandler = true,
 }
 
 --- Luau's built-in type names. A declared type becomes an exported Luau type of the same name, and

@@ -13,18 +13,18 @@ local RecieveInstanceCursor = 0
 
 local Null = newproxy()
 
-type Entry = {
+type BLINK_ENTRY = {
     value: any,
-    next: Entry?
+    next: BLINK_ENTRY?
 }
 
-type Queue = {
-    head: Entry?,
-    tail: Entry?,
+type BLINK_QUEUE = {
+    head: BLINK_ENTRY?,
+    tail: BLINK_ENTRY?,
     count: number
 }
 
-type BufferSave = {
+type BLINK_BUFFER_SAVE = {
     Size: number, 
     Cursor: number, 
     Buffer: buffer, 
@@ -64,7 +64,7 @@ local function Read(Bytes: number)
     return Offset
 end
 
-local function Save(): BufferSave
+local function Save(): BLINK_BUFFER_SAVE
     return {
         Size = SendSize,
         Cursor = SendCursor,
@@ -73,7 +73,7 @@ local function Save(): BufferSave
     }
 end
 
-local function Load(Save: BufferSave?)
+local function Load(Save: BLINK_BUFFER_SAVE?)
     if Save then
         SendSize = Save.Size
         SendCursor = Save.Cursor
@@ -136,7 +136,7 @@ local function Allocate(Bytes: number)
     return SendOffset
 end
 
-local function CreateQueue(): Queue
+local function CreateQueue(): BLINK_QUEUE
     return {
         head = nil,
         tail = nil,
@@ -144,7 +144,7 @@ local function CreateQueue(): Queue
     }
 end
 
-local function Pop(queue: Queue): any
+local function Pop(queue: BLINK_QUEUE): any
     local head = queue.head
     if head == nil then
         return
@@ -160,8 +160,8 @@ local function Pop(queue: Queue): any
     return head.value
 end
 
-local function Push(queue: Queue, value: any)
-    local entry: Entry = {
+local function Push(queue: BLINK_QUEUE, value: any)
+    local entry: BLINK_ENTRY = {
         value = value,
         next = nil
     }
@@ -233,7 +233,7 @@ end
 --> the moment the call is settled, so a timer only ever fires for the call that armed it. At most
 --> thirty-two calls are outstanding at once, as before: more than that with none answered is
 --> already pathological, and failing here beats queueing without bound.
-type Invocations = {
+type BLINK_INVOCATIONS = {
     Next: number,
     Outstanding: number,
     --> The function index each claimed id was claimed for.
@@ -242,7 +242,7 @@ type Invocations = {
     Timers: {[number]: thread},
 }
 
-local function CreateInvocations(): Invocations
+local function CreateInvocations(): BLINK_INVOCATIONS
     return {
         Next = 0,
         Outstanding = 0,
@@ -252,7 +252,7 @@ local function CreateInvocations(): Invocations
     }
 end
 
-local function ClaimInvocation(State: Invocations, Index: number): number
+local function ClaimInvocation(State: BLINK_INVOCATIONS, Index: number): number
     if State.Outstanding >= 32 then
         error("[BlinkBlox]: 32 calls are already awaiting a response, this call has been dropped.")
     end
@@ -270,7 +270,7 @@ end
 
 --> Settles a call: its id goes back and its timer is cancelled. Safe to call twice, and on a state
 --> that is already gone -- a player who left takes theirs with them.
-local function ReleaseInvocation(State: Invocations?, Identifier: number)
+local function ReleaseInvocation(State: BLINK_INVOCATIONS?, Identifier: number)
     if not State or State.Claimed[Identifier] == nil then
         return
     end
@@ -286,7 +286,7 @@ local function ReleaseInvocation(State: Invocations?, Identifier: number)
     end
 end
 
-local function ParkInvocation(State: Invocations?, Identifier: number, Thread: thread)
+local function ParkInvocation(State: BLINK_INVOCATIONS?, Identifier: number, Thread: thread)
     if State and State.Claimed[Identifier] ~= nil then
         State.Threads[Identifier] = Thread
     end
@@ -295,7 +295,7 @@ end
 --> The caller an answer is for, settled on the way out -- or nil when the id is not outstanding or
 --> was claimed by a different function. That second case is what a hostile client answering one
 --> function's call with another function's reply runs into.
-local function TakeInvocation(State: Invocations?, Identifier: number, Index: number): thread?
+local function TakeInvocation(State: BLINK_INVOCATIONS?, Identifier: number, Index: number): thread?
     if not State or State.Claimed[Identifier] ~= Index then
         return nil
     end
@@ -314,7 +314,7 @@ end
 --> be the callee, since a client that never replies is ordinary: it left, it crashed, it was
 --> exploited. `Expired` runs after the caller has been failed; the server uses it to let go of a
 --> player who is gone.
-local function TimeoutInvocation(State: Invocations, Identifier: number, Seconds: number, Name: string, Expired: (() -> ())?)
+local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Name: string, Expired: (() -> ())?)
     local Thread = State.Threads[Identifier]
     if not Thread then
         return

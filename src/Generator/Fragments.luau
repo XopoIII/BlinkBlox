@@ -118,8 +118,11 @@ local IGNORED_TYPES_IN_SHARED = {
 --- arguments of its own choosing, `buffer.len` on a string throws from inside the connection itself
 --- where no listener's pcall can reach it, and the signature is a promise the client never made.
 --- Then the SIZE, so the budget is never charged more than MaxPacketSize and a burst of at least that
---- always has room for one packet. Then the BUDGET (see InboundAccept in the server template), and
+--- always has room for one packet. Then the BUDGET (see InboundAccept in Templates/Limits.luau), and
 --- only then anything that costs work in proportion to what was sent.
+---
+--- Each refusal goes through ReportDrop (Templates/Limits.luau), which hands it to the game's
+--- packet-drop handler when there is one and warns when there is not, once a second either way.
 local function InboundGuard(Options: Grammar.Options): { string }
 	local MaxPacketSize = Options.MaxPacketSize or DEFAULT_MAX_PACKET_SIZE
 	local MaxInstances = Options.MaxInstancesPerPacket or DEFAULT_MAX_INSTANCES_PER_PACKET
@@ -129,18 +132,18 @@ local function InboundGuard(Options: Grammar.Options): { string }
 
 	return {
 		'if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then\n',
-		'\tif ShouldReport(Player, "Malformed") then warn(`[BlinkBlox]: Dropped a malformed packet from {Player.Name}.`) end\n',
+		'\tReportDrop(Player, "Malformed", 0)\n',
 		"\treturn\n",
 		"end\n",
 		`if buffer.len(Buffer) > {MaxPacketSize} then\n`,
-		'\tif ShouldReport(Player, "Oversized") then warn(`[BlinkBlox]: Dropped an oversized packet from {Player.Name}.`) end\n',
+		'\tReportDrop(Player, "Oversized", buffer.len(Buffer))\n',
 		"\treturn\n",
 		"end\n",
-		`if not InboundAccept(Player, math.max(buffer.len(Buffer), {Floor}), {Rate}, {Burst}) then\n`,
+		`if not InboundAccept(Player, buffer.len(Buffer), {Floor}, {Rate}, {Burst}) then\n`,
 		"\treturn\n",
 		"end\n",
 		`if #Instances > {MaxInstances} then\n`,
-		'\tif ShouldReport(Player, "Instances") then warn(`[BlinkBlox]: Dropped a packet with too many instances from {Player.Name}.`) end\n',
+		'\tReportDrop(Player, "Instances", #Instances)\n',
 		"\treturn\n",
 		"end\n",
 	}

@@ -1,0 +1,7 @@
+-- Imported by InstancesImported.blink. Valid on its own: nothing here sets MaxInstancesPerPacket.
+event Pointed {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: Instance
+}

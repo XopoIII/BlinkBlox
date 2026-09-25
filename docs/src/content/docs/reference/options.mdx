@@ -23,7 +23,7 @@ page explains each one in full.
 | [`RemoteScope`](/BlinkBlox/language/options/#remotescope) | string | `""` | Prefix for the remotes' names: `"PKG"` gives `PKG_BLINK_RELIABLE_REMOTE`. |
 | [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | whole number | `8192` | Largest inbound packet the server reads, in bytes. |
 | [`MaxEventsPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | whole number | `64` | Events the server decodes from one packet before dropping the rest. |
-| [`MaxInstancesPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | whole number | `256` | Instance and `unknown` values one inbound packet may carry. |
+| [`MaxInstancesPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | whole number | `256` | Instance and `unknown` values one inbound packet may carry. May be `0`, which refuses a client-sent Instance at compile time (`E3031`). |
 | [`InboundBytesPerSecond`](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) | whole number | `8 * MaxPacketSize` (65536) | Bytes a second each player's packets may cost the server; a packet costs at least 128. |
 | [`InboundBurst`](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) | whole number, at least `MaxPacketSize` and 128 | the larger of `InboundBytesPerSecond` and `MaxPacketSize` (65536) | The most inbound budget a player may bank. |
 | [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) | whole number | `980` | Largest unreliable payload, 6 bytes per Instance included, checked at compile time and on send. |

@@ -18,7 +18,7 @@ the bytes on the wire, a handful of schemas it now refuses, and some runtime beh
 2. Compile your schema. Fix any new errors (below) and read the new warnings.
 3. Replace deprecated spellings: `Poll: true` with `Call: Polling`, `.Next()` with `.Iter()`, and
    delete `option UseColon`.
-4. Decide rate limits for what clients send, and install the two server handlers. See
+4. Decide rate limits for what clients send, and install the three server handlers. See
    [Securing the server](/BlinkBlox/guides/securing-the-server/).
 5. Ship the regenerated server and client modules **together**. They do not talk to modules built by
    upstream Blink, and a client refuses to run against a server built from a different schema.
@@ -92,7 +92,7 @@ misbehaved at runtime -- usually silently -- and is refused at compile time inst
 |---|---|---|
 | `E3001` | A map keyed by a struct, tagged enum, map, set, array or type pack. Each decoded key is a fresh table that nothing can look up. | Key by a string, number, boolean or enum; move the rest into the value. |
 | `E3004` | A set flag, enum value or tagged-enum variant named twice. | Remove the duplicate. |
-| `E3005` | A declaration named `SetRateLimitHandler` or `SetDecodeErrorHandler`, which the module now uses; a type-pack element named after a Luau keyword or a name the generated code uses; a type named after a built-in Luau type (`number`, `string`, ...) or a Roblox type the module uses (`Player`, `Instance`, ...). | Rename it. |
+| `E3005` | A declaration named `SetRateLimitHandler`, `SetDecodeErrorHandler` or `SetPacketDropHandler`, which the module now uses; a type-pack element named after a Luau keyword or a name the generated code uses; a type named after a built-in Luau type (`number`, `string`, ...) or a Roblox type the module uses (`Player`, `Instance`, ...). | Rename it. |
 | `E3013` | An exported type containing an `Instance` or `unknown`. | Drop `export`, or move the Instance out of the type. |
 | `E3018` | An unreliable event whose smallest payload cannot fit in an unreliable packet. | Send it `Reliable`, or shrink it. |
 | `E3021` | An unbounded array or a map whose elements cost nothing to decode, such as `struct {}[]`. | Bound it (`[..16]`) or give the element a field. |
@@ -123,7 +123,7 @@ the 1000-byte limit Roblox enforces; bound the field it names.
   failure; a polled event's queue stops at 256 rows per `Players.MaxPlayers`.
 - **Decode failures are silent** unless you install `SetDecodeErrorHandler`, so that a client sending
   garbage cannot fill your output. Warnings about malformed, oversized or refused packets are printed
-  at most once a second per player.
+  at most once a second per player, or handed to `SetPacketDropHandler` instead when you install it.
 - **The server can invoke a client**, with a `From: Server` function. Existing functions are
   `From: Client` by default and unchanged.
 
@@ -163,7 +163,7 @@ but more than a version bump. Everything below is in the [Changelog](/BlinkBlox/
   A game that sends more than that from one client must raise it. Refusals reach the rate-limit
   handler with `Event` nil, which is why the handler's `Event` is `string?` since 0.27.0.
 - **The binary and release assets are renamed** from `blink` to `blinkblox` (0.28.0). Replace the
-  tool's line in `rokit.toml` with `blinkblox = "XopoIII/BlinkBlox@0.36.2"`, or run
+  tool's line in `rokit.toml` with `blinkblox = "XopoIII/BlinkBlox@0.37.0"`, or run
   `rokit add XopoIII/BlinkBlox blinkblox`, and update scripts that call `blink`. Rokit may ask you to
   trust the tool again under its new name (`rokit trust XopoIII/BlinkBlox`). The remotes,
   `_G._BLINK` and the `.blink` extension keep their names.

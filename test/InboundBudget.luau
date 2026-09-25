@@ -220,6 +220,48 @@ RunClosure("The inbound budget charges a packet by its size", function()
 	end
 end)
 
+RunClosure("A packet-drop handler takes the inbound budget's reports from the rate-limit handler", function()
+	--> Since 0.37.0 a game that installs a packet-drop handler hears about Budget there, with the
+	--> packet's length, and the rate-limit handler and the warning no longer do. Without one, the
+	--> spec above still holds: a warning and the rate-limit handler with `Event` nil.
+	Reset()
+
+	local Drops: { { Reason: string, Refused: number, Detail: number } } = {}
+	Server.SetPacketDropHandler(function(_Player, Reason, Refused, Detail)
+		table.insert(Drops, { Reason = Reason, Refused = Refused, Detail = Detail })
+	end)
+
+	local Legacy = 0
+	Server.SetRateLimitHandler(function()
+		Legacy += 1
+	end)
+
+	local Packet, Instances = CapturePacket()
+	local Remote = ServerEnvironment.Instances.BLINK_UNRELIABLE_REMOTE
+	for _ = 1, SMALL_PER_BURST + 5 do
+		Remote.OnServerEvent:Fire(Shared.Player, Packet, Instances)
+	end
+	Settle()
+
+	Server.SetPacketDropHandler(nil)
+	Server.SetRateLimitHandler(nil)
+
+	local First = Drops[1]
+	if #Drops ~= 1 or First.Reason ~= "Budget" or First.Refused ~= 1 or First.Detail ~= buffer.len(Packet) then
+		ErrorPrint(
+			`Failed "Budget to the drop handler": {#Drops} report(s), expected one Budget report counting 1 with the packet's {buffer.len(
+				Packet
+			)} bytes.`
+		)
+	end
+
+	--> The warning may still come from the second copy of the server module an earlier spec loaded
+	--> onto these remotes, which has no handler; this module's rate-limit handler must stay silent.
+	if Legacy ~= 0 then
+		ErrorPrint(`Failed "Budget to the drop handler": the rate-limit handler was called {Legacy} time(s).`)
+	end
+end)
+
 RunClosure("A player who leaves takes their inbound budget with them", function()
 	Reset()
 

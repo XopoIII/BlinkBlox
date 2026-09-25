@@ -1,0 +1,13 @@
+-- expect E3031
+-- A client's reply to a function the server invokes travels on the same remote as its events, past
+-- the same instance cap, so an unknown in the return is refused as an Instance in an event would be.
+option MaxInstancesPerPacket = 0
+option ClientOutput = "../../Network/InstanceReplyWithoutSlotsClient.luau"
+option ServerOutput = "../../Network/InstanceReplyWithoutSlotsServer.luau"
+
+function Ask {
+    From: Server,
+    Yield: Coroutine,
+    Data: u8,
+    Return: unknown
+}

@@ -40,6 +40,13 @@ export type Reader = {
 
 local OPTIONS = Grammar.OPTIONS
 
+--- The smallest value a numeric option takes, where it is not 1. `MaxInstancesPerPacket = 0` is a
+--- real setting rather than a typo: a game whose clients send no Instance says so, and the server
+--- then drops any packet that carries one. Analysis refuses it beside a client-sent Instance (E3031).
+local MINIMUMS: { [string]: number } = {
+	MaxInstancesPerPacket = 0,
+}
+
 local Utility = {}
 
 ---- Private Functions ----
@@ -133,9 +140,11 @@ function Utility.Parse(Reader: Reader): Options
 		if Type == "Number" then
 			--> Number tokens carry their text; every consumer of a numeric option wants the number.
 			local Numeric = tonumber(Value.Value)
-			if not Numeric or Numeric < 1 or not IsInteger(Numeric) then
+			local Minimum = MINIMUMS[Name] or 1
+			if not Numeric or Numeric < Minimum or not IsInteger(Numeric) then
+				local Expected = if Minimum == 1 then "a positive whole number" else `a whole number, {Minimum} or more`
 				Error.new(Error.ParserUnknownOption, Reader.Source, `Invalid value for option "{Name}"`, Reader.File)
-					:Primary(Value, "Expected a positive whole number")
+					:Primary(Value, `Expected {Expected}`)
 					:Emit()
 			end
 

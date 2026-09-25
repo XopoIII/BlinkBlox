@@ -1,0 +1,13 @@
+-- expect E3031
+-- With MaxInstancesPerPacket at 0 the server drops every packet that carries an Instance, so a
+-- client-sent event carrying one would never arrive.
+option MaxInstancesPerPacket = 0
+option ClientOutput = "../../Network/InstancesWithoutSlotsClient.luau"
+option ServerOutput = "../../Network/InstancesWithoutSlotsServer.luau"
+
+event Pointed {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: (u8, Instance?)
+}

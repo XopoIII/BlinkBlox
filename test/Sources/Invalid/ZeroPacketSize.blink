@@ -1,0 +1,12 @@
+-- expect E2003
+-- Only MaxInstancesPerPacket may be 0. A packet cap of 0 would refuse every packet.
+option MaxPacketSize = 0
+option ClientOutput = "../../Network/ZeroPacketSizeClient.luau"
+option ServerOutput = "../../Network/ZeroPacketSizeServer.luau"
+
+event Ping {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

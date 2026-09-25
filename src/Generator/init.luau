@@ -28,11 +28,15 @@ local DEFAULT_MAX_EVENTS_PER_PACKET = Fragments.DEFAULT_MAX_EVENTS_PER_PACKET
 local DEFAULT_MAX_UNRELIABLE_SIZE = Fragments.DEFAULT_MAX_UNRELIABLE_SIZE
 local UNRELIABLE_INSTANCE_BYTES = Fragments.UNRELIABLE_INSTANCE_BYTES
 
+--> The server template's second split marks where its limits go: after the remotes, before the
+--> PlayerRemoving handler that clears their tables. Templates/Limits.luau holds them.
+local ServerParts = string.split(require("./Templates/Server"), "-- SPLIT --")
+
 local Sources = {
 	Base = require("./Templates/Base"),
 	Shared = { "", "" },
 	Client = string.split(require("./Templates/Client"), "-- SPLIT --"),
-	Server = string.split(require("./Templates/Server"), "-- SPLIT --"),
+	Server = { ServerParts[1], ServerParts[2] .. require("./Templates/Limits") .. ServerParts[3] },
 }
 
 type Context = State.Context
@@ -158,6 +162,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	State.Noop.Push(`{State.Casing.SetRateLimitHandler} = NOOP,`, 0, 2)
 	State.Return.Push(`{State.Casing.SetDecodeErrorHandler} = SetDecodeErrorHandler,`, 1, 1)
 	State.Noop.Push(`{State.Casing.SetDecodeErrorHandler} = NOOP,`, 0, 2)
+	State.Return.Push(`{State.Casing.SetPacketDropHandler} = SetPacketDropHandler,`, 1, 1)
+	State.Noop.Push(`{State.Casing.SetPacketDropHandler} = NOOP,`, 0, 2)
 
 	if not State.Options.ManualReplication then
 		Replication.Push("RunService.Heartbeat:Connect(StepReplication)")
@@ -214,9 +220,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		if State.Context == "Server" then
 			Loop:Line("DecodedEvents += 1")
 			Loop:Line(`if DecodedEvents > {MaxEvents} then`)
-			Loop:Line(
-				`\tif ShouldReport(Player, "Events") then warn(\`[BlinkBlox]: Dropped the rest of a packet from \{Player.Name\}, too many events.\`) end`
-			)
+			Loop:Line(`\tReportDrop(Player, "Events", {MaxEvents})`)
 			Loop:Line("\tbreak")
 			Loop:Line("end")
 		end

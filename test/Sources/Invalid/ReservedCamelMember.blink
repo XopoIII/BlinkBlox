@@ -1,0 +1,12 @@
+-- expect E3005
+-- Under Camel casing the module's member is stepReplication, so an event of that name would replace it.
+option Casing = Camel
+option ClientOutput = "../../Network/ReservedCamelMemberClient.luau"
+option ServerOutput = "../../Network/ReservedCamelMemberServer.luau"
+
+event stepReplication {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

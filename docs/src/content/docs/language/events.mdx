@@ -141,7 +141,8 @@ it, and those counted since the last. A function's refusals arrive here too, wit
 `Rate` and, separately, from [`Concurrency`](/BlinkBlox/language/functions/#concurrency). `Event` is
 `nil` when what was refused was whole packets over the
 [inbound budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) rather than one
-event:
+event, and no [packet-drop handler](/BlinkBlox/reference/generated-api/#module-members) is installed
+to take those instead:
 
 ```luau title="Server.luau"
 local Net = require(path.to.Server)

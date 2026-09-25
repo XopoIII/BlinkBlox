@@ -11,7 +11,9 @@
 
 local Error = require("./Modules/Error")
 local Grammar = require("./Modules/Grammar")
+local InstanceSlots = require("./Modules/InstanceSlots")
 local Lexer = require("./Lexer")
+local ModuleNames = require("./Modules/ModuleNames")
 local Size = require("./Modules/Size")
 local Walk = require("./Modules/Walk")
 
@@ -441,11 +443,13 @@ end
 local function Run(Source: string, File: string?, Declarations: { Declaration }, Options: Options)
 	Channels(Source, File, Declarations)
 	RobloxNames(Source, File, Declarations)
+	ModuleNames.Check(Source, File, Declarations, Options)
 	UnreliableSizes(Source, File, Declarations, Options)
 	RateLimits(Source, File, Declarations, Options)
 	CostlessRepetitions(Source, File, Declarations)
 	MapKeys(Source, File, Declarations)
 	Rotations(Source, File, Declarations)
+	InstanceSlots.Check(Source, File, Declarations, Options)
 end
 
 return {
