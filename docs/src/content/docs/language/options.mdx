@@ -255,6 +255,10 @@ What it does **not** switch is anything the receiver relies on. Whatever this op
 - A string, buffer or array length, or a map's entry count, **outside its bounds** is always refused
   on send. The length prefix is sized from the bounds, so such a value would not fit it: it would go
   out with a wrapped length and every event behind it would decode from the wrong offset.
+- A **fixed-length** array (`u8[4]`) or exact-length string (`string(4)`) sends no length prefix, so
+  a longer value cannot corrupt the packet, and this option is what decides its fate. With
+  `WriteValidations`, a value longer (or shorter) than its length is refused on send. Without it, a
+  longer value is cut to its first elements or bytes and sent, silently.
 - An enum value or tagged-enum variant that does not exist always errors on send.
 
 <Aside>

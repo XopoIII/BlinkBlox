@@ -47,8 +47,11 @@ in the same Luau environment errors: `An instance of BlinkBlox is already runnin
   [`ManualReplication`](/BlinkBlox/language/options/#manualreplication) is set, in which case you call
   it.
 - The rate-limit handler is called at most once a second per player and event, with `Refused` the
-  number of refusals since the last call. `Event` is `nil` when whole packets were refused over the
-  [inbound byte budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst).
+  number of refusals since the last call. It hears three kinds of refusal: an event or call over its
+  `Rate`, a call over its function's [`Concurrency`](/BlinkBlox/language/functions/#concurrency)
+  (with the function's name as `Event`), and whole packets over the
+  [inbound byte budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst), with `Event`
+  `nil`.
 - The decode-error handler receives the event the packet claimed to carry, or `nil` if its index
   named none. On the server it is called at most once a second per player, channel and event, and
   without one the server is silent. On the client, without one, each failure is a warning.
@@ -140,7 +143,9 @@ What `Invoke` returns depends on the function's [`Yield`](/BlinkBlox/language/fu
 | `Promise` | `Promise.new(...)` resolving with the return values | the promise rejects; cancelling it releases the call |
 
 - A call fails when the listener errors, when its return value fails to serialise, when a rate limit
-  refuses it, when the call is not answered within
+  refuses it, when the player already has the function's
+  [`Concurrency`](/BlinkBlox/language/functions/#concurrency) calls running, when the call is not
+  answered within
   [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) (10 seconds), and, on the
   server, when the player leaves or has already left.
 - At most **32** calls may be outstanding at once: per client, and per player on the server. The 33rd
@@ -222,6 +227,8 @@ its result (`:andThen(...)`) errors in a story. Guard it with `RunService:IsRunn
 | Name | Why |
 |---|---|
 | `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler` | Module members. A top-level declaration may not take these names (`E3005`). |
+| Built-in Luau types: `any`, `boolean`, `buffer`, `never`, `number`, `string`, `thread`, `unknown` | A declared type is exported under its own name, and Luau refuses `export type number = number` (`E3005`, since 0.32.0). |
+| Roblox types the module uses: `Player`, `Instance`, `RemoteEvent`, `UnreliableRemoteEvent`, `CFrame`, `Vector3`, `Color3`, `DateTime`, `BrickColor`, and any class the schema names in `Instance(...)` | A top-level type of that name would refer to itself and shadow every use of the Roblox type in the module (`E3005`, since 0.32.0). A type inside a `scope` is exported with the scope's name in front, so it may take these names. |
 | Luau keywords (`end`, `local`, ...) | A named type-pack element becomes a parameter, so it must be a Luau identifier (`E3005`). Struct fields, flags and tags may be keywords; they are quoted. |
 | `Player`, `Buffer`, `Load`, `Size`, `Success` and other names the generated functions use | Refused as type-pack element names, which would shadow them (`E3005`); the diagnostic names the clash. |
 | A tagged enum's tag | May not also be a field of one of its variants (`E3005`). |
@@ -240,6 +247,7 @@ that name. Avoid those names.
 | Invocation timeout | `InvocationTimeout`, 10 seconds by default |
 | Queued reliable events with no listener | 256 per event (server drops, client warns) |
 | Queued calls with no listener | 256 per function on the server, then answered with a failure |
+| Calls running at once | `Concurrency` per player per function on the server, when declared; the rest are answered with a failure |
 | Polled queue on the server | 256 x `Players.MaxPlayers` rows per event |
 | Enum values or tagged-enum variants | 256 |
 | Declarations per channel | 256 (reliable events and functions share one channel, unreliable events the other) |

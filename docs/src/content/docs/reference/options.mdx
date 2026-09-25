@@ -18,7 +18,7 @@ page explains each one in full.
 | [`FutureLibrary`](/BlinkBlox/language/options/#futurelibrary-and-promiselibrary) | Luau path string | none | What `require` loads for `Yield: Future`. Required by any such function. |
 | [`PromiseLibrary`](/BlinkBlox/language/options/#futurelibrary-and-promiselibrary) | Luau path string | none | What `require` loads for `Yield: Promise`. Required by any such function. |
 | [`SyncValidation`](/BlinkBlox/language/options/#syncvalidation) | boolean | `true` | Warn when a Sync listener yielded, and discard the rest of the packet it held up. |
-| [`WriteValidations`](/BlinkBlox/language/options/#writevalidations) | boolean | `false` | Check types, ranges and Instance classes on send. Length bounds are checked on send regardless. |
+| [`WriteValidations`](/BlinkBlox/language/options/#writevalidations) | boolean | `false` | Check types, ranges and Instance classes on send. Length bounds are checked on send regardless; a fixed-length array or exact-length string that is too long is refused with it and cut short without it. |
 | [`ManualReplication`](/BlinkBlox/language/options/#manualreplication) | boolean | `false` | Do not flush reliable traffic on `Heartbeat`; call `StepReplication` yourself. |
 | [`RemoteScope`](/BlinkBlox/language/options/#remotescope) | string | none | Prefix for the remotes' names: `"PKG"` gives `PKG_BLINK_RELIABLE_REMOTE`. |
 | [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | whole number | `8192` | Largest inbound packet the server reads, in bytes. |

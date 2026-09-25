@@ -54,8 +54,10 @@ named type that no event or function uses is not included, since nothing sends i
   output paths, `SyncValidation`, `WriteValidations`, `Predict`, the packet limits, the rate options
   and `InvocationTimeout` can all differ between the two sides. `RemoteScope` is left out too,
   because it is already part of the remotes' names.
-- **`Call`, `Rate` and `Burst`.** They decide how the receiving side dispatches and throttles an
-  event, and change no byte.
+- **`Call`, `Rate`, `Burst` and `Concurrency`.** They decide how the receiving side dispatches and
+  throttles an event or a function, and change no byte. Two builds that differ only in a rate or
+  concurrency limit have the same signature, so the server's limits can be tuned without rebuilding
+  the client.
 - Comments, formatting, and the order of type declarations.
 
 A profile is covered indirectly: a declaration a profile leaves out is not in the schema that build
@@ -95,6 +97,10 @@ hashes `WIRE_VERSION`, a number the compiler bumps by hand whenever a type's byt
 | 0.32.0 | No change to the format. | 0.27.0 onward. |
 | 0.33.0 | No change to the format. | 0.27.0 onward. |
 | 0.34.0 | `u24`, `i24` and `f24` added. No existing type's encoding changed, so only schemas that use them are affected. | 0.27.0 onward. |
+| 0.35.0 | No change to the format. The generated code is faster; the bytes it writes are the same. | 0.27.0 onward. |
+| 0.36.0 | No change to the format. `MaxUnreliableSize` defaults to 980 and counts 6 bytes per Instance, which decides what a sender refuses to send, not how anything is encoded. | 0.27.0 onward. |
+| 0.36.1 | No change to the format. | 0.27.0 onward. |
+| 0.36.2 | No change to the format. `boolean[]` is written faster, into the same bytes. | 0.27.0 onward. |
 
 Modules from different releases with the same `WIRE_VERSION` interoperate, but a fix to how a value is
 read or handled applies only on the side built by the release that has it. Ship both sides from one
@@ -105,5 +111,5 @@ release.
 Each channel numbers its declarations with a single byte: reliable events and functions share one
 channel, `Unreliable` and `OrderedUnreliable` events the other. So each channel holds at most 256
 declarations, counting what the schema imports and not counting what its profile leaves out. The
-compiler refuses a 257th (`E3030`); before 0.30.0 it compiled, and was sent with the first one's
+compiler refuses a 257th (`E3030`); before 0.31.0 it compiled, and was sent with the first one's
 index.

@@ -142,6 +142,7 @@ server prints about a client's traffic are limited to one a second per player an
 | `Dropped the rest of a packet from X, too many events.` | server | `MaxEventsPerPacket` events were decoded; the rest was dropped. |
 | `Dropped packets from X over the inbound budget of N bytes a second, N refused.` | server | The player's `InboundBytesPerSecond` budget ran out. |
 | `Rate limited event "E" from X, N refused.` | server | The event's `Rate` refused it. |
+| `"F" from X already has N calls running, N refused.` | server | The function's [`Concurrency`](/BlinkBlox/language/functions/#concurrency) limit refused a call; it was answered with a failure. Reported once a second per player and function, and to the rate-limit handler. |
 | `Dropped a packet that could not be decoded, at event "E": ...` | client | A packet from the server failed to decode and no decode-error handler is installed. |
 | `Event queue of "E" exceeded 256, did you forget to implement a listener?` | client | Reliable events are queuing for a listener that never connected. |
 | `"E" already has a listener. ... keeps only the newest one, and the replaced listener's disconnect stops working.` | both | A second `On` on a `Single` event. |
