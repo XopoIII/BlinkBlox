@@ -714,6 +714,20 @@ export type Queue = number
 export type BufferSave = number
 export type Invocations = number
 export type DropReason = number
+export type FixedTenths = number
+export type FixedRanged = number
+export type FixedSigned = number
+export type FixedCoarse = number
+export type FixedTriple = number
+export type FixedWide = number
+export type FixedWhole = number
+export type SaturatedCount = number
+export type SaturatedSigned = number
+export type SaturatedNegative = number
+export type SaturatedTenths = number
+export type SaturatedHalf = number
+export type SaturatedUnit = number
+export type FixedStruct = { A: number, B: number?, C: { number } }
 function SerdesFunctions.Indexers_ReadEVENT_TestEvent(): ({ ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, {["a a"]: boolean,}, ("b b"), { Type: "c c", Test: number })
 	-- Read BLOCK: 7 bytes
 	local BLOCK_START = Read(7)
@@ -8858,6 +8872,804 @@ if not RunService:IsRunning() then
 	RangedFloat24 = {
 		Fire = NOOP
 	},
+	FixedTenths = {
+		Read = function(Buffer: buffer): (FixedTenths)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedTenths)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: FixedTenths
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				Value = Value / 10
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedTenths
+		end,
+		Write = function(Value: FixedTenths): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: FixedTenths
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 10)
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.1, got {Value} instead.`) end
+				if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 6553.5 in steps of 0.1, got {Value} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedRanged = {
+		Read = function(Buffer: buffer): (FixedRanged)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedRanged)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: FixedRanged
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+				if not (Value <= 65535) then error(`Expected "Value" to be smaller than or equal to 65535, got {Value} instead.`) end
+				Value = Value / 10
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedRanged
+		end,
+		Write = function(Value: FixedRanged): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: FixedRanged
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 10)
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.1, got {Value} instead.`) end
+				if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 6553.5 in steps of 0.1, got {Value} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedSigned = {
+		Read = function(Buffer: buffer): (FixedSigned)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedSigned)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: FixedSigned
+				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= -400) then error(`Expected "Value" to be larger than or equal to -400, got {Value} instead.`) end
+				if not (Value <= 400) then error(`Expected "Value" to be smaller than or equal to 400, got {Value} instead.`) end
+				Value = Value / 4
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedSigned
+		end,
+		Write = function(Value: FixedSigned): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: FixedSigned
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 4)
+				if not (Fixed >= -400) then error(`Expected "Value" to be larger than or equal to -100 in steps of 0.25, got {Value} instead.`) end
+				if not (Fixed <= 400) then error(`Expected "Value" to be smaller than or equal to 100 in steps of 0.25, got {Value} instead.`) end
+				buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedCoarse = {
+		Read = function(Buffer: buffer): (FixedCoarse)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedCoarse)
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Value: FixedCoarse
+				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value = Value * 2.5
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedCoarse
+		end,
+		Write = function(Value: FixedCoarse): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: FixedCoarse
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value / 2.5)
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 2.5, got {Value} instead.`) end
+				if not (Fixed <= 255) then error(`Expected "Value" to be smaller than or equal to 637.5 in steps of 2.5, got {Value} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedTriple = {
+		Read = function(Buffer: buffer): (FixedTriple)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedTriple)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				-- Value: FixedTriple
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				Value = Value / 1000
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedTriple
+		end,
+		Write = function(Value: FixedTriple): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				-- Value: FixedTriple
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 1000)
+				if not (Fixed >= -8388608) then error(`Expected "Value" to be larger than or equal to -8388.608 in steps of 0.001, got {Value} instead.`) end
+				if not (Fixed <= 8388607) then error(`Expected "Value" to be smaller than or equal to 8388.607 in steps of 0.001, got {Value} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Fixed, 16))
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedWide = {
+		Read = function(Buffer: buffer): (FixedWide)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedWide)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				-- Value: FixedWide
+				local Value = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+				if not (Value <= 100000) then error(`Expected "Value" to be smaller than or equal to 100000, got {Value} instead.`) end
+				Value = Value / 100
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedWide
+		end,
+		Write = function(Value: FixedWide): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				-- Value: FixedWide
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 100)
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.01, got {Value} instead.`) end
+				if not (Fixed <= 100000) then error(`Expected "Value" to be smaller than or equal to 1000 in steps of 0.01, got {Value} instead.`) end
+				buffer.writeu32(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedWhole = {
+		Read = function(Buffer: buffer): (FixedWhole)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedWhole)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: FixedWhole
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedWhole
+		end,
+		Write = function(Value: FixedWhole): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: FixedWhole
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value)
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 1, got {Value} instead.`) end
+				if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 65535 in steps of 1, got {Value} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedCount = {
+		Read = function(Buffer: buffer): (SaturatedCount)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedCount)
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Value: SaturatedCount
+				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= 1) then error(`Expected "Value" to be larger than or equal to 1, got {Value} instead.`) end
+				if not (Value <= 255) then error(`Expected "Value" to be smaller than or equal to 255, got {Value} instead.`) end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedCount
+		end,
+		Write = function(Value: SaturatedCount): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: SaturatedCount
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value)
+				if not (Fixed >= 1) then Fixed = 1 elseif Fixed > 255 then Fixed = 255 end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedSigned = {
+		Read = function(Buffer: buffer): (SaturatedSigned)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedSigned)
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Value: SaturatedSigned
+				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+				if not (Value <= 5) then error(`Expected "Value" to be smaller than or equal to 5, got {Value} instead.`) end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedSigned
+		end,
+		Write = function(Value: SaturatedSigned): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: SaturatedSigned
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value)
+				if Fixed ~= Fixed then Fixed = 0 elseif Fixed < -5 then Fixed = -5 elseif Fixed > 5 then Fixed = 5 end
+				buffer.writei8(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedNegative = {
+		Read = function(Buffer: buffer): (SaturatedNegative)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedNegative)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: SaturatedNegative
+				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= -10) then error(`Expected "Value" to be larger than or equal to -10, got {Value} instead.`) end
+				if not (Value <= -5) then error(`Expected "Value" to be smaller than or equal to -5, got {Value} instead.`) end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedNegative
+		end,
+		Write = function(Value: SaturatedNegative): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: SaturatedNegative
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value)
+				if Fixed ~= Fixed then Fixed = -5 elseif Fixed < -10 then Fixed = -10 elseif Fixed > -5 then Fixed = -5 end
+				buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedTenths = {
+		Read = function(Buffer: buffer): (SaturatedTenths)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedTenths)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: SaturatedTenths
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+				if not (Value <= 1000) then error(`Expected "Value" to be smaller than or equal to 1000, got {Value} instead.`) end
+				Value = Value / 10
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedTenths
+		end,
+		Write = function(Value: SaturatedTenths): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: SaturatedTenths
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 10)
+				if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 1000 then Fixed = 1000 end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedHalf = {
+		Read = function(Buffer: buffer): (SaturatedHalf)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedHalf)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: SaturatedHalf
+				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Value
+				local MantissaExponent = Encoded % 0x8000
+				if MantissaExponent == 0b0_11111_0000000000  then
+					if Encoded // 0x8000 == 1 then
+						Value = -math.huge
+					else
+						Value = math.huge
+					end
+				elseif MantissaExponent > 0b0_11111_0000000000 then
+					Value = 0 / 0
+				elseif MantissaExponent == 0b0_00000_0000000000   then
+					Value = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x400
+					local Exponent = MantissaExponent // 0x400
+					local Fraction;
+					if Exponent == 0 then
+						Fraction = Mantissa / 0x400
+					else
+						Fraction = Mantissa / 0x800 + 0.5
+					end
+					local Result = math.ldexp(Fraction, Exponent - 14)
+					Value = if Encoded // 0x8000 == 1 then -Result else Result
+				end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedHalf
+		end,
+		Write = function(Value: SaturatedHalf): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: SaturatedHalf
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = Value
+				if Fixed ~= Fixed then Fixed = 0 elseif Fixed < -65504 then Fixed = -65504 elseif Fixed > 65504 then Fixed = 65504 end
+				if Fixed > 65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+				elseif Fixed < -65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+				elseif Fixed ~= Fixed then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+				elseif Fixed == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Fixed < 0 then 0x8000 else 0)
+				else
+					local float = Fixed
+					local Abosulte = math.abs(float)
+					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+					local RoundedValue = (Abosulte // Interval) * Interval
+					local Fraction, Exponent = math.frexp(RoundedValue)
+					Exponent += 14
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+						+ if float < 0 then 0x8000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+				end
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedUnit = {
+		Read = function(Buffer: buffer): (SaturatedUnit)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedUnit)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				-- Value: SaturatedUnit
+				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+				if not (Value <= 1) then error(`Expected "Value" to be smaller than or equal to 1, got {Value} instead.`) end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedUnit
+		end,
+		Write = function(Value: SaturatedUnit): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				-- Value: SaturatedUnit
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = Value
+				if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 1 then Fixed = 1 end
+				buffer.writef32(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedStruct = {
+		Read = function(Buffer: buffer): (FixedStruct)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedStruct)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				local BITFIELD_0
+				-- Value: FixedStruct
+				local Value = {A = false, C = false} :: any
+				-- Value.A: A
+				Value.A = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				Value.A = Value.A / 10
+				-- Value.B: B
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+				if bit32.btest(BITFIELD_0, 0x01) == true then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					-- Value.B: B
+					Value.B = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
+					if not (Value.B >= -20) then error(`Expected "Value.B" to be larger than or equal to -20, got {Value.B} instead.`) end
+					if not (Value.B <= 20) then error(`Expected "Value.B" to be smaller than or equal to 20, got {Value.B} instead.`) end
+					Value.B = Value.B / 2
+				end
+				do
+					-- Value.C: C
+					-- START ARRAY
+					local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+					if not (Length <= 4) then error(`Expected "Length" to be smaller than or equal to 4, got {Length} instead.`) end
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.C" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.C = table.create(Length)
+						-- Read BLOCK: 1 bytes
+					local ARRAY_START_1 = Read(1 * Length)
+					for Slot_1 = 1, Length do
+						-- Item_1: C
+						-- Read 1
+						local OPERATION_OFFSET_0 = ARRAY_START_1
+						ARRAY_START_1 += 1
+						local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+						Value.C[Slot_1] = Item_1
+					end
+					-- END ARRAY
+				end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedStruct
+		end,
+		Write = function(Value: FixedStruct): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				local BITFIELD_0
+				-- Value: FixedStruct
+				do
+					-- Value.A: A
+					if typeof(Value.A) ~= "number" then
+						error(`Expected Value.A to be of type number, got {type(Value.A)} instead.`)
+					end
+					local Fixed = math.round(Value.A * 10)
+					if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 65535 then Fixed = 65535 end
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				end
+				-- Value.B: B
+				BITFIELD_0 = 0
+				if Value.B ~= nil then BITFIELD_0 += 0x01 end
+				if Value.B ~= nil then
+					-- Allocate BLOCK: 2 bytes
+					local BLOCK_START = Allocate(2)
+					-- Value.B: B
+					if typeof(Value.B) ~= "number" then
+						error(`Expected Value.B to be of type number, got {type(Value.B)} instead.`)
+					end
+					local Fixed = math.round(Value.B * 2)
+					if not (Fixed >= -20) then error(`Expected "Value.B" to be larger than or equal to -10 in steps of 0.5, got {Value.B} instead.`) end
+					if not (Fixed <= 20) then error(`Expected "Value.B" to be smaller than or equal to 10 in steps of 0.5, got {Value.B} instead.`) end
+					buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
+				end
+				do
+					-- Value.C: C
+					-- START ARRAY
+					if not (#Value.C <= 4) then error(`Expected "#Value.C" to be smaller than or equal to 4, got {#Value.C} instead.`) end
+					buffer.writeu8(SendBuffer, BLOCK_START + 3, #Value.C)
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_1 = Allocate(1 * #Value.C)
+					for Index = 1, #Value.C do
+						local Item_1 = Value.C[Index]
+						-- Item_1: C
+						if typeof(Item_1) ~= "number" then
+							error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+						end
+						local Fixed = math.round(Item_1)
+						if not (Fixed >= 0) then error(`Expected "Item_1" to be larger than or equal to 0 in steps of 1, got {Item_1} instead.`) end
+						if not (Fixed <= 255) then error(`Expected "Item_1" to be smaller than or equal to 255 in steps of 1, got {Item_1} instead.`) end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_1
+						ARRAY_START_1 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Fixed)
+					end
+					-- END ARRAY
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_0)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
 end
@@ -16674,6 +17486,804 @@ local Returns = table.freeze({
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
 			end
+		end
+	},
+	FixedTenths = {
+		Read = function(Buffer: buffer): (FixedTenths)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedTenths)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: FixedTenths
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				Value = Value / 10
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedTenths
+		end,
+		Write = function(Value: FixedTenths): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: FixedTenths
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 10)
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.1, got {Value} instead.`) end
+				if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 6553.5 in steps of 0.1, got {Value} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedRanged = {
+		Read = function(Buffer: buffer): (FixedRanged)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedRanged)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: FixedRanged
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+				if not (Value <= 65535) then error(`Expected "Value" to be smaller than or equal to 65535, got {Value} instead.`) end
+				Value = Value / 10
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedRanged
+		end,
+		Write = function(Value: FixedRanged): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: FixedRanged
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 10)
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.1, got {Value} instead.`) end
+				if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 6553.5 in steps of 0.1, got {Value} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedSigned = {
+		Read = function(Buffer: buffer): (FixedSigned)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedSigned)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: FixedSigned
+				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= -400) then error(`Expected "Value" to be larger than or equal to -400, got {Value} instead.`) end
+				if not (Value <= 400) then error(`Expected "Value" to be smaller than or equal to 400, got {Value} instead.`) end
+				Value = Value / 4
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedSigned
+		end,
+		Write = function(Value: FixedSigned): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: FixedSigned
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 4)
+				if not (Fixed >= -400) then error(`Expected "Value" to be larger than or equal to -100 in steps of 0.25, got {Value} instead.`) end
+				if not (Fixed <= 400) then error(`Expected "Value" to be smaller than or equal to 100 in steps of 0.25, got {Value} instead.`) end
+				buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedCoarse = {
+		Read = function(Buffer: buffer): (FixedCoarse)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedCoarse)
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Value: FixedCoarse
+				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value = Value * 2.5
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedCoarse
+		end,
+		Write = function(Value: FixedCoarse): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: FixedCoarse
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value / 2.5)
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 2.5, got {Value} instead.`) end
+				if not (Fixed <= 255) then error(`Expected "Value" to be smaller than or equal to 637.5 in steps of 2.5, got {Value} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedTriple = {
+		Read = function(Buffer: buffer): (FixedTriple)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedTriple)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				-- Value: FixedTriple
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				Value = Value / 1000
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedTriple
+		end,
+		Write = function(Value: FixedTriple): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				-- Value: FixedTriple
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 1000)
+				if not (Fixed >= -8388608) then error(`Expected "Value" to be larger than or equal to -8388.608 in steps of 0.001, got {Value} instead.`) end
+				if not (Fixed <= 8388607) then error(`Expected "Value" to be smaller than or equal to 8388.607 in steps of 0.001, got {Value} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Fixed, 16))
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedWide = {
+		Read = function(Buffer: buffer): (FixedWide)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedWide)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				-- Value: FixedWide
+				local Value = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+				if not (Value <= 100000) then error(`Expected "Value" to be smaller than or equal to 100000, got {Value} instead.`) end
+				Value = Value / 100
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedWide
+		end,
+		Write = function(Value: FixedWide): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				-- Value: FixedWide
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 100)
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.01, got {Value} instead.`) end
+				if not (Fixed <= 100000) then error(`Expected "Value" to be smaller than or equal to 1000 in steps of 0.01, got {Value} instead.`) end
+				buffer.writeu32(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedWhole = {
+		Read = function(Buffer: buffer): (FixedWhole)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedWhole)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: FixedWhole
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedWhole
+		end,
+		Write = function(Value: FixedWhole): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: FixedWhole
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value)
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 1, got {Value} instead.`) end
+				if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 65535 in steps of 1, got {Value} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedCount = {
+		Read = function(Buffer: buffer): (SaturatedCount)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedCount)
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Value: SaturatedCount
+				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= 1) then error(`Expected "Value" to be larger than or equal to 1, got {Value} instead.`) end
+				if not (Value <= 255) then error(`Expected "Value" to be smaller than or equal to 255, got {Value} instead.`) end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedCount
+		end,
+		Write = function(Value: SaturatedCount): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: SaturatedCount
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value)
+				if not (Fixed >= 1) then Fixed = 1 elseif Fixed > 255 then Fixed = 255 end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedSigned = {
+		Read = function(Buffer: buffer): (SaturatedSigned)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedSigned)
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Value: SaturatedSigned
+				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+				if not (Value <= 5) then error(`Expected "Value" to be smaller than or equal to 5, got {Value} instead.`) end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedSigned
+		end,
+		Write = function(Value: SaturatedSigned): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: SaturatedSigned
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value)
+				if Fixed ~= Fixed then Fixed = 0 elseif Fixed < -5 then Fixed = -5 elseif Fixed > 5 then Fixed = 5 end
+				buffer.writei8(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedNegative = {
+		Read = function(Buffer: buffer): (SaturatedNegative)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedNegative)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: SaturatedNegative
+				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= -10) then error(`Expected "Value" to be larger than or equal to -10, got {Value} instead.`) end
+				if not (Value <= -5) then error(`Expected "Value" to be smaller than or equal to -5, got {Value} instead.`) end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedNegative
+		end,
+		Write = function(Value: SaturatedNegative): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: SaturatedNegative
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value)
+				if Fixed ~= Fixed then Fixed = -5 elseif Fixed < -10 then Fixed = -10 elseif Fixed > -5 then Fixed = -5 end
+				buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedTenths = {
+		Read = function(Buffer: buffer): (SaturatedTenths)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedTenths)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: SaturatedTenths
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+				if not (Value <= 1000) then error(`Expected "Value" to be smaller than or equal to 1000, got {Value} instead.`) end
+				Value = Value / 10
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedTenths
+		end,
+		Write = function(Value: SaturatedTenths): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: SaturatedTenths
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 10)
+				if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 1000 then Fixed = 1000 end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedHalf = {
+		Read = function(Buffer: buffer): (SaturatedHalf)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedHalf)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value: SaturatedHalf
+				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Value
+				local MantissaExponent = Encoded % 0x8000
+				if MantissaExponent == 0b0_11111_0000000000  then
+					if Encoded // 0x8000 == 1 then
+						Value = -math.huge
+					else
+						Value = math.huge
+					end
+				elseif MantissaExponent > 0b0_11111_0000000000 then
+					Value = 0 / 0
+				elseif MantissaExponent == 0b0_00000_0000000000   then
+					Value = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x400
+					local Exponent = MantissaExponent // 0x400
+					local Fraction;
+					if Exponent == 0 then
+						Fraction = Mantissa / 0x400
+					else
+						Fraction = Mantissa / 0x800 + 0.5
+					end
+					local Result = math.ldexp(Fraction, Exponent - 14)
+					Value = if Encoded // 0x8000 == 1 then -Result else Result
+				end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedHalf
+		end,
+		Write = function(Value: SaturatedHalf): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: SaturatedHalf
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = Value
+				if Fixed ~= Fixed then Fixed = 0 elseif Fixed < -65504 then Fixed = -65504 elseif Fixed > 65504 then Fixed = 65504 end
+				if Fixed > 65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+				elseif Fixed < -65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+				elseif Fixed ~= Fixed then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+				elseif Fixed == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Fixed < 0 then 0x8000 else 0)
+				else
+					local float = Fixed
+					local Abosulte = math.abs(float)
+					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+					local RoundedValue = (Abosulte // Interval) * Interval
+					local Fraction, Exponent = math.frexp(RoundedValue)
+					Exponent += 14
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+						+ if float < 0 then 0x8000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+				end
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	SaturatedUnit = {
+		Read = function(Buffer: buffer): (SaturatedUnit)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (SaturatedUnit)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				-- Value: SaturatedUnit
+				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+				if not (Value <= 1) then error(`Expected "Value" to be smaller than or equal to 1, got {Value} instead.`) end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: SaturatedUnit
+		end,
+		Write = function(Value: SaturatedUnit): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				-- Value: SaturatedUnit
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = Value
+				if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 1 then Fixed = 1 end
+				buffer.writef32(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	FixedStruct = {
+		Read = function(Buffer: buffer): (FixedStruct)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (FixedStruct)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				local BITFIELD_0
+				-- Value: FixedStruct
+				local Value = {A = false, C = false} :: any
+				-- Value.A: A
+				Value.A = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				Value.A = Value.A / 10
+				-- Value.B: B
+				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+				if bit32.btest(BITFIELD_0, 0x01) == true then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					-- Value.B: B
+					Value.B = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
+					if not (Value.B >= -20) then error(`Expected "Value.B" to be larger than or equal to -20, got {Value.B} instead.`) end
+					if not (Value.B <= 20) then error(`Expected "Value.B" to be smaller than or equal to 20, got {Value.B} instead.`) end
+					Value.B = Value.B / 2
+				end
+				do
+					-- Value.C: C
+					-- START ARRAY
+					local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
+					if not (Length <= 4) then error(`Expected "Length" to be smaller than or equal to 4, got {Length} instead.`) end
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.C" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.C = table.create(Length)
+						-- Read BLOCK: 1 bytes
+					local ARRAY_START_1 = Read(1 * Length)
+					for Slot_1 = 1, Length do
+						-- Item_1: C
+						-- Read 1
+						local OPERATION_OFFSET_0 = ARRAY_START_1
+						ARRAY_START_1 += 1
+						local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+						Value.C[Slot_1] = Item_1
+					end
+					-- END ARRAY
+				end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: FixedStruct
+		end,
+		Write = function(Value: FixedStruct): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				local BITFIELD_0
+				-- Value: FixedStruct
+				do
+					-- Value.A: A
+					if typeof(Value.A) ~= "number" then
+						error(`Expected Value.A to be of type number, got {type(Value.A)} instead.`)
+					end
+					local Fixed = math.round(Value.A * 10)
+					if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 65535 then Fixed = 65535 end
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				end
+				-- Value.B: B
+				BITFIELD_0 = 0
+				if Value.B ~= nil then BITFIELD_0 += 0x01 end
+				if Value.B ~= nil then
+					-- Allocate BLOCK: 2 bytes
+					local BLOCK_START = Allocate(2)
+					-- Value.B: B
+					if typeof(Value.B) ~= "number" then
+						error(`Expected Value.B to be of type number, got {type(Value.B)} instead.`)
+					end
+					local Fixed = math.round(Value.B * 2)
+					if not (Fixed >= -20) then error(`Expected "Value.B" to be larger than or equal to -10 in steps of 0.5, got {Value.B} instead.`) end
+					if not (Fixed <= 20) then error(`Expected "Value.B" to be smaller than or equal to 10 in steps of 0.5, got {Value.B} instead.`) end
+					buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
+				end
+				do
+					-- Value.C: C
+					-- START ARRAY
+					if not (#Value.C <= 4) then error(`Expected "#Value.C" to be smaller than or equal to 4, got {#Value.C} instead.`) end
+					buffer.writeu8(SendBuffer, BLOCK_START + 3, #Value.C)
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_1 = Allocate(1 * #Value.C)
+					for Index = 1, #Value.C do
+						local Item_1 = Value.C[Index]
+						-- Item_1: C
+						if typeof(Item_1) ~= "number" then
+							error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+						end
+						local Fixed = math.round(Item_1)
+						if not (Fixed >= 0) then error(`Expected "Item_1" to be larger than or equal to 0 in steps of 1, got {Item_1} instead.`) end
+						if not (Fixed <= 255) then error(`Expected "Item_1" to be smaller than or equal to 255 in steps of 1, got {Item_1} instead.`) end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_1
+						ARRAY_START_1 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Fixed)
+					end
+					-- END ARRAY
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_0)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
 		end
 	},
 })

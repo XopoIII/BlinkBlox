@@ -281,6 +281,19 @@ function Completion.Match(Text: string, Cursor: number, Symbols: { [string]: tru
 		return Items
 	end
 
+	--> `saturate` goes in a number's brackets, first or after a scale: `u16<sat`, `u16<0.1, sat`. It is
+	--> an identifier rather than a keyword, so this is the one place it is offered.
+	local Number, Partial = string.match(Typed, "^([%a_][%w_]*)<(%a*)$")
+	if not Number and string.match(Typed, "^%a+$") then
+		Number, Partial = string.match(Previous.Text, "^([%a_][%w_]*)<[^>]*,$"), Typed
+	end
+	local Primitive = if Number then Settings.Primtives[Number] else nil
+	if Primitive and Primitive.Component and Primitive.Bounds and Partial then
+		local Head = string.sub(Typed, 1, #Typed - #Partial)
+		Offer(Items, ICONS.Keyword, Partial, "saturate", `{Head}saturate`)
+		return Items
+	end
+
 	--> `option` is followed by the option's name, and `option Name =` by its value.
 	local Leading = Utility.GetWordRangeAtPosition(Line.Text, 1)
 	if Leading.Text == "option" then

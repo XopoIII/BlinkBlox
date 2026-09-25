@@ -60,6 +60,13 @@ local function Range(Value: Node): string
 	return `r{Declared.Min}..{Declared.Max}`
 end
 
+--- `k{Scale}` for a scaled number, empty otherwise. A scale changes what a count of steps means, so
+--- `u16<0.1>` and `u16<0.01>` must not agree; `saturate` changes only which value is sent, never how
+--- one is read, so it stays out.
+local function Scale(Value: Node): string
+	return if Value.Scale then `k{Value.Scale}` else ""
+end
+
 local function Components(Value: Node): string
 	local Declared = Value.Components
 	if not Declared or #Declared == 0 then
@@ -85,7 +92,7 @@ function Serialise(Node: Node): string
 		local Name = (Tokens and Tokens.Primitive and Tokens.Primitive.Value) or "?"
 		local Class = if Value.Class then `({Value.Class})` else ""
 
-		return `p:{Name}{Class}{Range(Value)}{Components(Value)}`
+		return `p:{Name}{Class}{Range(Value)}{Components(Value)}{Scale(Value)}`
 	elseif Kind == "Array" then
 		return `a:[{Serialise(Value.Of)}]{Range(Value)}`
 	elseif Kind == "Optional" then

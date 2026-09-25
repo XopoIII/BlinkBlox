@@ -200,6 +200,121 @@ type Aim = f32(-1..1)
 type UserId = f64
 ```
 
+### Fixed-point numbers
+
+A number with a fractional part does not need a float when its precision is fixed. Put a scale -- the
+step between the values it carries -- in angle brackets after an integer type, and BlinkBlox sends the
+nearest whole number of steps in that integer and reads it back as that many steps.
+
+```blink
+type FrameTime = u16<0.1>(0..6553.5)
+type Angle = i16<0.01>(-180..180)
+type Cost = u8<2.5>
+```
+
+`FrameTime` travels in two bytes. `12.34` is sent as `123` and read back as `12.3` -- exactly the
+number the literal `12.3` is, since a step whose reciprocal is a whole number is sent as
+`round(v * 10)` and read as `n / 10`. Any other step, like `2.5`, multiplies and divides by the step.
+
+- **Every integer takes a scale**: `u8`, `u16`, `u24`, `u32`, `i8`, `i16`, `i24` and `i32`. A float
+  carries its own fraction and refuses one (`E3032`), and so does a scale of zero or less.
+- **Rounding is to nearest**, a tie away from zero, where a bare integer truncates. `u16<1>` is the
+  way to round an integer rather than truncate it.
+- **The range is written in real units**, and each bound must be a whole number of steps that fits
+  the integer: `u16<0.1>(0..0.05)` and `u8<0.5>(0..200)` are both refused (`E3009`). Without a range,
+  the bounds are the integer's scaled: `u16<0.1>` holds `0` to `6553.5`.
+- **Past its range**, a value is refused on send under
+  [`WriteValidations`](/BlinkBlox/language/options/#writevalidations), with the bounds in real units.
+  Without it, it wraps as the integer would: `6553.6` in a `u16<0.1>` is 65536 tenths and arrives as
+  `0`. Add [`saturate`](#saturating-on-send) to clamp instead. The receiver checks a ranged value in
+  whole steps before scaling it, so the check is exact.
+- **It costs the integer's size** in the size analysis, and is a `number` in Luau and TypeScript.
+- **The scale is part of the [schema signature](/BlinkBlox/reference/wire-compatibility/)**, since
+  the same bytes mean something else at another scale.
+
+### Saturating on send
+
+`saturate` in a number's angle brackets clamps what is sent into its range, where a value outside it
+would otherwise be refused under `WriteValidations` or wrap without it.
+
+```blink
+type Count = u8<saturate>(1..255)
+type Tenths = u16<0.1, saturate>
+type Aim = f32<saturate>(-1..1)
+```
+
+- An integer is **rounded to nearest** first, then clamped: `300` sends `255`, `-4` sends `1`, and
+  `254.5` sends `255`. A scaled one is clamped in whole steps, so it stops exactly at its bound.
+- A float is clamped to its range, or to the type's largest finite value where it has one: an `f16`
+  stops at `65,504` instead of arriving as infinity. An open side of `f32` or `f64` clamps nothing.
+- **`NaN` is sent as the value in range nearest zero**: `0` when the range holds it, otherwise the
+  bound closer to it -- `1` for `u8<saturate>(1..255)`. The alternatives were worse: sending `NaN`
+  makes a ranged receiver refuse the event, refusing it on send defeats the point of opting in, and
+  the lower bound is arbitrary for a range like `-5..5`. Zero is the value arithmetic that went wrong
+  most often meant, and it is what Rust's saturating float-to-integer casts choose.
+- It changes what an honest sender sends and nothing a receiver accepts: a modified client that does
+  not saturate is still refused by the range. It works with or without `WriteValidations`, which
+  still refuses a value that is not a number. It is not part of the signature, since no byte's
+  meaning changes.
+- The modifiers go in either order, once each, and a trailing comma is accepted: `u16<saturate, 0.1>`.
+  `saturate` is not a keyword, so a field or type may still be called that.
+
+### Replacing hand-written clamps
+
+A game that repeats its schema's bounds before sending can hand them to the schema instead. Before:
+
+```blink
+event Probe {
+	From: Client,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: struct { FrameTime: u16, Count: u8(1..255) }
+}
+```
+
+```lua
+-- tenths of a millisecond, clamped by hand to fit a u16
+Net.Probe.Fire({
+	FrameTime = math.clamp(math.round(Milliseconds * 10), 0, 65535),
+	Count = math.clamp(Count, 1, 255),
+})
+-- and on the server
+Net.Probe.On(function(Player, Probe)
+	local Milliseconds = Probe.FrameTime / 10
+end)
+```
+
+After, the schema says it once, and both sides send and read milliseconds:
+
+```blink
+event Probe {
+	From: Client,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: struct { FrameTime: u16<0.1, saturate>, Count: u8<saturate>(1..255) }
+}
+```
+
+```lua
+Net.Probe.Fire({ FrameTime = Milliseconds, Count = Count })
+
+Net.Probe.On(function(Player, Probe)
+	local Milliseconds = Probe.FrameTime
+end)
+```
+
+A bound the game needs to read -- an array's length before it fills one -- comes from
+[`option ExportLimits`](/BlinkBlox/language/options/#exportlimits) rather than a copy of the number:
+
+```lua
+for _, Head in Heads do
+	if #Out == Net.Limits.CrawlPacket.Heads.Length.Max then
+		break
+	end
+	table.insert(Out, Head)
+end
+```
+
 ## Strings
 Luau's text container, declared as `string`.
 

@@ -1,0 +1,3 @@
+-- expect E3032
+-- A scale of zero has no steps to count.
+type Frame = u16<0>

@@ -74,6 +74,7 @@ Grammar.OPTIONS = {
 	ClientConnectTimeout = "Number",
 	AutoStart = "Boolean",
 	TrafficStats = "Boolean",
+	ExportLimits = "Boolean",
 } :: { [string]: Lexer.Types }
 
 --> Defaults the option checks and the generator both need. Here because this module is data only,
@@ -360,9 +361,14 @@ export type Options = {
 	--> False leaves the server's remotes uncreated until the game calls `Start`. See
 	--> Generator/Lifecycle.
 	AutoStart: boolean?,
+
 	--> Counts the bytes and events each declaration sends and receives, and the packets on each
 	--> channel, behind GetTrafficStats. Off by default, and when off nothing of it is emitted.
 	TrafficStats: boolean?,
+
+	--> Adds a frozen `Limits` table of the schema's bounds to every generated module. See
+	--> Generator/Limits.
+	ExportLimits: boolean?,
 }
 
 return Grammar

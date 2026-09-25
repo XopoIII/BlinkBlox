@@ -4,6 +4,7 @@ local Parser = require("../Parser")
 local Settings = require("../Settings")
 
 local Lifecycle = require("./Lifecycle")
+local Limits = require("./Limits")
 local Prefabs = require("./Prefabs")
 local Traffic = require("./Traffic")
 local Util = require("./Util")
@@ -307,6 +308,12 @@ return function(FileContext: Context, AbstractSyntaxTree: AbstractSyntaxTree): s
 	end
 	if Lifecycle.Deferred(FileContext, Options) then
 		StringBuilder.Push(`export declare const {Casing.Start}: () => void`)
+	end
+
+	if Options.ExportLimits then
+		local Word = Limits.Words(Options.Casing :: Settings.Case?)
+		local Limit = Limits.Declarations(AbstractSyntaxTree.Value.Declarations, Word)
+		StringBuilder.Push(`export declare const {Word("Limits")}: {Limits.Typescript(Limit, Word)}`)
 	end
 
 	if _G.VERSION == nil then

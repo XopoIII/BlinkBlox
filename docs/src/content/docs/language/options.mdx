@@ -36,6 +36,7 @@ A few rules hold for all of them:
 | `Typescript` | boolean | `false` | [Output](#typescript) |
 | `Casing` | `Pascal`, `Camel`, `Snake` | `Pascal` | [Output](#casing) |
 | `RemoteScope` | string | `""` | [Output](#remotescope) |
+| `ExportLimits` | boolean | `false` | [Output](#exportlimits) |
 | `FutureLibrary`, `PromiseLibrary` | Luau path | none | [Output](#futurelibrary-and-promiselibrary) |
 | `ManualReplication` | boolean | `false` | [Runtime behaviour](#manualreplication) |
 | `UsePolling` | boolean | `false` | [Runtime behaviour](#usepolling) |
@@ -115,6 +116,7 @@ option Casing = Camel
 | `SetPacketDropHandler` | `setPacketDropHandler` | `set_packet_drop_handler` |
 | `SetListenerErrorHandler` | `setListenerErrorHandler` | `set_listener_error_handler` |
 | `Remotes`, `Start`, `Connected` | `remotes`, `start`, `connected` | `remotes`, `start`, `connected` |
+| `Limits`, with [`ExportLimits`](#exportlimits) | `limits` | `limits` |
 
 ### `RemoteScope`
 Default: `""`
@@ -135,6 +137,48 @@ already part of the remote names, so it is not part of the
 
 Both modules export the two names as `Remotes.Reliable` and `Remotes.Unreliable`, so code that has to
 find the remotes itself never spells them out.
+
+### `ExportLimits`
+Default: `false`
+
+Adds a frozen `Limits` table to every generated module -- server, client and `TypesOutput` -- holding
+the bounds the schema declares, so the game reads them instead of repeating them.
+
+```blink
+option ExportLimits = true
+
+struct CrawlHead { Id: u8, Back: boolean }
+struct CrawlPacket { At: u16, Heads: CrawlHead[..16] }
+struct Tally { Count: u8<saturate>(1..255), Frame: u16<0.1> }
+event Crawls { From: Server, Type: Reliable, Call: SingleSync, Data: CrawlPacket }
+```
+
+```lua
+Net.Limits.CrawlPacket.Heads.Length.Max -- 16
+Net.Limits.Tally.Count.Min -- 1
+Net.Limits.Tally.Frame.Max -- 6553.5
+Net.Limits.Tally.Frame.Step -- 0.1
+Net.Limits.Crawls.Heads.Length.Max -- 16, the event's data
+```
+
+The table mirrors the schema. A declaration is keyed by its name and a scope nests its own; a struct
+keys its fields, a tagged enum its variants, a type pack its named elements or their positions, and a
+function its `Data` and `Return`. At the bottom is a range, `{ Min, Max }`:
+
+| Declared | What `{ Min, Max }` holds |
+|---|---|
+| a number with a range, a [scale](/BlinkBlox/language/types/#fixed-point-numbers) or [`saturate`](/BlinkBlox/language/types/#saturating-on-send) | its bounds in the schema's units, and `Step` for a scaled one |
+| a ranged `string` or `buffer` | its length in bytes |
+| a ranged `vector` | its magnitude |
+| an array | `{ Length, Element }`, whichever is bounded |
+| a map | `{ Key, Value }`, whichever is bounded |
+
+What the schema bounds nowhere inside is left out, so a key exists only where there is a number to
+read, and an open side is `math.huge`. The structural words -- `Limits`, `Min`, `Max`, `Step`,
+`Length`, `Element`, `Key`, `Value` -- follow [`Casing`](#casing) (`limits.CrawlPacket.Heads.length.max`
+under `Camel` or `Snake`); names from the schema are kept as written. The TypeScript output declares
+it `readonly`. With the option on, `Limits` in the spelling `Casing` gives it is a reserved top-level
+name (`E3005`). With it off, nothing is emitted and no name is taken.
 
 ### `FutureLibrary` and `PromiseLibrary`
 

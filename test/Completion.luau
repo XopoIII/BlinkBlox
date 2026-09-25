@@ -74,6 +74,13 @@ RunClosure("Completion offers keywords, primitives and declared names where each
 		{ Text = "scope S {\n  event X {\n    Ty", Cursor = 29, Expect = "Type" },
 		--> Inside a struct, a field's name is the author's: keywords as before.
 		{ Text = "struct S {\n  Type: u", Cursor = 21, Expect = "u8,u16,u24,u32,unknown" },
+		--> A number's brackets take `saturate`, first or after its scale; a vector's take none.
+		{ Text = "type A = u8<sa", Cursor = 15, Expect = "saturate" },
+		{ Text = "type A = u16<", Cursor = 14, Expect = "saturate" },
+		{ Text = "type A = u16<0.1, s", Cursor = 20, Expect = "saturate" },
+		{ Text = "type A = f32<saturate", Cursor = 22, Expect = "" },
+		{ Text = "type A = vector<sa", Cursor = 19, Expect = "" },
+		{ Text = "type A = Point<s", Cursor = 17, Expect = "" },
 	}
 
 	for _, Case in Cases do
@@ -82,6 +89,15 @@ RunClosure("Completion offers keywords, primitives and declared names where each
 			ErrorPrint(
 				`Failed "Completion": {string.format("%q", Case.Text)} offered "{Got}", expected "{Case.Expect}".`
 			)
+		end
+	end
+
+	--> The whole word is replaced, so `saturate` is inserted with the number and bracket before it.
+	for Text, Insert in { ["type A = u8<sa"] = "u8<saturate", ["type A = u16<0.1, s"] = "saturate" } do
+		local Items = Completion.Match(Text, #Text + 1)
+		local Got = if Items[1] then Items[1].Insert else "nothing"
+		if Got ~= Insert then
+			ErrorPrint(`Failed "Completion": {string.format("%q", Text)} inserts "{Got}", expected "{Insert}".`)
 		end
 	end
 end)

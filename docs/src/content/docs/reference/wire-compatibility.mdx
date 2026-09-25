@@ -44,7 +44,7 @@ order, including those inside scopes and imports:
 | Event | channel (reliable or unreliable), index, `From`, `Type`, name, and the full `Data` type |
 | Function | index, `From`, name, `Data` and `Return` types |
 
-A type is included as a whole: every primitive with its range, components and Instance class, struct
+A type is included as a whole: every primitive with its range, components, scale and Instance class, struct
 field names, enum values, set flags, tagged-enum tags and variants, and type-pack element names. A
 named type that no event or function uses is not included, since nothing sends it.
 
@@ -58,6 +58,7 @@ named type that no event or function uses is not included, since nothing sends i
   throttles an event or a function, and change no byte. Two builds that differ only in a rate or
   concurrency limit have the same signature, so the server's limits can be tuned without rebuilding
   the client.
+- `saturate`, which changes which value an honest sender sends and not what any byte means.
 - Comments, formatting, and the order of type declarations.
 
 A profile is covered indirectly: a declaration a profile leaves out is not in the schema that build

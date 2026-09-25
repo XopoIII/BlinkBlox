@@ -46,12 +46,56 @@ function Oracle.IsFloat24(Value: number): boolean
 	return Absolute % Unit == 0
 end
 
+--- The number a count of steps stands for in a scaled integer, as the docs define it: divided by the
+--- reciprocal of the step when that is a whole number, so 123 tenths is exactly the double 12.3 is,
+--- and multiplied by the step otherwise. Written from that definition, not from the compiler's code.
+function Oracle.Decode(Scale: number, Steps: number): number
+	local Inverse = 1 / Scale
+	local Whole = math.floor(Inverse + 0.5)
+	if Whole >= 1 and math.abs(Inverse - Whole) <= Whole * 1e-12 then
+		return Steps / Whole
+	end
+
+	return Steps * Scale
+end
+
+--- The whole number of steps nearest `Value`, ties away from zero.
+function Oracle.Steps(Scale: number, Value: number): number
+	local Steps = Value / Scale
+	return if Steps < 0 then -math.floor(-Steps + 0.5) else math.floor(Steps + 0.5)
+end
+
+--- The bounds a scaled or saturated number is held to, in the schema's units.
+function Oracle.Bounds(Node: Node): (number, number)
+	local Range = Node.Value.Range
+	if Range then
+		return Range.Min, Range.Max
+	end
+
+	local Bounds = Settings.Primtives[PrimitiveName(Node)].Bounds
+	local Scale = Node.Value.Scale
+	if Scale then
+		return Oracle.Decode(Scale, Bounds.Min), Oracle.Decode(Scale, Bounds.Max)
+	end
+
+	return Bounds.Min, Bounds.Max
+end
+
 --- Whether a number is one this primitive type admits, range included.
 function Oracle.Admits(Node: Node, Value: number): boolean
 	local Name = PrimitiveName(Node)
 	local Range = Node.Value.Range
+	local Scale = Node.Value.Scale
 
-	if INTEGERS[Name] then
+	if Scale then
+		--> A whole number of steps, inside the bounds counted in steps.
+		local Min, Max = Oracle.Bounds(Node)
+		local Steps = Oracle.Steps(Scale, Value)
+		return Value == Value
+			and Oracle.Decode(Scale, Steps) == Value
+			and Steps >= Oracle.Steps(Scale, Min)
+			and Steps <= Oracle.Steps(Scale, Max)
+	elseif INTEGERS[Name] then
 		local Bounds = Range or Settings.Primtives[Name].Bounds
 		return Value == math.floor(Value) and Value >= Bounds.Min and Value <= Bounds.Max
 	elseif Name == "f32" and Value == Value and F32(Value) ~= Value then
@@ -249,10 +293,44 @@ function Oracle.Narrowed(Name: string, Sent: number, Got: number): boolean
 	return math.abs(Got - Sent) <= Unit
 end
 
+--- Whether `Got` is what a number with modifiers may arrive as, sent as `Sent` under WriteValidations.
+--- A saturated value is first clamped -- NaN to the bound nearest zero, or zero when the range holds
+--- it -- and then an integer arrives within half a step of it, a float as its type narrows it.
+function Oracle.Delivered(Node: Node, Sent: number, Got: number): boolean
+	local Name = PrimitiveName(Node)
+	local Value = Node.Value
+	local Min, Max = Oracle.Bounds(Node)
+
+	if Value.Saturate then
+		if Sent ~= Sent then
+			Sent = if Min > 0 then Min elseif Max < 0 then Max else 0
+		end
+
+		Sent = math.max(Min, math.min(Max, Sent))
+	end
+
+	if not INTEGERS[Name] then
+		return Oracle.Narrowed(Name, Sent, Got)
+	end
+
+	local Step = Value.Scale or 1
+	return Oracle.Admits(Node, Got) and math.abs(Got - Sent) <= Step / 2 * (1 + 1e-9)
+end
+
 --- Whether two values of `Node` are the same value. Floats compare by bits: NaN equals NaN, and -0
 --- does not equal 0, since both are values a sender can mean.
 function Oracle.Equal(Node: Node, Left: any, Right: any, Loose: boolean?): boolean
+	--> An optional is its value when both sides hold one, so a number inside it is judged by its own
+	--> primitive: compared as plain numbers first, a loose comparison never reached it.
+	if Node.Type == "Optional" and Left ~= nil and Right ~= nil then
+		return Oracle.Equal(Node.Value.Of, Left, Right, Loose)
+	end
+
 	if Loose and Node.Type == "Primitive" and type(Left) == "number" and type(Right) == "number" then
+		if Node.Value.Scale or Node.Value.Saturate then
+			return Oracle.Delivered(Node, Left, Right)
+		end
+
 		return Oracle.Narrowed(PrimitiveName(Node), Left, Right)
 	elseif type(Left) == "number" and type(Right) == "number" then
 		if Left ~= Left then

@@ -1,0 +1,3 @@
+-- expect E3032
+-- A negative step would count backwards; the sign belongs to the integer type.
+type Frame = i16<-0.5>

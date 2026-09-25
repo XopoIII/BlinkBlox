@@ -103,7 +103,52 @@ local function Length(Min: number, Max: number): number
 	return Drawn
 end
 
+--- A scaled integer: a whole number of steps inside its bounds, leaning on their edges -- or, wild,
+--- any real near them, between steps, past them, or NaN, since a saturated one takes all of those.
+local function Scaled(Node: Node): number
+	local Scale = Node.Value.Scale
+	local Min, Max = Oracle.Bounds(Node)
+
+	if Generate.Wild then
+		local Bounds = Settings.Primtives[PrimitiveName(Node)].Bounds
+		local Low, High = Oracle.Decode(Scale, Bounds.Min), Oracle.Decode(Scale, Bounds.Max)
+		if Chance(0.4) then
+			return Pick({
+				Min - Scale * 0.4,
+				Min - Scale * 0.6,
+				Max + Scale * 0.4,
+				Max + Scale * 0.6,
+				Low - Scale,
+				High + Scale,
+				0 / 0,
+				math.huge,
+				-math.huge,
+			})
+		end
+
+		return Low + math.random() * (High - Low)
+	end
+
+	local Lower, Upper = Oracle.Steps(Scale, Min), Oracle.Steps(Scale, Max)
+	local Steps = Lower + math.floor(math.random() * (Upper - Lower + 1))
+	if Chance(0.4) then
+		local Edge = Pick({ Lower, Upper, Lower + 1, Upper - 1, 0, 1, -1 })
+		if Edge >= Lower and Edge <= Upper then
+			Steps = Edge
+		end
+	end
+
+	return Oracle.Decode(Scale, Steps)
+end
+
 local function Integer(Node: Node): number
+	if Node.Value.Scale then
+		return Scaled(Node)
+	elseif Generate.Wild and Node.Value.Saturate and Chance(0.3) then
+		--> A saturated integer takes a fraction and NaN too, and sends the nearest value it holds.
+		return Pick({ 0 / 0, math.huge, -math.huge, 0.5, -0.5, 254.5, 1e9 })
+	end
+
 	local Declared = if Generate.Wild then nil else Node.Value.Range
 	local Bounds = Declared or Settings.Primtives[PrimitiveName(Node)].Bounds
 	local Min, Max = Bounds.Min, Bounds.Max
@@ -202,7 +247,12 @@ local function Float(Node: Node): number
 			Value = F32(Value)
 		end
 
-		if Oracle.Admits(Node, Value) then
+		--> A saturated float sends NaN and what lies past its bounds as something else, so neither
+		--> comes back as itself.
+		local Min, Max = Oracle.Bounds(Node)
+		local Carried = not Node.Value.Saturate or (Value == Value and Value >= Min and Value <= Max)
+
+		if Carried and Oracle.Admits(Node, Value) then
 			return Value
 		end
 	end

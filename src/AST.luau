@@ -51,10 +51,15 @@ export type Attributes = {
 	Export: boolean?,
 	Generics: Generics?,
 	Components: { string }?,
+	--> A number's modifiers, written in angle brackets: `u16<0.1>` sends round(v / 0.1) in a u16, and
+	--> `saturate` clamps a value into its range on send. See Modules/FixedPoint and Parser/Scales.
+	Scale: number?,
+	Saturate: boolean?,
 }
 
 export type AttributesTokens = {
 	Range: Token?,
+	Modifiers: Token?,
 }
 
 export type Options = Grammar.Options
