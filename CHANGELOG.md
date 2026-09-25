@@ -7,6 +7,44 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+**The wire format does not change.**
+
+### Added
+
+- The Studio plugin's editor completes more than keywords and types. `option` is offered at the
+  start of a line, followed by every option's name and, where the language fixes it, its value.
+  Inside an `event` or a `function` a line starts with the fields it takes and has not been given
+  yet, and each field is followed by the values it accepts, where before every `:` offered the
+  primitive types. `@profile` is offered at the start of a line, and a profile inside it.
+
+### Performance
+
+- The editor's completion no longer splits the whole document on every keystroke to find the line
+  under the cursor; it reads that line alone. The declaration around the cursor is found by reading
+  back from it with plain `string.find`, only as far as the nearest `event` or `function`. On a
+  2400-line schema a keystroke's completion went from 0.25 ms to 0.01, and inside a 2000-field
+  struct from 0.48 ms to 0.03.
+
+### Fixed
+
+- `--help` said `--compact` prints the full message after the compacted one. It prints only the one
+  line.
+
+### Documentation
+
+- The docs, the README and the llms files were checked against every release from 0.26.0 on. What
+  they had wrong: a malformed event ending only itself (it ends its packet), `InboundBurst`'s default
+  and minimum, the open side of an `f16` or `f24` range, `--json` on the runs that print plain text,
+  the names `E3005` covers, and the release `E3030` arrived in. What they had left out: `Concurrency`
+  in the server's check order and the rate-limit handler, send-side length checks below a minimum,
+  `f24`'s subnormals, trailing commas and strict modules. The version strings, the benchmark tables
+  and the wire table are brought up to 0.36.2.
+- `llms-full.txt` and `llms-small.txt` follow the sidebar's order, with the benchmarks and the
+  changelog last in the full file and left out of the small one. The small one keeps its notes,
+  which carry rules, and `llms.txt` carries a short brief.
+
 ## 0.36.2 — 2026-09-25
 
 **The wire format does not change.**
@@ -23,12 +61,14 @@ startup instead of misreading packets.
   only reads the elements costs the same on both. The forms without a branch -- `v and k or 0`, a
   `{ [true] = 1 }` lookup -- measured no faster or slower. The reader already did not depend on
   the data, and a lookup table there was three times slower natively, so it stays as it was.
+  These timings are from the run the change was developed against, not the published M1 run;
+  `benchmark/Benchmarks.md` has the published numbers.
 
 ### Benchmarks
 
 - Blink 0.18.9, the last release of the original project BlinkBlox forked from, is benchmarked
   beside it, compiling the same schema with its own compiler, in Studio and on Lune.
-- The tables name the tools BlinkBlox, Blink, zap, ByteNet, Packet and Roblox remotes, always in
+- The tables name the tools Roblox remotes, BlinkBlox, Blink, zap, ByteNet and Packet, always in
   that order, where they had printed the harness's ids (`blink`, `upstream`) in no fixed order.
 - `lune run Runtime` times zap, ByteNet, Packet and Blink as well as BlinkBlox, natively
   compiled and interpreted, and times the server decoding what they sent, which Studio does not.
@@ -93,7 +133,9 @@ wire format does not change.**
 ### Changed
 
 The generated code is faster on both sides. Each change was kept only if `benchmark/Runtime.luau`
-showed it was faster. Medians for 1000 events a frame, natively compiled, 0.34.0 then 0.35.0:
+showed it was faster. Medians for 1000 events a frame, natively compiled, 0.34.0 then 0.35.0, from
+the run the changes were developed against; the published M1 numbers are in
+`benchmark/Benchmarks.md`:
 
 | Bench | Fire (ms) | Decode (ms) |
 |---|---|---|
@@ -373,6 +415,11 @@ whole. **The wire format does not change.**
 ### Language
 
 - Repeated flags, values and variants are refused.
+- An enum with no values or variants is refused (`E3029`).
+- A `Burst` below 1 is refused (`E2003`): an event spends one whole token, so such a bucket refused
+  every event.
+- A type-pack element named after a name the generated `Fire` or `Invoke` already uses, such as
+  `Player` or `Buffer`, is refused (`E3005`).
 - The TypeScript tag is quoted.
 - A trailing comma is accepted in every list.
 
@@ -414,7 +461,9 @@ Ideas taken from reading ByteNet-Max, Warp and satset. **Recompile both modules*
   `option InboundBurst`. Each server connection charges a per-player token bucket before it decodes
   anything. A packet costs its size, and never less than 128 bytes. The burst is a whole second,
   because after a hitch Roblox delivers the backlog at once, and a refused reliable packet takes
-  every event in it along. Refusals go to the rate-limit handler with `Event` nil.
+  every event in it along. Refusals go to the rate-limit handler with `Event` nil. An
+  `InboundBurst` below `MaxPacketSize`, or below 128, is refused (`E2003`): the largest packet could
+  never be afforded.
 - **`boolean[]` is packed eight to a byte.**
 - **`CFrame<quat>`** encodes a rotation in 7 bytes instead of 12. It is opt-in, because it is lossy.
 

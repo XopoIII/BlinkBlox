@@ -137,8 +137,10 @@ Each player's bucket starts full. Refused events are dropped before they reach y
 reported at most once per player per event per second. To do something else about them -- log to
 your analytics, flag the account -- pass a handler to `SetRateLimitHandler`. It is called on the same
 schedule as the warning, and `Refused` is how many refusals that call stands for: the one that made
-it, and those counted since the last. `Event` is `nil` when what was refused was whole packets over
-the [inbound budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) rather than one
+it, and those counted since the last. A function's refusals arrive here too, with its name -- from
+`Rate` and, separately, from [`Concurrency`](/BlinkBlox/language/functions/#concurrency). `Event` is
+`nil` when what was refused was whole packets over the
+[inbound budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) rather than one
 event:
 
 ```luau title="Server.luau"

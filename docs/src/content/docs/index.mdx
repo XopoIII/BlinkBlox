@@ -104,14 +104,15 @@ local Items = Net.GetInventory.Invoke(1)
 <CardGrid>
 	<Card title="Safe to point at the internet" icon="warning">
 		Packets are bounded before they are parsed. Each player gets a byte budget, and each event can
-		get its own rate limit. Every length is checked before the read it pays for. One malformed
-		event is dropped without taking the rest of the batch with it. [How the server protects
+		get its own rate limit, each function a cap on the calls still running. Every length is
+		checked before the read it pays for. A malformed event ends its packet without throwing, and
+		the game is told who sent it. [How the server protects
 		itself](/BlinkBlox/guides/securing-the-server/).
 	</Card>
 	<Card title="Small on the wire" icon="rocket">
 		Booleans and optional flags share a bitfield, and `boolean[]` packs eight elements to a byte.
-		A length is sent relative to its range, and a rotation fits in 7 bytes. Unreliable events that
-		cannot fit are refused at compile time. [Bandwidth and sizes](/BlinkBlox/guides/bandwidth/).
+		A length is sent relative to its range, a rotation fits in 7 bytes, and 24-bit numbers make a
+		position 9 bytes instead of 12. Unreliable events that cannot fit are refused at compile time. [Bandwidth and sizes](/BlinkBlox/guides/bandwidth/).
 	</Card>
 	<Card title="Checked at compile time" icon="approve-check">
 		A schema that cannot work never builds. That covers map keys that can never be looked up,
@@ -119,22 +120,25 @@ local Items = Net.GetInventory.Invoke(1)
 		diagnostic with a code and a source span. [Diagnostics](/BlinkBlox/reference/diagnostics/).
 	</Card>
 	<Card title="Tooling included" icon="puzzle">
-		The CLI has watch mode and build profiles. A Studio plugin gives you an editor with live
-		diagnostics and autocomplete, and TypeScript definitions are available for roblox-ts.
+		The CLI has watch mode and build profiles, and `--check --json` hands every diagnostic to an
+		editor or an AI assistant as JSON. A Studio plugin gives you an editor with live diagnostics
+		and autocomplete, and TypeScript definitions are available for roblox-ts.
 		[Studio plugin](/BlinkBlox/getting-started/studio-plugin/).
 	</Card>
 </CardGrid>
 
 ## Measured
 
-A thousand events a frame from client to server, run in Studio on 0.35.0. The numbers are median
-frame rates, with the milliseconds a frame's thousand fires took in brackets.
+A thousand events a frame from client to server, run in Studio on an Apple M1 on 0.36.2. Blink is
+upstream's last release, 0.18.9. The numbers are median frame rates, with the milliseconds a frame's
+thousand fires took in brackets.
 
-| Payload | Roblox remotes | BlinkBlox | zap | ByteNet | Packet |
-|---|---|---|---|---|---|
-| 1000 booleans | 16 FPS (28.0 ms) | **60 FPS**\* (**5.6 ms**) | 37 FPS (25.7 ms) | 17 FPS (41.3 ms) | 15 FPS (67.8 ms) |
-| 100 entities | 16 FPS (109.5 ms) | **60 FPS**\* (**4.0 ms**) | 23 FPS (20.8 ms) | 18 FPS (38.0 ms) | 15 FPS (50.3 ms) |
-| 100 entities, each different | 15 FPS (110.2 ms) | **52 FPS** (**5.1 ms**) | 22 FPS (20.6 ms) | 17 FPS (38.2 ms) | 15 FPS (52.4 ms) |
+| Payload | Roblox remotes | BlinkBlox | Blink | zap | ByteNet | Packet |
+|---|---|---|---|---|---|---|
+| 1000 booleans | 16 FPS (29.2 ms) | **60 FPS**\* (**4.2 ms**) | 53 FPS (8.4 ms) | 35 FPS (25.9 ms) | 17 FPS (41.3 ms) | 15 FPS (67.3 ms) |
+| 1000 booleans, each different | 16 FPS (29.4 ms) | **60 FPS**\* (**8.7 ms**) | 36 FPS (20.5 ms) | 26 FPS (34.4 ms) | 15 FPS (44.7 ms) | 15 FPS (77.5 ms) |
+| 100 entities | 16 FPS (110.1 ms) | **56 FPS** (**4.0 ms**) | 22 FPS (4.6 ms) | 22 FPS (20.5 ms) | 18 FPS (37.8 ms) | 15 FPS (50.3 ms) |
+| 100 entities, each different | 15 FPS (115.6 ms) | **51 FPS** (5.1 ms) | 22 FPS (**5.0 ms**) | 22 FPS (20.4 ms) | 17 FPS (38.3 ms) | 15 FPS (53.1 ms) |
 
 \* Studio caps the frame rate at 60. [How these were measured](/BlinkBlox/guides/benchmarks/).
 
@@ -146,12 +150,13 @@ buffer out of scope. This fork fixes that and continues from there, without givi
 TypeScript output, the Studio plugin or the documentation.
 
 [Zap](https://github.com/red-blox/zap) is a neighbouring compiler that focuses on bandwidth. It
-leaves rate limiting to the game, and one malformed event discards the rest of that player's batch.
+leaves rate limiting to the game, and its decode loop has no `pcall`: one malformed event throws out
+of it, discarding the rest of that player's batch with nothing for the game to catch.
 
 | | BlinkBlox | Blink 0.18 | Zap |
 |---|---|---|---|
 | Per-player, per-event rate limits | Yes | No | No |
-| A malformed event drops only itself | Yes | No | No |
+| A decode failure is caught and reported to the game | Yes | No | No |
 | Shared bitfield for booleans and optionals | Yes | No | Yes |
 | TypeScript output | Yes | Yes | Yes |
 

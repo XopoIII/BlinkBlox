@@ -140,9 +140,12 @@ function SaveLoadout {
 
 With `Concurrency: 1`, a second `SaveLoadout` from a player whose first is still saving is refused.
 It is answered with a failure straight away, like a call refused by `Rate`, and reported through the
-same [rate-limit handler](/BlinkBlox/language/events/#rate-burst), once a second per player. The place
-is given back when the call is answered -- whether the listener returned, threw, or returned the wrong
-type -- and a call waiting in the queue for a listener that has not connected yet counts as running.
+same [rate-limit handler](/BlinkBlox/language/events/#rate-burst), with the function's name, at most
+once a second per player and function, apart from its `Rate` refusals. The server also warns, on the
+same schedule: `"SaveLoadout" from Player1 already has 1 calls running, 3 refused.` The place is given
+back when the call is answered -- whether the listener returned, threw, or returned the wrong type,
+or the queue for a listener that has not connected yet was full -- and a call waiting in that queue
+counts as running.
 When the player leaves, their count goes with them.
 
 `Concurrency` is a whole number of at least 1. Like `Rate`, it applies to a `From: Client` function
@@ -202,7 +205,7 @@ rejects. What causes it:
 | The listener threw | The listening side warns `"Name" encountered an error, ...` with the error. |
 | The listener returned something its `Return` type does not allow | The same warning. The reply is taken back out of the batch rather than sent half-written. |
 | The call was refused by `Rate` | Reported through the [rate-limit handler](/BlinkBlox/language/events/#rate-burst). |
-| The player already had `Concurrency` calls running | Reported through the same handler, with the function's name. |
+| The player already had `Concurrency` calls running | The server warns, and reports it through the same handler with the function's name. |
 | The server's queue for an unconnected listener was full | Nothing is reported. |
 | Nobody answered within `InvocationTimeout` | The caller's side warns, naming the function and, on the server, the player. |
 | The player being asked left the game | Every call outstanding to them fails at once rather than timing out. |

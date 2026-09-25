@@ -24,6 +24,84 @@ const redirects = {
 	'/language/7-profiles': '/BlinkBlox/language/profiles',
 };
 
+// The sidebar, in reading order. The llms.txt files below follow the same order.
+const sidebar = [
+	{
+		label: 'Getting Started',
+		items: [
+			'getting-started/installation',
+			'getting-started/quick-start',
+			'getting-started/cli',
+			'getting-started/studio-plugin',
+		],
+	},
+	{
+		label: 'Language',
+		items: [
+			'language/options',
+			'language/scopes',
+			'language/imports',
+			'language/types',
+			'language/events',
+			'language/functions',
+			'language/profiles',
+		],
+	},
+	{
+		label: 'Guides',
+		items: [
+			'guides/securing-the-server',
+			'guides/bandwidth',
+			'guides/benchmarks',
+			'guides/migrating-from-blink',
+			'guides/roblox-ts',
+			'guides/ai-assistants',
+		],
+	},
+	{
+		label: 'Reference',
+		items: [
+			'reference/generated-api',
+			'reference/options',
+			'reference/diagnostics',
+			'reference/wire-compatibility',
+		],
+	},
+	'changelog',
+];
+
+// The plain-text copies of the site for AI assistants; guides/ai-assistants.mdx describes them.
+const llmsTxt = {
+	details: [
+		'BlinkBlox is a maintained fork of Blink, forked at v0.18.8. A schema in the `.blink` language',
+		'compiles to a server module, a client module and optionally a types module and TypeScript',
+		'definitions, all Luau, that serialise events and functions into buffers. Schema syntax, option',
+		'names and defaults differ from upstream Blink and from zap; take them from these pages.',
+		'',
+		'After writing or changing a schema, run `blinkblox <schema> --check --json`: it compiles without',
+		'writing, and prints every diagnostic with its code, file, line and column as one JSON document.',
+	].join('\n'),
+	// Pages in the sidebar's order; without this they come alphabetically, the changelog second.
+	promote: ['index*', ...sidebar.flatMap((entry) => (typeof entry === 'string' ? [entry] : entry.items))],
+	// The changelog is the largest page and the benchmark tables the next, and neither is needed to
+	// write a schema. The full file keeps them, last; the small one leaves them out.
+	demote: ['guides/benchmarks', 'changelog'],
+	exclude: ['guides/benchmarks', 'changelog'],
+	// A plain <Aside> is a note, and the notes carry rules -- an unranged integer wraps, an exported
+	// type cannot hold an Instance -- so the small file keeps them. Tips and collapsed sections go.
+	minify: { note: false },
+	// CHANGELOG.md's own title repeats the page's; custom.css hides it on the site. Pages start at h2,
+	// so it is the only h1 in any page's body, and the selector matcher here takes no combinators.
+	customSelectors: { all: ['h1'] },
+	optionalLinks: [
+		{
+			label: 'Changelog',
+			url: 'https://xopoiii.github.io/BlinkBlox/changelog/',
+			description: 'every release since the fork, with what changed on the wire',
+		},
+	],
+};
+
 export default defineConfig({
 	redirects,
 	vite: {
@@ -63,51 +141,8 @@ export default defineConfig({
 				themes: ['catppuccin-mocha', 'catppuccin-latte'],
 				shiki: { langs: [{ ...blinkGrammar, name: 'blink', aliases: ['blinkblox'] }] },
 			},
-			plugins: [starlightLinksValidator(), starlightLlmsTxt()],
-			sidebar: [
-				{
-					label: 'Getting Started',
-					items: [
-						'getting-started/installation',
-						'getting-started/quick-start',
-						'getting-started/cli',
-						'getting-started/studio-plugin',
-					],
-				},
-				{
-					label: 'Language',
-					items: [
-						'language/options',
-						'language/scopes',
-						'language/imports',
-						'language/types',
-						'language/events',
-						'language/functions',
-						'language/profiles',
-					],
-				},
-				{
-					label: 'Guides',
-					items: [
-						'guides/securing-the-server',
-						'guides/bandwidth',
-						'guides/benchmarks',
-						'guides/migrating-from-blink',
-						'guides/roblox-ts',
-						'guides/ai-assistants',
-					],
-				},
-				{
-					label: 'Reference',
-					items: [
-						'reference/generated-api',
-						'reference/options',
-						'reference/diagnostics',
-						'reference/wire-compatibility',
-					],
-				},
-				'changelog',
-			],
+			plugins: [starlightLinksValidator(), starlightLlmsTxt(llmsTxt)],
+			sidebar,
 		}),
 	],
 });

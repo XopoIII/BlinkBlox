@@ -251,7 +251,7 @@
 		"numbers": {
 			"patterns": [
 				{
-					"match": "\\b\\d+(?:\\.\\d+)?\\b",
+					"match": "(?:(?<!\\w)-)?\\b\\d+(?:\\.\\d+)?\\b|(?<![\\w.])\\.\\d+\\b",
 					"name": "constant.numeric.blink"
 				}
 			]

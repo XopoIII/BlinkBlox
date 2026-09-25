@@ -1,9 +1,12 @@
 --!strict
---- What the editor offers to complete at the cursor: a keyword at the start of a line, and after a
---- `:` or `=` a primitive or a name the schema declares.
+--- What the editor offers to complete at the cursor: a keyword or `@profile` at the start of a line,
+--- an option's name and value, an event's or function's field and the values it takes, and where a
+--- type goes, a primitive or a name the schema declares.
 ---
 --- A pure function of the text, the cursor and the declared names, so it can be checked outside
 --- Studio; the popup that shows the result stays in init.luau.
+local Attributes = require("@compiler/Modules/Attributes")
+local Grammar = require("@compiler/Modules/Grammar")
 local Settings = require("@compiler/Settings")
 local Utility = require("./Utility")
 
@@ -41,7 +44,43 @@ local KEYWORDS: { Symbol } = {
 	{ Label = "import", Insert = "import %s as " },
 	{ Label = "scope", Insert = "scope %s {}" },
 	{ Label = "export", Insert = "export " },
+	{ Label = "option", Insert = "option %s = " },
 }
+
+--> Every option but the deprecated `UseColon`, in name order.
+local OPTIONS: { Symbol } = {}
+for Name in Grammar.OPTIONS do
+	if Name ~= "UseColon" then
+		table.insert(OPTIONS, { Label = Name, Insert = `{Name} = ` })
+	end
+end
+table.sort(OPTIONS, function(a, b)
+	return a.Label < b.Label
+end)
+
+--> What an option's value can be, where the language fixes it.
+local BOOLEANS = { "true", "false" }
+local OPTION_VALUES: { [string]: { string } } = {
+	Casing = { "Pascal", "Camel", "Snake" },
+}
+for Name, Type in Grammar.OPTIONS do
+	if Type == "Boolean" then
+		OPTION_VALUES[Name] = BOOLEANS
+	end
+end
+
+--> The fields of an `event` and of a `function`, in the order the docs write them.
+local FIELDS: { [string]: { Grammar.EventOption } } = {
+	event = Grammar.EVENT,
+	["function"] = Grammar.FUNCTION,
+}
+
+local FIELD_KEYS: { [string]: true } = {}
+for _, Fields in FIELDS do
+	for _, Field in Fields do
+		FIELD_KEYS[Field.Key] = true
+	end
+end
 
 --> Shortest first, so the closest match to what has been typed is at the top. Labels of one length go
 --> in name order: `Settings.Primtives` is a map, so without it their order was whatever the table's
@@ -62,6 +101,135 @@ local function Extends(Label: string, Typed: string): boolean
 	return Stub == Typed and Stub ~= Label
 end
 
+--- Whether the `Keyword` at `At` opens a declaration: first on its line, after any attribute, and
+--- followed by a name.
+local function Declares(Text: string, At: number, Keyword: string): boolean
+	if not string.match(Text, "^[ \t]+[%a_]", At + #Keyword) then
+		return false
+	end
+
+	local LineStart = At
+	while LineStart > 1 and string.sub(Text, LineStart - 1, LineStart - 1) ~= "\n" do
+		LineStart -= 1
+	end
+
+	local Prefix = string.sub(Text, LineStart, At - 1)
+	return string.match(Prefix, "^%s*$") ~= nil or string.match(Prefix, "^%s*@%a+%b()%s*$") ~= nil
+end
+
+--> How much text `NearestBlock` reads at a time, walking back from the cursor.
+local CHUNK = 4096
+
+--- The nearest `event` or `function` declaration before `Position`, and where its keyword is.
+---
+--- Runs on every keystroke, so it reads the schema from the cursor back, a chunk at a time, and only as
+--- far as the nearest one, finding the keywords with plain `string.find` at memory speed. A pattern
+--- search or a walk in Luau costs about a millisecond per 30 KB, and so does `string.reverse`.
+local function NearestBlock(Text: string, Position: number): (string?, number)
+	local Upper = Position - 1
+	while Upper >= 1 do
+		local From = math.max(1, Upper - CHUNK + 1)
+		local Slice = string.sub(Text, From, Upper)
+
+		--> Each keyword's occurrences in the chunk, checked from the last: the first that opens a
+		--> declaration is its nearest.
+		local Found: string?, Best = nil, 0
+		for Keyword in FIELDS do
+			local Occurrences: { number } = {}
+			local Index = 1
+			while true do
+				local At = string.find(Slice, Keyword, Index, true)
+				if not At then
+					break
+				end
+
+				table.insert(Occurrences, From + At - 1)
+				Index = At + 1
+			end
+
+			for Nth = #Occurrences, 1, -1 do
+				local At = Occurrences[Nth]
+				if At <= Best then
+					break
+				elseif Declares(Text, At, Keyword) then
+					Found, Best = Keyword, At
+					break
+				end
+			end
+		end
+
+		if Found then
+			return Found, Best
+		elseif From == 1 then
+			break
+		end
+
+		--> Overlapping by a keyword's length, so one split across two chunks is still found.
+		Upper = From + #"function" - 2
+	end
+
+	return nil, 0
+end
+
+--- The declaration whose braces hold `Position`, if it is an `event` or a `function`, and the text of
+--- its body up to there. Braces are counted from the nearest such declaration, skipping comments and
+--- strings, and only until its block closes: its body is short, whatever the schema's length.
+local function Enclosing(Text: string, Position: number): (string?, string)
+	local Keyword, Start = NearestBlock(Text, Position)
+	if not Keyword then
+		return nil, ""
+	end
+
+	--> The cursor is in the body only at depth one; deeper is a nested struct.
+	local Depth, Brace = 0, 0
+	local Index = Start
+	while true do
+		local At = string.find(Text, '[{}"%-]', Index)
+		if not At or At >= Position then
+			break
+		end
+
+		local Character = string.sub(Text, At, At)
+		if Character == "-" and string.sub(Text, At + 1, At + 1) == "-" then
+			local Level = string.match(Text, "^%-%-%[(=*)%[", At)
+			local Close = if Level then `]{Level}]` else "\n"
+			local _, End = string.find(Text, Close, At + 2, true)
+			Index = (End or #Text) + 1
+		elseif Character == '"' then
+			local _, End = string.find(Text, '"', At + 1, true)
+			Index = (End or #Text) + 1
+		else
+			if Character == "{" then
+				Depth += 1
+				if Depth == 1 then
+					Brace = At
+				end
+			elseif Character == "}" then
+				Depth -= 1
+				if Depth == 0 then
+					--> The declaration closed before the cursor.
+					return nil, ""
+				end
+			end
+			Index = At + 1
+		end
+	end
+
+	if Depth ~= 1 then
+		return nil, ""
+	end
+
+	--> A nested struct's own fields are not the declaration's.
+	local Body = string.gsub(string.sub(Text, Brace + 1, Position - 1), "%b{}", "")
+	return Keyword, Body
+end
+
+local function Offer(Items: { Item }, Icon: string, Typed: string, Label: string, Insert: string)
+	if Extends(Label, Typed) then
+		table.insert(Items, { Icon = Icon, Label = Label, Insert = Insert })
+	end
+end
+
 local Completion = {}
 
 --- The items to offer with the cursor at `Cursor` in `Text`. `Symbols` are the names the last
@@ -76,33 +244,88 @@ function Completion.Match(Text: string, Cursor: number, Symbols: { [string]: tru
 		return Items
 	end
 
-	--> A keyword opens a line.
-	if Word.Index == 1 then
-		for _, Symbol in KEYWORDS do
-			if Extends(Symbol.Label, Typed) then
-				table.insert(Items, { Icon = ICONS.Keyword, Label = Symbol.Label, Insert = Symbol.Insert })
-			end
+	--> A profile inside `@profile("`: the whole word is replaced, so the insert is the whole attribute.
+	local Profile = string.match(Typed, '^@profile%("(%a*)$')
+	if Profile and Word.Index == 1 then
+		for _, Name in Attributes.PROFILES do
+			Offer(Items, ICONS.Keyword, Profile, Name, `@profile("{Name}")`)
 		end
+
+		return Items
 	end
 
-	--> A type follows a field's `:` or a declaration's `=`.
+	local WordStart = Line.Start + Word.Start - 1
+	if Word.Index == 1 then
+		local Block, Body = Enclosing(Text, WordStart)
+		if Block then
+			--> A field opens a line in an event or a function, once each.
+			for _, Field in FIELDS[Block] do
+				local Written = string.find(Body, `%f[%w_]{Field.Key}%s*:`)
+				if not Written then
+					Offer(Items, ICONS.Field, Typed, Field.Key, `{Field.Key}: `)
+				end
+			end
+		else
+			--> A keyword or an attribute opens a line everywhere else.
+			for _, Symbol in KEYWORDS do
+				Offer(Items, ICONS.Keyword, Typed, Symbol.Label, Symbol.Insert)
+			end
+			Offer(Items, ICONS.Snippet, Typed, "@profile", '@profile("%s")')
+		end
+
+		return Items
+	end
+
 	local Previous = Utility.GetWordRangeBeforePosition(Line.Text, Word.Start - 1)
 	if Previous.Text == "" then
 		return Items
 	end
 
+	--> `option` is followed by the option's name, and `option Name =` by its value.
+	local Leading = Utility.GetWordRangeAtPosition(Line.Text, 1)
+	if Leading.Text == "option" then
+		if Word.Index == 2 then
+			for _, Symbol in OPTIONS do
+				Offer(Items, ICONS.Keyword, Typed, Symbol.Label, Symbol.Insert)
+			end
+		elseif Word.Index == 4 and Previous.Text == "=" then
+			local Name = Utility.GetWordRangeBeforePosition(Line.Text, Previous.Start - 1).Text
+			local Values: { string } = OPTION_VALUES[Name] or {}
+			for _, Value in Values do
+				Offer(Items, ICONS.Keyword, Typed, Value, Value)
+			end
+		end
+
+		return Items
+	end
+
+	--> A field of an event or a function takes its own values, and `Data` and `Return` a type. Only a
+	--> key one of them has is worth finding the enclosing declaration for.
+	local Key = string.match(Previous.Text, "^([%a_][%w_]*):$")
+	local Block = if Key and FIELD_KEYS[Key] then Enclosing(Text, WordStart) else nil
+	if Block and Key then
+		for _, Field in FIELDS[Block] do
+			if Field.Key == Key and #Field.Values > 0 then
+				for _, Value in Field.Values do
+					Offer(Items, ICONS.Keyword, Typed, tostring(Value), tostring(Value))
+				end
+
+				return Items
+			elseif Field.Key == Key and Field.Numeric then
+				return Items
+			end
+		end
+	end
+
+	--> A type follows a field's `:` or a declaration's `=`.
 	if string.match(Previous.Text, ":$") or Previous.Text == "=" then
 		for _, Symbol in PRIMITIVES do
-			if Extends(Symbol.Label, Typed) then
-				table.insert(Items, { Icon = ICONS.Primitive, Label = Symbol.Label, Insert = Symbol.Label })
-			end
+			Offer(Items, ICONS.Primitive, Typed, Symbol.Label, Symbol.Label)
 		end
 
 		if Symbols then
 			for Symbol in Symbols do
-				if Extends(Symbol, Typed) then
-					table.insert(Items, { Icon = ICONS.Variable, Label = Symbol, Insert = Symbol })
-				end
+				Offer(Items, ICONS.Variable, Typed, Symbol, Symbol)
 			end
 		end
 	end

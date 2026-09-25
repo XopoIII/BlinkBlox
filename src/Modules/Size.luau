@@ -8,7 +8,7 @@
 --- and says so only in Studio's Output: in a live game the event just never arrives, and only when a
 --- value happens to be large. A schema that can exceed its budget is broken in a way that no test in
 --- the game will reproduce, so the compiler has to say so before the schema ships rather than after.
---- The budget is `MaxUnreliableSize`; see Grammar.Options for why it sits below 1000.
+--- The budget is `MaxUnreliableSize`; see Grammar.DEFAULTS for why it sits below 1000.
 ---
 --- The numbers here MUST track what `src/Generator/Prefabs/` actually emits. They are checked
 --- against it rather than trusted: the suite serialises every exported type and asserts the measured

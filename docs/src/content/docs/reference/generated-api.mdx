@@ -8,7 +8,8 @@ import { Aside } from '@astrojs/starlight/components';
 A schema compiles to a server module, a client module and, with
 [`TypesOutput`](/BlinkBlox/language/options/#serveroutput-clientoutput-typesoutput), a shared types
 module. This page lists everything they expose. Names are shown in the default `Pascal`
-[casing](#casing).
+[casing](#casing). Every module declares `--!strict` and passes it, so the types below are what a
+strict script sees.
 
 In the signatures below, `...Data` stands for an event's or function's `Data` as parameters: one
 parameter named `Value` for a single type, or one per element of a
@@ -82,9 +83,10 @@ is set.
 
 - A **reliable** send is written into the recipient's batch and sent on the next `StepReplication`.
 - An **unreliable** send is sent at once, as its own packet. One larger than
-  [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) is dropped with a warning.
-- A send throws if a value fails validation: always for a string, buffer or array longer than its
-  bound, and for types, ranges and classes with
+  [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize), counting 6 bytes for each
+  Instance it carries, is dropped with a warning.
+- A send throws if a value fails validation: always for a string, buffer or array length outside its
+  bounds or a map with more than 65535 entries, and for types, ranges and classes with
   [`WriteValidations`](/BlinkBlox/language/options/#writevalidations). Whatever the throw had already
   written is taken back out, so the rest of the batch is unaffected.
 
@@ -144,8 +146,8 @@ What `Invoke` returns depends on the function's [`Yield`](/BlinkBlox/language/fu
 
 - A call fails when the listener errors, when its return value fails to serialise, when a rate limit
   refuses it, when the player already has the function's
-  [`Concurrency`](/BlinkBlox/language/functions/#concurrency) calls running, when the call is not
-  answered within
+  [`Concurrency`](/BlinkBlox/language/functions/#concurrency) calls running, when the server's queue
+  for a function with no listener is full, when the call is not answered within
   [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) (10 seconds), and, on the
   server, when the player leaves or has already left.
 - At most **32** calls may be outstanding at once: per client, and per player on the server. The 33rd
@@ -227,8 +229,9 @@ its result (`:andThen(...)`) errors in a story. Guard it with `RunService:IsRunn
 | Name | Why |
 |---|---|
 | `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler` | Module members. A top-level declaration may not take these names (`E3005`). |
-| Built-in Luau types: `any`, `boolean`, `buffer`, `never`, `number`, `string`, `thread`, `unknown` | A declared type is exported under its own name, and Luau refuses `export type number = number` (`E3005`, since 0.32.0). |
-| Roblox types the module uses: `Player`, `Instance`, `RemoteEvent`, `UnreliableRemoteEvent`, `CFrame`, `Vector3`, `Color3`, `DateTime`, `BrickColor`, and any class the schema names in `Instance(...)` | A top-level type of that name would refer to itself and shadow every use of the Roblox type in the module (`E3005`, since 0.32.0). A type inside a `scope` is exported with the scope's name in front, so it may take these names. |
+| Built-in Luau types: `any`, `never`, `number`, `thread` | A declared type is exported under its own name, and Luau refuses `export type number = number` (`E3005`, since 0.32.0). |
+| Roblox types the module uses: `Player`, `RemoteEvent`, `UnreliableRemoteEvent`, `Vector3`, and any class the schema names in `Instance(...)` | A top-level type of that name would refer to itself and shadow every use of the Roblox type in the module (`E3005`, since 0.32.0). A type inside a `scope` is exported with the scope's name in front, so it may take these names. |
+| BlinkBlox's own types: `boolean`, `buffer`, `string`, `unknown`, `Instance`, `CFrame`, `Color3`, `DateTime`, `BrickColor` and the rest | The parser reads them as primitives, so a declaration cannot be named after one (`E2002`). |
 | Luau keywords (`end`, `local`, ...) | A named type-pack element becomes a parameter, so it must be a Luau identifier (`E3005`). Struct fields, flags and tags may be keywords; they are quoted. |
 | `Player`, `Buffer`, `Load`, `Size`, `Success` and other names the generated functions use | Refused as type-pack element names, which would shadow them (`E3005`); the diagnostic names the clash. |
 | A tagged enum's tag | May not also be a field of one of its variants (`E3005`). |
