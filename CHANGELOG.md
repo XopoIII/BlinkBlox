@@ -7,6 +7,29 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.37.1 — 2026-09-25
+
+Two listener fixes, found by setting this fork's dispatch beside the Luau signal libraries
+(stravant/goodsignal, jiwonz/luau-signal) and Roblox's own reactive `signals`. None of them was worth
+taking as a library: goodsignal's reused runner thread is what `Spawn` has done since 0.23.0, and
+`signals` is reactive state, not events. **The wire format and the schema signature do not change**;
+regenerate to pick the fixes up.
+
+### Fixed
+
+- **A queue replayed to a `Sync` listener was unguarded.** When `On` connected, each event queued
+  before it was handed to the listener in a bare call, where one arriving later is caught and
+  reported on a thread of its own. A listener that threw on a queued event threw out of `On` after it
+  had been bound: the caller never got its disconnect, the rest of the queue was never delivered, and
+  the next `On` was handed the same queue again. The queue is now taken before the first event is
+  replayed, and each call is guarded as on receipt.
+- **A listener disconnected during a dispatch was still called.** A `Many` event's dispatch walks the
+  list it started with, which is what makes a self-disconnecting listener safe; it also reached a
+  listener that an earlier one had just disconnected. It is now passed over, as `RBXScriptSignal`
+  does. The check costs one comparison per listener until something disconnects mid-dispatch.
+  Grabby Pit: a listener that disconnects a later one of the same event now stops that one receiving
+  the event in flight, where it used to receive it once more.
+
 ## 0.37.0 — 2026-09-25
 
 A game can act on every packet the server refuses. **The wire format does not change, and neither

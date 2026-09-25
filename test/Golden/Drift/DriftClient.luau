@@ -363,6 +363,10 @@ local Events: any = {
     Unreliable = table.create(256)
 }
 
+--> Counts disconnects from Many events, so a dispatch can tell in one comparison whether a listener
+--> it is about to call may have gone since it started. See `Each` in src/Generator/Listeners.luau.
+local ListenerEpoch = 0
+
 local Queue: any = {
     Reliable = table.create(256),
     Unreliable = table.create(256)
@@ -530,7 +534,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			local Value: number = SerdesFunctions.ReadEVENT_Inserted()
 			if Events.Reliable[0] ~= nil then
 				SerdesEvent = "Inserted"
-				local ListenerRan, ListenerFailure = pcall(Events.Reliable[0], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[0], Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[0] > 256 then
@@ -542,7 +546,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			local Value: number = SerdesFunctions.ReadEVENT_Alpha()
 			if Events.Reliable[1] ~= nil then
 				SerdesEvent = "Alpha"
-				local ListenerRan, ListenerFailure = pcall(Events.Reliable[1], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[1], Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[1] > 256 then
@@ -608,10 +612,12 @@ local Returns = table.freeze({
 				warn("[BlinkBlox]: \"Inserted\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
 			Events.Reliable[0] = Listener
-			for Index, Arguments in Queue.Reliable[0] do
-				Listener(table.unpack(Arguments, 1, Arguments.n))
-			end
+			local Pending = Queue.Reliable[0]
 			Queue.Reliable[0] = {}
+			for _, Arguments in Pending do
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
 			return function (): ()
 				if Events.Reliable[0] == Listener then
 					Events.Reliable[0] = nil
@@ -625,10 +631,12 @@ local Returns = table.freeze({
 				warn("[BlinkBlox]: \"Alpha\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
 			Events.Reliable[1] = Listener
-			for Index, Arguments in Queue.Reliable[1] do
-				Listener(table.unpack(Arguments, 1, Arguments.n))
-			end
+			local Pending = Queue.Reliable[1]
 			Queue.Reliable[1] = {}
+			for _, Arguments in Pending do
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
 			return function (): ()
 				if Events.Reliable[1] == Listener then
 					Events.Reliable[1] = nil

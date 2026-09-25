@@ -11,6 +11,7 @@ local Builder = require("../Modules/Builder")
 local Decode = require("./Decode")
 local Fragments = require("./Fragments")
 local Generators = require("./Generators")
+local Listeners = require("./Listeners")
 local Parser = require("../Parser")
 local Prefabs = require("./Prefabs")
 local Queues = require("./Queue")
@@ -190,28 +191,12 @@ function Declarations.Event(Declaration: Parser.Event)
 		local ContextArguments = `Listener: ({State.Context == "Server" and "Player: Player, " or ""}{Values}) -> ()`
 		local Sender = if State.Context == "Server" then "Player, " else ""
 
-		local function CallListener(ListenerArguments: string): Blocks.Block
-			local Call = Blocks.Block()
-			if IsSync and State.Options.SyncValidation then
-				Call = Call:Line(`SerdesEvent = "{Declaration.Name}"`)
-			end
-
-			--> A Sync listener runs inside the decode loop's pcall, so an error in game code used to be
-			--> reported as a packet that could not be decoded -- blamed on the sender, silently on the
-			--> server unless the game had installed a handler, and taking the rest of the packet and
-			--> any later listeners with it. It is caught here instead, where the cursor already sits
-			--> past the event, and raised on a thread of its own: which is where an Async listener's
-			--> error has always surfaced.
-			local PathExpr = IsSingle and Connection or "Listener"
-			if IsSync then
-				Call = Call:Line(`local ListenerRan, ListenerFailure = pcall({PathExpr}, {ListenerArguments})`)
-					:Line("if not ListenerRan then task.spawn(error, ListenerFailure, 0) end")
-			else
-				Call = Call:Line(`Spawn({PathExpr}, {ListenerArguments})`)
-			end
-
-			return Call
-		end
+		local Event: Listeners.Event = {
+			Name = Declaration.Name,
+			Connection = Connection,
+			IsSync = IsSync,
+			Validating = State.Options.SyncValidation == true,
+		}
 
 		--> Read before the payload, because that is the order it was written in. The DECISION comes
 		--> after the payload is decoded, for the same reason the rate limit's does: a variable-length
@@ -244,6 +229,7 @@ function Declarations.Event(Declaration: Parser.Event)
 				:Line(`local Listeners = table.clone({Connection})`)
 				:Line("table.remove(Listeners, Index)")
 				:Line(`{Connection} = Listeners`)
+				:Line("ListenerEpoch += 1")
 				:End()
 		end
 
@@ -254,12 +240,12 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> predicted locally is delivered exactly as one received from the network would be.
 		local function Deliver(Target: Blocks.Block, Payload: string)
 			local ListenerArguments = `{Sender}{Payload}`
-			local Call = CallListener(ListenerArguments)
+			local Call = Listeners.Call(Event, Connection, ListenerArguments, true)
 			if not IsReliable then
 				if IsSingle then
 					Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent):End()
 				else
-					Target:Iterator("_", "Listener", Connection):Lines(Call.Content, Target.Indent):End()
+					Listeners.Each(Target, Event, ListenerArguments)
 				end
 
 				return
@@ -269,10 +255,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			if IsSingle then
 				Bound = Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent)
 			else
-				Bound = Target:Compare(`#{Connection}`, "0", "Greater")
-					:Iterator("_", "Listener", Connection)
-					:Lines(Call.Content, Target.Indent + 1)
-					:End()
+				Bound = Listeners.Each(Target:Compare(`#{Connection}`, "0", "Greater"), Event, ListenerArguments)
 			end
 
 			Queues.Enqueue(Bound:Branch("Default"), State.Context, Queue, ListenerArguments, Declaration.Name):End()
@@ -281,14 +264,11 @@ function Declarations.Event(Declaration: Parser.Event)
 		Deliver(Block, InnerArguments)
 
 		if IsReliable then
-			Listener = BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true))
-				:Iterator("Index", "Arguments", Queue)
-				:Line(
-					IsSync and `Listener(table.unpack(Arguments, 1, Arguments.n))`
-						or `Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))`
-				)
-				:End()
-				:Line(`{Queue} = \{}`)
+			Listener = Listeners.Replay(
+				BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true)),
+				Event,
+				Queue
+			)
 				:Lines(Disconnect.Content, 1)
 				:End()
 		else
