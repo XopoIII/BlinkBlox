@@ -1,0 +1,103 @@
+---
+title: Places without a server
+description: Showroom builds, test places and other places where no server module runs -- ClientConnectTimeout, AutoStart and the exported remote names.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A game is not always one place. A showroom build shares the real game's scripts but should never
+talk to anyone; a test place loads the client scripts with no server behind them. By default neither
+works: the client module waits for the server's remotes with no timeout, so every script that
+requires it stops for good, and the server module creates the remotes the moment it is required, so
+a build that must stay silent cannot require it at all.
+
+Two options cover both halves.
+
+```blink title="Game.blink"
+option ClientConnectTimeout = 10
+option AutoStart = false
+
+event Ready {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Rate: 5,
+    Data: u8
+}
+```
+
+## The client: `ClientConnectTimeout`
+
+With [`ClientConnectTimeout`](/BlinkBlox/language/options/#clientconnecttimeout) set, requiring the
+client module waits at most that many seconds for the remotes and then returns either way. Check
+`Connected` to know which module you got:
+
+```luau title="Network.client.luau"
+local Net = require(ReplicatedStorage.Network.Client)
+
+if not Net.Connected then
+    -- No server in this place. Everything below still runs, and does nothing.
+end
+
+Net.Ready.Fire(1)
+```
+
+A module that did not connect has the [edit-mode stubs](/BlinkBlox/reference/generated-api/#edit-mode):
+`Fire` does nothing, listeners are never called, `Iter` ends at once, and `Invoke` fails at once.
+It stays that way: remotes that turn up after the timeout are ignored, because `require` has cached
+the module and a client joining half way would have missed what came before. Reload to try again.
+
+Pick a timeout that a slow join will not reach. The client waits only for the server to have required
+its module, so in a real game the wait is usually a frame or two; ten seconds covers a server that is
+still loading.
+
+## The server: `AutoStart = false`
+
+With [`AutoStart = false`](/BlinkBlox/language/options/#autostart), requiring the server module
+creates no remote and connects nothing. Call `Start()` where the game should talk:
+
+```luau title="Network.server.luau"
+local Net = require(ServerScriptService.Network.Server)
+
+if not workspace:GetAttribute("Showroom") then
+    Net.Start()
+end
+```
+
+Shared code can require the module and register listeners at the top level, in both builds, without
+a lazy `require` to keep the remotes from appearing. Before `Start`, a `Fire` is dropped with a single
+warning and an `Invoke` of a client fails at once; see the option for why they are not queued.
+`Start` may be called from several scripts: the second call does nothing.
+
+## Finding the remotes yourself
+
+Both modules export the remotes' names, so nothing outside them spells out
+`<RemoteScope>_BLINK_RELIABLE_REMOTE`:
+
+```luau
+local Net = require(ReplicatedStorage.Network.Client)
+print(Net.Remotes.Reliable, Net.Remotes.Unreliable)
+```
+
+<Aside>
+The names follow [`RemoteScope`](/BlinkBlox/language/options/#remotescope), and `Remotes` follows
+[`Casing`](/BlinkBlox/language/options/#casing): `Net.remotes.Reliable` under `Camel` or `Snake`. The
+keys `Reliable` and `Unreliable` name the two channels, as `Type:` does in a schema, and keep their
+spelling.
+</Aside>
+
+Both options may sit under a [profile](/BlinkBlox/language/profiles/), so only the build that needs
+them gets them:
+
+```blink
+@profile("test")
+option ClientConnectTimeout = 2
+
+event Ping {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Rate: 5,
+    Data: u8
+}
+```

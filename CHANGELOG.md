@@ -7,6 +7,52 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+A module can come up in a place where no server module runs. **The wire format does not change, and
+neither does the schema signature**: a module built with these options talks to a 0.37.0 one built
+from the same schema.
+
+### Added
+
+- **`option ClientConnectTimeout = <seconds>`**, any number above zero. The client module waits at
+  most that long for the remotes. When they do not come, requiring it still returns, with the
+  edit-mode stubs in place of the API -- `Fire` does nothing, listeners are never called, `Invoke`
+  fails at once with `The client is not connected to a server` -- and `Connected` false. When they
+  come, `Connected` is true. Remotes that appear after the timeout are not picked up: the module is
+  already cached, and the game reloads to try again. `Connected` exists only under the option;
+  without it the client waits for as long as it takes, as before.
+- **`option AutoStart = false`**: requiring the server module creates no remote and connects
+  neither the remotes nor `Heartbeat`. **`Start()`** does all three, and a second call does nothing.
+  Before it, `On` and the handler setters register as usual; a `Fire` is dropped, not queued, and
+  the first one warns once (`Something was sent before Start() was called, and was dropped.`); an
+  `Invoke` of a client fails at once instead of waiting out `InvocationTimeout`. The client module
+  ignores the option.
+- **`Remotes`** on both modules and their stubs: `{ Reliable = "<scope>_BLINK_RELIABLE_REMOTE",
+  Unreliable = "<scope>_BLINK_UNRELIABLE_REMOTE" }`, so no game spells the names out.
+- All three follow `Casing` (`remotes`, `start`, `connected`), are stubbed in edit mode, are declared
+  in the TypeScript output where they exist, and are offered by the Studio plugin's option
+  completion. Both options may sit under `@profile`.
+
+### Changed
+
+- A top-level event, function, scope or exported type named `Remotes` -- in the spelling the casing
+  gives it -- is refused (`E3005`), as are `Start` under `AutoStart = false` and `Connected` under
+  `ClientConnectTimeout`. A plain type may keep the name. A schema that used one of these names has
+  to rename it.
+
+### Downstream
+
+Grabby Pit can drop what it built around the unbounded wait and the eager remotes, once it is on this
+release:
+
+- `client/Link.luau`'s hard-coded `<RemoteScope>_BLINK_RELIABLE_REMOTE` and its own 60-second wait:
+  set `option ClientConnectTimeout = 60` (or less) and require the client module directly, checking
+  `Connected` where the showroom needs to know. The eight client scripts can require it directly.
+  Anything that still needs a remote's name reads `Remotes`.
+- The three lazy requires of the server module: set `option AutoStart = false`, require it at the
+  top like any module, and call `Start()` in the real game's bootstrap only.
+
 ## 0.37.0 — 2026-09-25
 
 A game can act on every packet the server refuses. **The wire format does not change, and neither

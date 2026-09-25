@@ -1,0 +1,12 @@
+-- expect E2003
+-- A client that gives up at once never connects, so a timeout must be above zero.
+option ClientConnectTimeout = 0
+option ClientOutput = "../../Network/ZeroConnectTimeoutClient.luau"
+option ServerOutput = "../../Network/ZeroConnectTimeoutServer.luau"
+
+event Ping {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

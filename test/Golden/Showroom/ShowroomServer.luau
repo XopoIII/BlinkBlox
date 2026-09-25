@@ -9,17 +9,17 @@
 -- This file is not meant to be edited
 
 _G._BLINK = _G._BLINK or {}
-if _G._BLINK["BLINK"] then
-	error("[BlinkBlox]: An instance of BlinkBlox is already running with the remote scope \"BLINK\". Change the remote scope of either instance to avoid conflicts.")
+if _G._BLINK["Showroom"] then
+	error("[BlinkBlox]: An instance of BlinkBlox is already running with the remote scope \"Showroom\". Change the remote scope of either instance to avoid conflicts.")
 end
-_G._BLINK["BLINK"] = true
+_G._BLINK["Showroom"] = true
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
-local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "72b10453eb030037"
+local BASE_EVENT_NAME = "Showroom_BLINK"
+local SCHEMA_SIGNATURE = "7f8e98d241b5d6b2"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -377,7 +377,7 @@ local EventNames: any = {
     Unreliable = {}
 }
 
-local RATE_TEMPLATE = table.freeze({})
+local RATE_TEMPLATE = table.freeze({10, 0, 0, 0, 10, 0, 0, 0})
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
@@ -396,62 +396,111 @@ local function CheckUnreliableSize(Name: string): boolean
 end
 local SerdesEvent = "?"
 local SerdesThread: thread?
-export type TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
-export type TestFlags = {["a a"]: boolean,}
-export type TestEnums = ("b b")
-export type TestTaggedEnums = { Type: "c c", Test: number }
-function SerdesFunctions.WriteEVENT_TestEvent(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-	-- Allocate BLOCK: 8 bytes
-	local BLOCK_START = Allocate(8)
-	-- EVENT_TestEvent (0)
+Queue.Reliable[1] = table.create(256)
+EventNames.Reliable[1] = "Ready"
+Queue.Reliable[2] = table.create(256)
+EventNames.Reliable[2] = "Price"
+Queue.Reliable[3] = table.create(256)
+EventNames.Reliable[3] = "Confirm"
+function SerdesFunctions.WriteEVENT_Announce(Value: string): ()
+	-- Allocate BLOCK: 2 bytes
+	local BLOCK_START = Allocate(2)
+	-- EVENT_Announce (0)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
-	-- Value: TestEvent
-	-- Value1: TestEvent
-	-- Value1["z z"]: z z
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value1["z z"])
-	-- Value1["1 1"]: 1 1
-	buffer.writeu8(SendBuffer, BLOCK_START + 2, Value1["1 1"])
-	-- Value1["2 2"]: 2 2
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value1["2 2"])
-	-- Value1["3 3"]: 3 3
-	buffer.writeu8(SendBuffer, BLOCK_START + 4, Value1["3 3"])
-	-- Value2: TestEvent
-	local SET_BITS = 0
-	if Value2["a a"] == true then SET_BITS += 0x1 end
-	buffer.writeu8(SendBuffer, BLOCK_START + 5, SET_BITS)
-	-- Value3: TestEvent
-	if Value3 == "b b" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 6, 0)
-	else
-		error(`Unexpected enum: {Value3}, expected one of "b b".`)
-	end
-	-- Value4: TestEvent
-	if Value4.Type == "c c" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 7, 0)
-		-- Allocate BLOCK: 1 bytes
-		local BLOCK_START = Allocate(1)
-		-- Value4: c c
-		-- Value4.Test: Test
-		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value4.Test)
-	else
-		error(`Unexpected variant: {Value4.Type}`)
-	end
+	-- Value: Announce
+	local Length = #Value
+	if not (Length <= 64) then error(`Expected "Length" to be smaller than or equal to 64, got {Length} instead.`) end
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, Length)
+	Allocate(Length)
+	buffer.writestring(SendBuffer, SendOffset, Value, Length)
+end
+
+function SerdesFunctions.WriteEVENT_Position(Value: number): ()
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
+	-- EVENT_Position (0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+	-- Value: Position
+	buffer.writeu16(SendBuffer, BLOCK_START + 1, Value)
+end
+
+function SerdesFunctions.ReadEVENT_Ready(): (number)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	-- Value: Ready
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	return Value
+end
+
+function SerdesFunctions.ReadFUNCTION_DATA_Price(): (number)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	-- Value: Price
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	return Value
+end
+
+function SerdesFunctions.WriteFUNCTION_RETURN_Price(Value: number, InvocationIdentifier: number): ()
+	-- Allocate BLOCK: 5 bytes
+	local BLOCK_START = Allocate(5)
+	-- FUNCTION_RETURN_Price (2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
+	-- Value: Price
+	buffer.writeu16(SendBuffer, BLOCK_START + 3, Value)
+end
+
+function SerdesFunctions.WriteFUNCTION_DATA_Confirm(Value: number, InvocationIdentifier: number): ()
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
+	-- FUNCTION_DATA_Confirm (3)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
+	-- Value: Confirm
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, Value)
+end
+
+function SerdesFunctions.ReadFUNCTION_RETURN_Confirm(): (boolean)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	local BITFIELD_0
+	-- Value: Confirm
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	local Value = bit32.btest(BITFIELD_0, 0x01)
+	return Value
 end
 
 if not RunService:IsRunning() then
 	local NOOP = function() end
 	local NOOP_RETURNING = function() return NOOP end
 	local Returns = table.freeze({
-		StepReplication = NOOP,
-		SetRateLimitHandler = NOOP,
-		SetDecodeErrorHandler = NOOP,
-		SetPacketDropHandler = NOOP,
-		Remotes = REMOTE_NAMES,
-	TestEvent = {
-		Fire = NOOP,
-		FireAll = NOOP,
-		FireList = NOOP,
-		FireExcept = NOOP
+		stepReplication = NOOP,
+		setRateLimitHandler = NOOP,
+		setDecodeErrorHandler = NOOP,
+		setPacketDropHandler = NOOP,
+		remotes = REMOTE_NAMES,
+		start = NOOP,
+	Announce = {
+		fire = NOOP,
+		fireAll = NOOP,
+		fireList = NOOP,
+		fireExcept = NOOP
+	},
+	Position = {
+		fire = NOOP,
+		fireAll = NOOP,
+		fireList = NOOP,
+		fireExcept = NOOP
+	},
+	Ready = {
+		on = NOOP_RETURNING
+	},
+	Price = {
+		on = NOOP_RETURNING
+	},
+	Confirm = {
+		invoke = NOOP
 	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
@@ -461,36 +510,67 @@ if not RunService:IsServer() then
     error("Server network module can only be required from the server.")
 end
 
-local Reliable: RemoteEvent = ReplicatedStorage:FindFirstChild(BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
-if not Reliable then
-    local RemoteEvent = Instance.new("RemoteEvent")
-    RemoteEvent.Name = BASE_EVENT_NAME .. "_RELIABLE_REMOTE"
-    --> Set BEFORE parenting, and that ordering is the whole trick. An attribute written on an
-    --> unparented instance replicates atomically with the instance itself; one written afterwards is
-    --> a separate replication event with no ordering guarantee against the client's WaitForChild
-    --> returning. Doing it here removes the race rather than papering over it with a wait.
-    RemoteEvent:SetAttribute("SchemaSignature", SCHEMA_SIGNATURE)
-    RemoteEvent.Parent = ReplicatedStorage
-    Reliable = RemoteEvent
-else
-    --> The remote already existed -- planted by Rojo, or left by an earlier build. Here the attribute
-    --> IS a separate replication event, so the client tolerates arriving before it.
-    Reliable:SetAttribute("SchemaSignature", SCHEMA_SIGNATURE)
+--> option AutoStart = false: requiring this module creates nothing. The remotes are made, and the
+--> Heartbeat and both remotes' connections are made, when the game calls Start.
+local Started = false
+local DroppedBeforeStart = false
+
+--> Sends before Start go nowhere, and are said to have gone nowhere once. They are dropped rather
+--> than queued: in a build that never calls Start -- the reason the option exists -- a queue would
+--> hold every player's events for as long as they stayed, and an event queued for a minute is
+--> rarely still true when it arrives.
+local function DropBeforeStart()
+    if DroppedBeforeStart then
+        return
+    end
+
+    DroppedBeforeStart = true
+    warn("[BlinkBlox]: Something was sent before Start() was called, and was dropped. The server module sends nothing until it is started.")
 end
 
-local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:FindFirstChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
-if not Unreliable then
-    local UnreliableRemoteEvent = Instance.new("UnreliableRemoteEvent")
-    UnreliableRemoteEvent.Name = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE"
-    UnreliableRemoteEvent.Parent = ReplicatedStorage
-    Unreliable = UnreliableRemoteEvent
-end
+--> What Reliable and Unreliable are until Start: reliable sends stop at SavePlayerBuffer, and an
+--> unreliable send, which fires the remote directly, lands here.
+local NOT_STARTED = table.freeze({
+    FireClient = DropBeforeStart,
+    FireAllClients = DropBeforeStart,
+})
 
---> The server creates these when they are missing, but FindFirstChild above may have matched an
---> instance of a different class that a plugin or an earlier build left behind. Failing loudly at
---> require time beats failing per packet, forever, at runtime.
-assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
-assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+local Reliable: RemoteEvent = NOT_STARTED :: any
+local Unreliable: UnreliableRemoteEvent = NOT_STARTED :: any
+
+local function CreateRemotes(): (RemoteEvent, UnreliableRemoteEvent)
+    local Reliable: RemoteEvent = ReplicatedStorage:FindFirstChild(BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
+    if not Reliable then
+        local RemoteEvent = Instance.new("RemoteEvent")
+        RemoteEvent.Name = BASE_EVENT_NAME .. "_RELIABLE_REMOTE"
+        --> Set BEFORE parenting, and that ordering is the whole trick. An attribute written on an
+        --> unparented instance replicates atomically with the instance itself; one written afterwards is
+        --> a separate replication event with no ordering guarantee against the client's WaitForChild
+        --> returning. Doing it here removes the race rather than papering over it with a wait.
+        RemoteEvent:SetAttribute("SchemaSignature", SCHEMA_SIGNATURE)
+        RemoteEvent.Parent = ReplicatedStorage
+        Reliable = RemoteEvent
+    else
+        --> The remote already existed -- planted by Rojo, or left by an earlier build. Here the attribute
+        --> IS a separate replication event, so the client tolerates arriving before it.
+        Reliable:SetAttribute("SchemaSignature", SCHEMA_SIGNATURE)
+    end
+
+    local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:FindFirstChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
+    if not Unreliable then
+        local UnreliableRemoteEvent = Instance.new("UnreliableRemoteEvent")
+        UnreliableRemoteEvent.Name = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE"
+        UnreliableRemoteEvent.Parent = ReplicatedStorage
+        Unreliable = UnreliableRemoteEvent
+    end
+
+    --> The server creates these when they are missing, but FindFirstChild above may have matched an
+    --> instance of a different class that a plugin or an earlier build left behind. Failing loudly at
+    --> require time beats failing per packet, forever, at runtime.
+    assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
+    assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+    return Reliable, Unreliable
+end
 
 local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
 
@@ -829,6 +909,10 @@ end
 local PlayerInvocations: {[Player]: BLINK_INVOCATIONS} = {}
 
 local function InvokePlayer(Player: Player, Index: number): number
+    if not Started then
+        error(`[BlinkBlox]: Cannot invoke {Player.Name} before Start() was called.`)
+    end
+
     --> Checked before an id is claimed. A player who already left gets no answer from anyone, and
     --> PlayerRemoving has cleared their set, so claiming here would put back a set nothing removes
     --> again and park the caller for the whole timeout to learn what is already known.
@@ -898,6 +982,11 @@ end)
 --> again: StepReplication would allocate a buffer and fire a remote at a player who is gone, on
 --> every Heartbeat, for the lifetime of the server.
 local function SavePlayerBuffer(Player: Player)
+    if not Started then
+        DropBeforeStart()
+        return
+    end
+
     if not Player:IsDescendantOf(Players) then
         return
     end
@@ -949,149 +1038,276 @@ local function StepReplication()
         end
     end
 end
-RunService.Heartbeat:Connect(StepReplication)
-Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
-	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
-		ReportDrop(Player, "Malformed", 0)
-		return
-	end
-	if buffer.len(Buffer) > 8192 then
-		ReportDrop(Player, "Oversized", buffer.len(Buffer))
-		return
-	end
-	if not InboundAccept(Player, buffer.len(Buffer), 128, 65536, 65536) then
-		return
-	end
-	if #Instances > 256 then
-		ReportDrop(Player, "Instances", #Instances)
-		return
-	end
-	RecieveCursor = 0
-	RecieveBuffer = Buffer
-	RecieveInstances = Instances
-	RecieveInstanceCursor = 0
-	local Size = buffer.len(RecieveBuffer)
-	if SerdesThread and coroutine.status(SerdesThread) == "suspended" then
-		warn(`[BlinkBlox]: Event "{SerdesEvent}" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.`)
-		coroutine.close(SerdesThread)
-	end
-	SerdesThread = coroutine.running()
-	local DecodedEvents = 0
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
-	end
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
-		DecodedEvents += 1
-		if DecodedEvents > 64 then
-			ReportDrop(Player, "Events", 64)
-			break
+local function Listen()
+	RunService.Heartbeat:Connect(StepReplication)
+	Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
+		if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
+			ReportDrop(Player, "Malformed", 0)
+			return
 		end
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
-			break
+		if buffer.len(Buffer) > 8192 then
+			ReportDrop(Player, "Oversized", buffer.len(Buffer))
+			return
 		end
-	end
-end)
-Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
-	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
-		ReportDrop(Player, "Malformed", 0)
-		return
-	end
-	if buffer.len(Buffer) > 8192 then
-		ReportDrop(Player, "Oversized", buffer.len(Buffer))
-		return
-	end
-	if not InboundAccept(Player, buffer.len(Buffer), 128, 65536, 65536) then
-		return
-	end
-	if #Instances > 256 then
-		ReportDrop(Player, "Instances", #Instances)
-		return
-	end
-	RecieveCursor = 0
-	RecieveBuffer = Buffer
-	RecieveInstances = Instances
-	RecieveInstanceCursor = 0
-	local Size = buffer.len(RecieveBuffer)
-	if SerdesThread and coroutine.status(SerdesThread) == "suspended" then
-		warn(`[BlinkBlox]: Event "{SerdesEvent}" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.`)
-		coroutine.close(SerdesThread)
-	end
-	SerdesThread = coroutine.running()
-	local DecodedEvents = 0
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
-	end
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
-		DecodedEvents += 1
-		if DecodedEvents > 64 then
-			ReportDrop(Player, "Events", 64)
-			break
+		if not InboundAccept(Player, buffer.len(Buffer), 128, 65536, 65536) then
+			return
 		end
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
-			break
+		if #Instances > 256 then
+			ReportDrop(Player, "Instances", #Instances)
+			return
 		end
-	end
-end)
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		RecieveInstances = Instances
+		RecieveInstanceCursor = 0
+		local Size = buffer.len(RecieveBuffer)
+		if SerdesThread and coroutine.status(SerdesThread) == "suspended" then
+			warn(`[BlinkBlox]: Event "{SerdesEvent}" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.`)
+			coroutine.close(SerdesThread)
+		end
+		SerdesThread = coroutine.running()
+		local DecodedEvents = 0
+		local Decoding = -1
+		local function DecodeEvent()
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Decoding = Index
+			if Index == 1 then
+				local Value: number = SerdesFunctions.ReadEVENT_Ready()
+				if RateAccept(Player, 1, 10, 10, "Ready") == true then
+					if Events.Reliable[1] ~= nil then
+						SerdesEvent = "Ready"
+						local ListenerRan, ListenerFailure = pcall(Events.Reliable[1], Player, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[1] < 256 then
+							table.insert(Queue.Reliable[1], table.pack(Player, Value))
+						end
+					end
+				end
+			elseif Index == 2 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: number = SerdesFunctions.ReadFUNCTION_DATA_Price()
+				if not RateAccept(Player, 5, 10, 10, "Price") then
+					Load(PlayersMap[Player])
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 2)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					SavePlayerBuffer(Player)
+					return
+				end
+				if Events.Reliable[2] ~= nil then
+					Spawn(Events.Reliable[2], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[2] >= 256 then
+						Load(PlayersMap[Player])
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 2)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[2], table.pack(Player, Value, InvocationIdentifier))
+				end
+			elseif Index == 3 then
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+					local Success, ReturnValue = pcall(function ()
+						if Answered ~= 1 then
+							error("The call failed on the side that answered it.")
+						end
+						return SerdesFunctions.ReadFUNCTION_RETURN_Confirm()
+					end)
+				local Thread = TakeInvocation(PlayerInvocations[Player], InvocationIdentifier, 3)
+				if Thread ~= nil then
+					if coroutine.status(Thread) == "suspended" then
+						task.spawn(Thread, Success, ReturnValue)
+					end
+				end
+				if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+			else
+				error("[BlinkBlox]: Unknown event index.")
+			end
+		end
+		while (RecieveCursor < Size and Player.Parent ~= nil) do
+			DecodedEvents += 1
+			if DecodedEvents > 64 then
+				ReportDrop(Player, "Events", 64)
+				break
+			end
+			Decoding = -1
+			local Parsed: boolean, Failure: any = pcall(DecodeEvent)
+			if not Parsed then
+				ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
+				break
+			end
+		end
+	end)
+	Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
+		if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
+			ReportDrop(Player, "Malformed", 0)
+			return
+		end
+		if buffer.len(Buffer) > 8192 then
+			ReportDrop(Player, "Oversized", buffer.len(Buffer))
+			return
+		end
+		if not InboundAccept(Player, buffer.len(Buffer), 128, 65536, 65536) then
+			return
+		end
+		if #Instances > 256 then
+			ReportDrop(Player, "Instances", #Instances)
+			return
+		end
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		RecieveInstances = Instances
+		RecieveInstanceCursor = 0
+		local Size = buffer.len(RecieveBuffer)
+		if SerdesThread and coroutine.status(SerdesThread) == "suspended" then
+			warn(`[BlinkBlox]: Event "{SerdesEvent}" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.`)
+			coroutine.close(SerdesThread)
+		end
+		SerdesThread = coroutine.running()
+		local DecodedEvents = 0
+		local Decoding = -1
+		local function DecodeEvent()
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Decoding = Index
+			error("[BlinkBlox]: This channel receives no events.")
+		end
+		while (RecieveCursor < Size and Player.Parent ~= nil) do
+			DecodedEvents += 1
+			if DecodedEvents > 64 then
+				ReportDrop(Player, "Events", 64)
+				break
+			end
+			Decoding = -1
+			local Parsed: boolean, Failure: any = pcall(DecodeEvent)
+			if not Parsed then
+				ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
+				break
+			end
+		end
+	end)
+end
+--> Creates the remotes and starts listening and sending. Calling it again does nothing, so every
+--> script that needs the network can make sure of it without agreeing which one goes first.
+local function Start()
+    if Started then
+        return
+    end
+
+    Reliable, Unreliable = CreateRemotes()
+    Started = true
+    Listen()
+end
 
 
 local Returns = table.freeze({
-	StepReplication = StepReplication,
+	stepReplication = StepReplication,
 
-	SetRateLimitHandler = SetRateLimitHandler,
+	setRateLimitHandler = SetRateLimitHandler,
 
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
+	setDecodeErrorHandler = SetDecodeErrorHandler,
 
-	SetPacketDropHandler = SetPacketDropHandler,
+	setPacketDropHandler = SetPacketDropHandler,
 
-	Remotes = REMOTE_NAMES,
+	remotes = REMOTE_NAMES,
 
-	TestEvent = {
-		Fire = function(Player: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+	start = Start,
+
+	Announce = {
+		fire = function(Player: Player, Value: string): ()
+			Load(PlayersMap[Player])
+			local Cursor, Instances = Mark()
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Announce, Value)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
+			SavePlayerBuffer(Player)
+		end,
+		fireAll = function(Value: string): ()
 			Load()
-			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-			if not CheckUnreliableSize("TestEvent") then return end
+			SerdesFunctions.WriteEVENT_Announce(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in Players:GetPlayers() do
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
+		fireList = function(List: {Player}, Value: string): ()
+			Load()
+			SerdesFunctions.WriteEVENT_Announce(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in List do
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
+		fireExcept = function(Except: Player, Value: string): ()
+			Load()
+			SerdesFunctions.WriteEVENT_Announce(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
+				end
+				Load(PlayersMap[Player])
+				local Position = Allocate(Size)
+				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+				SavePlayerBuffer(Player)
+			end
+		end,
+	},
+	Position = {
+		fire = function(Player: Player, Value: number): ()
+			Load()
+			SerdesFunctions.WriteEVENT_Position(Value)
+			if not CheckUnreliableSize("Position") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
-		FireAll = function(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+		fireAll = function(Value: number): ()
 			Load()
-			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-			if not CheckUnreliableSize("TestEvent") then return end
+			SerdesFunctions.WriteEVENT_Position(Value)
+			if not CheckUnreliableSize("Position") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			Unreliable:FireAllClients(Buffer, SendInstances)
 		end,
-		FireList = function(List: {Player}, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+		fireList = function(List: {Player}, Value: number): ()
 			Load()
-			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-			if not CheckUnreliableSize("TestEvent") then return end
+			SerdesFunctions.WriteEVENT_Position(Value)
+			if not CheckUnreliableSize("Position") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
-		FireExcept = function(Except: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+		fireExcept = function(Except: Player, Value: number): ()
 			Load()
-			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-			if not CheckUnreliableSize("TestEvent") then return end
+			SerdesFunctions.WriteEVENT_Position(Value)
+			if not CheckUnreliableSize("Position") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 			for _, Player in Players:GetPlayers() do
@@ -1101,6 +1317,77 @@ local Returns = table.freeze({
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
+	},
+	Ready = {
+		on = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+			if Events.Reliable[1] ~= nil then
+				warn("[BlinkBlox]: \"Ready\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Reliable[1] = Listener
+			for Index, Arguments in Queue.Reliable[1] do
+				Listener(table.unpack(Arguments, 1, Arguments.n))
+			end
+			Queue.Reliable[1] = {}
+			return function (): ()
+				if Events.Reliable[1] == Listener then
+					Events.Reliable[1] = nil
+				end
+			end
+		end
+	},
+	Price = {
+		on = function(Listener: (Player, number) -> (number)): ()
+			Events.Reliable[2] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
+				local ReturnValue: number;
+				local Success, Error = pcall(function ()
+					ReturnValue = Listener(Player, Value)
+				end)
+				Load(PlayersMap[Player])
+				if Success == true then
+					local Cursor, Instances = Mark()
+					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Price, ReturnValue, InvocationIdentifier)
+					if Success ~= true then
+						Rollback(Cursor, Instances)
+					end
+				end
+				if Success ~= true then
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 2)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					warn(`"Price" encountered an error, {Error}`)
+				end
+				SavePlayerBuffer(Player)
+			end
+			Spawn(function (): ()
+				local EventQueue = Queue.Reliable[2] or {}
+				Queue.Reliable[2] = nil
+				for Index, Arguments in EventQueue do
+					Events.Reliable[2](table.unpack(Arguments, 1, Arguments.n))
+				end
+			end)
+		end
+	},
+	Confirm = {
+		invoke = function(Player: Player, Value: number): (boolean)
+			local InvocationIdentifier = InvokePlayer(Player, 3)
+			Load(PlayersMap[Player])
+			local Cursor, Instances = Mark()
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_Confirm, Value, InvocationIdentifier)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				ReleaseInvocation(PlayerInvocations[Player], InvocationIdentifier)
+				error(Failure, 0)
+			end
+			SavePlayerBuffer(Player)
+			ParkInvocation(PlayerInvocations[Player], InvocationIdentifier, coroutine.running())
+			TimeoutPlayerInvocation(Player, InvocationIdentifier, 10, "Confirm")
+			local Success, ReturnValue: boolean = coroutine.yield()
+			if Success ~= true then
+				error("There was an exception while processing \"Confirm\".")
+			end
+			return ReturnValue
+		end
 	},
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)

@@ -66,7 +66,7 @@ local function BitIndexToHex(Index: number): string
 	return `0x{string.format("%x", 2 ^ Index)}`
 end
 
---- The two constants the generated module opens with: the remote's name, and the signature of the
+--- The constants the generated module opens with: the remotes' names, and the signature of the
 --- schema it was built from.
 ---
 --- Routed through here rather than written inline because Generator/init.luau was over its size
@@ -81,6 +81,8 @@ local function Constants(RemoteScope: string?, Tree: any): { string }
 	return {
 		`local BASE_EVENT_NAME = "{Scope}BLINK"\n`,
 		`local SCHEMA_SIGNATURE = "{Signature.Of(Tree)}"\n`,
+		--> Exported as the module's Remotes, so that nothing outside it spells the names out again.
+		`local REMOTE_NAMES = table.freeze(\{ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" \})\n`,
 	}
 end
 

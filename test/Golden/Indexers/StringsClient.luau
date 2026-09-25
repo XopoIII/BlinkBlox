@@ -19,6 +19,7 @@ local RunService = game:GetService("RunService")
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
 local SCHEMA_SIGNATURE = "72b10453eb030037"
+local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -450,6 +451,7 @@ if not RunService:IsRunning() then
 		SetRateLimitHandler = NOOP,
 		SetDecodeErrorHandler = NOOP,
 		SetPacketDropHandler = NOOP,
+		Remotes = REMOTE_NAMES,
 	TestEvent = {
 		On = NOOP_RETURNING
 	},
@@ -626,6 +628,8 @@ local Returns = table.freeze({
 	SetDecodeErrorHandler = SetDecodeErrorHandler,
 
 	SetPacketDropHandler = SetPacketDropHandler,
+
+	Remotes = REMOTE_NAMES,
 
 	TestEvent = {
 		On = function(Listener: (Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }) -> ()): () -> ()

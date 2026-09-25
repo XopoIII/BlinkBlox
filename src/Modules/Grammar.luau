@@ -71,6 +71,8 @@ Grammar.OPTIONS = {
 	RequireRates = "Boolean",
 	Predict = "Boolean",
 	InvocationTimeout = "Number",
+	ClientConnectTimeout = "Number",
+	AutoStart = "Boolean",
 } :: { [string]: Lexer.Types }
 
 --> Defaults the option checks and the generator both need. Here because this module is data only,
@@ -342,6 +344,14 @@ export type Options = {
 
 	--> Seconds before an unanswered invocation fails its caller and gives its slot back.
 	InvocationTimeout: number?,
+
+	--> Seconds the client waits for the server's remotes before it returns a module that is not
+	--> connected. Absent, it waits for as long as it takes. See Generator/Lifecycle.
+	ClientConnectTimeout: number?,
+
+	--> False leaves the server's remotes uncreated until the game calls `Start`. See
+	--> Generator/Lifecycle.
+	AutoStart: boolean?,
 }
 
 return Grammar

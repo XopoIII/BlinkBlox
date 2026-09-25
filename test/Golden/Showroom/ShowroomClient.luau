@@ -9,16 +9,16 @@
 -- This file is not meant to be edited
 
 _G._BLINK = _G._BLINK or {}
-if _G._BLINK["BLINK"] then
-	error("[BlinkBlox]: An instance of BlinkBlox is already running with the remote scope \"BLINK\". Change the remote scope of either instance to avoid conflicts.")
+if _G._BLINK["Showroom"] then
+	error("[BlinkBlox]: An instance of BlinkBlox is already running with the remote scope \"Showroom\". Change the remote scope of either instance to avoid conflicts.")
 end
-_G._BLINK["BLINK"] = true
+_G._BLINK["Showroom"] = true
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
-local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "a2ab0e79f5b19429"
+local BASE_EVENT_NAME = "Showroom_BLINK"
+local SCHEMA_SIGNATURE = "7f8e98d241b5d6b2"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -376,29 +376,161 @@ local EventNames: any = {
     Unreliable = {}
 }
 
+
+--> Roblox drops an unreliable payload past this size and tells nobody. The compiler
+--> refuses schemas that can never fit; this catches the ones that merely overflow at
+--> runtime, and says which event did it. Each Instance sent beside the buffer costs the
+--> payload bytes of its own, measured in Studio, so it counts against the same limit.
+local MAX_UNRELIABLE_SIZE = 980
+local UNRELIABLE_INSTANCE_BYTES = 6
+local function CheckUnreliableSize(Name: string): boolean
+	local Size = SendCursor + #SendInstances * UNRELIABLE_INSTANCE_BYTES
+	if Size <= MAX_UNRELIABLE_SIZE then
+		return true
+	end
+
+	warn(`[BlinkBlox]: Dropped unreliable event "{Name}", {Size} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+	return false
+end
 local SerdesEvent = "?"
 local SerdesThread: thread?
+Events.Reliable[0] = {}
 Queue.Reliable[0] = table.create(256)
-EventNames.Reliable[0] = "Alpha"
-function SerdesFunctions.ReadEVENT_Alpha(): (number)
+EventNames.Reliable[0] = "Announce"
+Queue.Unreliable[0] = table.create(256)
+EventNames.Unreliable[0] = "Position"
+Queue.Reliable[2] = table.create(256)
+EventNames.Reliable[2] = "Price"
+Queue.Reliable[3] = table.create(256)
+EventNames.Reliable[3] = "Confirm"
+function SerdesFunctions.ReadEVENT_Announce(): (string)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
-	-- Value: Alpha
+	-- Value: Announce
+	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if Length < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {Length} instead.`) end
+	if Length > 64 then error(`Expected length of "Value" to be smaller than or equal to 64, got {Length} instead.`) end
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
+	return Value
+end
+
+function SerdesFunctions.ReadEVENT_Position(): (number)
+	-- Read BLOCK: 2 bytes
+	local BLOCK_START = Read(2)
+	-- Value: Position
+	local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	return Value
+end
+
+function SerdesFunctions.WriteEVENT_Ready(Value: number): ()
+	-- Allocate BLOCK: 2 bytes
+	local BLOCK_START = Allocate(2)
+	-- EVENT_Ready (1)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+	-- Value: Ready
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+end
+
+function SerdesFunctions.WriteFUNCTION_DATA_Price(Value: number, InvocationIdentifier: number): ()
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
+	-- FUNCTION_DATA_Price (2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
+	-- Value: Price
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, Value)
+end
+
+function SerdesFunctions.ReadFUNCTION_RETURN_Price(): (number)
+	-- Read BLOCK: 2 bytes
+	local BLOCK_START = Read(2)
+	-- Value: Price
+	local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	return Value
+end
+
+function SerdesFunctions.ReadFUNCTION_DATA_Confirm(): (number)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	-- Value: Confirm
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
 end
 
-if not RunService:IsRunning() then
+function SerdesFunctions.WriteFUNCTION_RETURN_Confirm(Value: boolean, InvocationIdentifier: number): ()
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
+	local BITFIELD_0
+	-- FUNCTION_RETURN_Confirm (3)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
+	-- Value: Confirm
+	BITFIELD_0 = 0
+	if Value then BITFIELD_0 += 0x01 end
+	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_0)
+end
+
+local CONNECT_TIMEOUT = 2.5
+local ConnectedReliable: Instance? = nil
+local ConnectedUnreliable: Instance? = nil
+
+--> Waits for both remotes, CONNECT_TIMEOUT seconds in all, and says whether they came.
+-->
+--> Without the option this is a WaitForChild with no timeout, and a place where no server module is
+--> ever required -- a showroom build, a test place -- blocked every script requiring this one forever.
+--> When they do not come, the module returns the same stubs edit mode gets, with Connected false:
+--> Fire does nothing, Invoke fails at once, and no listener is ever called.
+-->
+--> Remotes that appear after the timeout are not picked up. The module has already been returned,
+--> `require` has cached it, and a client that connected half way through would have missed whatever
+--> the server sent before it. A game that wants to connect later reloads.
+local function ConnectRemotes(): boolean
+    --> Required from the server: the context check below raises the error that belongs to it.
+    if not RunService:IsClient() then
+        return true
+    end
+
+    local Deadline = os.clock() + CONNECT_TIMEOUT
+    ConnectedReliable = ReplicatedStorage:WaitForChild(REMOTE_NAMES.Reliable, CONNECT_TIMEOUT)
+    if ConnectedReliable == nil then
+        return false
+    end
+
+    --> The server creates both in the same frame, so what is left of the budget is plenty.
+    local Remaining = Deadline - os.clock()
+    ConnectedUnreliable = if Remaining > 0
+        then ReplicatedStorage:WaitForChild(REMOTE_NAMES.Unreliable, Remaining)
+        else ReplicatedStorage:FindFirstChild(REMOTE_NAMES.Unreliable)
+    return ConnectedUnreliable ~= nil
+end
+
+if not RunService:IsRunning() or not ConnectRemotes() then
 	local NOOP = function() end
 	local NOOP_RETURNING = function() return NOOP end
+	local NOOP_INVOKE = if RunService:IsRunning() then function() error("[BlinkBlox]: The client is not connected to a server, so there is nobody to invoke.") end else NOOP
 	local Returns = table.freeze({
-		StepReplication = NOOP,
-		SetRateLimitHandler = NOOP,
-		SetDecodeErrorHandler = NOOP,
-		SetPacketDropHandler = NOOP,
-		Remotes = REMOTE_NAMES,
-	Alpha = {
-		On = NOOP_RETURNING
+		stepReplication = NOOP,
+		setRateLimitHandler = NOOP,
+		setDecodeErrorHandler = NOOP,
+		setPacketDropHandler = NOOP,
+		remotes = REMOTE_NAMES,
+		connected = false,
+	Announce = {
+		on = NOOP_RETURNING
+	},
+	Position = {
+		on = NOOP_RETURNING
+	},
+	Ready = {
+		fire = NOOP
+	},
+	Price = {
+		invoke = NOOP_INVOKE
+	},
+	Confirm = {
+		on = NOOP_RETURNING
 	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
@@ -408,8 +540,8 @@ if not RunService:IsClient() then
     error("Client network module can only be required from the client.")
 end
 
-local Reliable: RemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
-local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
+local Reliable: RemoteEvent = ConnectedReliable :: RemoteEvent
+local Unreliable: UnreliableRemoteEvent = ConnectedUnreliable :: UnreliableRemoteEvent
 
 --> WaitForChild returns whatever carries that name. A client can create an instance of any class in
 --> ReplicatedStorage, so without this the first thing to answer to the name wins -- and every
@@ -516,16 +648,49 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
-			local Value: number = SerdesFunctions.ReadEVENT_Alpha()
-			if Events.Reliable[0] ~= nil then
-				SerdesEvent = "Alpha"
-				local ListenerRan, ListenerFailure = pcall(Events.Reliable[0], Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			local Value: string = SerdesFunctions.ReadEVENT_Announce()
+			if #Events.Reliable[0] > 0 then
+				for _, Listener in Events.Reliable[0] do
+					SerdesEvent = "Announce"
+					local ListenerRan, ListenerFailure = pcall(Listener, Value)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+				end
 			else
 				if #Queue.Reliable[0] > 256 then
-					warn("[BlinkBlox]: Event queue of \"Alpha\" exceeded 256, did you forget to implement a listener?")
+					warn("[BlinkBlox]: Event queue of \"Announce\" exceeded 256, did you forget to implement a listener?")
 				end
 				table.insert(Queue.Reliable[0], table.pack(Value))
+			end
+		elseif Index == 2 then
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				local Success, ReturnValue = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
+					return SerdesFunctions.ReadFUNCTION_RETURN_Price()
+				end)
+			local Thread = TakeInvocation(Invocations, InvocationIdentifier, 2)
+			if Thread ~= nil then
+				if coroutine.status(Thread) == "suspended" then
+					task.spawn(Thread, Success, ReturnValue)
+				end
+			end
+			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+		elseif Index == 3 then
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Value: number = SerdesFunctions.ReadFUNCTION_DATA_Confirm()
+			if Events.Reliable[3] ~= nil then
+				Spawn(Events.Reliable[3], Value, InvocationIdentifier)
+			else
+				if #Queue.Reliable[3] > 256 then
+					warn("[BlinkBlox]: Event queue of \"Confirm\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[3], table.pack(Value, InvocationIdentifier))
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -557,7 +722,16 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		local BLOCK_START = Read(1)
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
+		if Index == 0 then
+			local Value: number = SerdesFunctions.ReadEVENT_Position()
+			if Events.Unreliable[0] ~= nil then
+				SerdesEvent = "Position"
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[0], Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+		else
+			error("[BlinkBlox]: Unknown event index.")
+		end
 	end
 	while (RecieveCursor < Size) do
 		Decoding = -1
@@ -571,31 +745,108 @@ end)
 
 
 local Returns = table.freeze({
-	StepReplication = StepReplication,
+	stepReplication = StepReplication,
 
-	SetRateLimitHandler = SetRateLimitHandler,
+	setRateLimitHandler = SetRateLimitHandler,
 
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
+	setDecodeErrorHandler = SetDecodeErrorHandler,
 
-	SetPacketDropHandler = SetPacketDropHandler,
+	setPacketDropHandler = SetPacketDropHandler,
 
-	Remotes = REMOTE_NAMES,
+	remotes = REMOTE_NAMES,
 
-	Alpha = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Reliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Alpha\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[0] = Listener
+	connected = true,
+
+	Announce = {
+		on = function(Listener: (Value: string) -> ()): () -> ()
+			local Listeners = table.clone(Events.Reliable[0])
+			table.insert(Listeners, Listener)
+			Events.Reliable[0] = Listeners
 			for Index, Arguments in Queue.Reliable[0] do
 				Listener(table.unpack(Arguments, 1, Arguments.n))
 			end
 			Queue.Reliable[0] = {}
 			return function (): ()
-				if Events.Reliable[0] == Listener then
-					Events.Reliable[0] = nil
+				local Index = table.find(Events.Reliable[0], Listener)
+				if Index ~= nil then
+					local Listeners = table.clone(Events.Reliable[0])
+					table.remove(Listeners, Index)
+					Events.Reliable[0] = Listeners
 				end
 			end
+		end
+	},
+	Position = {
+		on = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Unreliable[0] ~= nil then
+				warn("[BlinkBlox]: \"Position\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Unreliable[0] = Listener
+			return function (): ()
+				if Events.Unreliable[0] == Listener then
+					Events.Unreliable[0] = nil
+				end
+			end
+		end
+	},
+	Ready = {
+		fire = function(Value: number): ()
+			local Cursor, Instances = Mark()
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Ready, Value)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				error(Failure, 0)
+			end
+		end
+	},
+	Price = {
+		invoke = function(Value: number): (number)
+			local InvocationIdentifier = ClaimInvocation(Invocations, 2)
+			local Cursor, Instances = Mark()
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_Price, Value, InvocationIdentifier)
+			if Sent ~= true then
+				Rollback(Cursor, Instances)
+				ReleaseInvocation(Invocations, InvocationIdentifier)
+				error(Failure, 0)
+			end
+			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
+			TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"Price" was never answered')
+			local Success, ReturnValue: number = coroutine.yield()
+			if Success ~= true then
+				error("There was an exception while processing \"Price\".")
+			end
+			return ReturnValue
+		end
+	},
+	Confirm = {
+		on = function(Listener: (number) -> (boolean)): ()
+			Events.Reliable[3] = function(Value: number, InvocationIdentifier: number): ()
+				local ReturnValue: boolean;
+				local Success, Error = pcall(function ()
+					ReturnValue = Listener(Value)
+				end)
+				if Success == true then
+					local Cursor, Instances = Mark()
+					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Confirm, ReturnValue, InvocationIdentifier)
+					if Success ~= true then
+						Rollback(Cursor, Instances)
+					end
+				end
+				if Success ~= true then
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 3)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					warn(`"Confirm" encountered an error, {Error}`)
+				end
+			end
+			Spawn(function (): ()
+				local EventQueue = Queue.Reliable[3] or {}
+				Queue.Reliable[3] = nil
+				for Index, Arguments in EventQueue do
+					Events.Reliable[3](table.unpack(Arguments, 1, Arguments.n))
+				end
+			end)
 		end
 	},
 })

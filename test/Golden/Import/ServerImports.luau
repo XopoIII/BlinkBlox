@@ -20,6 +20,7 @@ local RunService = game:GetService("RunService")
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
 local SCHEMA_SIGNATURE = "e4412fa3347eac81"
+local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -548,6 +549,7 @@ if not RunService:IsRunning() then
 		SetRateLimitHandler = NOOP,
 		SetDecodeErrorHandler = NOOP,
 		SetPacketDropHandler = NOOP,
+		Remotes = REMOTE_NAMES,
 	Generics = {
 		Entity = {
 			Read = function(Buffer: buffer): (Generics_Entity)
@@ -1309,6 +1311,8 @@ local Returns = table.freeze({
 	SetDecodeErrorHandler = SetDecodeErrorHandler,
 
 	SetPacketDropHandler = SetPacketDropHandler,
+
+	Remotes = REMOTE_NAMES,
 
 	Generics = {
 		Entity = {

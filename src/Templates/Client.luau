@@ -7,8 +7,10 @@ if not RunService:IsClient() then
     error("Client network module can only be required from the client.")
 end
 
+-- REMOTES --
 local Reliable: RemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
 local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
+-- REMOTES --
 
 --> WaitForChild returns whatever carries that name. A client can create an instance of any class in
 --> ReplicatedStorage, so without this the first thing to answer to the name wins -- and every

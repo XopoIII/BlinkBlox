@@ -31,6 +31,8 @@ page explains each one in full.
 | [`RequireRates`](/BlinkBlox/language/options/#defaultrate-requirerates) | boolean | `false` | Make an inbound event or function with no effective rate a compile error (`E3020`). |
 | [`Predict`](/BlinkBlox/language/options/#predict) | boolean | `false` | Add `Predict` to every event this side listens to (not polled ones): it delivers to local listeners without a remote. |
 | [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) | whole number | `10` | Seconds before an unanswered `Invoke` fails. |
+| [`ClientConnectTimeout`](/BlinkBlox/language/options/#clientconnecttimeout) | number above zero | none; wait for ever | Seconds the client waits for the remotes before it returns a module with `Connected` false and every entry point stubbed. |
+| [`AutoStart`](/BlinkBlox/language/options/#autostart) | boolean | `true` | `false`: the server module creates and connects nothing until the game calls `Start()`. |
 | `UseColon` | boolean | none | Deprecated and ignored; warns `W3017`. Delete it. |
 
 ## Value syntax
@@ -41,9 +43,10 @@ page explains each one in full.
 | path string | a quoted path, relative to the schema's folder unless absolute | `option ServerOutput = "../src/Network/Server.luau"` |
 | Luau path string | a quoted Luau expression, inserted into `require(...)` | `option PromiseLibrary = "ReplicatedStorage.Packages.Promise"` |
 | whole number | a positive integer | `option MaxPacketSize = 16384` |
+| seconds | a number above zero, fractions allowed (`ClientConnectTimeout` only) | `option ClientConnectTimeout = 2.5` |
 | casing | a bare word | `option Casing = Camel` |
 
-A number that is zero, negative or fractional is refused (`E2003`), as is an unknown option name or
+A number that is zero, negative or, outside `ClientConnectTimeout`, fractional is refused (`E2003`), as is an unknown option name or
 casing. An option after the first declaration is `E3016`; one set twice for the same build is `E3024`.
 
 ## What the options do not change

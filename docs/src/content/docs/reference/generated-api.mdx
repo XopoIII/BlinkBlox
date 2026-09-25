@@ -29,8 +29,8 @@ local Net = require(ReplicatedStorage.Network.Client)
 
 | Module | Requirable from | When it loads |
 |---|---|---|
-| Server | the server only; errors elsewhere | Creates the two remotes if they are missing, publishes the schema signature, and checks both remotes' classes. |
-| Client | a client only; errors elsewhere | Waits for the two remotes, checks their classes, then checks the [schema signature](/BlinkBlox/reference/wire-compatibility/) and errors on a mismatch. May yield. |
+| Server | the server only; errors elsewhere | Creates the two remotes if they are missing, publishes the schema signature, and checks both remotes' classes. Under [`AutoStart = false`](/BlinkBlox/language/options/#autostart), none of this happens until `Start()`. |
+| Client | a client only; errors elsewhere | Waits for the two remotes, checks their classes, then checks the [schema signature](/BlinkBlox/reference/wire-compatibility/) and errors on a mismatch. May yield -- for ever, unless [`ClientConnectTimeout`](/BlinkBlox/language/options/#clientconnecttimeout) bounds the wait. |
 | Types | anywhere | Nothing: it holds types and exported `Read`/`Write` pairs. |
 
 Requiring a second server or client module with the same [`RemoteScope`](/BlinkBlox/language/options/#remotescope)
@@ -44,6 +44,9 @@ in the same Luau environment errors: `An instance of BlinkBlox is already runnin
 | `SetRateLimitHandler(Handler?)` | `Handler: (Player: Player, Event: string?, Refused: number) -> ()` | Accepted and ignored: the client does not rate-limit. |
 | `SetDecodeErrorHandler(Handler?)` | `Handler: (Player: Player, Event: string?, Failure: string) -> ()` | `Handler: (Event: string?, Failure: string) -> ()` |
 | `SetPacketDropHandler(Handler?)` | `Handler: (Player: Player, Reason: "Malformed" \| "Oversized" \| "Budget" \| "Instances" \| "Events", Refused: number, Detail: number) -> ()` | Accepted and ignored: the client does not refuse packets. |
+| `Remotes` | `{ Reliable: string, Unreliable: string }`, the remotes' names in `ReplicatedStorage` | The same. |
+| `Start()` | Only under `AutoStart = false`: creates and connects the remotes and the Heartbeat. A second call does nothing. | -- |
+| `Connected` | -- | Only under `ClientConnectTimeout`: `true` when the remotes were found in time, `false` when the module returned stubs. |
 
 - `StepReplication` is connected to `RunService.Heartbeat` unless
   [`ManualReplication`](/BlinkBlox/language/options/#manualreplication) is set, in which case you call
@@ -218,6 +221,9 @@ your own declarations are never changed.
 | `SetRateLimitHandler` | `setRateLimitHandler` | `set_rate_limit_handler` |
 | `SetDecodeErrorHandler` | `setDecodeErrorHandler` | `set_decode_error_handler` |
 | `SetPacketDropHandler` | `setPacketDropHandler` | `set_packet_drop_handler` |
+| `Remotes` | `remotes` | `remotes` |
+| `Start` | `start` | `start` |
+| `Connected` | `connected` | `connected` |
 
 ## Edit mode
 
@@ -232,7 +238,15 @@ Flipbook) -- no remotes exist, and both modules return stubs that keep the real 
 | `Predict` | does nothing |
 | `Invoke` | does nothing and returns `nil` |
 | `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | do nothing |
+| `Remotes` | the real names |
+| `Start` | does nothing |
+| `Connected` | `false` |
 | exported `Read`, `Write` | work normally |
+
+A client under [`ClientConnectTimeout`](/BlinkBlox/language/options/#clientconnecttimeout) that did
+not find its remotes in time returns the same stubs, with one difference: `Invoke` fails at once with
+`The client is not connected to a server`, as a real call fails on its timeout, instead of returning
+`nil`.
 
 The stub is returned before the module checks which side it is on, so a story can require either
 module -- but not both. The `RemoteScope` guard above runs first, in edit mode too, and the server
@@ -248,6 +262,7 @@ its result (`:andThen(...)`) errors in a story. Guard it with `RunService:IsRunn
 | Name | Why |
 |---|---|
 | `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | Module members. A top-level event, function, scope or type may not take these names, nor, under `Camel` or `Snake` casing, the spelling the module gives them there (`stepReplication`, `step_replication`, ...) (`E3005`). |
+| `Remotes`; `Start` under `AutoStart = false`; `Connected` under `ClientConnectTimeout` | Module members added after 0.37.0, refused in the spelling the casing gives them for a top-level event, function, scope or exported type (`E3005`). A plain type may keep the name: it is a Luau type, not a key of the module. |
 | `BLINK_ENTRY`, `BLINK_QUEUE`, `BLINK_BUFFER_SAVE`, `BLINK_INVOCATIONS`, `BLINK_DROP_REASON`, `BLINK_EVENTS_SYMBOL` | Types the module declares for itself. A top-level type of that name would redefine one (`E3005`). |
 | Built-in Luau types: `any`, `never`, `number`, `thread` | A declared type is exported under its own name, and Luau refuses `export type number = number` (`E3005`, since 0.32.0). |
 | Roblox types the module uses: `Player`, `RemoteEvent`, `UnreliableRemoteEvent`, `Vector3`, and any class the schema names in `Instance(...)` | A top-level type of that name would refer to itself and shadow every use of the Roblox type in the module (`E3005`, since 0.32.0). A type inside a `scope` is exported with the scope's name in front, so it may take these names. |
