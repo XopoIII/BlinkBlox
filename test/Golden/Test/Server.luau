@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "a7988355cdec7aff"
+local SCHEMA_SIGNATURE = "4b67181eec207c98"
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -536,6 +536,8 @@ Queue.Reliable[60] = table.create(256)
 EventNames.Reliable[60] = "RangedFloat32"
 Queue.Reliable[61] = table.create(256)
 EventNames.Reliable[61] = "RangedFloat16"
+Queue.Reliable[64] = table.create(256)
+EventNames.Reliable[64] = "RangedFloat24"
 export type Indexers_TestStruct = { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }
 export type Indexers_TestFlags = {["a a"]: boolean,}
 export type Indexers_TestEnums = ("b b")
@@ -641,6 +643,11 @@ export type Issue33_Enum<T> = { Tag: "Variant", field: ("One" | "Two") }
 export type Issue33_Struct<T> = { field: ("One" | "Two") }
 export type OptionalHoles = { number? }
 export type HalfFloat = number
+export type Float24 = number
+export type Unsigned24 = number
+export type Signed24 = number
+export type Vector24 = Vector3
+export type QuatCFrame24 = CFrame
 export type CollidingFlags = {Length: boolean,Index: boolean,}
 export type FlagCarrier = { Flags: {Length: boolean,Index: boolean,}, Text: string, Kind: ("A" | "B") }
 function SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
@@ -3468,6 +3475,31 @@ function SerdesFunctions.WriteEVENT_LengthFirst(Value1: number, Value2: string):
 	buffer.writeu16(SendBuffer, BLOCK_START + 3, Length)
 	Allocate(Length)
 	buffer.writestring(SendBuffer, SendOffset, Value2, Length)
+end
+
+function SerdesFunctions.ReadEVENT_RangedFloat24(): (number)
+	-- Read BLOCK: 3 bytes
+	local BLOCK_START = Read(3)
+	-- Value: RangedFloat24
+	local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+	local Value
+	local MantissaExponent = Encoded % 0x800000
+	if MantissaExponent == 0x7E0000 then
+		Value = if Encoded >= 0x800000 then -math.huge else math.huge
+	elseif MantissaExponent > 0x7E0000 then
+		Value = 0 / 0
+	elseif MantissaExponent == 0 then
+		Value = if Encoded == 0 then 0 else -0
+	else
+		local Mantissa = MantissaExponent % 0x20000
+		local Exponent = MantissaExponent // 0x20000
+		local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+		local Result = math.ldexp(Fraction, Exponent - 30)
+		Value = if Encoded >= 0x800000 then -Result else Result
+	end
+	if not (Value >= 0.09999990463256836) then error(`Expected "Value" to be larger than or equal to 0.09999990463256836, got {Value} instead.`) end
+	if not (Value <= 0.7000007629394531) then error(`Expected "Value" to be smaller than or equal to 0.7000007629394531, got {Value} instead.`) end
+	return Value
 end
 
 if not RunService:IsRunning() then
@@ -8066,6 +8098,473 @@ if not RunService:IsRunning() then
 			return Result
 		end
 	},
+	Float24 = {
+		Read = function(Buffer: buffer): (Float24)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Float24)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				-- Value: Float24
+				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				local Value
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					Value = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					Value = 0 / 0
+				elseif MantissaExponent == 0 then
+					Value = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					Value = if Encoded >= 0x800000 then -Result else Result
+				end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Float24
+		end,
+		Write = function(Value: Float24): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				-- Value: Float24
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				if Value ~= Value then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
+				elseif Value == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Value < 0 then 0x80 else 0)
+				else
+					local float = Value
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
+				end
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	Unsigned24 = {
+		Read = function(Buffer: buffer): (Unsigned24)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Unsigned24)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				-- Value: Unsigned24
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Unsigned24
+		end,
+		Write = function(Value: Unsigned24): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				-- Value: Unsigned24
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Value)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Value, 16))
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	Signed24 = {
+		Read = function(Buffer: buffer): (Signed24)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Signed24)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				-- Value: Signed24
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Signed24
+		end,
+		Write = function(Value: Signed24): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				-- Value: Signed24
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Value)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Value, 16))
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	Vector24 = {
+		Read = function(Buffer: buffer): (Vector24)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Vector24)
+				-- Read BLOCK: 9 bytes
+				local BLOCK_START = Read(9)
+				-- Value: Vector24
+				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				local X
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					X = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					X = 0 / 0
+				elseif MantissaExponent == 0 then
+					X = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					X = if Encoded >= 0x800000 then -Result else Result
+				end
+				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
+				local Y
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					Y = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					Y = 0 / 0
+				elseif MantissaExponent == 0 then
+					Y = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					Y = if Encoded >= 0x800000 then -Result else Result
+				end
+				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
+				local Z
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					Z = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					Z = 0 / 0
+				elseif MantissaExponent == 0 then
+					Z = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					Z = if Encoded >= 0x800000 then -Result else Result
+				end
+				local Value = Vector3.new(X, Y, Z)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Vector24
+		end,
+		Write = function(Value: Vector24): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 9 bytes
+				local BLOCK_START = Allocate(9)
+				-- Value: Vector24
+				if typeof(Value) ~= "Vector3" then
+					error(`Expected Value to be of type Vector3, got {type(Value)} instead.`)
+				end
+				local Vector = Value
+				if Vector.X ~= Vector.X then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
+				elseif Vector.X == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Vector.X < 0 then 0x80 else 0)
+				else
+					local float = Vector.X
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
+				end
+				if Vector.Y ~= Vector.Y then
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, 0xFE)
+				elseif Vector.Y == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, if 1 / Vector.Y < 0 then 0x80 else 0)
+				else
+					local float = Vector.Y
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, bit32.rshift(Result, 16))
+				end
+				if Vector.Z ~= Vector.Z then
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, 0xFE)
+				elseif Vector.Z == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, if 1 / Vector.Z < 0 then 0x80 else 0)
+				else
+					local float = Vector.Z
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, bit32.rshift(Result, 16))
+				end
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	QuatCFrame24 = {
+		Read = function(Buffer: buffer): (QuatCFrame24)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (QuatCFrame24)
+				-- Read BLOCK: 16 bytes
+				local BLOCK_START = Read(16)
+				-- Value: QuatCFrame24
+				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				local X
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					X = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					X = 0 / 0
+				elseif MantissaExponent == 0 then
+					X = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					X = if Encoded >= 0x800000 then -Result else Result
+				end
+				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
+				local Y
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					Y = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					Y = 0 / 0
+				elseif MantissaExponent == 0 then
+					Y = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					Y = if Encoded >= 0x800000 then -Result else Result
+				end
+				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
+				local Z
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					Z = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					Z = 0 / 0
+				elseif MantissaExponent == 0 then
+					Z = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					Z = if Encoded >= 0x800000 then -Result else Result
+				end
+				local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 9)
+				local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 10)
+				local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 12)
+				local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 14)
+				local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: QuatCFrame24
+		end,
+		Write = function(Value: QuatCFrame24): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 16 bytes
+				local BLOCK_START = Allocate(16)
+				-- Value: QuatCFrame24
+				if typeof(Value) ~= "CFrame" then
+					error(`Expected Value to be of type CFrame, got {type(Value)} instead.`)
+				end
+				local Position = Value.Position
+				local QIndex, QA, QB, QC = PackRotation(Value)
+				if Position.X ~= Position.X then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
+				elseif Position.X == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Position.X < 0 then 0x80 else 0)
+				else
+					local float = Position.X
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
+				end
+				if Position.Y ~= Position.Y then
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, 0xFE)
+				elseif Position.Y == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, if 1 / Position.Y < 0 then 0x80 else 0)
+				else
+					local float = Position.Y
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, bit32.rshift(Result, 16))
+				end
+				if Position.Z ~= Position.Z then
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, 0xFE)
+				elseif Position.Z == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, if 1 / Position.Z < 0 then 0x80 else 0)
+				else
+					local float = Position.Z
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, bit32.rshift(Result, 16))
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 9, QIndex)
+				buffer.writei16(SendBuffer, BLOCK_START + 10, QA)
+				buffer.writei16(SendBuffer, BLOCK_START + 12, QB)
+				buffer.writei16(SendBuffer, BLOCK_START + 14, QC)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
 	RangedFloat32 = {
 		On = NOOP_RETURNING,
 		Predict = NOOP
@@ -8166,6 +8665,10 @@ if not RunService:IsRunning() then
 			end
 			return Result
 		end
+	},
+	RangedFloat24 = {
+		On = NOOP_RETURNING,
+		Predict = NOOP
 	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
@@ -8984,6 +9487,17 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			else
 				if #Queue.Reliable[61] < 256 then
 					table.insert(Queue.Reliable[61], table.pack(Player, Value))
+				end
+			end
+		elseif Index == 64 then
+			local Value: number = SerdesFunctions.ReadEVENT_RangedFloat24()
+			if Events.Reliable[64] ~= nil then
+				SerdesEvent = "RangedFloat24"
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[64], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			else
+				if #Queue.Reliable[64] < 256 then
+					table.insert(Queue.Reliable[64], table.pack(Player, Value))
 				end
 			end
 		else
@@ -16510,6 +17024,473 @@ local Returns = table.freeze({
 			return Result
 		end
 	},
+	Float24 = {
+		Read = function(Buffer: buffer): (Float24)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Float24)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				-- Value: Float24
+				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				local Value
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					Value = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					Value = 0 / 0
+				elseif MantissaExponent == 0 then
+					Value = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					Value = if Encoded >= 0x800000 then -Result else Result
+				end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Float24
+		end,
+		Write = function(Value: Float24): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				-- Value: Float24
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				if Value ~= Value then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
+				elseif Value == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Value < 0 then 0x80 else 0)
+				else
+					local float = Value
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
+				end
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	Unsigned24 = {
+		Read = function(Buffer: buffer): (Unsigned24)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Unsigned24)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				-- Value: Unsigned24
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Unsigned24
+		end,
+		Write = function(Value: Unsigned24): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				-- Value: Unsigned24
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Value)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Value, 16))
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	Signed24 = {
+		Read = function(Buffer: buffer): (Signed24)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Signed24)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				-- Value: Signed24
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Signed24
+		end,
+		Write = function(Value: Signed24): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				-- Value: Signed24
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Value)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Value, 16))
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	Vector24 = {
+		Read = function(Buffer: buffer): (Vector24)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Vector24)
+				-- Read BLOCK: 9 bytes
+				local BLOCK_START = Read(9)
+				-- Value: Vector24
+				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				local X
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					X = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					X = 0 / 0
+				elseif MantissaExponent == 0 then
+					X = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					X = if Encoded >= 0x800000 then -Result else Result
+				end
+				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
+				local Y
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					Y = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					Y = 0 / 0
+				elseif MantissaExponent == 0 then
+					Y = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					Y = if Encoded >= 0x800000 then -Result else Result
+				end
+				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
+				local Z
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					Z = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					Z = 0 / 0
+				elseif MantissaExponent == 0 then
+					Z = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					Z = if Encoded >= 0x800000 then -Result else Result
+				end
+				local Value = Vector3.new(X, Y, Z)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Vector24
+		end,
+		Write = function(Value: Vector24): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 9 bytes
+				local BLOCK_START = Allocate(9)
+				-- Value: Vector24
+				if typeof(Value) ~= "Vector3" then
+					error(`Expected Value to be of type Vector3, got {type(Value)} instead.`)
+				end
+				local Vector = Value
+				if Vector.X ~= Vector.X then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
+				elseif Vector.X == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Vector.X < 0 then 0x80 else 0)
+				else
+					local float = Vector.X
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
+				end
+				if Vector.Y ~= Vector.Y then
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, 0xFE)
+				elseif Vector.Y == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, if 1 / Vector.Y < 0 then 0x80 else 0)
+				else
+					local float = Vector.Y
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, bit32.rshift(Result, 16))
+				end
+				if Vector.Z ~= Vector.Z then
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, 0xFE)
+				elseif Vector.Z == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, if 1 / Vector.Z < 0 then 0x80 else 0)
+				else
+					local float = Vector.Z
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, bit32.rshift(Result, 16))
+				end
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	QuatCFrame24 = {
+		Read = function(Buffer: buffer): (QuatCFrame24)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (QuatCFrame24)
+				-- Read BLOCK: 16 bytes
+				local BLOCK_START = Read(16)
+				-- Value: QuatCFrame24
+				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				local X
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					X = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					X = 0 / 0
+				elseif MantissaExponent == 0 then
+					X = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					X = if Encoded >= 0x800000 then -Result else Result
+				end
+				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
+				local Y
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					Y = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					Y = 0 / 0
+				elseif MantissaExponent == 0 then
+					Y = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					Y = if Encoded >= 0x800000 then -Result else Result
+				end
+				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
+				local Z
+				local MantissaExponent = Encoded % 0x800000
+				if MantissaExponent == 0x7E0000 then
+					Z = if Encoded >= 0x800000 then -math.huge else math.huge
+				elseif MantissaExponent > 0x7E0000 then
+					Z = 0 / 0
+				elseif MantissaExponent == 0 then
+					Z = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x20000
+					local Exponent = MantissaExponent // 0x20000
+					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+					local Result = math.ldexp(Fraction, Exponent - 30)
+					Z = if Encoded >= 0x800000 then -Result else Result
+				end
+				local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 9)
+				local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 10)
+				local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 12)
+				local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 14)
+				local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: QuatCFrame24
+		end,
+		Write = function(Value: QuatCFrame24): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 16 bytes
+				local BLOCK_START = Allocate(16)
+				-- Value: QuatCFrame24
+				if typeof(Value) ~= "CFrame" then
+					error(`Expected Value to be of type CFrame, got {type(Value)} instead.`)
+				end
+				local Position = Value.Position
+				local QIndex, QA, QB, QC = PackRotation(Value)
+				if Position.X ~= Position.X then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
+				elseif Position.X == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Position.X < 0 then 0x80 else 0)
+				else
+					local float = Position.X
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
+				end
+				if Position.Y ~= Position.Y then
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, 0xFE)
+				elseif Position.Y == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, if 1 / Position.Y < 0 then 0x80 else 0)
+				else
+					local float = Position.Y
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 3, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, bit32.rshift(Result, 16))
+				end
+				if Position.Z ~= Position.Z then
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0x0001)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, 0xFE)
+				elseif Position.Z == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, if 1 / Position.Z < 0 then 0x80 else 0)
+				else
+					local float = Position.Z
+					local Fraction, Exponent = math.frexp(math.abs(float))
+					Exponent += 30
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+						else Fraction * 0x40000)
+					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+						+ if float < 0 then 0x800000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, Result)
+					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, bit32.rshift(Result, 16))
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 9, QIndex)
+				buffer.writei16(SendBuffer, BLOCK_START + 10, QA)
+				buffer.writei16(SendBuffer, BLOCK_START + 12, QB)
+				buffer.writei16(SendBuffer, BLOCK_START + 14, QC)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
 	RangedFloat32 = {
 		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
 			if Events.Reliable[60] ~= nil then
@@ -16747,6 +17728,34 @@ local Returns = table.freeze({
 				error(Result, 0)
 			end
 			return Result
+		end
+	},
+	RangedFloat24 = {
+		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+			if Events.Reliable[64] ~= nil then
+				warn("[BlinkBlox]: \"RangedFloat24\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Reliable[64] = Listener
+			for Index, Arguments in Queue.Reliable[64] do
+				Listener(table.unpack(Arguments, 1, Arguments.n))
+			end
+			Queue.Reliable[64] = {}
+			return function (): ()
+				if Events.Reliable[64] == Listener then
+					Events.Reliable[64] = nil
+				end
+			end
+		end,
+		Predict = function(Player: Player, Value: number): ()
+			if Events.Reliable[64] ~= nil then
+				SerdesEvent = "RangedFloat24"
+				local ListenerRan, ListenerFailure = pcall(Events.Reliable[64], Player, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			else
+				if #Queue.Reliable[64] < 256 then
+					table.insert(Queue.Reliable[64], table.pack(Player, Value))
+				end
+			end
 		end
 	},
 })

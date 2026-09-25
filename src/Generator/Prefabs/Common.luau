@@ -48,6 +48,7 @@ local SEND_POSITION = "SendOffset"
 
 local BYTE = 1
 local SHORT = 2
+local TRIPLE = 3
 local INTEGER = 4
 local HALF_FLOAT = 2
 local FLOAT = 4
@@ -192,6 +193,7 @@ return {
 	SEND_POSITION = SEND_POSITION,
 	BYTE = BYTE,
 	SHORT = SHORT,
+	TRIPLE = TRIPLE,
 	INTEGER = INTEGER,
 	HALF_FLOAT = HALF_FLOAT,
 	FLOAT = FLOAT,

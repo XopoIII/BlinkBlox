@@ -15,8 +15,8 @@ type Node = { Type: string, Name: string, Value: any, Tokens: any }
 
 local Oracle = {}
 
-local INTEGERS = { u8 = true, u16 = true, u32 = true, i8 = true, i16 = true, i32 = true }
-local FLOATS = { f16 = true, f32 = true, f64 = true }
+local INTEGERS = { u8 = true, u16 = true, u24 = true, u32 = true, i8 = true, i16 = true, i24 = true, i32 = true }
+local FLOATS = { f16 = true, f24 = true, f32 = true, f64 = true }
 
 local function PrimitiveName(Node: Node): string
 	return Node.Tokens.Primitive.Value
@@ -30,6 +30,21 @@ function Oracle.F32(Value: number): number
 end
 
 local F32 = Oracle.F32
+
+--- Whether f24 holds a number exactly: zero, an infinity, or a multiple of its binade's unit with
+--- eighteen significant bits at most. Worked out from the format, not from `Narrow.f24`.
+function Oracle.IsFloat24(Value: number): boolean
+	local Absolute = math.abs(Value)
+	if Absolute == 0 or Absolute == math.huge then
+		return true
+	elseif Absolute > math.ldexp(0x3FFFF, 14) then
+		return false
+	end
+
+	local _, Exponent = math.frexp(Absolute)
+	local Unit = math.ldexp(1, math.max(Exponent - 18, -47))
+	return Absolute % Unit == 0
+end
 
 --- Whether a number is one this primitive type admits, range included.
 function Oracle.Admits(Node: Node, Value: number): boolean
@@ -75,6 +90,8 @@ function Oracle.Valid(Node: Node, Value: any): string?
 				return `{Value} is not a {Name}{if Body.Range then ` in {Body.Range.Min}..{Body.Range.Max}` else ""}`
 			elseif Name == "f16" and Value == Value and Narrow.f16(Value) ~= Value then
 				return `{Value} is not a half-precision value`
+			elseif Name == "f24" and Value == Value and not Oracle.IsFloat24(Value) then
+				return `{Value} is not an f24 value`
 			end
 
 			return nil
@@ -192,8 +209,9 @@ function Oracle.Valid(Node: Node, Value: any): string?
 end
 
 --- Whether `Got` is what a float of type `Name` may legitimately become of `Sent` on the wire. Worked
---- out independently of the compiler's own narrowing: f32 is the platform's, and f16 is held to
---- being a half-precision value within one unit of its last place, with the sign kept.
+--- out independently of the compiler's own narrowing: f32 is the platform's, f16 is held to being a
+--- half-precision value within one unit of its last place, and f24 to being an f24 value within half
+--- of one, with the sign kept.
 function Oracle.Narrowed(Name: string, Sent: number, Got: number): boolean
 	if Sent ~= Sent then
 		return Got ~= Got
@@ -202,6 +220,21 @@ function Oracle.Narrowed(Name: string, Sent: number, Got: number): boolean
 	elseif Name == "f32" then
 		local Expected = F32(Sent)
 		return Expected == Got and (Expected ~= 0 or 1 / Expected == 1 / Got)
+	end
+
+	if Name == "f24" then
+		--> Rounded to nearest: within half a unit of the binade the sent value is in, and infinity
+		--> from half a unit past the largest finite value.
+		if Got ~= Got or not Oracle.IsFloat24(Got) then
+			return false
+		elseif math.abs(Sent) >= 4294959104 then
+			return Got == (if Sent > 0 then math.huge else -math.huge)
+		elseif (1 / Sent > 0) ~= (1 / Got > 0) then
+			return false
+		end
+
+		local _, Exponent = math.frexp(math.abs(Sent))
+		return math.abs(Got - Sent) <= math.ldexp(1, math.max(Exponent - 18, -47)) / 2
 	end
 
 	if Got ~= Got or (Got ~= 0 and math.abs(Got) ~= math.huge and Narrow.f16(Got) ~= Got) then

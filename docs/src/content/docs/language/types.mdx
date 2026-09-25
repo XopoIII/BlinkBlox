@@ -20,6 +20,7 @@ unreliable event that cannot fit in
 |---|---|
 | `u8`, `i8` | 1 |
 | `u16`, `i16`, `f16` | 2 |
+| `u24`, `i24`, `f24` | 3 |
 | `u32`, `i32`, `f32` | 4 |
 | `f64` | 8 |
 | `boolean` | 1 **bit**, [shared](#booleans-and-optionals-share-a-bitfield) with neighbouring booleans |
@@ -117,7 +118,8 @@ event if it fails; a ranged float refuses `NaN` too. The sending side checks onl
 value outside the range would corrupt the packet, so those are always checked.
 
 ## Numbers
-BlinkBlox supports every number type the buffer library implements, plus a half-precision float.
+BlinkBlox supports every number type the buffer library implements, plus a half-precision float and
+three 24-bit types.
 
 Number types start with a prefix -- `u`, `i` or `f` -- followed by the number of bits used to represent
 the number. The number of bits is also what it costs to send.
@@ -129,6 +131,7 @@ Whole numbers greater than or equal to zero.
 |----|----|---|---|
 |`u8`|`1 byte`|`0`|`255`|
 |`u16`|`2 bytes`|`0`|`65,535`|
+|`u24`|`3 bytes`|`0`|`16,777,215`|
 |`u32`|`4 bytes`|`0`|`4,294,967,295`|
 
 ### Signed Integers
@@ -138,6 +141,7 @@ Whole numbers, positive or negative.
 |----|----|---|---|
 |`i8`|`1 byte`|`-128`|`127`|
 |`i16`|`2 bytes`|`-32,768`|`32,767`|
+|`i24`|`3 bytes`|`-8,388,608`|`8,388,607`|
 |`i32`|`4 bytes`|`-2,147,483,648`|`2,147,483,647`|
 
 <Aside type="caution">
@@ -156,6 +160,7 @@ lists the largest integer each type represents exactly.
 |Name|Size|Exact integers up to|Largest value|
 |----|----|---|---|
 |`f16`|`2 bytes`|`2,048`|`65,504`|
+|`f24`|`3 bytes`|`262,144`|about `4.29e9`|
 |`f32`|`4 bytes`|`16,777,216`|about `3.4e38`|
 |`f64`|`8 bytes`|`9,007,199,254,740,992`|about `1.8e308`|
 
@@ -163,11 +168,18 @@ A range on a float may go past the exact-integer limit, and an open side of one,
 not bounded at all. A value past `65,504` sent as an `f16` arrives as infinity. Every float type
 carries `NaN`, both infinities and `-0`, though a ranged float refuses `NaN`.
 
+`f24` has a sign, six bits of exponent and seventeen of mantissa, so it holds 18 significant bits
+where `f16` holds 11. It rounds to the nearest value it can hold, where `f16` truncates. Between 512
+and 1024 its step is about `0.004`, so a position a thousand studs from the origin arrives within
+`0.002` of where it was sent. A value that rounds past its largest finite value, `4,294,950,912`,
+arrives as infinity.
+
 <Aside>
 Luau stores every number as an `f64`, so `f64` is lossless and the smaller floats round.
 
-The `f16` type is not natively supported by the buffer library, which makes it slower to read and
-write than the other number types.
+The `f16` and `f24` types are not natively supported by the buffer library, which makes them slower
+to read and write than the other number types. `u24` and `i24` are not native either; each is
+written as a `u16` and a byte.
 </Aside>
 
 ### Bounding Numbers
@@ -238,10 +250,11 @@ A magnitude is never negative, so the range cannot be either.
 
 ### Specifying Encoding
 Pass a [number type](#numbers) in angle brackets to choose how each of the three components is sent.
-The default is `f32`, 12 bytes; `vector<i16>` is 6.
+The default is `f32`, 12 bytes; `vector<f24>` is 9 and `vector<i16>` is 6.
 
 ```blink
 type Position = vector
+type NearPosition = vector<f24>
 type GridCell = vector<i16>
 type CompactOffset = vector<f16>
 ```
