@@ -244,6 +244,23 @@ the emitted text. Each fails when the bug it is about is put back: the 0.24 phan
 closed-up holes, the 0.26 channel with no refusal. `test/Isolated.luau` builds a server and client
 from a spec's own schema on remotes nothing else shares, for any spec that needs the bytes.
 
+0.34.0 was about performance, and it began with the benchmark, because the benchmark could not see
+it. Studio caps the frame rate at 60, so Entities showed only that BlinkBlox kept up. Studio compiles
+LocalScripts natively where most clients do not. And every event carried the same data, which Roblox's
+zstd compression squeezed to nothing, so the Kbps column measured the compressor: all three tools read
+42 on Entities. `benchmark/Runtime.luau` now times fire, flush and decode on Lune, natively compiled
+and interpreted. It loads the modules into the real global environment, because Lune deoptimises a
+chunk given a custom one. Studio's harness gained random payloads, a fire-time column and macOS
+support. What the numbers found: a send buffer past 4 KB was let go at every flush, so the heaviest
+senders regrew theirs from 64 bytes every frame; `boolean[]` went a bit at a time; a decoded struct
+was built as `{}` and rehashed four times on the way to six fields; and every decoded event
+allocated a closure. Decoding structs is five times faster natively and `boolean[]` three times. On
+the compiler side, 90% of parse time was generic substitution deep-copying the declaring scope's
+whole symbol table, and parsing went from 166 ms to 12 ms. A reused parser also kept every tree it
+had parsed, which is how the plugin's editor had leaked 16 MB a parse on a schema using
+`@profile`. Constant offsets in array loops and branchless boolean packing were measured and
+dropped: the first was slower natively, the second no faster.
+
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of
