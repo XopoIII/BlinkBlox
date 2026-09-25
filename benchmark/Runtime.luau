@@ -1,23 +1,31 @@
 --!strict
---- What the generated modules cost, measured without Roblox. Run from this directory:
+--- What each tool's modules cost, measured without Roblox. Run from this directory:
 ---
 ---     lune run Runtime                   every bench, natively compiled and interpreted
 ---     lune run Runtime -- Entities       only the benches whose name contains "Entities"
 ---     lune run Runtime -- --frames 50    fewer frames, for a quick look
+---     lune run Runtime -- --tools blink,zap  only these tools
 ---
 --- Studio's own benchmark (run.luau, generate.luau) reports frame rate and bandwidth, and neither
---- isolates this compiler's work: Studio caps the frame rate at 60, and Roblox compresses each packet
---- before counting its bytes. This one times the three things the generated code does -- a
---- frame's thousand Fires, the flush that turns them into one packet, and the server decoding that
---- packet -- each on its own, and counts the bytes the encoder produced before any compression.
+--- isolates a tool's own work: Studio caps the frame rate at 60, and Roblox compresses each packet
+--- before counting its bytes. This one times the three things a tool does -- a frame's thousand
+--- Fires, the flush that turns them into packets, and the server decoding those packets and calling
+--- its listener -- each on its own, and counts the bytes each event cost: as the encoder wrote them,
+--- and after zstd, which is what Roblox compresses a remote's packets with.
 ---
---- Each bench runs twice: natively compiled, as the generated `--!native` asks and as a Roblox
---- server runs it, and interpreted, as most Roblox clients still run it.
+--- It runs every tool Studio compares -- BlinkBlox, zap, ByteNet, Packet -- on the same pools, so
+--- the tools can be compared where Studio cannot: interpreted, as most Roblox clients run code, and
+--- decoding, which Studio does not time. See runtime/Tools.luau for how each is loaded.
+---
+--- Each bench runs twice per tool. `native` is what a Roblox server runs: modules that declare
+--- `--!native` natively compiled, and the rest interpreted -- Packet declares it nowhere, so its two
+--- rows are both interpreted. `interpreted` is what most players' clients run.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local serde = require("@lune/serde")
 
 local Attributes = require("../src/Modules/Attributes")
-local Environment = require("./runtime/Environment")
+local Tools = require("./runtime/Tools")
 local Generator = require("../src/Generator")
 local Parser = require("../src/Parser")
 
@@ -29,6 +37,7 @@ local LOCAL_BENCHES = { Tiny = true }
 
 local Frames = 200
 local Filter: string? = nil
+local Only: { string }? = nil
 do
 	local Index = 1
 	while Index <= #process.args do
@@ -37,6 +46,9 @@ do
 			--> What `lune run Runtime -- ...` passes through ahead of the arguments.
 		elseif Argument == "--frames" then
 			Frames = assert(tonumber(process.args[Index + 1]), "--frames takes a number")
+			Index += 1
+		elseif Argument == "--tools" then
+			Only = string.split(assert(process.args[Index + 1], "--tools takes a list"), ",")
 			Index += 1
 		else
 			Filter = Argument
@@ -82,18 +94,26 @@ type Result = {
 	Flush: Summary,
 	Decode: Summary,
 	Bytes: number,
-	Received: number,
+	Compressed: number,
 }
 
-local function Run(Pair: Environment.Pair, Bench: string, Pool: { any }): Result
-	local Fire = Pair.Client[Bench].Fire
-	local StepReplication = Pair.Client.StepReplication
-	local Reliable = Pair.Reliable
-	local Player = Pair.Player
+--> Roblox compresses what a remote sends with zstd. Its level is not documented; this is Lune's.
+local function Compressed(Packets: { Tools.Sent }): number
+	local Total = 0
+	for _, Packet in Packets do
+		Total += #serde.compress("zstd", buffer.tostring(Packet.Buffer))
+	end
+	return Total
+end
+
+local function Run(Tool: Tools.Tool, Bench: string, Pool: { any }): Result
+	local Fire = Tool.Fire
+	local Flush = Tool.Flush
+	local Deliver = Tool.Deliver
 
 	local Received = 0
 	local First: any = nil
-	Pair.Server[Bench].On(function(_Player, Value)
+	Tool.Listen(function(Value)
 		Received += 1
 		if First == nil then
 			First = Value
@@ -101,7 +121,7 @@ local function Run(Pair: Environment.Pair, Bench: string, Pool: { any }): Result
 	end)
 
 	local FireTimes, FlushTimes, DecodeTimes = {}, {}, {}
-	local Bytes = 0
+	local Bytes, CompressedBytes, Compressions = 0, 0, 0
 	local PoolSize = #Pool
 	local Sent = 0
 
@@ -112,23 +132,26 @@ local function Run(Pair: Environment.Pair, Bench: string, Pool: { any }): Result
 			Sent += 1
 		end
 		local Fired = os.clock()
-		StepReplication()
+		local Packets = Flush()
 		local Flushed = os.clock()
+		assert(#Packets > 0, `{Bench}: the client flushed nothing`)
 
-		local Packet = assert(Reliable.Sent, "The client flushed nothing")
-		local Instances = Reliable.SentInstances
-		Reliable.Sent = nil
-
-		local Handler = assert(Reliable.ServerHandler, "The server never connected")
 		local DecodeStart = os.clock()
-		Handler(Player, Packet, Instances)
+		Deliver(Packets)
 		local Decoded = os.clock()
 
 		if Frame > WARMUP_FRAMES then
 			table.insert(FireTimes, (Fired - Start) * 1000)
 			table.insert(FlushTimes, (Flushed - Fired) * 1000)
 			table.insert(DecodeTimes, (Decoded - DecodeStart) * 1000)
-			Bytes = buffer.len(Packet)
+			for _, Packet in Packets do
+				Bytes += buffer.len(Packet.Buffer)
+			end
+			--> Compressing every frame would take longer than the run; a tenth of them is plenty.
+			if Frame % 10 == 0 then
+				Compressions += 1
+				CompressedBytes += Compressed(Packets)
+			end
 		end
 	end
 
@@ -144,8 +167,8 @@ local function Run(Pair: Environment.Pair, Bench: string, Pool: { any }): Result
 		Fire = Summarise(FireTimes),
 		Flush = Summarise(FlushTimes),
 		Decode = Summarise(DecodeTimes),
-		Bytes = Bytes,
-		Received = Received,
+		Bytes = Bytes / (Frames * EVENTS_PER_FRAME),
+		Compressed = CompressedBytes / (Compressions * EVENTS_PER_FRAME),
 	}
 end
 
@@ -154,32 +177,56 @@ local function Format(Value: number): string
 end
 
 local ServerSource, ClientSource = Generate()
+local Sources = { Server = ServerSource, Client = ClientSource }
+
+local Selected: { string } = {}
+for _, Name in Tools.ORDER do
+	if Only and not table.find(Only, Name) then
+		continue
+	end
+	local Missing = Tools.Missing(Name)
+	if Missing then
+		print(`Skipping {Name}: {Missing}`)
+	else
+		table.insert(Selected, Name)
+	end
+end
 
 print(`BlinkBlox {_G.VERSION or "(unbundled)"}, {Frames} frames of {EVENTS_PER_FRAME} events, times in ms per frame`)
-print("")
-print("|Bench|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|")
-print("|---|---|---|---|---|---|---|---|")
 
 for _, Bench in BENCHES do
 	if Filter and not string.find(Bench, Filter, 1, true) then
 		continue
 	end
 
+	print("")
+	print(`### {Bench}`)
+	print("")
+	print("|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|")
+	print("|---|---|---|---|---|---|---|---|---|")
+
 	local Pool = LoadPool(Bench)
 	for _, Native in { true, false } do
-		--> A pair per run: listeners, buffers and the inbound budget start from nothing each time.
-		local Pair = Environment.Load(ServerSource, ClientSource, Native)
-		local Result = Run(Pair, Bench, Pool)
-		local Cells = {
-			Bench,
-			if Native then "native" else "interpreted",
-			Format(Result.Fire.Median),
-			Format(Result.Fire.P99),
-			Format(Result.Flush.Median),
-			Format(Result.Decode.Median),
-			Format(Result.Decode.P99),
-			string.format("%.2f", Result.Bytes / EVENTS_PER_FRAME),
-		}
-		print(`|{table.concat(Cells, "|")}|`)
+		for _, Name in Selected do
+			if LOCAL_BENCHES[Bench] and Name ~= "blink" then
+				--> Only BlinkBlox's definition declares the benches Studio does not run.
+				continue
+			end
+
+			--> A fresh load per run: listeners, buffers and the inbound budget start from nothing.
+			local Result = Run(Tools.Load(Name, Native, Bench, Sources), Bench, Pool)
+			local Cells: { string } = {
+				Name,
+				if Native then "native" else "interpreted",
+				Format(Result.Fire.Median),
+				Format(Result.Fire.P99),
+				Format(Result.Flush.Median),
+				Format(Result.Decode.Median),
+				Format(Result.Decode.P99),
+				string.format("%.2f", Result.Bytes),
+				string.format("%.2f", Result.Compressed),
+			}
+			print(`|{table.concat(Cells, "|")}|`)
+		end
 	end
 end
