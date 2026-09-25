@@ -263,8 +263,8 @@ function Generators.Tree(State: State, Tree: { Parser.Declaration })
 end
 
 --- The module members that install the game's handlers, typed as the Luau module types them. The
---- client's rate-limit and packet-drop setters take the server's handler type and ignore it, so code
---- shared between the two sides can install one without branching.
+--- client's rate-limit, packet-drop and listener-error setters take the server's handler type and
+--- ignore it, so code shared between the two sides can install one without branching.
 local DROP_REASON = `"Malformed" | "Oversized" | "Budget" | "Instances" | "Events"`
 
 local function HandlerDeclarations(FileContext: Context, Casing: Settings.Cases): { string }
@@ -276,6 +276,7 @@ local function HandlerDeclarations(FileContext: Context, Casing: Settings.Cases)
 		`export declare const {Casing.SetRateLimitHandler}: (handler?: (player: Player, event: string | undefined, refused: number) => void) => void`,
 		`export declare const {Casing.SetDecodeErrorHandler}: (handler?: {Decode}) => void`,
 		`export declare const {Casing.SetPacketDropHandler}: (handler?: (player: Player, reason: {DROP_REASON}, refused: number, detail: number) => void) => void`,
+		`export declare const {Casing.SetListenerErrorHandler}: (handler?: (player: Player, event: string, failure: string, count: number) => void) => void`,
 	}
 end
 

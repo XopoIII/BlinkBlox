@@ -11,6 +11,7 @@ local Builder = require("../Modules/Builder")
 local Decode = require("./Decode")
 local Fragments = require("./Fragments")
 local Generators = require("./Generators")
+local Listeners = require("./Listener")
 local Parser = require("../Parser")
 local Prefabs = require("./Prefabs")
 local Queues = require("./Queue")
@@ -190,28 +191,13 @@ function Declarations.Event(Declaration: Parser.Event)
 		local ContextArguments = `Listener: ({State.Context == "Server" and "Player: Player, " or ""}{Values}) -> ()`
 		local Sender = if State.Context == "Server" then "Player, " else ""
 
-		local function CallListener(ListenerArguments: string): Blocks.Block
-			local Call = Blocks.Block()
-			if IsSync and State.Options.SyncValidation then
-				Call = Call:Line(`SerdesEvent = "{Declaration.Name}"`)
-			end
-
-			--> A Sync listener runs inside the decode loop's pcall, so an error in game code used to be
-			--> reported as a packet that could not be decoded -- blamed on the sender, silently on the
-			--> server unless the game had installed a handler, and taking the rest of the packet and
-			--> any later listeners with it. It is caught here instead, where the cursor already sits
-			--> past the event, and raised on a thread of its own: which is where an Async listener's
-			--> error has always surfaced.
-			local PathExpr = IsSingle and Connection or "Listener"
-			if IsSync then
-				Call = Call:Line(`local ListenerRan, ListenerFailure = pcall({PathExpr}, {ListenerArguments})`)
-					:Line("if not ListenerRan then task.spawn(error, ListenerFailure, 0) end")
-			else
-				Call = Call:Line(`Spawn({PathExpr}, {ListenerArguments})`)
-			end
-
-			return Call
-		end
+		local ListenerOptions: Listeners.Options = {
+			Name = Declaration.Name,
+			Context = State.Context,
+			IsSync = IsSync,
+			Path = IsSingle and Connection or "Listener",
+			Validate = IsSync and State.Options.SyncValidation == true,
+		}
 
 		--> Read before the payload, because that is the order it was written in. The DECISION comes
 		--> after the payload is decoded, for the same reason the rate limit's does: a variable-length
@@ -254,7 +240,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> predicted locally is delivered exactly as one received from the network would be.
 		local function Deliver(Target: Blocks.Block, Payload: string)
 			local ListenerArguments = `{Sender}{Payload}`
-			local Call = CallListener(ListenerArguments)
+			local Call = Listeners.Call(ListenerOptions, ListenerArguments)
 			if not IsReliable then
 				if IsSingle then
 					Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent):End()
@@ -283,10 +269,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		if IsReliable then
 			Listener = BindListener(Blocks.Function(State.Casing.On, ContextArguments, `() -> ()`, true))
 				:Iterator("Index", "Arguments", Queue)
-				:Line(
-					IsSync and `Listener(table.unpack(Arguments, 1, Arguments.n))`
-						or `Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))`
-				)
+				:Line(Listeners.Replay(ListenerOptions))
 				:End()
 				:Line(`{Queue} = \{}`)
 				:Lines(Disconnect.Content, 1)

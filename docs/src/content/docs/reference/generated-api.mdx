@@ -44,6 +44,7 @@ in the same Luau environment errors: `An instance of BlinkBlox is already runnin
 | `SetRateLimitHandler(Handler?)` | `Handler: (Player: Player, Event: string?, Refused: number) -> ()` | Accepted and ignored: the client does not rate-limit. |
 | `SetDecodeErrorHandler(Handler?)` | `Handler: (Player: Player, Event: string?, Failure: string) -> ()` | `Handler: (Event: string?, Failure: string) -> ()` |
 | `SetPacketDropHandler(Handler?)` | `Handler: (Player: Player, Reason: "Malformed" \| "Oversized" \| "Budget" \| "Instances" \| "Events", Refused: number, Detail: number) -> ()` | Accepted and ignored: the client does not refuse packets. |
+| `SetListenerErrorHandler(Handler?)` | `Handler: (Player: Player, Event: string, Failure: string, Count: number) -> ()` | Accepted and ignored: a client listener's error surfaces in the output. |
 
 - `StepReplication` is connected to `RunService.Heartbeat` unless
   [`ManualReplication`](/BlinkBlox/language/options/#manualreplication) is set, in which case you call
@@ -73,6 +74,16 @@ in the same Luau environment errors: `An instance of BlinkBlox is already runnin
 - The decode-error handler receives the event the packet claimed to carry, or `nil` if its index
   named none. On the server it is called at most once a second per player, channel and event, and
   without one the server is silent. On the client, without one, each failure is a warning.
+- The listener-error handler hears every error a server listener throws: an event's, `Sync` or
+  `Async`, `Single` or `Many`, reliable or unreliable, whether it arrived live, through `Predict`, or
+  from the queue replayed when `.On` connects; and a function's, including a return value its
+  serialiser refuses -- that call is still answered with a failure. It is called at most once a second
+  per player and event, with `Failure` the error that call is about and `Count` the errors since the
+  last call, that one included. A player who has already left is reported at once with `Count` 1.
+  A polled event has no listener: the code iterating it is the game's own.
+  With one installed, the server prints none of those errors. Without one, they surface as they
+  always have: a `Sync` listener's raised on a thread of its own, an `Async` one's on the thread it
+  ran on, a function's as the warning `"Name" encountered an error, ...`.
 - Every handler runs on a thread of its own, so one that yields or throws does not disturb
   decoding. Pass `nil` to remove one.
 
@@ -218,6 +229,7 @@ your own declarations are never changed.
 | `SetRateLimitHandler` | `setRateLimitHandler` | `set_rate_limit_handler` |
 | `SetDecodeErrorHandler` | `setDecodeErrorHandler` | `set_decode_error_handler` |
 | `SetPacketDropHandler` | `setPacketDropHandler` | `set_packet_drop_handler` |
+| `SetListenerErrorHandler` | `setListenerErrorHandler` | `set_listener_error_handler` |
 
 ## Edit mode
 
@@ -231,7 +243,7 @@ Flipbook) -- no remotes exist, and both modules return stubs that keep the real 
 | `Iter`, `Next` | returns an iterator that ends at once, so a `for` loop runs zero times |
 | `Predict` | does nothing |
 | `Invoke` | does nothing and returns `nil` |
-| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | do nothing |
+| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler`, `SetListenerErrorHandler` | do nothing |
 | exported `Read`, `Write` | work normally |
 
 The stub is returned before the module checks which side it is on, so a story can require either
@@ -247,7 +259,7 @@ its result (`:andThen(...)`) errors in a story. Guard it with `RunService:IsRunn
 
 | Name | Why |
 |---|---|
-| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | Module members. A top-level event, function, scope or type may not take these names, nor, under `Camel` or `Snake` casing, the spelling the module gives them there (`stepReplication`, `step_replication`, ...) (`E3005`). |
+| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler`, `SetListenerErrorHandler` | Module members. A top-level event, function, scope or type may not take these names, nor, under `Camel` or `Snake` casing, the spelling the module gives them there (`stepReplication`, `step_replication`, ...) (`E3005`). |
 | `BLINK_ENTRY`, `BLINK_QUEUE`, `BLINK_BUFFER_SAVE`, `BLINK_INVOCATIONS`, `BLINK_DROP_REASON`, `BLINK_EVENTS_SYMBOL` | Types the module declares for itself. A top-level type of that name would redefine one (`E3005`). |
 | Built-in Luau types: `any`, `never`, `number`, `thread` | A declared type is exported under its own name, and Luau refuses `export type number = number` (`E3005`, since 0.32.0). |
 | Roblox types the module uses: `Player`, `RemoteEvent`, `UnreliableRemoteEvent`, `Vector3`, and any class the schema names in `Instance(...)` | A top-level type of that name would refer to itself and shadow every use of the Roblox type in the module (`E3005`, since 0.32.0). A type inside a `scope` is exported with the scope's name in front, so it may take these names. |

@@ -164,6 +164,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	State.Noop.Push(`{State.Casing.SetDecodeErrorHandler} = NOOP,`, 0, 2)
 	State.Return.Push(`{State.Casing.SetPacketDropHandler} = SetPacketDropHandler,`, 1, 1)
 	State.Noop.Push(`{State.Casing.SetPacketDropHandler} = NOOP,`, 0, 2)
+	State.Return.Push(`{State.Casing.SetListenerErrorHandler} = SetListenerErrorHandler,`, 1, 1)
+	State.Noop.Push(`{State.Casing.SetListenerErrorHandler} = NOOP,`, 0, 2)
 
 	if not State.Options.ManualReplication then
 		Replication.Push("RunService.Heartbeat:Connect(StepReplication)")

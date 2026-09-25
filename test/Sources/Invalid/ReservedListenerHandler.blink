@@ -1,0 +1,11 @@
+-- expect E3005
+-- SetListenerErrorHandler is a member of the generated module, so a declaration may not take its name.
+option ClientOutput = "../../Network/ReservedListenerHandlerClient.luau"
+option ServerOutput = "../../Network/ReservedListenerHandlerServer.luau"
+
+event SetListenerErrorHandler {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

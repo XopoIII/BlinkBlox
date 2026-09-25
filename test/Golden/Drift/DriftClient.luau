@@ -405,6 +405,7 @@ if not RunService:IsRunning() then
 		SetRateLimitHandler = NOOP,
 		SetDecodeErrorHandler = NOOP,
 		SetPacketDropHandler = NOOP,
+		SetListenerErrorHandler = NOOP,
 	Inserted = {
 		On = NOOP_RETURNING
 	},
@@ -464,6 +465,11 @@ local function SetRateLimitHandler(_Handler: ((Player: Player, Event: string?, R
 local function SetPacketDropHandler(
     _Handler: ((Player: Player, Reason: "Malformed" | "Oversized" | "Budget" | "Instances" | "Events", Refused: number, Detail: number) -> ())?
 ) end
+
+--> And for listener errors. A listener on the client runs what the trusted server sent, so an error
+--> there is the game's own bug with no hostile volume to bound and no player to name: it surfaces in
+--> the output as it always has.
+local function SetListenerErrorHandler(_Handler: ((Player: Player, Event: string, Failure: string, Count: number) -> ())?) end
 
 --> A packet from the server that cannot be decoded is a bug in the game rather than an attack --
 --> usually a Sync listener that yielded, or a client built from a different schema. It is said out
@@ -601,6 +607,8 @@ local Returns = table.freeze({
 	SetDecodeErrorHandler = SetDecodeErrorHandler,
 
 	SetPacketDropHandler = SetPacketDropHandler,
+
+	SetListenerErrorHandler = SetListenerErrorHandler,
 
 	Inserted = {
 		On = function(Listener: (Value: number) -> ()): () -> ()

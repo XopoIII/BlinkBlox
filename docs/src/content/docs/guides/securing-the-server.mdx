@@ -200,6 +200,11 @@ None of this needs an option. The limits it uses have defaults you can change, b
            Strikes:Add(Player, Refused)
        end
    end)
+
+   -- A listener that threw on this player's event or call. Count is the errors this call stands for.
+   Net.SetListenerErrorHandler(function(Player: Player, Event: string, Failure: string, Count: number)
+       Analytics:Record(Player, "ListenerError", Event, Failure, Count)
+   end)
    ```
 
    `Reason` is `"Malformed"`, `"Oversized"`, `"Budget"`, `"Instances"` or `"Events"`, and `Refused`
@@ -209,7 +214,7 @@ None of this needs an option. The limits it uses have defaults you can change, b
    `Budget` goes to it instead of to the rate-limit handler. `Budget` can come from an honest client
    after a network hitch, so weigh it lightly.
 
-   All three handlers are called on a thread of their own, at most once a second per player (and per
+   All four handlers are called on a thread of their own, at most once a second per player (and per
    event or reason), so a handler that yields or throws does not disturb decoding. Without a decode-error handler
    the server says nothing about packets that fail to decode, so that a client sending garbage every
    frame cannot fill the output. See
@@ -224,7 +229,10 @@ None of this needs an option. The limits it uses have defaults you can change, b
    may yield -- a datastore call, a `task.wait`, a remote round trip.
 
    An error thrown by a Sync listener is caught and raised on a thread of its own; it is not reported
-   as the sender's decode failure, and the rest of the packet is still delivered.
+   as the sender's decode failure, and the rest of the packet is still delivered. To learn which
+   player and event set a listener off, install `SetListenerErrorHandler` instead of wrapping each
+   listener in a `pcall` of your own; see
+   [Listeners that throw](/BlinkBlox/language/events/#listeners-that-throw).
 
 6. **Keep debug remotes out of release builds.**
 

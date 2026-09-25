@@ -7,6 +7,47 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+A game can hear which player's event set off a listener that threw. **The wire format does not
+change, and neither does the schema signature**: a module built from this release talks to a 0.37.0
+one built from the same schema.
+
+### Added
+
+- **`SetListenerErrorHandler(Handler?)`** on the server module. A server listener that threw was
+  caught -- a `Sync` one by the pcall that keeps the rest of the packet decoding -- and its error
+  raised with nobody named, so a game that wanted the player and the event wrapped every listener in
+  a pcall of its own. The handler is called as `(Player, Event, Failure, Count)`:
+  - It hears every server listener: an event's, `Sync` or `Async`, `Single` or `Many`, reliable or
+    unreliable, live, through `Predict`, or replayed from the queue when `.On` connects; and a
+    function's, including a return value its serialiser refuses. The function's caller is still
+    answered with a failure. A polled event has no listener, so nothing there is covered.
+  - `Failure` is the error, as a string. `Count` is how many errors the call stands for: a modified
+    client can make a listener throw on every packet, so it is called at most once a second per
+    player and event, on the schedule every other report keeps -- the first error at once, the rest
+    of that second counted into the next call. A player who has already left is reported at once
+    with `Count` 1.
+  - It runs on a thread of its own, so one that yields or throws does not disturb decoding.
+  - With a handler installed the server prints none of those errors, and a `Sync` listener replayed
+    from the queue no longer throws into the code that called `.On`. Without one, nothing changes: a
+    `Sync` listener's error is raised on a thread of its own, an `Async` one's on the thread it ran
+    on, and a function's is the same `"Name" encountered an error, ...` warning.
+  - The client module has it too, accepted and ignored, as it has `SetRateLimitHandler`: a client's
+    listeners run what the trusted server sent, so their errors stay in the output. It is stubbed in
+    edit mode, declared in the TypeScript output, follows `Casing` (`setListenerErrorHandler`,
+    `set_listener_error_handler`), and is a reserved top-level name (`E3005`).
+- **For Grabby Pit:** the pcall its `Security/Guard` wraps around every listener, to log the player
+  and event and write a telemetry row, can go. Install one `SetListenerErrorHandler` that does both;
+  the report arrives already bounded to once a second per player and event, with the count.
+
+### Changed
+
+- An `Async` listener on the server, and every listener replayed from the server's queue, is called
+  through `RunListener`, which calls it bare when no handler is installed. An event, function, scope
+  or type may not be named `SetListenerErrorHandler`, and a type-pack element may not be named
+  `ListenerFailed` or `RunListener`.
+
 ## 0.37.0 — 2026-09-25
 
 A game can act on every packet the server refuses. **The wire format does not change, and neither

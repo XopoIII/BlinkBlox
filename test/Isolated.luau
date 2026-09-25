@@ -24,13 +24,16 @@ export type Pair = {
 	Client: any,
 	--- Every packet the client fired on the reliable channel, oldest first.
 	Sent: { Packet },
+	--- Every packet the server fired to a client on the reliable channel, oldest first.
+	Replies: { Packet },
 	--- Hands the server a packet as though `Shared.Player` sent it.
 	Feed: (Reliable: boolean, Buffer: buffer, Instances: { any }?) -> (),
 }
 
 --- One remote for both sides: the server finds it and sets its signature on it, the client finds it
 --- and reads that signature back, and what the client fires lands in `Sent` rather than anywhere else.
-local function Remote(ClassName: string, Sent: { Packet })
+--- What the server fires to a client lands in `Replies`, when it is given one.
+local function Remote(ClassName: string, Sent: { Packet }, Replies: { Packet }?)
 	local Stored: { [string]: any } = {}
 	return {
 		SetAttribute = function(_self, Name: string, Value: any)
@@ -47,7 +50,13 @@ local function Remote(ClassName: string, Sent: { Packet })
 			buffer.copy(Copy, 0, Buffer)
 			table.insert(Sent, { Buffer = Copy, Instances = table.clone(Instances) })
 		end,
-		FireClient = function() end,
+		FireClient = function(_self, _Player: any, Buffer: buffer, Instances: { any })
+			if Replies then
+				local Copy = buffer.create(buffer.len(Buffer))
+				buffer.copy(Copy, 0, Buffer)
+				table.insert(Replies, { Buffer = Copy, Instances = table.clone(Instances) })
+			end
+		end,
 		FireAllClients = function() end,
 		OnServerEvent = Shared.Signal.new(),
 		OnClientEvent = Shared.Signal.new(),
@@ -92,7 +101,8 @@ local function Build(Tree: any, Scope: string, WithClient: boolean?): Pair
 	Built.Value.Options = Options
 
 	local Sent: { Packet } = {}
-	local Reliable = Remote("RemoteEvent", Sent)
+	local Replies: { Packet } = {}
+	local Reliable = Remote("RemoteEvent", Sent, Replies)
 	local Unreliable = Remote("UnreliableRemoteEvent", {})
 	for _, Environment in { ServerEnvironment, ClientEnvironment } do
 		Environment.Instances[`{Scope}_BLINK_RELIABLE_REMOTE`] = Reliable
@@ -126,6 +136,7 @@ local function Build(Tree: any, Scope: string, WithClient: boolean?): Pair
 		Server = Server,
 		Client = Client,
 		Sent = Sent,
+		Replies = Replies,
 		Feed = function(IsReliable: boolean, Buffer: buffer, Instances: { any }?)
 			local Target = if IsReliable then Reliable else Unreliable
 			Target.OnServerEvent:Fire(Shared.Player, Buffer, Instances or {})

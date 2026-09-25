@@ -548,6 +548,7 @@ if not RunService:IsRunning() then
 		SetRateLimitHandler = NOOP,
 		SetDecodeErrorHandler = NOOP,
 		SetPacketDropHandler = NOOP,
+		SetListenerErrorHandler = NOOP,
 	Generics = {
 		Entity = {
 			Read = function(Buffer: buffer): (Generics_Entity)
@@ -872,6 +873,67 @@ local function ReportDecodeFailure(Player: Player, Channel: string, Event: strin
     end
 end
 
+--> LISTENER ERRORS. A listener that throws on the server -- an event's, Sync or Async, or a function's
+--> -- is the game's bug, but the arguments that set it off are a client's: a modified client can make
+--> one throw on every packet it sends. With no handler installed the error surfaces as it always did,
+--> in the output with nobody named. With one, the handler owns it and the output stays silent: it is
+--> told the player, the event, the error and `Count`, the errors that report stands for, at most once
+--> a second per player and event on the schedule every other report keeps. A player who has already
+--> left is reported at once with a count of 1, since there is no schedule left to hold it on.
+local ListenerHandler: ((Player: Player, Event: string, Failure: string, Count: number) -> ())? = nil
+local ListenerErrors: {[Player]: {[string]: number}} = {}
+
+local function SetListenerErrorHandler(Handler: ((Player: Player, Event: string, Failure: string, Count: number) -> ())?)
+    ListenerHandler = Handler
+end
+
+--> Reports a listener's error, or returns false when no handler is installed and the caller should
+--> surface it the way it did before the handler existed. Never throws or yields: it runs inside the
+--> decode loop's per-event pcall.
+local function ListenerFailed(Player: Player, Event: string, Failure: unknown): boolean
+    local Handler = ListenerHandler
+    if not Handler then
+        return false
+    end
+
+    local Counts = ListenerErrors[Player]
+    if not Counts then
+        if Player.Parent == nil then
+            Spawn(Handler, Player, Event, tostring(Failure), 1)
+            return true
+        end
+
+        Counts = {}
+        ListenerErrors[Player] = Counts
+    end
+
+    local Count = (Counts[Event] or 0) + 1
+    if not ShouldReport(Player, `Listener {Event}`) then
+        Counts[Event] = Count
+        return true
+    end
+
+    Counts[Event] = 0
+    --> Spawned for RateAccept's reason: a handler that throws or yields must not reach the decoder.
+    Spawn(Handler, Player, Event, tostring(Failure), Count)
+    return true
+end
+
+--> Runs an Async listener, or replays a queued event to one of either kind. Without a handler the
+--> listener is called bare, so its error surfaces on its own thread exactly as before; with one it is
+--> protected and reported.
+local function RunListener<T...>(Event: string, Listener: (Player, T...) -> (), Player: Player, ...: T...)
+    if ListenerHandler == nil then
+        Listener(Player, ...)
+        return
+    end
+
+    local Ran: boolean, Failure: any = pcall(Listener, Player, ...)
+    if not Ran then
+        ListenerFailed(Player, Event, Failure)
+    end
+end
+
 --> Charges a packet against its sender's inbound budget, or reports and refuses it.
 -->
 --> Called from the connection before the packet is decoded, so a refusal costs the server a table
@@ -1103,6 +1165,7 @@ Players.PlayerRemoving:Connect(function(Player)
     InboundBudgets[Player] = nil
     Reports[Player] = nil
     Drops[Player] = nil
+    ListenerErrors[Player] = nil
     InFlight[Player] = nil
     InFlightRefused[Player] = nil
 
@@ -1272,14 +1335,14 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			if Events.Unreliable[0] ~= nil then
 				SerdesEvent = "Snapshot"
 				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[0], Player, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+				if not ListenerRan and not ListenerFailed(Player, "Snapshot", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 1 then
 			local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Example_ReadEVENT_Snapshot()
 			if Events.Unreliable[1] ~= nil then
 				SerdesEvent = "Snapshot"
 				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[1], Player, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+				if not ListenerRan and not ListenerFailed(Player, "Snapshot", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -1309,6 +1372,8 @@ local Returns = table.freeze({
 	SetDecodeErrorHandler = SetDecodeErrorHandler,
 
 	SetPacketDropHandler = SetPacketDropHandler,
+
+	SetListenerErrorHandler = SetListenerErrorHandler,
 
 	Generics = {
 		Entity = {
