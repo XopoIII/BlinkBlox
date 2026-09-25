@@ -46,3 +46,12 @@ event EntitiesRandom {
     Call: SingleSync,
     Data: Entity[0..1000]
 }
+
+-- One byte of payload, where the cost of an event is its framing, dispatch and guards rather than its
+-- data. Timed by Runtime.luau only; Studio's harness has no bench of this name and skips it.
+event Tiny {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

@@ -326,6 +326,12 @@ function Block.While(self: Block, Condition: string): Block
 	return Block.new(self)
 end
 
+--- A scope of its own under `Header`, such as a local function: closed by `End` like any other.
+function Block.Scope(self: Block, Header: string): Block
+	self:Line(Header)
+	return Block.new(self)
+end
+
 function Block.Iterator(self: Block, Key: string, Value: string, Iterator: string): Block
 	self:Line(`for {Key}, {Value} in {Iterator} do`)
 	return Block.new(self)

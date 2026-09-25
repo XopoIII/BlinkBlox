@@ -8189,11 +8189,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	while (RecieveCursor < Size) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 2 then
@@ -8840,7 +8839,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		else
 			error("[BlinkBlox]: Unknown event index.")
 		end
-		end)
+	end
+	while (RecieveCursor < Size) do
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
 			break
@@ -8858,11 +8860,10 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	while (RecieveCursor < Size) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -8943,7 +8944,10 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		else
 			error("[BlinkBlox]: Unknown event index.")
 		end
-		end)
+	end
+	while (RecieveCursor < Size) do
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
 			break

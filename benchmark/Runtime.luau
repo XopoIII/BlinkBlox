@@ -23,7 +23,9 @@ local Parser = require("../src/Parser")
 
 local EVENTS_PER_FRAME = 1000
 local WARMUP_FRAMES = 10
-local BENCHES = { "Booleans", "Entities", "BooleansRandom", "EntitiesRandom" }
+local BENCHES = { "Booleans", "Entities", "BooleansRandom", "EntitiesRandom", "Tiny" }
+--> Benches only this file runs. The rest are Studio's, shared with it.
+local LOCAL_BENCHES = { Tiny = true }
 
 local Frames = 200
 local Filter: string? = nil
@@ -56,7 +58,8 @@ end
 local function LoadPool(Name: string): { any }
 	--> As benches/init.luau does in Studio, so each pool is the same on every run.
 	math.randomseed(0)
-	return (require :: any)(`./src/shared/benches/{Name}`)
+	local Directory = if LOCAL_BENCHES[Name] then "./runtime/benches" else "./src/shared/benches"
+	return (require :: any)(`{Directory}/{Name}`)
 end
 
 local function Percentile(Sorted: { number }, Percent: number): number
@@ -131,7 +134,11 @@ local function Run(Pair: Environment.Pair, Bench: string, Pool: { any }): Result
 
 	--> A benchmark of a codec that decodes the wrong thing measures nothing.
 	assert(Received == Sent, `{Bench}: the server received {Received} of {Sent} events`)
-	assert(#First == #Pool[1], `{Bench}: the first event decoded to a different length`)
+	if type(First) == "table" then
+		assert(#First == #Pool[1], `{Bench}: the first event decoded to a different length`)
+	else
+		assert(First == Pool[1], `{Bench}: the first event decoded to a different value`)
+	end
 
 	return {
 		Fire = Summarise(FireTimes),

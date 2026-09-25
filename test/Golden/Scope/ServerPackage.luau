@@ -846,20 +846,22 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	end
 	SerdesThread = coroutine.running()
 	local DecodedEvents = 0
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
+		error("[BlinkBlox]: This channel receives no events.")
+	end
+	while (RecieveCursor < Size and Player.Parent ~= nil) do
 		DecodedEvents += 1
 		if DecodedEvents > 64 then
 			if ShouldReport(Player, "Events") then warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`) end
 			break
 		end
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
-		end)
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
 			break
@@ -893,20 +895,22 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 	SerdesThread = coroutine.running()
 	local DecodedEvents = 0
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
+	local Decoding = -1
+	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		Decoding = Index
+		error("[BlinkBlox]: This channel receives no events.")
+	end
+	while (RecieveCursor < Size and Player.Parent ~= nil) do
 		DecodedEvents += 1
 		if DecodedEvents > 64 then
 			if ShouldReport(Player, "Events") then warn(`[BlinkBlox]: Dropped the rest of a packet from {Player.Name}, too many events.`) end
 			break
 		end
-		local Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(function()
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
-		end)
+		Decoding = -1
+		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
 		if not Parsed then
 			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
 			break
