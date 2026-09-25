@@ -12,6 +12,7 @@ local Size = require("../Modules/Size")
 
 local Blocks = require("./Blocks")
 local Prefabs = require("./Prefabs")
+local Scope = require("./Scope")
 local State = require("./State")
 local Util = require("./Util")
 
@@ -186,10 +187,15 @@ function Serde.Struct(Declaration: Parser.Struct, Read: Blocks.Block, Write: Blo
 
 	Read:Line(`{Read:Declare(Variable)} = \{{table.concat(Slots, ", ")}\} :: any`)
 
+	--> Each field in a scope of its own, so that its locals end with it; see Scope.luau.
 	for _, Field in Value.Values do
 		local Name = Field.Name
 		local FieldVariable = `{Variable}{FormatIndex(Name)}`
-		Serde.Emit(Field :: Type, Read, Write, FieldVariable)
+		Scope(Read, function()
+			Scope(Write, function()
+				Serde.Emit(Field :: Type, Read, Write, FieldVariable)
+			end)
+		end)
 	end
 end
 

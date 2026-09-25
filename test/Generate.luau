@@ -26,8 +26,8 @@ Generate.Wild = false
 --- their own and would need the mocked globals to construct.
 Generate.Unsupported = "Unsupported"
 
-local INTEGERS = { u8 = true, u16 = true, u32 = true, i8 = true, i16 = true, i32 = true }
-local FLOATS = { f16 = true, f32 = true, f64 = true }
+local INTEGERS = { u8 = true, u16 = true, u24 = true, u32 = true, i8 = true, i16 = true, i24 = true, i32 = true }
+local FLOATS = { f16 = true, f24 = true, f32 = true, f64 = true }
 
 --> Past this, a draw of a length or a count stays near the lower bound unless it takes an edge.
 local SMALL = 8
@@ -63,6 +63,22 @@ function Generate.HalfFromBits(Bits: number): number
 	end
 
 	return Sign * math.ldexp(0x400 + Mantissa, Exponent - 25)
+end
+
+--- The value an f24 bit pattern stands for -- a sign, six bits of exponent biased by 31 and
+--- seventeen of mantissa, laid out as IEEE lays out a half -- decoded without the compiler's code.
+function Generate.Float24FromBits(Bits: number): number
+	local Sign = if Bits >= 0x800000 then -1 else 1
+	local Exponent = (Bits // 0x20000) % 0x40
+	local Mantissa = Bits % 0x20000
+
+	if Exponent == 0x3F then
+		return if Mantissa == 0 then Sign * math.huge else 0 / 0
+	elseif Exponent == 0 then
+		return Sign * math.ldexp(Mantissa, -47)
+	end
+
+	return Sign * math.ldexp(0x20000 + Mantissa, Exponent - 48)
 end
 
 local F32 = Oracle.F32
@@ -107,7 +123,26 @@ end
 --- subnormals, the largest finite values, and just past them.
 local function WildFloat(): number
 	if Chance(0.4) then
-		local Edge = Pick({ 65504, 65519, 65520, 1e5, 6.1e-5, 6.103e-5, 6.1035e-5, 5.96e-8, 2.9e-8, 3e-8, 1e-10 })
+		local Edge = Pick({
+			65504,
+			65519,
+			65520,
+			1e5,
+			6.1e-5,
+			6.103e-5,
+			6.1035e-5,
+			5.96e-8,
+			2.9e-8,
+			3e-8,
+			1e-10,
+			--> f24's: its largest finite value and where rounding passes it, its smallest normal and
+			--> subnormal, and a mantissa that rounds up into the next binade.
+			4294950912,
+			4294959104,
+			9.3132e-10,
+			7.1e-15,
+			1023.9999999,
+		})
 		return Edge * Pick({ 1, -1 }) * (1 + (math.random() - 0.5) * 1e-4)
 	end
 
@@ -130,6 +165,23 @@ local function Float(Node: Node): number
 				then Pick({ 0x0000, 0x8000, 0x0001, 0x8001, 0x03FF, 0x0400, 0x7BFF, 0xFBFF, 0x7C00, 0xFC00, 0x7E00 })
 				else math.random(0, 0xFFFF)
 			Value = Generate.HalfFromBits(Bits)
+		elseif Name == "f24" then
+			local Bits = if Chance(0.3)
+				then Pick({
+					0x000000,
+					0x800000,
+					0x000001,
+					0x800001,
+					0x01FFFF,
+					0x020000,
+					0x7DFFFF,
+					0xFDFFFF,
+					0x7E0000,
+					0xFE0000,
+					0x7F0000,
+				})
+				else math.random(0, 0xFFFFFF)
+			Value = Generate.Float24FromBits(Bits)
 		elseif Chance(0.3) then
 			Value =
 				Pick({ 0, -0, 1, -1, math.huge, -math.huge, 0 / 0, 2 ^ 24, 2 ^ 24 + 2, 1e-45, 3.4e38, 1e300, -1e300 })

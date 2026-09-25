@@ -21,11 +21,11 @@ end
 
 RunClosure("Completion offers keywords, primitives and declared names where each belongs", function()
 	local Cases: { { Text: string, Cursor: number, Symbols: { [string]: true }?, Expect: string } } = {
-		--> A keyword opens a line, shortest first.
+		--> A keyword opens a line, shortest first and then by name.
 		{ Text = "str", Cursor = 4, Expect = "struct" },
 		{ Text = "e", Cursor = 2, Expect = "enum,event,export" },
 		--> A type follows `=` or a field's `:`.
-		{ Text = "type A = u", Cursor = 11, Expect = "u8,u16,u32,unknown" },
+		{ Text = "type A = u", Cursor = 11, Expect = "u8,u16,u24,u32,unknown" },
 		{ Text = "event X {\n  Data: st", Cursor = 20, Expect = "string" },
 		{ Text = "type A = Po", Cursor = 12, Symbols = { Position = true, Other = true }, Expect = "Position" },
 		--> A word already complete has nothing left to add.

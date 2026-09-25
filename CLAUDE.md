@@ -244,7 +244,17 @@ the emitted text. Each fails when the bug it is about is put back: the 0.24 phan
 closed-up holes, the 0.26 channel with no refusal. `test/Isolated.luau` builds a server and client
 from a spec's own schema on remotes nothing else shares, for any spec that needs the bytes.
 
-0.34.0 was about performance, and it began with the benchmark, because the benchmark could not see
+0.34.0 came out of reading two devforum projects by 5uphi. Global Framework is not networking at all.
+Packet is a runtime library of the ByteNet/Warp kind, and its gaps are this fork's changelog run
+backwards again: a reply is matched by slot alone, whatever function it answers; an array's u16
+length sizes an allocation before its elements are read; Instances go unchecked; there is no schema
+signature; the budget is 8000 bytes per heartbeat. What it had that this fork lacked was 24-bit
+numbers, so `u24`, `i24` and `f24` were added. `vector<f24>` is 9 bytes where `vector` is 12, and at a
+thousand studs it is within 0.002. The idea was taken, not the code. Packet's own f24 drops the carry
+when a mantissa rounds up, so 1023.9999999 arrives as 512, and it has no subnormals. This one rounds
+to nearest where f16 truncates, and `test/Floats24.luau` fails with either Packet bug put back.
+
+0.35.0 was about performance, and it began with the benchmark, because the benchmark could not see
 it. Studio caps the frame rate at 60, so Entities showed only that BlinkBlox kept up. Studio compiles
 LocalScripts natively where most clients do not. And every event carried the same data, which Roblox's
 zstd compression squeezed to nothing, so the Kbps column measured the compressor: all three tools read
@@ -259,7 +269,9 @@ the compiler side, 90% of parse time was generic substitution deep-copying the d
 whole symbol table, and parsing went from 166 ms to 12 ms. A reused parser also kept every tree it
 had parsed, which is how the plugin's editor had leaked 16 MB a parse on a schema using
 `@profile`. Constant offsets in array loops and branchless boolean packing were measured and
-dropped: the first was slower natively, the second no faster.
+dropped: the first was slower natively, the second no faster. Reviewing 0.34.0's f24 turned up that
+a struct of 50 CFrames failed to load at all -- every field's locals stayed live, past Luau's 200 --
+so each field of a struct is now scoped (`src/Generator/Scope.luau`).
 
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as

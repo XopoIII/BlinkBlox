@@ -43,10 +43,16 @@ local KEYWORDS: { Symbol } = {
 	{ Label = "export", Insert = "export " },
 }
 
---> Shortest first, so the closest match to what has been typed is at the top.
+--> Shortest first, so the closest match to what has been typed is at the top. Labels of one length go
+--> in name order: `Settings.Primtives` is a map, so without it their order was whatever the table's
+--> layout happened to be, and adding `u24` put it after `u32`.
 for _, List in { PRIMITIVES, KEYWORDS } do
 	table.sort(List, function(a, b)
-		return #a.Label < #b.Label
+		if #a.Label ~= #b.Label then
+			return #a.Label < #b.Label
+		end
+
+		return a.Label < b.Label
 	end)
 end
 

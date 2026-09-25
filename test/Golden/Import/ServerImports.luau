@@ -422,49 +422,55 @@ function SerdesFunctions.Generics_ReadEVENT_Snapshot(): ({ Sequence: number, Ack
 	Value.Sequence = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	-- Value.Ack: Ack
 	Value.Ack = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
-	-- Value.Data: Data
-	local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
-	Value.Data = true :: any
-	if Tag == 0 then
-		-- Read BLOCK: 15 bytes
-		local BLOCK_START = Read(15)
-		-- Value.Data: Single
-		Value.Data = {Data = false} :: any
-		-- Value.Data.Data: Data
-		Value.Data.Data = {id = false, pos = false, angle = false} :: any
-		-- Value.Data.Data.id: id
-		Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		-- Value.Data.Data.pos: pos
-		local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-		local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-		local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-		Value.Data.Data.pos = Vector3.new(X, Y, Z)
-		-- Value.Data.Data.angle: angle
-		Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
-		Value.Data.Type = "Single"
-	elseif Tag == 1 then
-		-- Read BLOCK: 17 bytes
-		local BLOCK_START = Read(17)
-		-- Value.Data: Fragment
-		Value.Data = {Fragment = false, Fragments = false, Data = false} :: any
-		-- Value.Data.Fragment: Fragment
-		Value.Data.Fragment = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		-- Value.Data.Fragments: Fragments
-		Value.Data.Fragments = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-		-- Value.Data.Data: Data
-		Value.Data.Data = {id = false, pos = false, angle = false} :: any
-		-- Value.Data.Data.id: id
-		Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-		-- Value.Data.Data.pos: pos
-		local X = buffer.readf32(RecieveBuffer, BLOCK_START + 3)
-		local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 7)
-		local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 11)
-		Value.Data.Data.pos = Vector3.new(X, Y, Z)
-		-- Value.Data.Data.angle: angle
-		Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 15)
-		Value.Data.Type = "Fragment"
-	else
-		error(`Unexpected variant: {Tag}`)
+	do
+		-- Value.Data: Data
+		local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
+		Value.Data = true :: any
+		if Tag == 0 then
+			-- Read BLOCK: 15 bytes
+			local BLOCK_START = Read(15)
+			-- Value.Data: Single
+			Value.Data = {Data = false} :: any
+			-- Value.Data.Data: Data
+			Value.Data.Data = {id = false, pos = false, angle = false} :: any
+			-- Value.Data.Data.id: id
+			Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			do
+				-- Value.Data.Data.pos: pos
+				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+				Value.Data.Data.pos = Vector3.new(X, Y, Z)
+			end
+			-- Value.Data.Data.angle: angle
+			Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
+			Value.Data.Type = "Single"
+		elseif Tag == 1 then
+			-- Read BLOCK: 17 bytes
+			local BLOCK_START = Read(17)
+			-- Value.Data: Fragment
+			Value.Data = {Fragment = false, Fragments = false, Data = false} :: any
+			-- Value.Data.Fragment: Fragment
+			Value.Data.Fragment = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Value.Data.Fragments: Fragments
+			Value.Data.Fragments = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			-- Value.Data.Data: Data
+			Value.Data.Data = {id = false, pos = false, angle = false} :: any
+			-- Value.Data.Data.id: id
+			Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+			do
+				-- Value.Data.Data.pos: pos
+				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 3)
+				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 7)
+				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 11)
+				Value.Data.Data.pos = Vector3.new(X, Y, Z)
+			end
+			-- Value.Data.Data.angle: angle
+			Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 15)
+			Value.Data.Type = "Fragment"
+		else
+			error(`Unexpected variant: {Tag}`)
+		end
 	end
 	return Value
 end
@@ -478,49 +484,55 @@ function SerdesFunctions.Example_ReadEVENT_Snapshot(): ({ Sequence: number, Ack:
 	Value.Sequence = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	-- Value.Ack: Ack
 	Value.Ack = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
-	-- Value.Data: Data
-	local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
-	Value.Data = true :: any
-	if Tag == 0 then
-		-- Read BLOCK: 15 bytes
-		local BLOCK_START = Read(15)
-		-- Value.Data: Single
-		Value.Data = {Data = false} :: any
-		-- Value.Data.Data: Data
-		Value.Data.Data = {id = false, pos = false, angle = false} :: any
-		-- Value.Data.Data.id: id
-		Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		-- Value.Data.Data.pos: pos
-		local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-		local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-		local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-		Value.Data.Data.pos = Vector3.new(X, Y, Z)
-		-- Value.Data.Data.angle: angle
-		Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
-		Value.Data.Type = "Single"
-	elseif Tag == 1 then
-		-- Read BLOCK: 17 bytes
-		local BLOCK_START = Read(17)
-		-- Value.Data: Fragment
-		Value.Data = {Fragment = false, Fragments = false, Data = false} :: any
-		-- Value.Data.Fragment: Fragment
-		Value.Data.Fragment = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		-- Value.Data.Fragments: Fragments
-		Value.Data.Fragments = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-		-- Value.Data.Data: Data
-		Value.Data.Data = {id = false, pos = false, angle = false} :: any
-		-- Value.Data.Data.id: id
-		Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-		-- Value.Data.Data.pos: pos
-		local X = buffer.readf32(RecieveBuffer, BLOCK_START + 3)
-		local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 7)
-		local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 11)
-		Value.Data.Data.pos = Vector3.new(X, Y, Z)
-		-- Value.Data.Data.angle: angle
-		Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 15)
-		Value.Data.Type = "Fragment"
-	else
-		error(`Unexpected variant: {Tag}`)
+	do
+		-- Value.Data: Data
+		local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
+		Value.Data = true :: any
+		if Tag == 0 then
+			-- Read BLOCK: 15 bytes
+			local BLOCK_START = Read(15)
+			-- Value.Data: Single
+			Value.Data = {Data = false} :: any
+			-- Value.Data.Data: Data
+			Value.Data.Data = {id = false, pos = false, angle = false} :: any
+			-- Value.Data.Data.id: id
+			Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			do
+				-- Value.Data.Data.pos: pos
+				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+				Value.Data.Data.pos = Vector3.new(X, Y, Z)
+			end
+			-- Value.Data.Data.angle: angle
+			Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
+			Value.Data.Type = "Single"
+		elseif Tag == 1 then
+			-- Read BLOCK: 17 bytes
+			local BLOCK_START = Read(17)
+			-- Value.Data: Fragment
+			Value.Data = {Fragment = false, Fragments = false, Data = false} :: any
+			-- Value.Data.Fragment: Fragment
+			Value.Data.Fragment = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Value.Data.Fragments: Fragments
+			Value.Data.Fragments = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			-- Value.Data.Data: Data
+			Value.Data.Data = {id = false, pos = false, angle = false} :: any
+			-- Value.Data.Data.id: id
+			Value.Data.Data.id = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+			do
+				-- Value.Data.Data.pos: pos
+				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 3)
+				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 7)
+				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 11)
+				Value.Data.Data.pos = Vector3.new(X, Y, Z)
+			end
+			-- Value.Data.Data.angle: angle
+			Value.Data.Data.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 15)
+			Value.Data.Type = "Fragment"
+		else
+			error(`Unexpected variant: {Tag}`)
+		end
 	end
 	return Value
 end
@@ -547,11 +559,13 @@ if not RunService:IsRunning() then
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -573,11 +587,13 @@ if not RunService:IsRunning() then
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)
@@ -610,11 +626,13 @@ if not RunService:IsRunning() then
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -636,11 +654,13 @@ if not RunService:IsRunning() then
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)
@@ -1235,11 +1255,13 @@ local Returns = table.freeze({
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -1261,11 +1283,13 @@ local Returns = table.freeze({
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)
@@ -1308,11 +1332,13 @@ local Returns = table.freeze({
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -1334,11 +1360,13 @@ local Returns = table.freeze({
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)

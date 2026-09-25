@@ -426,11 +426,13 @@ function SerdesFunctions.Generics_WriteEVENT_Snapshot(Value: { Sequence: number,
 		-- Value.Data.Data: Data
 		-- Value.Data.Data.id: id
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Data.Data.id)
-		-- Value.Data.Data.pos: pos
-		local Vector = Value.Data.Data.pos
-		buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-		buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-		buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+		do
+			-- Value.Data.Data.pos: pos
+			local Vector = Value.Data.Data.pos
+			buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+		end
 		-- Value.Data.Data.angle: angle
 		buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.Data.Data.angle)
 	elseif Value.Data.Type == "Fragment" then
@@ -445,11 +447,13 @@ function SerdesFunctions.Generics_WriteEVENT_Snapshot(Value: { Sequence: number,
 		-- Value.Data.Data: Data
 		-- Value.Data.Data.id: id
 		buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Data.Data.id)
-		-- Value.Data.Data.pos: pos
-		local Vector = Value.Data.Data.pos
-		buffer.writef32(SendBuffer, BLOCK_START + 3, Vector.X)
-		buffer.writef32(SendBuffer, BLOCK_START + 7, Vector.Y)
-		buffer.writef32(SendBuffer, BLOCK_START + 11, Vector.Z)
+		do
+			-- Value.Data.Data.pos: pos
+			local Vector = Value.Data.Data.pos
+			buffer.writef32(SendBuffer, BLOCK_START + 3, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 7, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 11, Vector.Z)
+		end
 		-- Value.Data.Data.angle: angle
 		buffer.writeu16(SendBuffer, BLOCK_START + 15, Value.Data.Data.angle)
 	else
@@ -476,11 +480,13 @@ function SerdesFunctions.Example_WriteEVENT_Snapshot(Value: { Sequence: number, 
 		-- Value.Data.Data: Data
 		-- Value.Data.Data.id: id
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Data.Data.id)
-		-- Value.Data.Data.pos: pos
-		local Vector = Value.Data.Data.pos
-		buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-		buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-		buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+		do
+			-- Value.Data.Data.pos: pos
+			local Vector = Value.Data.Data.pos
+			buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+		end
 		-- Value.Data.Data.angle: angle
 		buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.Data.Data.angle)
 	elseif Value.Data.Type == "Fragment" then
@@ -495,11 +501,13 @@ function SerdesFunctions.Example_WriteEVENT_Snapshot(Value: { Sequence: number, 
 		-- Value.Data.Data: Data
 		-- Value.Data.Data.id: id
 		buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Data.Data.id)
-		-- Value.Data.Data.pos: pos
-		local Vector = Value.Data.Data.pos
-		buffer.writef32(SendBuffer, BLOCK_START + 3, Vector.X)
-		buffer.writef32(SendBuffer, BLOCK_START + 7, Vector.Y)
-		buffer.writef32(SendBuffer, BLOCK_START + 11, Vector.Z)
+		do
+			-- Value.Data.Data.pos: pos
+			local Vector = Value.Data.Data.pos
+			buffer.writef32(SendBuffer, BLOCK_START + 3, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 7, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 11, Vector.Z)
+		end
 		-- Value.Data.Data.angle: angle
 		buffer.writeu16(SendBuffer, BLOCK_START + 15, Value.Data.Data.angle)
 	else
@@ -529,11 +537,13 @@ if not RunService:IsRunning() then
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -555,11 +565,13 @@ if not RunService:IsRunning() then
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)
@@ -592,11 +604,13 @@ if not RunService:IsRunning() then
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -618,11 +632,13 @@ if not RunService:IsRunning() then
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)
@@ -819,11 +835,13 @@ local Returns = table.freeze({
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -845,11 +863,13 @@ local Returns = table.freeze({
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)
@@ -895,11 +915,13 @@ local Returns = table.freeze({
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
 					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					-- Value.pos: pos
-					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-					Value.pos = Vector3.new(X, Y, Z)
+					do
+						-- Value.pos: pos
+						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+						Value.pos = Vector3.new(X, Y, Z)
+					end
 					-- Value.angle: angle
 					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
 					return Value
@@ -921,11 +943,13 @@ local Returns = table.freeze({
 					-- Value: Entity
 					-- Value.id: id
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					-- Value.pos: pos
-					local Vector = Value.pos
-					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					do
+						-- Value.pos: pos
+						local Vector = Value.pos
+						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+					end
 					-- Value.angle: angle
 					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
 					local Result = buffer.create(SendCursor)

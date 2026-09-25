@@ -528,11 +528,12 @@ export type AnotherScope_ScopeWithinAnotherScope_ExampleType = number
 function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 	-- Allocate BLOCK: 4 bytes
 	local BLOCK_START = Allocate(4)
+	local BITFIELD_0
 	-- EVENT_ClientPollEvent (0)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
 	-- Value: ClientPollEvent
 	-- Value.Field: Field
-	local BITFIELD_0 = 0
+	BITFIELD_0 = 0
 	if Value.Field ~= nil then BITFIELD_0 += 0x01 end
 	if Value.Field ~= nil then
 		-- Allocate BLOCK: 1 bytes
@@ -593,23 +594,25 @@ function SerdesFunctions.WriteEVENT_ClientPollEvent(Value: { Field: number?, Flo
 		error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value.Nested.Guh)
-	-- Value.Nested.Array: Array
-	-- START ARRAY
-	if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
-		-- Allocate BLOCK: 1 bytes
-	local ARRAY_START_1 = Allocate(1 * 10)
-	for Index = 1, 10 do
-		local Item_1 = Value.Nested.Array[Index]
-		-- Item_1: Array
-		if typeof(Item_1) ~= "number" then
-			error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+	do
+		-- Value.Nested.Array: Array
+		-- START ARRAY
+		if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
+			-- Allocate BLOCK: 1 bytes
+		local ARRAY_START_1 = Allocate(1 * 10)
+		for Index = 1, 10 do
+			local Item_1 = Value.Nested.Array[Index]
+			-- Item_1: Array
+			if typeof(Item_1) ~= "number" then
+				error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+			end
+			-- Allocate 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
 		end
-		-- Allocate 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Nested.OptionalArray: OptionalArray
 	if Value.Nested.OptionalArray ~= nil then BITFIELD_0 += 0x04 end
 	if Value.Nested.OptionalArray ~= nil then
@@ -637,11 +640,12 @@ end
 function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 	-- Allocate BLOCK: 4 bytes
 	local BLOCK_START = Allocate(4)
+	local BITFIELD_0
 	-- EVENT_ClientUnreliablePollEvent (0)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
 	-- Value: ClientUnreliablePollEvent
 	-- Value.Field: Field
-	local BITFIELD_0 = 0
+	BITFIELD_0 = 0
 	if Value.Field ~= nil then BITFIELD_0 += 0x01 end
 	if Value.Field ~= nil then
 		-- Allocate BLOCK: 1 bytes
@@ -702,23 +706,25 @@ function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: nu
 		error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value.Nested.Guh)
-	-- Value.Nested.Array: Array
-	-- START ARRAY
-	if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
-		-- Allocate BLOCK: 1 bytes
-	local ARRAY_START_1 = Allocate(1 * 10)
-	for Index = 1, 10 do
-		local Item_1 = Value.Nested.Array[Index]
-		-- Item_1: Array
-		if typeof(Item_1) ~= "number" then
-			error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+	do
+		-- Value.Nested.Array: Array
+		-- START ARRAY
+		if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
+			-- Allocate BLOCK: 1 bytes
+		local ARRAY_START_1 = Allocate(1 * 10)
+		for Index = 1, 10 do
+			local Item_1 = Value.Nested.Array[Index]
+			-- Item_1: Array
+			if typeof(Item_1) ~= "number" then
+				error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+			end
+			-- Allocate 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
 		end
-		-- Allocate 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Nested.OptionalArray: OptionalArray
 	if Value.Nested.OptionalArray ~= nil then BITFIELD_0 += 0x04 end
 	if Value.Nested.OptionalArray ~= nil then
@@ -760,10 +766,11 @@ end
 function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local BITFIELD_0
 	-- Value: ServerPollEvent
 	local Value = {Enum = false, Nested = false} :: any
 	-- Value.Field: Field
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
@@ -800,39 +807,43 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 			Value.Float16Field = if Encoded // 0x8000 == 1 then -Result else Result
 		end
 	end
-	-- Value.Enum: Enum
-	Value.Enum = true :: any
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-	if Index == 0 then
-		Value.Enum = "A"
-	elseif Index == 1 then
-		Value.Enum = "B"
-	elseif Index == 2 then
-		Value.Enum = "C"
-	elseif Index == 3 then
-		Value.Enum = "D"
-	else
-		error(`Unexpected enum: {Index}`)
+	do
+		-- Value.Enum: Enum
+		Value.Enum = true :: any
+		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+		if Index == 0 then
+			Value.Enum = "A"
+		elseif Index == 1 then
+			Value.Enum = "B"
+		elseif Index == 2 then
+			Value.Enum = "C"
+		elseif Index == 3 then
+			Value.Enum = "D"
+		else
+			error(`Unexpected enum: {Index}`)
+		end
 	end
 	-- Value.Nested: Nested
 	Value.Nested = {Guh = false, Array = false} :: any
 	-- Value.Nested.Guh: Guh
 	Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-	-- Value.Nested.Array: Array
-	-- START ARRAY
-	local Length = 10
-	Value.Nested.Array = table.create(Length)
-		-- Read BLOCK: 1 bytes
-	local ARRAY_START_1 = Read(1 * Length)
-	for Slot_1 = 1, Length do
-		-- Item_1: Array
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		Value.Nested.Array[Slot_1] = Item_1
+	do
+		-- Value.Nested.Array: Array
+		-- START ARRAY
+		local Length = 10
+		Value.Nested.Array = table.create(Length)
+			-- Read BLOCK: 1 bytes
+		local ARRAY_START_1 = Read(1 * Length)
+		for Slot_1 = 1, Length do
+			-- Item_1: Array
+			-- Read 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+			Value.Nested.Array[Slot_1] = Item_1
+		end
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Nested.OptionalArray: OptionalArray
 	if bit32.btest(BITFIELD_0, 0x04) == true then
 		-- Value.Nested.OptionalArray: OptionalArray
@@ -857,10 +868,11 @@ end
 function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local BITFIELD_0
 	-- Value: ServerUnreliablePollEvent
 	local Value = {Enum = false, Nested = false} :: any
 	-- Value.Field: Field
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
@@ -897,39 +909,43 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 			Value.Float16Field = if Encoded // 0x8000 == 1 then -Result else Result
 		end
 	end
-	-- Value.Enum: Enum
-	Value.Enum = true :: any
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-	if Index == 0 then
-		Value.Enum = "A"
-	elseif Index == 1 then
-		Value.Enum = "B"
-	elseif Index == 2 then
-		Value.Enum = "C"
-	elseif Index == 3 then
-		Value.Enum = "D"
-	else
-		error(`Unexpected enum: {Index}`)
+	do
+		-- Value.Enum: Enum
+		Value.Enum = true :: any
+		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+		if Index == 0 then
+			Value.Enum = "A"
+		elseif Index == 1 then
+			Value.Enum = "B"
+		elseif Index == 2 then
+			Value.Enum = "C"
+		elseif Index == 3 then
+			Value.Enum = "D"
+		else
+			error(`Unexpected enum: {Index}`)
+		end
 	end
 	-- Value.Nested: Nested
 	Value.Nested = {Guh = false, Array = false} :: any
 	-- Value.Nested.Guh: Guh
 	Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-	-- Value.Nested.Array: Array
-	-- START ARRAY
-	local Length = 10
-	Value.Nested.Array = table.create(Length)
-		-- Read BLOCK: 1 bytes
-	local ARRAY_START_1 = Read(1 * Length)
-	for Slot_1 = 1, Length do
-		-- Item_1: Array
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		Value.Nested.Array[Slot_1] = Item_1
+	do
+		-- Value.Nested.Array: Array
+		-- START ARRAY
+		local Length = 10
+		Value.Nested.Array = table.create(Length)
+			-- Read BLOCK: 1 bytes
+		local ARRAY_START_1 = Read(1 * Length)
+		for Slot_1 = 1, Length do
+			-- Item_1: Array
+			-- Read 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+			Value.Nested.Array[Slot_1] = Item_1
+		end
+		-- END ARRAY
 	end
-	-- END ARRAY
 	-- Value.Nested.OptionalArray: OptionalArray
 	if bit32.btest(BITFIELD_0, 0x04) == true then
 		-- Value.Nested.OptionalArray: OptionalArray
@@ -1131,15 +1147,19 @@ function SerdesFunctions.ReadEVENT_DynamicMap(): ({[number]: { Static: number, D
 		local Key_1 = buffer.readu8(RecieveBuffer, OFFSET_0)
 		-- Element_1: DynamicMap
 		local Element_1 = {Static = false, Dynamic = false} :: any
-		-- Element_1.Static: Static
-		local OFFSET_1 = Read(1)
-		Element_1.Static = buffer.readu8(RecieveBuffer, OFFSET_1)
-		-- Element_1.Dynamic: Dynamic
-		local OFFSET_2 = Read(2)
-		local Length = buffer.readu16(RecieveBuffer, OFFSET_2)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1.Dynamic" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Element_1.Dynamic = buffer.create(Length)
-		buffer.copy(Element_1.Dynamic, 0, RecieveBuffer, Read(Length), Length)
+		do
+			-- Element_1.Static: Static
+			local OFFSET_1 = Read(1)
+			Element_1.Static = buffer.readu8(RecieveBuffer, OFFSET_1)
+		end
+		do
+			-- Element_1.Dynamic: Dynamic
+			local OFFSET_2 = Read(2)
+			local Length = buffer.readu16(RecieveBuffer, OFFSET_2)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1.Dynamic" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			Element_1.Dynamic = buffer.create(Length)
+			buffer.copy(Element_1.Dynamic, 0, RecieveBuffer, Read(Length), Length)
+		end
 		Value[Key_1] = Element_1
 	end
 	return Value
@@ -1155,19 +1175,23 @@ function SerdesFunctions.ReadEVENT_DynamicArray(): ({ { Static: number, Dynamic:
 	for Slot_1 = 1, Length do
 		-- Item_1: DynamicArray
 		local Item_1 = {Static = false, Dynamic = false} :: any
-		-- Item_1.Static: Static
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		Item_1.Static = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		-- Item_1.Dynamic: Dynamic
-		-- Read 2
-		local OPERATION_OFFSET_1 = ARRAY_START_1
-		ARRAY_START_1 += 2
-		local Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_1)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1.Dynamic" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Item_1.Dynamic = buffer.create(Length)
-		buffer.copy(Item_1.Dynamic, 0, RecieveBuffer, Read(Length), Length)
+		do
+			-- Item_1.Static: Static
+			-- Read 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			Item_1.Static = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+		end
+		do
+			-- Item_1.Dynamic: Dynamic
+			-- Read 2
+			local OPERATION_OFFSET_1 = ARRAY_START_1
+			ARRAY_START_1 += 2
+			local Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_1)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1.Dynamic" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			Item_1.Dynamic = buffer.create(Length)
+			buffer.copy(Item_1.Dynamic, 0, RecieveBuffer, Read(Length), Length)
+		end
 		Value[Slot_1] = Item_1
 	end
 	-- END ARRAY
@@ -1185,10 +1209,12 @@ function SerdesFunctions.ReadEVENT_PlayerEvent(): ({ Type: "Join", Name: string,
 		local BLOCK_START = Read(10)
 		-- Value: Join
 		Value = {Name = false, UserId = false} :: any
-		-- Value.Name: Name
-		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
+		do
+			-- Value.Name: Name
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			Value.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
+		end
 		-- Value.UserId: UserId
 		Value.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
 		Value.Type = "Join"
@@ -1199,10 +1225,12 @@ function SerdesFunctions.ReadEVENT_PlayerEvent(): ({ Type: "Join", Name: string,
 		Value = {UserId = false, Message = false} :: any
 		-- Value.UserId: UserId
 		Value.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-		-- Value.Message: Message
-		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
+		do
+			-- Value.Message: Message
+			local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			Value.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
+		end
 		Value.Type = "Chat"
 	elseif Tag == 2 then
 		-- Read BLOCK: 8 bytes
@@ -1293,19 +1321,21 @@ function SerdesFunctions.ReadEVENT_MapStructEvent(): ({ Map: {[string]: number} 
 	local BLOCK_START = Read(2)
 	-- Value: MapStructEvent
 	local Value = {Map = false} :: any
-	-- Value.Map: Map
-	Value.Map = {}
-	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-	for _ = 1, Elements_1 do
-		-- Key_1: Map
-		local OFFSET_0 = Read(2)
-		local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
-		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-		-- Element_1: Map
-		local OFFSET_1 = Read(1)
-		local Element_1 = buffer.readu8(RecieveBuffer, OFFSET_1)
-		Value.Map[Key_1] = Element_1
+	do
+		-- Value.Map: Map
+		Value.Map = {}
+		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		for _ = 1, Elements_1 do
+			-- Key_1: Map
+			local OFFSET_0 = Read(2)
+			local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			-- Element_1: Map
+			local OFFSET_1 = Read(1)
+			local Element_1 = buffer.readu8(RecieveBuffer, OFFSET_1)
+			Value.Map[Key_1] = Element_1
+		end
 	end
 	return Value
 end
@@ -1349,9 +1379,10 @@ end
 function SerdesFunctions.ReadEVENT_MapReferenceEvent(): ({[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local BITFIELD_0
 	-- Value: MapReferenceEvent
 	local Value
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
@@ -1417,9 +1448,10 @@ end
 function SerdesFunctions.ReadEVENT_OptionalPrimitive(): (number?)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local BITFIELD_0
 	-- Value: OptionalPrimitive
 	local Value
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
@@ -1551,16 +1583,18 @@ end
 function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local BITFIELD_0
 	-- Value: Reference
 	local Value
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 3 bytes
 		local BLOCK_START = Read(3)
+		local BITFIELD_0
 		-- Value: Reference
 		Value = {Enum = false, Nested = false} :: any
 		-- Value.Field: Field
-		local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		if bit32.btest(BITFIELD_0, 0x01) == true then
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
@@ -1597,39 +1631,43 @@ function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field:
 				Value.Float16Field = if Encoded // 0x8000 == 1 then -Result else Result
 			end
 		end
-		-- Value.Enum: Enum
-		Value.Enum = true :: any
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-		if Index == 0 then
-			Value.Enum = "A"
-		elseif Index == 1 then
-			Value.Enum = "B"
-		elseif Index == 2 then
-			Value.Enum = "C"
-		elseif Index == 3 then
-			Value.Enum = "D"
-		else
-			error(`Unexpected enum: {Index}`)
+		do
+			-- Value.Enum: Enum
+			Value.Enum = true :: any
+			local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			if Index == 0 then
+				Value.Enum = "A"
+			elseif Index == 1 then
+				Value.Enum = "B"
+			elseif Index == 2 then
+				Value.Enum = "C"
+			elseif Index == 3 then
+				Value.Enum = "D"
+			else
+				error(`Unexpected enum: {Index}`)
+			end
 		end
 		-- Value.Nested: Nested
 		Value.Nested = {Guh = false, Array = false} :: any
 		-- Value.Nested.Guh: Guh
 		Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-		-- Value.Nested.Array: Array
-		-- START ARRAY
-		local Length = 10
-		Value.Nested.Array = table.create(Length)
-			-- Read BLOCK: 1 bytes
-		local ARRAY_START_2 = Read(1 * Length)
-		for Slot_2 = 1, Length do
-			-- Item_2: Array
-			-- Read 1
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			Value.Nested.Array[Slot_2] = Item_2
+		do
+			-- Value.Nested.Array: Array
+			-- START ARRAY
+			local Length = 10
+			Value.Nested.Array = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_2 = Read(1 * Length)
+			for Slot_2 = 1, Length do
+				-- Item_2: Array
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_2
+				ARRAY_START_2 += 1
+				local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				Value.Nested.Array[Slot_2] = Item_2
+			end
+			-- END ARRAY
 		end
-		-- END ARRAY
 		-- Value.Nested.OptionalArray: OptionalArray
 		if bit32.btest(BITFIELD_0, 0x04) == true then
 			-- Value.Nested.OptionalArray: OptionalArray
@@ -1659,19 +1697,22 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 	local Value = table.create(Length)
 		-- Read BLOCK: 3 bytes
 	local ARRAY_START_1 = Read(3 * Length)
+	local BITFIELD_0
 	for Slot_1 = 1, Length do
 		-- Item_1: ReferenceArray
 		local Item_1 = {Enum = false, Nested = false} :: any
-		-- Item_1.Field: Field
-		-- Read 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-		if bit32.btest(BITFIELD_0, 0x01) == true then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
+		do
 			-- Item_1.Field: Field
-			Item_1.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Read 1
+			local OPERATION_OFFSET_0 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+			if bit32.btest(BITFIELD_0, 0x01) == true then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Item_1.Field: Field
+				Item_1.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			end
 		end
 		-- Item_1.Float16Field: Float16Field
 		if bit32.btest(BITFIELD_0, 0x02) == true then
@@ -1703,45 +1744,51 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 				Item_1.Float16Field = if Encoded // 0x8000 == 1 then -Result else Result
 			end
 		end
-		-- Item_1.Enum: Enum
-		Item_1.Enum = true :: any
-		-- Read 1
-		local OPERATION_OFFSET_1 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		local Index = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_1)
-		if Index == 0 then
-			Item_1.Enum = "A"
-		elseif Index == 1 then
-			Item_1.Enum = "B"
-		elseif Index == 2 then
-			Item_1.Enum = "C"
-		elseif Index == 3 then
-			Item_1.Enum = "D"
-		else
-			error(`Unexpected enum: {Index}`)
+		do
+			-- Item_1.Enum: Enum
+			Item_1.Enum = true :: any
+			-- Read 1
+			local OPERATION_OFFSET_1 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			local Index = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_1)
+			if Index == 0 then
+				Item_1.Enum = "A"
+			elseif Index == 1 then
+				Item_1.Enum = "B"
+			elseif Index == 2 then
+				Item_1.Enum = "C"
+			elseif Index == 3 then
+				Item_1.Enum = "D"
+			else
+				error(`Unexpected enum: {Index}`)
+			end
 		end
 		-- Item_1.Nested: Nested
 		Item_1.Nested = {Guh = false, Array = false} :: any
-		-- Item_1.Nested.Guh: Guh
-		-- Read 1
-		local OPERATION_OFFSET_2 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		Item_1.Nested.Guh = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2)
-		-- Item_1.Nested.Array: Array
-		-- START ARRAY
-		local Length = 10
-		Item_1.Nested.Array = table.create(Length)
-			-- Read BLOCK: 1 bytes
-		local ARRAY_START_2 = Read(1 * Length)
-		for Slot_2 = 1, Length do
-			-- Item_2: Array
+		do
+			-- Item_1.Nested.Guh: Guh
 			-- Read 1
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			Item_1.Nested.Array[Slot_2] = Item_2
+			local OPERATION_OFFSET_2 = ARRAY_START_1
+			ARRAY_START_1 += 1
+			Item_1.Nested.Guh = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2)
 		end
-		-- END ARRAY
+		do
+			-- Item_1.Nested.Array: Array
+			-- START ARRAY
+			local Length = 10
+			Item_1.Nested.Array = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_2 = Read(1 * Length)
+			for Slot_2 = 1, Length do
+				-- Item_2: Array
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_2
+				ARRAY_START_2 += 1
+				local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				Item_1.Nested.Array[Slot_2] = Item_2
+			end
+			-- END ARRAY
+		end
 		-- Item_1.Nested.OptionalArray: OptionalArray
 		if bit32.btest(BITFIELD_0, 0x04) == true then
 			-- Item_1.Nested.OptionalArray: OptionalArray
@@ -1769,16 +1816,18 @@ end
 function SerdesFunctions.ReadEVENT_ReferenceOptional(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local BITFIELD_0
 	-- Value: ReferenceOptional
 	local Value
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 3 bytes
 		local BLOCK_START = Read(3)
+		local BITFIELD_0
 		-- Value: ReferenceOptional
 		Value = {Enum = false, Nested = false} :: any
 		-- Value.Field: Field
-		local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+		BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		if bit32.btest(BITFIELD_0, 0x01) == true then
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
@@ -1815,39 +1864,43 @@ function SerdesFunctions.ReadEVENT_ReferenceOptional(): ({ Field: number?, Float
 				Value.Float16Field = if Encoded // 0x8000 == 1 then -Result else Result
 			end
 		end
-		-- Value.Enum: Enum
-		Value.Enum = true :: any
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-		if Index == 0 then
-			Value.Enum = "A"
-		elseif Index == 1 then
-			Value.Enum = "B"
-		elseif Index == 2 then
-			Value.Enum = "C"
-		elseif Index == 3 then
-			Value.Enum = "D"
-		else
-			error(`Unexpected enum: {Index}`)
+		do
+			-- Value.Enum: Enum
+			Value.Enum = true :: any
+			local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			if Index == 0 then
+				Value.Enum = "A"
+			elseif Index == 1 then
+				Value.Enum = "B"
+			elseif Index == 2 then
+				Value.Enum = "C"
+			elseif Index == 3 then
+				Value.Enum = "D"
+			else
+				error(`Unexpected enum: {Index}`)
+			end
 		end
 		-- Value.Nested: Nested
 		Value.Nested = {Guh = false, Array = false} :: any
 		-- Value.Nested.Guh: Guh
 		Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-		-- Value.Nested.Array: Array
-		-- START ARRAY
-		local Length = 10
-		Value.Nested.Array = table.create(Length)
-			-- Read BLOCK: 1 bytes
-		local ARRAY_START_2 = Read(1 * Length)
-		for Slot_2 = 1, Length do
-			-- Item_2: Array
-			-- Read 1
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 1
-			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			Value.Nested.Array[Slot_2] = Item_2
+		do
+			-- Value.Nested.Array: Array
+			-- START ARRAY
+			local Length = 10
+			Value.Nested.Array = table.create(Length)
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_2 = Read(1 * Length)
+			for Slot_2 = 1, Length do
+				-- Item_2: Array
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_2
+				ARRAY_START_2 += 1
+				local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				Value.Nested.Array[Slot_2] = Item_2
+			end
+			-- END ARRAY
 		end
-		-- END ARRAY
 		-- Value.Nested.OptionalArray: OptionalArray
 		if bit32.btest(BITFIELD_0, 0x04) == true then
 			-- Value.Nested.OptionalArray: OptionalArray
@@ -1894,6 +1947,7 @@ end
 function SerdesFunctions.ReadEVENT_Tuple(): (number, ("A" | "B" | "C" | "D"), number?, Instance, Instance?, { number })
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local BITFIELD_0
 	-- Value: Tuple
 	-- Value1: Tuple
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -1913,7 +1967,7 @@ function SerdesFunctions.ReadEVENT_Tuple(): (number, ("A" | "B" | "C" | "D"), nu
 	end
 	-- Value3: Tuple
 	local Value3
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
@@ -1955,6 +2009,7 @@ end
 function SerdesFunctions.ReadEVENT_TupleUnreliable(): (number, ("A" | "B" | "C" | "D"), number?, Instance, Instance?)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local BITFIELD_0
 	-- Value: TupleUnreliable
 	-- Value1: TupleUnreliable
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -1974,7 +2029,7 @@ function SerdesFunctions.ReadEVENT_TupleUnreliable(): (number, ("A" | "B" | "C" 
 	end
 	-- Value3: TupleUnreliable
 	local Value3
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
@@ -2001,6 +2056,7 @@ end
 function SerdesFunctions.WriteFUNCTION_DATA_TupleFunction(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, InvocationIdentifier: number): ()
 	-- Allocate BLOCK: 5 bytes
 	local BLOCK_START = Allocate(5)
+	local BITFIELD_0
 	-- FUNCTION_DATA_TupleFunction (33)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 33)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
@@ -2023,7 +2079,7 @@ function SerdesFunctions.WriteFUNCTION_DATA_TupleFunction(Value1: number, Value2
 		error(`Unexpected enum: {Value2}, expected one of "A" or "B" or "C" or "D".`)
 	end
 	-- Value3: TupleFunction
-	local BITFIELD_0 = 0
+	BITFIELD_0 = 0
 	if Value3 ~= nil then BITFIELD_0 += 0x01 end
 	if Value3 ~= nil then
 		-- Allocate BLOCK: 2 bytes
@@ -2051,6 +2107,7 @@ end
 function SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction(): (Instance?, Instance, number?, ("A" | "B" | "C" | "D"), number)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local BITFIELD_0
 	-- Value: TupleFunction
 	-- Value1: TupleFunction
 	local Value1
@@ -2068,7 +2125,7 @@ function SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction(): (Instance?, Instan
 	if typeof(Value2) ~= "Instance" then error(`Expected an Instance, got {typeof(Value2)} instead.`) end
 	-- Value3: TupleFunction
 	local Value3
-	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
@@ -2536,54 +2593,64 @@ if not RunService:IsRunning() then
 				Value.Two = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				-- Value.Three: Three
 				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				-- Value.Event: Event
-				local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-				Value.Event = true :: any
-				if Tag == 0 then
-					-- Read BLOCK: 10 bytes
-					local BLOCK_START = Read(10)
-					-- Value.Event: Join
-					Value.Event = {Name = false, UserId = false} :: any
-					-- Value.Event.Name: Name
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
-					Value.Event.Type = "Join"
-				elseif Tag == 1 then
-					-- Read BLOCK: 10 bytes
-					local BLOCK_START = Read(10)
-					-- Value.Event: Chat
-					Value.Event = {UserId = false, Message = false} :: any
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-					-- Value.Event.Message: Message
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					Value.Event.Type = "Chat"
-				elseif Tag == 2 then
-					-- Read BLOCK: 8 bytes
-					local BLOCK_START = Read(8)
-					-- Value.Event: Leave
-					Value.Event = {UserId = false} :: any
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-					Value.Event.Type = "Leave"
-				else
-					error(`Unexpected variant: {Tag}`)
+				do
+					-- Value.Event: Event
+					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					Value.Event = true :: any
+					if Tag == 0 then
+						-- Read BLOCK: 10 bytes
+						local BLOCK_START = Read(10)
+						-- Value.Event: Join
+						Value.Event = {Name = false, UserId = false} :: any
+						do
+							-- Value.Event.Name: Name
+							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+							Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
+						end
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
+						Value.Event.Type = "Join"
+					elseif Tag == 1 then
+						-- Read BLOCK: 10 bytes
+						local BLOCK_START = Read(10)
+						-- Value.Event: Chat
+						Value.Event = {UserId = false, Message = false} :: any
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+						do
+							-- Value.Event.Message: Message
+							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+							Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
+						end
+						Value.Event.Type = "Chat"
+					elseif Tag == 2 then
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
+						-- Value.Event: Leave
+						Value.Event = {UserId = false} :: any
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+						Value.Event.Type = "Leave"
+					else
+						error(`Unexpected variant: {Tag}`)
+					end
 				end
 				-- Value.Nested: Nested
 				Value.Nested = {Four = false, Five = false} :: any
-				-- Value.Nested.Four: Four
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				-- Value.Nested.Five: Five
-				Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				do
+					-- Value.Nested.Four: Four
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
+				do
+					-- Value.Nested.Five: Five
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -2622,15 +2689,17 @@ if not RunService:IsRunning() then
 					-- Allocate BLOCK: 10 bytes
 					local BLOCK_START = Allocate(10)
 					-- Value.Event: Join
-					-- Value.Event.Name: Name
-					if typeof(Value.Event.Name) ~= "string" then
-						error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+					do
+						-- Value.Event.Name: Name
+						if typeof(Value.Event.Name) ~= "string" then
+							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+						end
+						local Length = #Value.Event.Name
+						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+						Allocate(Length)
+						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					end
-					local Length = #Value.Event.Name
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
@@ -2646,15 +2715,17 @@ if not RunService:IsRunning() then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
-					-- Value.Event.Message: Message
-					if typeof(Value.Event.Message) ~= "string" then
-						error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+					do
+						-- Value.Event.Message: Message
+						if typeof(Value.Event.Message) ~= "string" then
+							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+						end
+						local Length = #Value.Event.Message
+						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+						buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
+						Allocate(Length)
+						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
-					local Length = #Value.Event.Message
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 				elseif Value.Event.Type == "Leave" then
 					buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
 					-- Allocate BLOCK: 8 bytes
@@ -2669,24 +2740,28 @@ if not RunService:IsRunning() then
 					error(`Unexpected variant: {Value.Event.Type}`)
 				end
 				-- Value.Nested: Nested
-				-- Value.Nested.Four: Four
-				if typeof(Value.Nested.Four) ~= "string" then
-					error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+				do
+					-- Value.Nested.Four: Four
+					if typeof(Value.Nested.Four) ~= "string" then
+						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+					end
+					local Length = #Value.Nested.Four
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
 				end
-				local Length = #Value.Nested.Four
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
-				-- Value.Nested.Five: Five
-				if typeof(Value.Nested.Five) ~= "string" then
-					error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+				do
+					-- Value.Nested.Five: Five
+					if typeof(Value.Nested.Five) ~= "string" then
+						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+					end
+					local Length = #Value.Nested.Five
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
-				local Length = #Value.Nested.Five
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -3872,54 +3947,64 @@ local Returns = table.freeze({
 				Value.Two = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				-- Value.Three: Three
 				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				-- Value.Event: Event
-				local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-				Value.Event = true :: any
-				if Tag == 0 then
-					-- Read BLOCK: 10 bytes
-					local BLOCK_START = Read(10)
-					-- Value.Event: Join
-					Value.Event = {Name = false, UserId = false} :: any
-					-- Value.Event.Name: Name
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
-					Value.Event.Type = "Join"
-				elseif Tag == 1 then
-					-- Read BLOCK: 10 bytes
-					local BLOCK_START = Read(10)
-					-- Value.Event: Chat
-					Value.Event = {UserId = false, Message = false} :: any
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-					-- Value.Event.Message: Message
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					Value.Event.Type = "Chat"
-				elseif Tag == 2 then
-					-- Read BLOCK: 8 bytes
-					local BLOCK_START = Read(8)
-					-- Value.Event: Leave
-					Value.Event = {UserId = false} :: any
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-					Value.Event.Type = "Leave"
-				else
-					error(`Unexpected variant: {Tag}`)
+				do
+					-- Value.Event: Event
+					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					Value.Event = true :: any
+					if Tag == 0 then
+						-- Read BLOCK: 10 bytes
+						local BLOCK_START = Read(10)
+						-- Value.Event: Join
+						Value.Event = {Name = false, UserId = false} :: any
+						do
+							-- Value.Event.Name: Name
+							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+							Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
+						end
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
+						Value.Event.Type = "Join"
+					elseif Tag == 1 then
+						-- Read BLOCK: 10 bytes
+						local BLOCK_START = Read(10)
+						-- Value.Event: Chat
+						Value.Event = {UserId = false, Message = false} :: any
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+						do
+							-- Value.Event.Message: Message
+							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+							Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
+						end
+						Value.Event.Type = "Chat"
+					elseif Tag == 2 then
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
+						-- Value.Event: Leave
+						Value.Event = {UserId = false} :: any
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+						Value.Event.Type = "Leave"
+					else
+						error(`Unexpected variant: {Tag}`)
+					end
 				end
 				-- Value.Nested: Nested
 				Value.Nested = {Four = false, Five = false} :: any
-				-- Value.Nested.Four: Four
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				-- Value.Nested.Five: Five
-				Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				do
+					-- Value.Nested.Four: Four
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
+				do
+					-- Value.Nested.Five: Five
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -3958,15 +4043,17 @@ local Returns = table.freeze({
 					-- Allocate BLOCK: 10 bytes
 					local BLOCK_START = Allocate(10)
 					-- Value.Event: Join
-					-- Value.Event.Name: Name
-					if typeof(Value.Event.Name) ~= "string" then
-						error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+					do
+						-- Value.Event.Name: Name
+						if typeof(Value.Event.Name) ~= "string" then
+							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+						end
+						local Length = #Value.Event.Name
+						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+						Allocate(Length)
+						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					end
-					local Length = #Value.Event.Name
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
@@ -3982,15 +4069,17 @@ local Returns = table.freeze({
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
-					-- Value.Event.Message: Message
-					if typeof(Value.Event.Message) ~= "string" then
-						error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+					do
+						-- Value.Event.Message: Message
+						if typeof(Value.Event.Message) ~= "string" then
+							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+						end
+						local Length = #Value.Event.Message
+						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+						buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
+						Allocate(Length)
+						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
-					local Length = #Value.Event.Message
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 				elseif Value.Event.Type == "Leave" then
 					buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
 					-- Allocate BLOCK: 8 bytes
@@ -4005,24 +4094,28 @@ local Returns = table.freeze({
 					error(`Unexpected variant: {Value.Event.Type}`)
 				end
 				-- Value.Nested: Nested
-				-- Value.Nested.Four: Four
-				if typeof(Value.Nested.Four) ~= "string" then
-					error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+				do
+					-- Value.Nested.Four: Four
+					if typeof(Value.Nested.Four) ~= "string" then
+						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+					end
+					local Length = #Value.Nested.Four
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
 				end
-				local Length = #Value.Nested.Four
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
-				-- Value.Nested.Five: Five
-				if typeof(Value.Nested.Five) ~= "string" then
-					error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+				do
+					-- Value.Nested.Five: Five
+					if typeof(Value.Nested.Five) ~= "string" then
+						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+					end
+					local Length = #Value.Nested.Five
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
-				local Length = #Value.Nested.Five
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result

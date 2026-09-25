@@ -826,54 +826,64 @@ return {
 				Value.Two = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 				-- Value.Three: Three
 				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				-- Value.Event: Event
-				local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-				Value.Event = true :: any
-				if Tag == 0 then
-					-- Read BLOCK: 10 bytes
-					local BLOCK_START = Read(10)
-					-- Value.Event: Join
-					Value.Event = {Name = false, UserId = false} :: any
-					-- Value.Event.Name: Name
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
-					Value.Event.Type = "Join"
-				elseif Tag == 1 then
-					-- Read BLOCK: 10 bytes
-					local BLOCK_START = Read(10)
-					-- Value.Event: Chat
-					Value.Event = {UserId = false, Message = false} :: any
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-					-- Value.Event.Message: Message
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					Value.Event.Type = "Chat"
-				elseif Tag == 2 then
-					-- Read BLOCK: 8 bytes
-					local BLOCK_START = Read(8)
-					-- Value.Event: Leave
-					Value.Event = {UserId = false} :: any
-					-- Value.Event.UserId: UserId
-					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-					Value.Event.Type = "Leave"
-				else
-					error(`Unexpected variant: {Tag}`)
+				do
+					-- Value.Event: Event
+					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					Value.Event = true :: any
+					if Tag == 0 then
+						-- Read BLOCK: 10 bytes
+						local BLOCK_START = Read(10)
+						-- Value.Event: Join
+						Value.Event = {Name = false, UserId = false} :: any
+						do
+							-- Value.Event.Name: Name
+							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+							Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
+						end
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
+						Value.Event.Type = "Join"
+					elseif Tag == 1 then
+						-- Read BLOCK: 10 bytes
+						local BLOCK_START = Read(10)
+						-- Value.Event: Chat
+						Value.Event = {UserId = false, Message = false} :: any
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+						do
+							-- Value.Event.Message: Message
+							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+							Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
+						end
+						Value.Event.Type = "Chat"
+					elseif Tag == 2 then
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
+						-- Value.Event: Leave
+						Value.Event = {UserId = false} :: any
+						-- Value.Event.UserId: UserId
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+						Value.Event.Type = "Leave"
+					else
+						error(`Unexpected variant: {Tag}`)
+					end
 				end
 				-- Value.Nested: Nested
 				Value.Nested = {Four = false, Five = false} :: any
-				-- Value.Nested.Four: Four
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				-- Value.Nested.Five: Five
-				Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				do
+					-- Value.Nested.Four: Four
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
+				do
+					-- Value.Nested.Five: Five
+					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				end
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -912,15 +922,17 @@ return {
 					-- Allocate BLOCK: 10 bytes
 					local BLOCK_START = Allocate(10)
 					-- Value.Event: Join
-					-- Value.Event.Name: Name
-					if typeof(Value.Event.Name) ~= "string" then
-						error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+					do
+						-- Value.Event.Name: Name
+						if typeof(Value.Event.Name) ~= "string" then
+							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+						end
+						local Length = #Value.Event.Name
+						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+						Allocate(Length)
+						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					end
-					local Length = #Value.Event.Name
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
@@ -936,15 +948,17 @@ return {
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
-					-- Value.Event.Message: Message
-					if typeof(Value.Event.Message) ~= "string" then
-						error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+					do
+						-- Value.Event.Message: Message
+						if typeof(Value.Event.Message) ~= "string" then
+							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+						end
+						local Length = #Value.Event.Message
+						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+						buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
+						Allocate(Length)
+						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
-					local Length = #Value.Event.Message
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 				elseif Value.Event.Type == "Leave" then
 					buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
 					-- Allocate BLOCK: 8 bytes
@@ -959,24 +973,28 @@ return {
 					error(`Unexpected variant: {Value.Event.Type}`)
 				end
 				-- Value.Nested: Nested
-				-- Value.Nested.Four: Four
-				if typeof(Value.Nested.Four) ~= "string" then
-					error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+				do
+					-- Value.Nested.Four: Four
+					if typeof(Value.Nested.Four) ~= "string" then
+						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+					end
+					local Length = #Value.Nested.Four
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
 				end
-				local Length = #Value.Nested.Four
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
-				-- Value.Nested.Five: Five
-				if typeof(Value.Nested.Five) ~= "string" then
-					error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+				do
+					-- Value.Nested.Five: Five
+					if typeof(Value.Nested.Five) ~= "string" then
+						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+					end
+					local Length = #Value.Nested.Five
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
-				local Length = #Value.Nested.Five
-				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
