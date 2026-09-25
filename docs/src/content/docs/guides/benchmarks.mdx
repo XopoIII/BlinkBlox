@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: What BlinkBlox's generated code costs to fire, flush and decode, measured on Lune, and its frame rate and bandwidth against plain remotes, zap and ByteNet in Studio.
+description: What BlinkBlox's generated code costs to fire, flush and decode, measured on Lune, and its frame rate, fire time and bandwidth against plain remotes, zap, ByteNet and Packet in Studio.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -11,13 +11,13 @@ There are two benchmarks, and they answer different questions.
   [Lune](https://lune-org.github.io/docs), without Roblox. It is reproducible on any machine and
   separates the three things the code does: firing events, flushing them into a packet, and the
   server decoding that packet.
-- **The Studio benchmark** puts BlinkBlox next to plain remotes, zap and ByteNet inside Roblox
-  Studio, and reports frame rate and bandwidth.
+- **The Studio benchmark** puts BlinkBlox next to plain remotes, zap, ByteNet and Packet inside
+  Roblox Studio, and reports frame rate, the time the fires took, and bandwidth.
 
 ## The generated code, on Lune
 
 Each frame fires 1000 events from the client, flushes them into one packet, and hands that packet
-to the server. The times below are medians in milliseconds per frame, from 100 frames, and "bytes"
+to the server. The times below are medians in milliseconds per frame, from 200 frames, and "bytes"
 is the size of one event on the wire before Roblox compresses it. `Booleans` is `boolean[0..1000]`
 holding 1000 values; `Entities` is 100 structs of six `u8` fields. The `Random` variants send a
 thousand different payloads a frame instead of one payload a thousand times, and `Tiny` is a single
@@ -27,82 +27,115 @@ Natively compiled, as a Roblox server runs the module:
 
 | Bench | Fire 0.34.0 | Fire 0.35.0 | Decode 0.34.0 | Decode 0.35.0 | Bytes |
 |---|---|---|---|---|---|
-| Booleans | 11.9 | **5.5** | 21.7 | **6.5** | 128 |
-| Entities | 4.6 | **3.9** | 73.3 | **17.0** | 603 |
-| BooleansRandom | 21.2 | **14.1** | 23.9 | **9.4** | 128 |
-| EntitiesRandom | 9.3 | **6.9** | 91.1 | **30.0** | 603 |
-| Tiny | 0.13 | 0.15 | 0.43 | **0.28** | 2 |
+| Booleans | 8.97 | **6.10** | 15.16 | **4.37** | 128 |
+| Entities | 3.57 | **3.19** | 72.95 | **11.31** | 603 |
+| BooleansRandom | 20.14 | **17.39** | 15.40 | **5.40** | 128 |
+| EntitiesRandom | 4.07 | **3.66** | 75.96 | **15.81** | 603 |
+| Tiny | 0.13 | 0.13 | 0.54 | **0.36** | 2 |
 
 Interpreted, as most Roblox clients run it:
 
 | Bench | Fire 0.34.0 | Fire 0.35.0 | Decode 0.34.0 | Decode 0.35.0 |
 |---|---|---|---|---|
-| Booleans | 64.3 | **24.9** | 79.7 | **32.5** |
-| Entities | 23.3 | 23.1 | 93.7 | **46.7** |
-| BooleansRandom | 64.6 | **33.4** | 80.5 | **33.4** |
-| EntitiesRandom | 29.9 | 28.9 | 102.2 | **57.5** |
-| Tiny | 0.26 | 0.25 | 0.69 | **0.49** |
+| Booleans | 92.12 | **36.98** | 107.64 | **45.13** |
+| Entities | 34.13 | 33.52 | 103.77 | **54.04** |
+| BooleansRandom | 82.66 | **41.83** | 108.28 | **46.19** |
+| EntitiesRandom | 33.89 | 33.60 | 107.44 | **57.65** |
+| Tiny | 0.35 | 0.35 | 0.78 | **0.62** |
 
-A difference of a few hundredths of a millisecond, like Tiny's fire, is noise on this machine.
-The run was made on 2026-09-25 with Lune 0.10.5 on an Intel Xeon at 2.8 GHz. The flush, which
-copies the batch into an exact-size buffer, took under 0.25 ms in every case. The
-[changelog](/BlinkBlox/changelog/) says what changed in 0.35.0.
+Both versions were run back to back on 2026-09-25, with Lune 0.10.5 on an Apple M1 with 16 GB of
+memory, by the same harness: 0.34.0's compiler with 0.35.0's `benchmark/Runtime.luau`. A difference
+of a few hundredths of a millisecond is noise. The flush, which copies the batch into an exact-size
+buffer, took under 0.035 ms in every case. The [changelog](/BlinkBlox/changelog/) says what changed
+in 0.35.0.
+
+Entities' fire time barely moves, natively or not, because there is nothing left to take out of it:
+each element is six `buffer.writeu8` calls into a block allocated once for the whole array.
 
 ## Against other tools, in Studio
 
-Each tool fires the same event 1000 times a frame, with the same data, for ten seconds, and every
-tool received everything it sent. The numbers below are medians. The percentiles, and the harness
-itself, are in
+Each tool fires 1000 events a frame for ten seconds, and every tool received everything it sent. The
+numbers below are medians. The percentiles, and the harness itself, are in
 [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
 
-The run was made on 2026-09-24 on an Apple M1 with 16 GB of memory, in Roblox Studio. The versions
-were BlinkBlox 0.29.0, zap 0.6.29 and ByteNet 0.4.3. It predates both the random benches and the
-fire-time column the harness now records.
+The run was made on 2026-09-25 on an Apple M1 with 16 GB of memory, in Roblox Studio. The versions
+were BlinkBlox 0.35.0, zap 0.6.29, ByteNet 0.4.3 and Packet 1.7.0.
+
+"Fire ms" is the CPU time a frame's thousand fires took on the client. It is the column to read when
+two tools are both at Studio's 60 FPS cap.
 
 ### Booleans
 
 The payload is an array of 1000 `true` values: `boolean[0..1000]`.
 
-| Tool | FPS | Kbps |
-|---|---|---|
-| Roblox remotes | 15 | 136800 |
-| **BlinkBlox** | **57** | **3.19** |
-| zap | 37 | 8.53 |
-| ByteNet | 22 | 8.33 |
+| Tool | FPS | Fire ms | Kbps |
+|---|---|---|---|
+| Roblox remotes | 16 | 27.99 | 225217 |
+| **BlinkBlox** | **60** | **5.63** | **3.08** |
+| zap | 37 | 25.65 | 8.55 |
+| ByteNet | 17 | 41.29 | 9.01 |
+| Packet | 15 | 67.80 | 8.51 |
 
-BlinkBlox sends about 2.7 times less data than zap or ByteNet here, because
+BlinkBlox sends about 2.8 times less data than the others here, because
 [`boolean[]`](/BlinkBlox/language/types/#arrays-of-booleans) is packed eight elements to a byte. The
-other two spend a whole byte on each boolean.
+others spend a whole byte on each boolean.
 
 ### Entities
 
 The payload is 100 structs of six `u8` fields each: an id, a position, an orientation and an
 animation.
 
-| Tool | FPS | Kbps |
-|---|---|---|
-| Roblox remotes | 16 | 721337 |
-| **BlinkBlox** | **60** | **41.57** |
-| zap | 42 | 41.86 |
-| ByteNet | 24 | 41.71 |
+| Tool | FPS | Fire ms | Kbps |
+|---|---|---|---|
+| Roblox remotes | 16 | 109.51 | 808020 |
+| **BlinkBlox** | **60** | **4.02** | 41.89 |
+| zap | 23 | 20.78 | 40.52 |
+| ByteNet | 18 | 37.95 | 41.65 |
+| Packet | 15 | 50.30 | 36.59 |
 
-Every tool encodes six `u8` fields in six bytes, so the bandwidth is the same within noise. The
-frame rate is where they differ: the generated serialisers cost less per event.
+Every tool encodes six `u8` fields in six bytes. The bandwidth differs only in what the compressor
+made of each packet, see below.
+
+### BooleansRandom
+
+The same shape as Booleans, with a different array in every event.
+
+| Tool | FPS | Fire ms | Kbps |
+|---|---|---|---|
+| Roblox remotes | 16 | 28.93 | 231066 |
+| **BlinkBlox** | **60** | **15.29** | **7690** |
+| zap | 25 | 34.55 | 11512 |
+| ByteNet | 15 | 44.52 | 10607 |
+| Packet | 15 | 77.43 | 8765 |
+
+### EntitiesRandom
+
+The same shape as Entities, with different structs in every event.
+
+| Tool | FPS | Fire ms | Kbps |
+|---|---|---|---|
+| Roblox remotes | 15 | 110.15 | 840661 |
+| **BlinkBlox** | **52** | **5.05** | 36070 |
+| zap | 22 | 20.64 | 34382 |
+| ByteNet | 17 | 38.24 | 34852 |
+| Packet | 15 | 52.39 | 29152 |
 
 ## Reading the numbers
 
 <Aside type="caution" title="60 FPS is Studio's cap">
 Studio does not render faster than 60 frames a second. A tool at 60 FPS is limited by the cap, not by
-its own cost, so the Entities result shows only that BlinkBlox kept up. It does not show by how much.
-The harness now also records the CPU time a frame's fires took, which the cap does not hide.
+its own cost, so the frame rate shows only that BlinkBlox kept up. The fire time is not capped, and
+it shows by how much.
 </Aside>
 
-<Aside type="caution" title="Identical events compress to nothing">
-Roblox compresses a remote's buffers with zstd before they go out. When every event in a packet is the
-same, the packet compresses to almost nothing, and the bandwidth reported measures the compressor
-rather than the encoding. That is why all three tools read about 42 Kbps on Entities. The
-`BooleansRandom` and `EntitiesRandom` benches send a different payload in every event, which leaves
-the compressor nothing to find.
+<Aside type="caution" title="Kbps is measured after compression">
+Roblox compresses a remote's buffers with zstd before they go out, and the Kbps column is what is
+left. When every event in a packet is the same, the packet compresses to almost nothing, and the
+number measures the compressor rather than the encoding. That is why every tool reads about 40 Kbps
+on Entities, where the encodings are byte for byte the same size. The `Random` benches leave the
+compressor less to find, but the column still measures bytes after compression. Packet reads lowest
+on the two Entities benches, although its encoding of an entity is the same six bytes as everyone
+else's. The encoded sizes are in the Lune tables above.
 </Aside>
 
 - **Studio runs LocalScripts natively compiled, and most clients do not.** Studio compiles the
@@ -119,6 +152,13 @@ the compressor nothing to find.
   A thousand events a frame is a flood, and with the defaults a live server refuses most of it.
   Refusing it is the purpose of those limits. The checks still run, so their cost is included in the
   numbers above. See [Securing the server](/BlinkBlox/guides/securing-the-server/).
+- **Packet's inbound limit is raised the same way.** Packet's server drops whatever a player sends
+  past 8000 bytes a heartbeat, and it has no option to change that, so the harness patches the
+  constant in the downloaded copy
+  ([`benchmark/download.luau`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/download.luau)).
+  Left alone, Packet would lose nearly every event and the tables would have nothing to show for it.
+  Packet has no packed boolean array, so its `Booleans` payload is an array of `Boolean8`, a byte per
+  value, as ByteNet's is.
 - **The events go from client to server.** That direction is the one BlinkBlox validates.
   Every event is checked before a listener sees it.
 - **Bandwidth depends on your schema.** These two payloads are simple. Where a schema has bounded
@@ -134,6 +174,10 @@ runs on Windows, macOS and Linux.
 - `lune run Runtime` times the generated code. `lune run Runtime -- Entities` runs only the benches
   whose name contains `Entities`, and `--frames 50` makes the run shorter.
 - `lune run Performance` times the compiler itself: lexing, parsing and generating the test schema.
-- `lune run build --download --run` fetches zap, BlinkBlox and ByteNet for the machine it runs on,
-  builds the Studio place, runs it with `run-in-roblox`, and writes `Benchmarks.md`. Without
-  `--download` it reuses the tools it has; without `--run` it only builds the place.
+- `lune run build --download --run` fetches zap, BlinkBlox, ByteNet and Packet for the machine it
+  runs on, builds the Studio place, runs it with `run-in-roblox`, and writes `Benchmarks.md`. Press
+  F5 when Studio's Output asks. Without `--download` it reuses the tools it has; without `--run` it
+  only builds the place. `--local` compiles the schema with the checkout's own compiler rather than
+  the latest release, which is how the numbers above were taken.
+- `lune run Probe` measures how large an unreliable payload Roblox delivers, in both directions. It
+  is what [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) was set from.

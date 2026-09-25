@@ -49,12 +49,13 @@ local DEFAULT_MAX_EVENTS_PER_PACKET = 64
 local DEFAULT_MAX_INSTANCES_PER_PACKET = 256
 
 --> OUTBOUND UNRELIABLE LIMIT. Roblox drops an UnreliableRemoteEvent whose encoded payload passes 1000
---> bytes, and in a live game says nothing; this is the buffer's share of that (see Grammar.Options,
---> MaxUnreliableSize). The compiler already refuses a schema whose unreliable events cannot fit (see the
---> parser's AnalyzeUnreliableSizes), but a bounded schema can still overflow at runtime -- a map with
---> more entries than expected, a string longer than the game assumed -- and a dropped packet nobody
---> is told about is the worst possible failure mode. This is the runtime half of that check.
-local DEFAULT_MAX_UNRELIABLE_SIZE = 900
+--> bytes, and in a live game says nothing; this is the budget for the buffer and the Instances beside
+--> it (see Grammar.DEFAULTS, where the figures were measured). The compiler already refuses a schema
+--> whose unreliable events cannot fit (see the parser's AnalyzeUnreliableSizes), but a bounded schema
+--> can still overflow at runtime -- a map with more entries than expected, a string longer than the
+--> game assumed -- and a dropped packet nobody is told about is the worst possible failure mode.
+--> This is the runtime half of that check.
+local DEFAULT_MAX_UNRELIABLE_SIZE = Grammar.DEFAULTS.MaxUnreliableSize
 
 --- Seconds before an unanswered invocation fails its caller and returns its slot.
 ---
@@ -222,6 +223,7 @@ return {
 	DEFAULT_MAX_EVENTS_PER_PACKET = DEFAULT_MAX_EVENTS_PER_PACKET,
 	DEFAULT_MAX_INSTANCES_PER_PACKET = DEFAULT_MAX_INSTANCES_PER_PACKET,
 	DEFAULT_MAX_UNRELIABLE_SIZE = DEFAULT_MAX_UNRELIABLE_SIZE,
+	UNRELIABLE_INSTANCE_BYTES = Grammar.DEFAULTS.UnreliableInstanceBytes,
 	DEFAULT_INVOCATION_TIMEOUT = DEFAULT_INVOCATION_TIMEOUT,
 	SYNC_VALIDATION_BODY = SYNC_VALIDATION_BODY,
 	EVENT_SYNC_VALIDATION = EVENT_SYNC_VALIDATION,

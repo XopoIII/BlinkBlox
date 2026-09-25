@@ -78,10 +78,18 @@ Grammar.OPTIONS = {
 -->
 --> The inbound budget charges every packet at least `InboundFloor` bytes, so a flood of tiny packets
 --> is not free, and refills at `InboundRatePackets` full-size packets a second.
+-->
+--> The unreliable budget was measured in Studio by benchmark/Probe.luau, the same in both directions:
+--> a call carrying only a buffer arrives up to 994 bytes of it, and every Instance beside it costs
+--> exactly 6 bytes more (988 with one, 970 with four, 898 with sixteen). `MaxUnreliableSize` is
+--> checked against the buffer plus `UnreliableInstanceBytes` per Instance, and its default keeps 14
+--> bytes of that 994 in reserve against the encoding shifting between Roblox versions.
 Grammar.DEFAULTS = {
 	MaxPacketSize = 8192,
 	InboundFloor = 128,
 	InboundRatePackets = 8,
+	MaxUnreliableSize = 980,
+	UnreliableInstanceBytes = 6,
 }
 
 Grammar.EVENT = {
@@ -314,12 +322,11 @@ export type Options = {
 	InboundBytesPerSecond: number?,
 	InboundBurst: number?,
 
-	--> Largest buffer an unreliable event may send. Roblox drops an UnreliableRemoteEvent whose payload
-	--> passes 1000 bytes, and the payload is every argument of the call as Roblox encodes it: the
-	--> buffer, the instances table, and the bytes that describe each. This bounds the buffer alone,
-	--> so it sits below 1000 by what the rest costs, which Roblox does not document. The default of
-	--> 900 leaves 100 bytes for it until benchmark/probe measures the real figure. Configurable
-	--> because a platform's ceiling can move, and a game that sends no instances may want the room.
+	--> Largest payload an unreliable event may send: its buffer, plus `UnreliableInstanceBytes` for
+	--> each Instance beside it. Roblox drops an UnreliableRemoteEvent whose payload passes 1000
+	--> bytes, and the payload is every argument of the call as Roblox encodes it: the buffer, the
+	--> instances table, and the bytes that describe each. Roblox does not document what the rest
+	--> costs, so it was measured; see DEFAULTS. Configurable because a platform's ceiling can move.
 	MaxUnreliableSize: number?,
 
 	--> Rate limiting. `DefaultRate` applies to every inbound event and function that does not set its

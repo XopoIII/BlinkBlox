@@ -40,7 +40,7 @@ A few rules hold for all of them:
 | `Predict` | boolean | `false` | [Runtime behaviour](#predict) |
 | `WriteValidations` | boolean | `false` | [Validation](#writevalidations) |
 | `SyncValidation` | boolean | `true` | [Validation](#syncvalidation) |
-| `MaxUnreliableSize` | bytes | `900` | [Validation](#maxunreliablesize) |
+| `MaxUnreliableSize` | bytes | `980` | [Validation](#maxunreliablesize) |
 | `MaxPacketSize` | bytes | `8192` | [Inbound limits](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) |
 | `MaxEventsPerPacket` | events | `64` | [Inbound limits](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) |
 | `MaxInstancesPerPacket` | instances | `256` | [Inbound limits](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) |
@@ -288,18 +288,30 @@ packet where it stands. If a listener needs to yield, it needs an
 The check costs one `coroutine.status` per packet, which is why it is on by default.
 
 ### `MaxUnreliableSize`
-Default: `900` bytes
+Default: `980` bytes
 
-The largest buffer an unreliable event may send, counting its one-byte event id and, for
-`OrderedUnreliable`, its two-byte sequence number.
+The largest payload an unreliable event may send: its buffer, counting its one-byte event id and,
+for `OrderedUnreliable`, its two-byte sequence number, plus 6 bytes for each Instance sent beside it.
 
 Roblox drops an `UnreliableRemoteEvent` whose payload is over
 [1000 bytes](https://create.roblox.com/docs/reference/engine/classes/UnreliableRemoteEvent). Studio's
 Output reports it, but a live game drops the event silently, and only when a value happens to be
 large. So the failure shows up in production for some players and never in testing. That payload is
 everything the call carries, as Roblox encodes it: the buffer, the table of instances sent beside it,
-and the bytes that describe each. This option bounds the buffer alone, so it has to sit below 1000.
-The default of 900 leaves 100 bytes for the rest. Roblox does not say what the rest costs.
+and the bytes that describe each. Roblox does not say what the rest costs, so
+[`benchmark/Probe.luau`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Probe.luau)
+measured it in Studio, the same in both directions:
+
+| Instances | Largest buffer delivered |
+|---|---|
+| 0 | 994 |
+| 1 | 988 |
+| 4 | 970 |
+| 16 | 898 |
+
+So the call itself costs 6 bytes and each Instance 6 more, and that is what this option counts. The
+default of 980 keeps 14 bytes of the measured 994 in reserve, against the encoding changing between
+Roblox versions.
 
 BlinkBlox checks this twice. At compile time it measures every unreliable event: one that can **never**
 fit is a hard error (`E3018`), and one that merely **might not** is a warning (`W3019`) naming the
@@ -307,7 +319,7 @@ field that has no upper bound. At runtime the send path checks the finished buff
 that is too large with a warning naming it rather than letting the packet vanish.
 
 ```blink
-option MaxUnreliableSize = 900
+option MaxUnreliableSize = 980
 ```
 
 <Aside>

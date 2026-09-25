@@ -273,6 +273,15 @@ dropped: the first was slower natively, the second no faster. Reviewing 0.34.0's
 a struct of 50 CFrames failed to load at all -- every field's locals stayed live, past Luau's 200 --
 so each field of a struct is now scoped (`src/Generator/Scope.luau`).
 
+0.36.0 measured on a Mac what 0.35.0 could not. `benchmark/Probe.luau` found Roblox delivering an
+unreliable buffer up to 994 bytes, and 6 bytes less for each Instance beside it, the same in both
+directions. So `MaxUnreliableSize` now counts 6 bytes per Instance, at compile time and on send, and
+defaults to 980 instead of 900 -- a guess that turned out to overflow with sixteen Instances. The
+figures live in `Grammar.DEFAULTS`, the one place both the analysis and the generator read. The
+Studio benchmark gained Packet, whose hard-coded 8000-byte inbound cap the harness raises the way
+the bench's schema raises BlinkBlox's own limits, and `--local`, since the download fetches the
+latest release and that had lagged two versions behind main.
+
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of

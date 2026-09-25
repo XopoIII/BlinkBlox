@@ -74,10 +74,7 @@ for Name, Pool in Benches do
 		local Event = Events[Name]
 		local Callback = OnRecieve(Tool)
 
-		if Tool == "warp" then
-			Event:Connect(Callback)
-			continue
-		elseif Tool == "roblox" then
+		if Tool == "roblox" or Tool == "packet" then
 			Event.OnServerEvent:Connect(Callback)
 			continue
 		end

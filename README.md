@@ -62,15 +62,17 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 
 ## Performance
 
-Each tool fires 1000 events a frame from client to server. The run was in Studio, on BlinkBlox
-0.29.0, and the numbers are median frame rate and bandwidth.
+Each tool fires 1000 events a frame from client to server. The run was in Studio on an Apple M1, on
+BlinkBlox 0.35.0, and the numbers are the median frame rate and the milliseconds a frame's thousand
+fires took.
 
-| Payload | Roblox remotes | BlinkBlox | zap | ByteNet |
-|---|---|---|---|---|
-| 1000 booleans | 15 FPS | **57 FPS**, 3.19 Kbps | 37 FPS, 8.53 Kbps | 22 FPS, 8.33 Kbps |
-| 100 entities | 16 FPS | **60 FPS**\*, 41.57 Kbps | 42 FPS, 41.86 Kbps | 24 FPS, 41.71 Kbps |
+| Payload | Roblox remotes | BlinkBlox | zap | ByteNet | Packet |
+|---|---|---|---|---|---|
+| 1000 booleans | 16 FPS, 28.0 ms | **60 FPS**\*, **5.6 ms** | 37 FPS, 25.7 ms | 17 FPS, 41.3 ms | 15 FPS, 67.8 ms |
+| 100 entities | 16 FPS, 109.5 ms | **60 FPS**\*, **4.0 ms** | 23 FPS, 20.8 ms | 18 FPS, 38.0 ms | 15 FPS, 50.3 ms |
+| 100 entities, each different | 15 FPS, 110.2 ms | **52 FPS**, **5.1 ms** | 22 FPS, 20.6 ms | 17 FPS, 38.2 ms | 15 FPS, 52.4 ms |
 
-\* Studio caps the frame rate at 60. The methodology and the full percentiles are in
+\* Studio caps the frame rate at 60. The methodology, the bandwidth and the full percentiles are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
 [`benchmark/Benchmarks.md`](benchmark/Benchmarks.md).
 

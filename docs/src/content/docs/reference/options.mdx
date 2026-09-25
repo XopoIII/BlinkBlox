@@ -26,7 +26,7 @@ page explains each one in full.
 | [`MaxInstancesPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | whole number | `256` | Instance and `unknown` values one inbound packet may carry. |
 | [`InboundBytesPerSecond`](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) | whole number | `8 * MaxPacketSize` (65536) | Bytes a second each player's packets may cost the server; a packet costs at least 128. |
 | [`InboundBurst`](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) | whole number, at least `MaxPacketSize` | the larger of `InboundBytesPerSecond` and `MaxPacketSize` (65536) | The most inbound budget a player may bank. |
-| [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) | whole number | `900` | Largest unreliable payload, checked at compile time and on send. |
+| [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) | whole number | `980` | Largest unreliable payload, 6 bytes per Instance included, checked at compile time and on send. |
 | [`DefaultRate`](/BlinkBlox/language/options/#defaultrate-requirerates) | whole number | none | Events per second per player for every inbound event and function without its own `Rate`. |
 | [`RequireRates`](/BlinkBlox/language/options/#defaultrate-requirerates) | boolean | `false` | Make an inbound event or function with no effective rate a compile error (`E3020`). |
 | [`Predict`](/BlinkBlox/language/options/#predict) | boolean | `false` | Add `Predict` to every event this side listens to (not polled ones): it delivers to local listeners without a remote. |

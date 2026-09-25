@@ -213,6 +213,16 @@ event UnreliableOversize {
     Data: string,
 }
 
+-- Each Instance sent beside the buffer costs the unreliable payload 6 bytes, so a buffer that fits
+-- alone can overflow with Instances beside it: the compiler warns (W3019) and the runtime guard counts
+-- them.
+event UnreliableInstances {
+    From: Client,
+    Type: Unreliable,
+    Call: SingleSync,
+    Data: (buffer(0..970), Instance[0..4])
+}
+
 function RateLimitedCall {
     Yield: Coroutine,
     Rate: 2,

@@ -29,7 +29,7 @@ event Snapshot {
 001 │ event Snapshot {
     ┆       ────┬────
     ┆           │
-    ┆           ╰── Unbounded, and the limit is 900 bytes
+    ┆           ╰── Unbounded, and the limit is 980 bytes
 005 │     Data: struct { Names: string[], Tick: u32 }
     ┆                           ───┬───
     ┆                              │
@@ -146,7 +146,7 @@ server prints about a client's traffic are limited to one a second per player an
 | `Event queue of "E" exceeded 256, did you forget to implement a listener?` | client | Reliable events are queuing for a listener that never connected. |
 | `"E" already has a listener. ... keeps only the newest one, and the replaced listener's disconnect stops working.` | both | A second `On` on a `Single` event. |
 | `Event "E" yielded in a Sync call, so the rest of the packet it arrived in was discarded. ...` | both | A Sync listener yielded; see [`SyncValidation`](/BlinkBlox/language/options/#syncvalidation). |
-| `Dropped unreliable event "E", N bytes exceeds the N byte limit.` | both | An unreliable send grew past `MaxUnreliableSize` and was not sent. |
+| `Dropped unreliable event "E", N bytes exceeds the N byte limit.` | both | An unreliable send grew past `MaxUnreliableSize`, counting 6 bytes per Instance, and was not sent. |
 | `"F" was never answered and has been failed after N seconds.` | both | An `Invoke` timed out; on the server the message names the player. |
 | `"F" encountered an error, ...` | both | A function's listener errored or returned a value that failed to serialise; the caller is failed. |
 | `There was an exception while processing "F".` | both | Raised by a `Coroutine` `Invoke` whose call failed. |

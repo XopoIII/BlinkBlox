@@ -22,16 +22,48 @@ local Tools: { [string]: { Url: string, Binary: string } } = {
 	},
 }
 
-local Packages: { [string]: { GitHub: string, Wally: string } } = {
-	-- FIXME: Doesn't download correctly
-	--[[warp = {
-        GitHub = "https://api.github.com/repos/imezx/Warp/releases", 
-        Wally = "https://api.wally.run/v1/package-contents/imezx/warp/"
-    },]]
+--> A package is either the latest GitHub release, fetched from Wally by that tag (`GitHub`), or a
+--> pinned `Version` for a package with no GitHub releases to ask. `Source` is the folder inside the
+--> Wally archive that holds the module, `src` unless given. `Patch` runs on the unpacked package.
+type Package = {
+	GitHub: string?,
+	Version: string?,
+	Wally: string,
+	Source: string?,
+	Patch: ((Directory: string) -> ())?,
+}
 
+--> Replaces the one occurrence of `Find` in a downloaded file, and fails if there is not exactly one:
+--> a patch that silently stopped applying would publish numbers for a configuration nobody chose.
+local function Replace(Path: string, Find: string, With: string)
+	local Contents = fs.readFile(Path)
+	local Start, Finish = string.find(Contents, Find, 1, true)
+	assert(Start and Finish, `{Path} no longer contains {Find}`)
+	assert(string.find(Contents, Find, Finish + 1, true) == nil, `{Path} contains {Find} more than once`)
+	fs.writeFile(Path, string.sub(Contents, 1, Start - 1) .. With .. string.sub(Contents, Finish + 1))
+end
+
+local Packages: { [string]: Package } = {
 	bytenet = {
 		GitHub = "https://api.github.com/repos/ffrostflame/ByteNet/releases",
 		Wally = "https://api.wally.run/v1/package-contents/ffrostflame/bytenet/",
+	},
+
+	--> 5uphi's Packet ships as a DevForum model with no repository or releases of its own. This is a
+	--> Wally upload of 1.7.0, checked file for file against a second, independent upload.
+	packet = {
+		Version = "1.7.0",
+		Wally = "https://api.wally.run/v1/package-contents/reelplum/packet/",
+		Source = ".",
+		--> Packet's server drops whatever a player sends past 8000 bytes a heartbeat, a constant with no
+		--> option to change it. The bench sends up to 600 KB a frame and raises BlinkBlox's inbound
+		--> limits to fit (definitions/Definition.blink), so Packet's is raised the same way; left
+		--> alone, it would lose nearly every event and the tables would show nothing for it.
+		Patch = function(Directory: string)
+			Replace(`{Directory}/init.luau`, "if bytes > 8_000 then", "if bytes > math.huge then")
+			--> The upload keeps its manifest beside the module, where Rojo would build it into one.
+			fs.removeFile(`{Directory}/wally.toml`)
+		end,
 	},
 }
 
@@ -163,18 +195,23 @@ for Name, Tool in Tools do
 end
 
 for Name, Urls in Packages do
-	local Response = Request({
-		url = Urls.GitHub,
-		method = "GET",
-	})
+	local Version: string
+	if Urls.GitHub then
+		local Response = Request({
+			url = Urls.GitHub,
+			method = "GET",
+		})
 
-	local Releases = serde.decode("json", Response.body)
-	table.sort(Releases, function(a, b)
-		return a.id > b.id
-	end)
+		local Releases = serde.decode("json", Response.body)
+		table.sort(Releases, function(a, b)
+			return a.id > b.id
+		end)
 
-	local Release = Releases[1]
-	local Version = Release.tag_name
+		Version = Releases[1].tag_name
+	else
+		Version = assert(Urls.Version, `{Name} names neither a GitHub repository nor a version`)
+	end
+
 	local PackageVersion = Version
 
 	local ZipPath = `{PATH_TO_PACKAGES}{Name}_ZIP`
@@ -190,9 +227,18 @@ for Name, Urls in Packages do
 
 	Extract(`{ZipPath}.zip`, ZipPath)
 
-	fs.move(`{ZipPath}/src`, FinalPath, true)
-	fs.removeDir(ZipPath)
+	local Source = Urls.Source or "src"
+	if Source == "." then
+		fs.move(ZipPath, FinalPath, true)
+	else
+		fs.move(`{ZipPath}/{Source}`, FinalPath, true)
+		fs.removeDir(ZipPath)
+	end
 	fs.removeFile(`{ZipPath}.zip`)
+
+	if Urls.Patch then
+		Urls.Patch(FinalPath)
+	end
 
 	Versions[Name] = Version
 	print("Downloaded", Name, Version)
