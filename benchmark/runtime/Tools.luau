@@ -2,9 +2,10 @@
 --- Each tool the Studio benchmark compares, behind one shape the timing loop drives: fire an event,
 --- flush a frame's events into packets, deliver packets to the server, listen for what it decodes.
 ---
---- BlinkBlox loads through Environment.luau, as it always has. The others load through World.luau
---- from the same files Studio runs: `src/shared/modes/<tool>.luau` declares each tool's events, and
---- requires zap's generated modules or the downloaded packages. `lune run build --download` fetches
+--- BlinkBlox loads through Environment.luau, as it always has. The others load through World.luau,
+--- upstream Blink among them, compiled by its own compiler from definitions/Definition.upstream.blink
+--- -- from the same files Studio runs: `src/shared/modes/<tool>.luau` declares each tool's events, and
+--- requires the generated modules or the downloaded packages. `lune run build --download` fetches
 --- those; a tool whose files are missing is skipped, and says so.
 local fs = require("@lune/fs")
 
@@ -26,12 +27,13 @@ export type Tool = {
 
 --> What each tool needs on disk, relative to the benchmark, beyond its mode file.
 local REQUIRES: { [string]: { string } } = {
+	upstream = { "src/shared/upstream/Server.luau", "src/shared/upstream/Client.luau" },
 	zap = { "src/shared/zap/Server.luau", "src/shared/zap/Client.luau" },
 	bytenet = { "packages/bytenet/init.luau" },
 	packet = { "packages/packet/init.luau" },
 }
 
-Tools.ORDER = { "blink", "zap", "bytenet", "packet" }
+Tools.ORDER = { "blink", "upstream", "zap", "bytenet", "packet" }
 
 --- Why `Name` cannot run here, or nil when it can.
 function Tools.Missing(Name: string): string?
@@ -101,7 +103,14 @@ function Tools.Load(Name: string, Native: boolean, Bench: string, Sources: { Ser
 
 	local Fire: (Value: any) -> ()
 	local Listen: (Callback: (Value: any) -> ()) -> ()
-	if Name == "zap" then
+	if Name == "upstream" then
+		Fire = ClientEvent.Fire
+		Listen = function(Callback)
+			ServerEvent.On(function(_Player, Value)
+				Callback(Value)
+			end)
+		end
+	elseif Name == "zap" then
 		Fire = ClientEvent.Fire
 		Listen = function(Callback)
 			ServerEvent.SetCallback(function(_Player, Value)

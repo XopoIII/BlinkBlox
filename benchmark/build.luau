@@ -43,12 +43,25 @@ if Download then
 end
 
 print("Compiling definitions")
-for _, Directory in { "./src/shared/zap", "./src/shared/blink" } do
+for _, Directory in { "./src/shared/zap", "./src/shared/blink", "./src/shared/upstream" } do
 	if not fs.isDir(Directory) then
 		fs.writeDir(Directory)
 	end
 end
 Step(`./tools/zap{EXECUTABLE}`, { "./definitions/Definition.zap" })
+
+--> Upstream Blink compiles its own definition with its own compiler, run from source on Lune.
+do
+	local Definition = `{process.cwd}definitions/Definition.upstream.blink`
+	print(`> lune run init {Definition} -- --yes (in ./tools/upstream/src/CLI)`)
+	local Result = process.exec("lune", { "run", "init", Definition, "--", "--yes" }, {
+		cwd = "./tools/upstream/src/CLI",
+		stdio = "inherit",
+	})
+	if not Result.ok then
+		error(`Upstream Blink's compiler failed with exit code {Result.code}`, 0)
+	end
+end
 if Local then
 	local Definition = `{process.cwd}definitions/Definition.blink`
 	print(`> lune run init {Definition} -- --yes (in ../src/CLI)`)
