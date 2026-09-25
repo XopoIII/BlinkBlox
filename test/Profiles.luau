@@ -158,3 +158,53 @@ do
 
 	OkPrint(`Test "Builds under different profiles refuse each other" passed!`)
 end
+
+---- A parser used again ----
+
+--> The plugin's editor keeps one parser for the document and parses it again on every change. What
+--> the attributes of one parse leave behind must not reach the next.
+do
+	PrettyPrint("cyan", "Testing: A parser used again forgets the excluded declarations...", true)
+
+	--> Each excluded declaration holds the tree it came from, so a record that outlived its parse
+	--> kept every earlier tree alive.
+	local Reused = Parser.new(nil, nil, nil, Attributes.new("release"))
+	for _ = 1, 3 do
+		Reused:Parse(GATED)
+	end
+
+	local Kept = 0
+	for _ in Reused.Attributes.Excluded do
+		Kept += 1
+	end
+
+	if Kept ~= 2 then
+		ErrorPrint(`Failed: three parses of two excluded declarations left {Kept} recorded.`)
+	end
+
+	OkPrint(`Test "A parser used again forgets the excluded declarations" passed!`)
+end
+
+do
+	PrettyPrint("cyan", "Testing: A parse that failed inside an attribute does not carry it over...", true)
+
+	--> Half-typed, as an editor sees a document mid-keystroke: the attribute has opened its
+	--> statement and the statement never closes.
+	local Reused = Parser.new(nil, nil, nil, Attributes.new("release"))
+	local Failed = pcall(function()
+		Reused:Parse(`@profile("dev")\nevent Broken \{\n    From: Client,\n`)
+	end)
+
+	local Success, Tree = pcall(function()
+		return Reused:Parse(Event("Ping", "u8"))
+	end)
+
+	local Found = if Success then #Tree.Value.Declarations else -1
+	if Failed then
+		ErrorPrint("Failed: the half-typed schema parsed.")
+	elseif Found ~= 1 then
+		ErrorPrint(`Failed: the next parse compiled {Found} declaration(s), expected the one it holds.`)
+	end
+
+	OkPrint(`Test "A parse that failed inside an attribute does not carry it over" passed!`)
+end

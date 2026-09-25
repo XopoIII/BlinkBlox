@@ -41,7 +41,11 @@ local KEYWORDS = Grammar.KEYWORDS
 local Parser = ParserClass.Class
 
 function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
-	--> Set state
+	--> Set state. A parse without a scope is a document's own, not an import's: an import shares the
+	--> importing parser's attribute state, which has to survive into it.
+	if Scope == nil then
+		AttributeParser.Reset(self.Attributes)
+	end
 	self.Scope = Scope or { Name = { Value = "", Start = 0, End = 0 } :: any, Symbols = { Types = {}, Scopes = {} } }
 	self.Source = Source
 	table.clear(self.Symbols)
