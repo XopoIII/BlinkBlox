@@ -6,6 +6,8 @@
 --- matters where noted: some specs leave state the next one in its file relies on, and the CLI specs
 --- remove what the others read.
 require("./Ranges")
+require("./Numbers")
+require("./NumberLimits")
 require("./Buffers")
 require("./Listeners")
 require("./SizeAnalysis")

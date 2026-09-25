@@ -11,6 +11,7 @@
 ---   Types        the type grammar's keyword dispatch, and primitives
 ---   Collections  sets, maps, enums, tagged enums, type packs and structs
 ---   Ranges       ranges, array brackets, components and the optional mark
+---   Scales       a number's modifiers: its scale and `saturate`
 ---   Symbols      references, declarations and generic substitution
 local Class = require("@self/Class")
 
@@ -22,6 +23,7 @@ local _ = {
 	require("@self/Types"),
 	require("@self/Collections"),
 	require("@self/Ranges"),
+	require("@self/Scales"),
 	require("@self/Symbols"),
 }
 

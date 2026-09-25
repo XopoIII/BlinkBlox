@@ -1,0 +1,3 @@
+-- expect E3032
+-- `saturate` once is enough.
+type Count = u8<saturate, saturate>

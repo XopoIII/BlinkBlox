@@ -11,6 +11,7 @@ local Table = require("./Modules/Table")
 local Blocks = require("@self/Blocks")
 local Fragments = require("@self/Fragments")
 local GenerateTypescript = require("@self/Typescript")
+local Limits = require("@self/Limits")
 local Prefabs = require("@self/Prefabs")
 local Serde = require("@self/Serde")
 --> Everything one generation run builds up, shared with the generator's other files. See State.luau.
@@ -164,6 +165,11 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	State.Noop.Push(`{State.Casing.SetDecodeErrorHandler} = NOOP,`, 0, 2)
 	State.Return.Push(`{State.Casing.SetPacketDropHandler} = SetPacketDropHandler,`, 1, 1)
 	State.Noop.Push(`{State.Casing.SetPacketDropHandler} = NOOP,`, 0, 2)
+	if State.Options.ExportLimits then
+		local Member = Limits.Words(State.Options.Casing :: Settings.Case?)("Limits")
+		State.Return.Push(`{Member} = {Limits.LOCAL},`, 1, 1)
+		State.Noop.Push(`{Member} = {Limits.LOCAL},`, 0, 2)
+	end
 
 	if not State.Options.ManualReplication then
 		Replication.Push("RunService.Heartbeat:Connect(StepReplication)")
@@ -401,6 +407,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		State.Events.DumpLines(),
 		State.LuauTypes.DumpLines(),
 		State.UserTypes.DumpLines(),
+		Limits.Body(AbstractSyntaxTree),
 		State.Noop.DumpLines(),
 		string.split(Source[2], "\r"),
 		Replication.DumpLines(),
@@ -419,6 +426,10 @@ function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 	State.Options = AbstractSyntaxTree.Value.Options
 	State.Casing = Settings.GetCasing((State.Options.Casing :: Settings.Case) or "Pascal")
 
+	if State.Options.ExportLimits then
+		State.Return.Push(`{Limits.Words(State.Options.Casing :: Settings.Case?)("Limits")} = {Limits.LOCAL},`, 1, 1)
+	end
+
 	--> Parse declarations
 	Generators.AbstractSyntaxTree(AbstractSyntaxTree.Value.Declarations)
 
@@ -434,6 +445,7 @@ function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 		{ "\n" },
 		State.UserTypes.DumpLines(),
 		string.split(Source[2], "\r"),
+		Limits.Body(AbstractSyntaxTree),
 		{ "\n" },
 		{ `\nreturn \{\n` },
 		State.Return.DumpLines(),

@@ -7,6 +7,58 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+A schema's numbers say what the game had been saying by hand around them. **The wire format does not
+change, and nothing changes for a schema that uses none of this**: its generated modules are
+byte-identical to 0.37.0's, and `WIRE_VERSION` stays 2.
+
+### Added
+
+- **Fixed-point numbers**: an integer type takes a scale, `u16<0.1>`, and sends the nearest whole
+  number of steps, `round(v / 0.1)`, in that integer, read back as the count times the step. `12.34`
+  in a `u16<0.1>` sends 123 and reads `12.3` -- the exact double the literal is, since a step whose
+  reciprocal is whole is sent as `round(v * 10)` and read as `n / 10`. Every integer takes one (`u8`
+  to `u32`, `i8` to `i32`, the 24-bit ones included). The range is in real units,
+  `u16<0.1>(0..6553.5)`, and each bound must be a whole number of steps (`E3009`). Rounding is to
+  nearest, a tie away from zero. Past the range it is refused on send under `WriteValidations`, in
+  real units, and wraps as its integer would without it; the receiver checks it in whole steps. It
+  costs its integer's size, and is a `number` in Luau and TypeScript. **The scale is part of the
+  schema signature.**
+- **`saturate`**, `u8<saturate>(1..255)`, `u16<0.1, saturate>`: a number is clamped into its range on
+  send instead of refused or wrapped -- an integer rounded to nearest first, an `f16` stopping at
+  65504 instead of becoming infinity. `NaN` is sent as the value in range nearest zero (0 when the
+  range holds it), so it neither reaches the wire nor makes a ranged receiver refuse the event. It
+  changes nothing a receiver accepts, and is not part of the signature. `saturate` is not a keyword:
+  a field may still be called that.
+- **`option ExportLimits`** adds a frozen `Limits` table to the server, client and types modules,
+  and a `readonly` declaration to the TypeScript output: every numeric range, scale, string, buffer
+  and array length and vector magnitude the schema declares, keyed by the schema's own names --
+  `Limits.CrawlPacket.Heads.Length.Max` is 16. The structural words follow `Casing`. With the option
+  on, `Limits` is a reserved top-level name (`E3005`); off, nothing is emitted.
+- **`E3032`** refuses a scale on a float, a scale of zero or less, a repeated scale or `saturate`,
+  and anything else in a number's brackets.
+- The Studio plugin offers `saturate` inside a number's brackets, and the docs' grammar highlights it.
+- `test/Numbers.luau` and `test/NumberLimits.luau` check exact bytes and values; `test/Oracle.luau`
+  and `test/Generate.luau` learnt both modifiers, so the property draws cover them.
+
+### Downstream
+
+Grabby Pit can drop three pieces of hand-written bounds (`net/Game.blink`, which sets
+`WriteValidations`):
+
+- **PerfProbe's `whole()` and its `* 10`**: declare the tenths fields `u16<0.1, saturate>`
+  (`FrameP50`, `FrameP95`, `ReceiveKbps`, `ReceivePeakKbps`, `SendKbps`, `WorldTenths`) and the rest
+  `u16<saturate>` / `u8<saturate>`, send the raw numbers, and drop the `/ 10` in `World/Net.luau`.
+- **`Tally`'s `math.min(n, 255)`**: `Count: u8<saturate>(1..255)`.
+- **`HuntCrawl`'s `if #heads == 16`**: set `option ExportLimits = true` and compare with
+  `Wire.Limits.CrawlPacket.Heads.Length.Max`.
+
+A scale changes `PerfReport`'s signature and `saturate` changes none, so both modules are rebuilt
+together, as after any schema change. Since `saturate` sends NaN as the nearest value to zero, a
+PerfProbe reading that came out NaN now arrives as 0, where `whole()` handed the writer NaN
+(`math.clamp` passes it through).
+
 ## 0.37.0 — 2026-09-25
 
 A game can act on every packet the server refuses. **The wire format does not change, and neither

@@ -1,0 +1,3 @@
+-- expect E3009
+-- 0.05 falls between two tenths, so the receiver could never be sent it.
+type Frame = u16<0.1>(0..0.05)

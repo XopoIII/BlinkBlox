@@ -9,6 +9,7 @@
 --- The registries are filled at load, in the order Prefabs/init.luau requires the files, and a later
 --- prefab may build on an earlier one: f16 reads through u16, CFrame through vector.
 local Blocks = require("../Blocks")
+local Fixed = require("./Fixed")
 local Narrow = require("./Narrow")
 local Parser = require("../../Parser")
 
@@ -109,6 +110,10 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 		local Primitive = Tokens.Primitive.Value
 		local IsVariableSize = (Range and Range.Max ~= Range.Min)
 
+		--> A number with modifiers is checked on receipt in the units it travels in: whole steps.
+		local Modified = Value.Scale ~= nil or Value.Saturate == true
+		local WireRange = if Range and Value.Scale then Fixed.WireBounds(Declaration) else Range
+
 		local function GenerateValidation(Block: Block, TargetVariable: string)
 			if Block == Write and WriteValidations ~= true then
 				return
@@ -132,8 +137,8 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 				return
 			end
 
-			if Range then
-				local Min, Max = Range.Min, Range.Max
+			if WireRange then
+				local Min, Max = WireRange.Min, WireRange.Max
 				if Block == Read then
 					Min, Max = Narrow.Bounds(Primitive, Min, Max)
 				end
@@ -145,10 +150,10 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 					--> An open side of a float range is infinite, and every value passes it. Its line is
 					--> left out rather than emitted, since `inf` would read as a nil global. NaN is still
 					--> refused, because the side that remains is written `not (x >= Min)`.
-					if Range.Min ~= -math.huge then
+					if WireRange.Min ~= -math.huge then
 						Block:Line(Assert.Lower)
 					end
-					if Range.Max ~= math.huge then
+					if WireRange.Max ~= math.huge then
 						Block:Line(Assert.Upper)
 					end
 				end
@@ -173,10 +178,23 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 			end
 		end
 
-		GenerateValidation(Write, Target)
+		if Modified then
+			Fixed.Write(Declaration, Target, Write, WriteValidations, function(Converted: string)
+				Prefab.Write(Converted, Write, Range, Components)
+			end)
+		else
+			GenerateValidation(Write, Target)
+		end
+
 		Prefab.Read(Target, Read, Range, Components)
-		Prefab.Write(Target, Write, Range, Components)
+		if not Modified then
+			Prefab.Write(Target, Write, Range, Components)
+		end
+
 		GenerateValidation(Read, Target)
+		if Modified then
+			Fixed.Read(Declaration, Target, Read)
+		end
 	end
 end
 

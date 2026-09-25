@@ -3,6 +3,7 @@
 local Parser = require("../Parser")
 local Settings = require("../Settings")
 
+local Limits = require("./Limits")
 local Prefabs = require("./Prefabs")
 local Util = require("./Util")
 
@@ -288,6 +289,12 @@ return function(FileContext: Context, AbstractSyntaxTree: AbstractSyntaxTree): s
 	StringBuilder.Push(`export declare const {Casing.StepReplication}: () => void`)
 	for _, Line in HandlerDeclarations(FileContext, Casing) do
 		StringBuilder.Push(Line)
+	end
+
+	if Options.ExportLimits then
+		local Word = Limits.Words(Options.Casing :: Settings.Case?)
+		local Limit = Limits.Declarations(AbstractSyntaxTree.Value.Declarations, Word)
+		StringBuilder.Push(`export declare const {Word("Limits")}: {Limits.Typescript(Limit, Word)}`)
 	end
 
 	if _G.VERSION == nil then

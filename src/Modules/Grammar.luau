@@ -71,6 +71,7 @@ Grammar.OPTIONS = {
 	RequireRates = "Boolean",
 	Predict = "Boolean",
 	InvocationTimeout = "Number",
+	ExportLimits = "Boolean",
 } :: { [string]: Lexer.Types }
 
 --> Defaults the option checks and the generator both need. Here because this module is data only,
@@ -342,6 +343,10 @@ export type Options = {
 
 	--> Seconds before an unanswered invocation fails its caller and gives its slot back.
 	InvocationTimeout: number?,
+
+	--> Adds a frozen `Limits` table of the schema's bounds to every generated module. See
+	--> Generator/Limits.
+	ExportLimits: boolean?,
 }
 
 return Grammar

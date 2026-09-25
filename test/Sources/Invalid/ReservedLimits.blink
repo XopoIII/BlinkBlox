@@ -1,0 +1,10 @@
+-- expect E3005
+-- `option ExportLimits` makes Limits a member of the module.
+option ExportLimits = true
+
+event Limits {
+	From: Server,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: u8
+}

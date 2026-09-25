@@ -79,12 +79,13 @@ instead, which gives each one's code, file, line and column, labels and notes as
 | `E3004` | Duplicate field / flag / value / variant / element | A name repeated inside a struct, set, enum, tagged enum or type pack. |
 | `E3004` | Merged struct contains a duplicate field | Two merged structs, or a merge and a field, share a field name. |
 | `E3005` | Reserved identifier | `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler` and `SetPacketDropHandler` name module members, in the spelling `option Casing` gives them (`stepReplication` under `Camel`, `step_replication` under `Snake`), and a scope counts as a member too. A type may not take the name of one the module declares for itself, spelled `BLINK_*`. Rename the declaration. |
+| `E3005` | "X" is the module's Limits | With `option ExportLimits`, `Limits` -- `limits` under `Camel` or `Snake` -- is a module member, and a top-level declaration of that name would replace it. Rename it. |
 | `E3005` | "X" cannot name a type pack element | A named element becomes a parameter: it must be a Luau identifier, not a keyword, and not a name the generated function already uses, such as `Player`. |
 | `E3005` | Reserved identifier (a type named `number`, `Player`, ...) | A declared type is exported to Luau under its own name. It cannot take a built-in Luau type's name (`any`, `never`, `number`, `thread`), and a top-level type cannot take the name of a Roblox type the module uses: `Player`, `RemoteEvent`, `UnreliableRemoteEvent`, `Vector3`, or a class the schema names in `Instance(...)`. A type inside a scope is exempt from the Roblox names. Names that are BlinkBlox types themselves -- `boolean`, `buffer`, `string`, `unknown`, `Instance`, `CFrame`, `Color3`, `DateTime`, `BrickColor` -- are refused earlier with `E2002`. Rename it. |
 | `E3005` | Enum tag used as field in variant | A tagged enum's tag field may not also be a field of a variant. |
 | `E3007` | Unknown reference | The name is not declared, or not declared yet: a declaration is in scope only after it closes. |
 | `E3008` | Type doesn't accept a range | Only numbers, `string`, `buffer`, `vector` and arrays take a range. |
-| `E3009` | Malformed range / Expected an integer / Range outside bounds | Fix the range: integer types and lengths need whole numbers, and the range must fit the type (an array holds at most 65535). |
+| `E3009` | Malformed range / Expected an integer / Range outside bounds | Fix the range: integer types and lengths need whole numbers, and the range must fit the type (an array holds at most 65535). A scaled number's range is in real units, and each bound must be a whole number of steps (`Bound is not a whole number of steps`). |
 | `E3010` | Duplicate declaration | Two declarations, scopes or imports share a name in one scope, including across profiles. |
 | `E3012` | Unit enums don't support generics | Only structs, maps and tagged enums are generic. |
 | `E3013` | ... is not exportable / Generic types can't be exported / Types containing an Instance or unknown can't be exported | `export` applies to non-generic types whose values travel entirely in the buffer. |
@@ -120,6 +121,7 @@ instead, which gives each one's code, file, line and column, labels and notes as
 | `E3020` | Inbound "X" has no rate limit | `option RequireRates` is set. Give it a `Rate`, or set `option DefaultRate`. |
 | `E3021` | Array / Map of a type that costs nothing to decode | An unbounded repetition of elements that read no bytes gives a hostile count nothing to run out of. Bound it (`[..16]`) or give the element a sent field. |
 | `E3031` | Client-sent event / function "X" carries an Instance | `option MaxInstancesPerPacket = 0` refuses every packet that carries an Instance or `unknown`, and this declaration's client-sent data (or, for a `From: Server` function, the client's reply) carries one, so none of its packets could arrive. Raise the limit, or send an id instead of the Instance. In an imported file it is reported at the `import`. |
+| `E3032` | Only an integer takes a scale / A scale must be greater than zero / Repeated scale / Repeated saturate / Unknown number modifier | A number's angle brackets take one [scale](/BlinkBlox/language/types/#fixed-point-numbers), a positive number on an integer type, and [`saturate`](/BlinkBlox/language/types/#saturating-on-send), each at most once. |
 
 ## Errors without a code
 

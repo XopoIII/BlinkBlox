@@ -63,12 +63,26 @@ local function Check(Source: string, File: string?, Declarations: { Declaration 
 		Members[(Casing :: any)[Member]] = Member
 	end
 
+	--> `Limits` is a member only under `option ExportLimits`, so the parser's own check never refuses
+	--> its Pascal spelling, and every kind is refused here.
+	local LimitsMember = if Options.ExportLimits
+		then (if Options.Casing and Options.Casing ~= "Pascal" then "limits" else "Limits")
+		else nil
+
 	for _, Declaration in Declarations do
 		local Name = Declaration.Name
 		local Kind = Declaration.Type
 		local Member = Members[Name]
 
-		if Member and (Name ~= Member or Kind == "Scope") then
+		if Name == LimitsMember then
+			Refuse(
+				Source,
+				File,
+				Declaration,
+				`"{Name}" is the module's Limits`,
+				"`option ExportLimits` adds a Limits member to the module, and this would replace it. Rename it."
+			)
+		elseif Member and (Name ~= Member or Kind == "Scope") then
 			Refuse(
 				Source,
 				File,

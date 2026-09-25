@@ -130,12 +130,21 @@ function Parser.Type(self: Parser, Name: Token, Keyword: Token?, IsDataField: bo
 
 	-- ex: vector<u8> and u8(0..00)
 	if Primitive then
-		local Components = self:Components(Primitive)
-		if Components then
-			Value.Components = Components
+		if self:IsNumber(Primitive) then
+			local Modifiers = self:NumberModifiers(Primitive, (Declaration :: Primitive).Tokens.Primitive)
+			if Modifiers then
+				Value.Scale = Modifiers.Scale
+				Value.Saturate = Modifiers.Saturate
+				Tokens.Modifiers = Modifiers.Token
+			end
+		else
+			local Components = self:Components(Primitive)
+			if Components then
+				Value.Components = Components
+			end
 		end
 
-		local Range = self:Range(Primitive)
+		local Range = self:Range(Primitive, Value.Scale)
 		if Range then
 			if not Primitive.AllowsRange then
 				local PrimitiveToken = (Declaration :: Primitive).Tokens.Primitive
