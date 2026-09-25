@@ -374,8 +374,8 @@ RunClosure("Invocation slots are recycled", function()
 end)
 
 RunClosure("Oversized unreliable payloads are dropped, not sent", function()
-	--> Roblox drops an unreliable payload past 1000 bytes, silently in a live game, and the buffer's
-	--> share of that is MaxUnreliableSize, 900 by default. The compiler refuses schemas that
+	--> Roblox drops an unreliable payload past 1000 bytes, silently in a live game, and the budget
+	--> for it is MaxUnreliableSize, 980 by default. The compiler refuses schemas that
 	--> can never fit and warns about the ones that might not, but a bounded schema can still overflow
 	--> at runtime -- a string longer than the game assumed -- and that packet would vanish with
 	--> nobody told which event lost it.
@@ -402,6 +402,42 @@ RunClosure("Oversized unreliable payloads are dropped, not sent", function()
 
 	if Received ~= 1 then
 		ErrorPrint(`Failed "Oversized unreliable": an oversized payload was sent anyway.`)
+	end
+end)
+
+RunClosure("Instances count against the unreliable limit", function()
+	--> Measured in Studio: each Instance beside the buffer costs the payload 6 bytes. This event's
+	--> buffer is 973 bytes (the event id, two bytes of buffer length, 969 of data, the array's
+	--> count), which fits the default 980 alone; with four Instances it is 997, which Roblox would
+	--> drop. Counting the buffer alone sent it.
+	local Received = 0
+	local Disconnect = Server.UnreliableInstances.On(function()
+		Received += 1
+	end)
+
+	task.wait(0.2)
+	Received = 0
+
+	local Instance = setmetatable({
+		__typeof = "Instance",
+		IsA = function()
+			return true
+		end,
+	}, {})
+
+	Client.UnreliableInstances.Fire(buffer.create(969), {})
+	task.wait(0.3)
+
+	if Received ~= 1 then
+		ErrorPrint(`Failed "Unreliable instances": the buffer alone arrived {Received} time(s), expected 1.`)
+	end
+
+	Client.UnreliableInstances.Fire(buffer.create(969), { Instance, Instance, Instance, Instance })
+	task.wait(0.3)
+	Disconnect()
+
+	if Received ~= 1 then
+		ErrorPrint(`Failed "Unreliable instances": four Instances past the limit were sent anyway.`)
 	end
 end)
 

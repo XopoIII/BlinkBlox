@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "4b67181eec207c98"
+local SCHEMA_SIGNATURE = "bc166b3f1e28c7ab"
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -453,14 +453,17 @@ end
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
---> runtime, and says which event did it.
-local MAX_UNRELIABLE_SIZE = 900
+--> runtime, and says which event did it. Each Instance sent beside the buffer costs the
+--> payload bytes of its own, measured in Studio, so it counts against the same limit.
+local MAX_UNRELIABLE_SIZE = 980
+local UNRELIABLE_INSTANCE_BYTES = 6
 local function CheckUnreliableSize(Name: string): boolean
-	if SendCursor <= MAX_UNRELIABLE_SIZE then
+	local Size = SendCursor + #SendInstances * UNRELIABLE_INSTANCE_BYTES
+	if Size <= MAX_UNRELIABLE_SIZE then
 		return true
 	end
 
-	warn(`[BlinkBlox]: Dropped unreliable event "{Name}", {SendCursor} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+	warn(`[BlinkBlox]: Dropped unreliable event "{Name}", {Size} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
 	return false
 end
 local SerdesEvent = "?"
@@ -475,16 +478,16 @@ Queue.Reliable[4] = table.create(256)
 EventNames.Reliable[4] = "SendOccupiedCell"
 Queue.Reliable[7] = CreateQueue()
 EventNames.Reliable[7] = "ServerPollEvent"
-Queue.Unreliable[5] = CreateQueue()
-EventNames.Unreliable[5] = "ServerUnreliablePollEvent"
+Queue.Unreliable[6] = CreateQueue()
+EventNames.Unreliable[6] = "ServerUnreliablePollEvent"
 Queue.Reliable[8] = CreateQueue()
 EventNames.Reliable[8] = "ServerEmptyPollEvent"
-Queue.Unreliable[6] = CreateQueue()
-EventNames.Unreliable[6] = "ServerEmptyUnreliablePollEvent"
+Queue.Unreliable[7] = CreateQueue()
+EventNames.Unreliable[7] = "ServerEmptyUnreliablePollEvent"
 Queue.Reliable[10] = table.create(256)
 EventNames.Reliable[10] = "EmptyEvent"
-Queue.Unreliable[8] = table.create(256)
-EventNames.Unreliable[8] = "EmptyUnreliableEvent"
+Queue.Unreliable[9] = table.create(256)
+EventNames.Unreliable[9] = "EmptyUnreliableEvent"
 Queue.Reliable[11] = table.create(256)
 EventNames.Reliable[11] = "EmptyFunction"
 Queue.Reliable[12] = table.create(256)
@@ -517,30 +520,30 @@ Queue.Reliable[26] = table.create(256)
 EventNames.Reliable[26] = "MapComplexEvent"
 Queue.Reliable[27] = table.create(256)
 EventNames.Reliable[27] = "MapReferenceEvent"
-Queue.Unreliable[9] = table.create(256)
-EventNames.Unreliable[9] = "ArrayPrimitive"
 Queue.Unreliable[10] = table.create(256)
-EventNames.Unreliable[10] = "OptionalPrimitive"
+EventNames.Unreliable[10] = "ArrayPrimitive"
+Queue.Unreliable[11] = table.create(256)
+EventNames.Unreliable[11] = "OptionalPrimitive"
 Events.Reliable[28] = {}
 Queue.Reliable[28] = table.create(256)
 EventNames.Reliable[28] = "ManyReliableSync"
 Events.Reliable[29] = {}
 Queue.Reliable[29] = table.create(256)
 EventNames.Reliable[29] = "ManyReliableAsync"
-Events.Unreliable[11] = {}
-Queue.Unreliable[11] = table.create(256)
-EventNames.Unreliable[11] = "ManyUnreliableSync"
 Events.Unreliable[12] = {}
 Queue.Unreliable[12] = table.create(256)
-EventNames.Unreliable[12] = "ManyUnreliableAsync"
+EventNames.Unreliable[12] = "ManyUnreliableSync"
+Events.Unreliable[13] = {}
+Queue.Unreliable[13] = table.create(256)
+EventNames.Unreliable[13] = "ManyUnreliableAsync"
 Queue.Reliable[30] = table.create(256)
 EventNames.Reliable[30] = "ReliableServer"
 Queue.Reliable[31] = table.create(256)
 EventNames.Reliable[31] = "ReliableServerAsync"
-Queue.Unreliable[13] = table.create(256)
-EventNames.Unreliable[13] = "UnreliableServer"
 Queue.Unreliable[14] = table.create(256)
-EventNames.Unreliable[14] = "UnreliableServerAsync"
+EventNames.Unreliable[14] = "UnreliableServer"
+Queue.Unreliable[15] = table.create(256)
+EventNames.Unreliable[15] = "UnreliableServerAsync"
 Queue.Reliable[33] = table.create(256)
 EventNames.Reliable[33] = "InstanceAny"
 Queue.Reliable[34] = table.create(256)
@@ -559,8 +562,8 @@ Queue.Reliable[40] = table.create(256)
 EventNames.Reliable[40] = "RemoteFunction"
 Queue.Reliable[41] = table.create(256)
 EventNames.Reliable[41] = "Tuple"
-Queue.Unreliable[16] = table.create(256)
-EventNames.Unreliable[16] = "TupleUnreliable"
+Queue.Unreliable[17] = table.create(256)
+EventNames.Unreliable[17] = "TupleUnreliable"
 Queue.Reliable[42] = table.create(256)
 EventNames.Reliable[42] = "TupleFunction"
 Queue.Reliable[43] = table.create(256)
@@ -587,8 +590,8 @@ Queue.Reliable[58] = table.create(256)
 EventNames.Reliable[58] = "Unanswered"
 Queue.Reliable[59] = table.create(256)
 EventNames.Reliable[59] = "QueuedHoles"
-Queue.Unreliable[18] = table.create(256)
-EventNames.Unreliable[18] = "OrderedToClient"
+Queue.Unreliable[19] = table.create(256)
+EventNames.Unreliable[19] = "OrderedToClient"
 Queue.Reliable[62] = table.create(256)
 EventNames.Reliable[62] = "NamedLength"
 Queue.Reliable[63] = table.create(256)
@@ -801,6 +804,38 @@ function SerdesFunctions.WriteEVENT_UnreliableOversize(Value: string): ()
 	buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
 	Allocate(Length)
 	buffer.writestring(SendBuffer, SendOffset, Value, Length)
+end
+
+function SerdesFunctions.WriteEVENT_UnreliableInstances(Value1: buffer, Value2: { Instance }): ()
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
+	-- EVENT_UnreliableInstances (3)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
+	-- Value: UnreliableInstances
+	-- Value1: UnreliableInstances
+	if typeof(Value1) ~= "buffer" then
+		error(`Expected Value1 to be of type buffer, got {type(Value1)} instead.`)
+	end
+	if buffer.len(Value1) < 0 then error(`Expected size of "Value1" to be larger than or equal to 0, got {buffer.len(Value1)} instead.`) end
+	if buffer.len(Value1) > 970 then error(`Expected size of "Value1" to be smaller than or equal to 970, got {buffer.len(Value1)} instead.`) end
+	local Length = buffer.len(Value1)
+	if not (Length <= 970) then error(`Expected "Length" to be smaller than or equal to 970, got {Length} instead.`) end
+	buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
+	Allocate(Length)
+	buffer.copy(SendBuffer, SendOffset, Value1, 0, Length)
+	-- Value2: UnreliableInstances
+	-- START ARRAY
+	if not (#Value2 <= 4) then error(`Expected "#Value2" to be smaller than or equal to 4, got {#Value2} instead.`) end
+	buffer.writeu8(SendBuffer, BLOCK_START + 3, #Value2)
+	for Index = 1, #Value2 do
+		local Item_1 = Value2[Index]
+		-- Item_1: UnreliableInstances
+		if (Item_1 :: any) ~= nil then
+			if typeof(Item_1) ~= "Instance" then error(`Expected an Instance, got {typeof(Item_1)} instead.`) end
+		end
+		table.insert(SendInstances, Item_1 or Null)
+	end
+	-- END ARRAY
 end
 
 function SerdesFunctions.WriteFUNCTION_DATA_RateLimitedCall(Value: number, InvocationIdentifier: number): ()
@@ -1074,8 +1109,8 @@ function SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent(Value: { Field: nu
 	-- Allocate BLOCK: 20 bytes
 	local BLOCK_START = Allocate(20)
 	local BITFIELD_0
-	-- EVENT_ClientUnreliablePollEvent (3)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
+	-- EVENT_ClientUnreliablePollEvent (4)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 4)
 	-- Value: ClientUnreliablePollEvent
 	-- Value.Field: Field
 	BITFIELD_0 = 0
@@ -1294,8 +1329,8 @@ end
 function SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent(Value: nil): ()
 	-- Allocate BLOCK: 1 bytes
 	local BLOCK_START = Allocate(1)
-	-- EVENT_ClientEmptyUnreliablePollEvent (4)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 4)
+	-- EVENT_ClientEmptyUnreliablePollEvent (5)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 5)
 end
 
 function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
@@ -1678,8 +1713,8 @@ end
 function SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent(Value: nil): ()
 	-- Allocate BLOCK: 1 bytes
 	local BLOCK_START = Allocate(1)
-	-- EVENT_ClientEmptyUnreliableEvent (7)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 7)
+	-- EVENT_ClientEmptyUnreliableEvent (8)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 8)
 end
 
 function SerdesFunctions.ReadEVENT_EmptyEvent(): (nil)
@@ -2372,8 +2407,8 @@ end
 function SerdesFunctions.WriteEVENT_UnreliableClient(Value: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- EVENT_UnreliableClient (15)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 15)
+	-- EVENT_UnreliableClient (16)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 16)
 	-- Value: UnreliableClient
 	if typeof(Value) ~= "number" then
 		error(`Expected Value to be of type number, got {type(Value)} instead.`)
@@ -3224,8 +3259,8 @@ end
 function SerdesFunctions.WriteEVENT_RangedUnreliableFromClient(Value: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- EVENT_RangedUnreliableFromClient (17)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 17)
+	-- EVENT_RangedUnreliableFromClient (18)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 18)
 	-- Value: RangedUnreliableFromClient
 	if typeof(Value) ~= "number" then
 		error(`Expected Value to be of type number, got {type(Value)} instead.`)
@@ -7429,6 +7464,9 @@ if not RunService:IsRunning() then
 	UnreliableOversize = {
 		Fire = NOOP
 	},
+	UnreliableInstances = {
+		Fire = NOOP
+	},
 	RateLimitedCall = {
 		Invoke = NOOP
 	},
@@ -9545,71 +9583,71 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[0], Value1, Value2, Value3, Value4)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
-		elseif Index == 5 then
-			Push(Queue.Unreliable[5], table.pack(SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent()))
 		elseif Index == 6 then
-			Push(Queue.Unreliable[6], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyUnreliablePollEvent()))
-		elseif Index == 8 then
-			local Value: nil = SerdesFunctions.ReadEVENT_EmptyUnreliableEvent()
-			if Events.Unreliable[8] ~= nil then
-				SerdesEvent = "EmptyUnreliableEvent"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[8], Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
+			Push(Queue.Unreliable[6], table.pack(SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent()))
+		elseif Index == 7 then
+			Push(Queue.Unreliable[7], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyUnreliablePollEvent()))
 		elseif Index == 9 then
-			local Value: { number } = SerdesFunctions.ReadEVENT_ArrayPrimitive()
+			local Value: nil = SerdesFunctions.ReadEVENT_EmptyUnreliableEvent()
 			if Events.Unreliable[9] ~= nil then
-				SerdesEvent = "ArrayPrimitive"
+				SerdesEvent = "EmptyUnreliableEvent"
 				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[9], Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 10 then
-			local Value: number? = SerdesFunctions.ReadEVENT_OptionalPrimitive()
+			local Value: { number } = SerdesFunctions.ReadEVENT_ArrayPrimitive()
 			if Events.Unreliable[10] ~= nil then
-				SerdesEvent = "OptionalPrimitive"
+				SerdesEvent = "ArrayPrimitive"
 				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[10], Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 11 then
+			local Value: number? = SerdesFunctions.ReadEVENT_OptionalPrimitive()
+			if Events.Unreliable[11] ~= nil then
+				SerdesEvent = "OptionalPrimitive"
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[11], Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+		elseif Index == 12 then
 			local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableSync()
-			for _, Listener in Events.Unreliable[11] do
+			for _, Listener in Events.Unreliable[12] do
 				SerdesEvent = "ManyUnreliableSync"
 				local ListenerRan, ListenerFailure = pcall(Listener, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
-		elseif Index == 12 then
+		elseif Index == 13 then
 			local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableAsync()
-			for _, Listener in Events.Unreliable[12] do
+			for _, Listener in Events.Unreliable[13] do
 				Spawn(Listener, Value)
 			end
-		elseif Index == 13 then
-			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServer()
-			if Events.Unreliable[13] ~= nil then
-				SerdesEvent = "UnreliableServer"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[13], Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
 		elseif Index == 14 then
-			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServerAsync()
+			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServer()
 			if Events.Unreliable[14] ~= nil then
-				Spawn(Events.Unreliable[14], Value)
-			end
-		elseif Index == 16 then
-			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadEVENT_TupleUnreliable()
-			if Events.Unreliable[16] ~= nil then
-				SerdesEvent = "TupleUnreliable"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[16], Value1, Value2, Value3, Value4, Value5)
+				SerdesEvent = "UnreliableServer"
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[14], Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
-		elseif Index == 18 then
+		elseif Index == 15 then
+			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServerAsync()
+			if Events.Unreliable[15] ~= nil then
+				Spawn(Events.Unreliable[15], Value)
+			end
+		elseif Index == 17 then
+			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadEVENT_TupleUnreliable()
+			if Events.Unreliable[17] ~= nil then
+				SerdesEvent = "TupleUnreliable"
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[17], Value1, Value2, Value3, Value4, Value5)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+		elseif Index == 19 then
 			-- Read BLOCK: 2 bytes
 			local BLOCK_START = Read(2)
 			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			local Value: number = SerdesFunctions.ReadEVENT_OrderedToClient()
-			if OrderAccept(18, OrderIdentifier) == true then
-				if Events.Unreliable[18] ~= nil then
+			if OrderAccept(19, OrderIdentifier) == true then
+				if Events.Unreliable[19] ~= nil then
 					SerdesEvent = "OrderedToClient"
-					local ListenerRan, ListenerFailure = pcall(Events.Unreliable[18], Value)
+					local ListenerRan, ListenerFailure = pcall(Events.Unreliable[19], Value)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
@@ -13658,6 +13696,22 @@ local Returns = table.freeze({
 			end
 		end
 	},
+	UnreliableInstances = {
+		Fire = function(Value1: buffer, Value2: { Instance }): ()
+			local Previous = Save()
+			Load()
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_UnreliableInstances, Value1, Value2)
+			if Sent and CheckUnreliableSize("UnreliableInstances") then
+				local Buffer = buffer.create(SendCursor)
+				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+				Unreliable:FireServer(Buffer, SendInstances)
+			end
+			Load(Previous)
+			if Sent ~= true then
+				error(Failure, 0)
+			end
+		end
+	},
 	RateLimitedCall = {
 		Invoke = function(Value: number): (number)
 			local InvocationIdentifier = ClaimInvocation(Invocations, 2)
@@ -14109,7 +14163,7 @@ local Returns = table.freeze({
 	ServerUnreliablePollEvent = {
 		Iter = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
-			local queue = Queue.Unreliable[5]
+			local queue = Queue.Unreliable[6]
 			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
@@ -14122,7 +14176,7 @@ local Returns = table.freeze({
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
 		Next = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 			local index = 0
-			local queue = Queue.Unreliable[5]
+			local queue = Queue.Unreliable[6]
 			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
 				index += 1
 				local arguments = Pop(queue)
@@ -14163,7 +14217,7 @@ local Returns = table.freeze({
 	ServerEmptyUnreliablePollEvent = {
 		Iter = function(): () -> (number, nil)
 			local index = 0
-			local queue = Queue.Unreliable[6]
+			local queue = Queue.Unreliable[7]
 			return function (): (number, nil)
 				index += 1
 				local arguments = Pop(queue)
@@ -14176,7 +14230,7 @@ local Returns = table.freeze({
 		--- @deprecated v0.14.1 -- Use `Iter` instead.
 		Next = function(): () -> (number, nil)
 			local index = 0
-			local queue = Queue.Unreliable[6]
+			local queue = Queue.Unreliable[7]
 			return function (): (number, nil)
 				index += 1
 				local arguments = Pop(queue)
@@ -14244,20 +14298,20 @@ local Returns = table.freeze({
 	},
 	EmptyUnreliableEvent = {
 		On = function(Listener: (Value: nil) -> ()): () -> ()
-			if Events.Unreliable[8] ~= nil then
+			if Events.Unreliable[9] ~= nil then
 				warn("[BlinkBlox]: \"EmptyUnreliableEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
-			Events.Unreliable[8] = Listener
+			Events.Unreliable[9] = Listener
 			return function (): ()
-				if Events.Unreliable[8] == Listener then
-					Events.Unreliable[8] = nil
+				if Events.Unreliable[9] == Listener then
+					Events.Unreliable[9] = nil
 				end
 			end
 		end,
 		Predict = function(Value: nil): ()
-			if Events.Unreliable[8] ~= nil then
+			if Events.Unreliable[9] ~= nil then
 				SerdesEvent = "EmptyUnreliableEvent"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[8], Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[9], Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -14718,28 +14772,8 @@ local Returns = table.freeze({
 	},
 	ArrayPrimitive = {
 		On = function(Listener: (Value: { number }) -> ()): () -> ()
-			if Events.Unreliable[9] ~= nil then
-				warn("[BlinkBlox]: \"ArrayPrimitive\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[9] = Listener
-			return function (): ()
-				if Events.Unreliable[9] == Listener then
-					Events.Unreliable[9] = nil
-				end
-			end
-		end,
-		Predict = function(Value: { number }): ()
-			if Events.Unreliable[9] ~= nil then
-				SerdesEvent = "ArrayPrimitive"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[9], Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-		end
-	},
-	OptionalPrimitive = {
-		On = function(Listener: (Value: number?) -> ()): () -> ()
 			if Events.Unreliable[10] ~= nil then
-				warn("[BlinkBlox]: \"OptionalPrimitive\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+				warn("[BlinkBlox]: \"ArrayPrimitive\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
 			Events.Unreliable[10] = Listener
 			return function (): ()
@@ -14748,10 +14782,30 @@ local Returns = table.freeze({
 				end
 			end
 		end,
-		Predict = function(Value: number?): ()
+		Predict = function(Value: { number }): ()
 			if Events.Unreliable[10] ~= nil then
-				SerdesEvent = "OptionalPrimitive"
+				SerdesEvent = "ArrayPrimitive"
 				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[10], Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+		end
+	},
+	OptionalPrimitive = {
+		On = function(Listener: (Value: number?) -> ()): () -> ()
+			if Events.Unreliable[11] ~= nil then
+				warn("[BlinkBlox]: \"OptionalPrimitive\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Unreliable[11] = Listener
+			return function (): ()
+				if Events.Unreliable[11] == Listener then
+					Events.Unreliable[11] = nil
+				end
+			end
+		end,
+		Predict = function(Value: number?): ()
+			if Events.Unreliable[11] ~= nil then
+				SerdesEvent = "OptionalPrimitive"
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[11], Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -14822,28 +14876,6 @@ local Returns = table.freeze({
 	},
 	ManyUnreliableSync = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[11])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[11] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[11], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[11])
-					table.remove(Listeners, Index)
-					Events.Unreliable[11] = Listeners
-				end
-			end
-		end,
-		Predict = function(Value: number): ()
-			for _, Listener in Events.Unreliable[11] do
-				SerdesEvent = "ManyUnreliableSync"
-				local ListenerRan, ListenerFailure = pcall(Listener, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-		end
-	},
-	ManyUnreliableAsync = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
 			local Listeners = table.clone(Events.Unreliable[12])
 			table.insert(Listeners, Listener)
 			Events.Unreliable[12] = Listeners
@@ -14858,6 +14890,28 @@ local Returns = table.freeze({
 		end,
 		Predict = function(Value: number): ()
 			for _, Listener in Events.Unreliable[12] do
+				SerdesEvent = "ManyUnreliableSync"
+				local ListenerRan, ListenerFailure = pcall(Listener, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+		end
+	},
+	ManyUnreliableAsync = {
+		On = function(Listener: (Value: number) -> ()): () -> ()
+			local Listeners = table.clone(Events.Unreliable[13])
+			table.insert(Listeners, Listener)
+			Events.Unreliable[13] = Listeners
+			return function (): ()
+				local Index = table.find(Events.Unreliable[13], Listener)
+				if Index ~= nil then
+					local Listeners = table.clone(Events.Unreliable[13])
+					table.remove(Listeners, Index)
+					Events.Unreliable[13] = Listeners
+				end
+			end
+		end,
+		Predict = function(Value: number): ()
+			for _, Listener in Events.Unreliable[13] do
 				Spawn(Listener, Value)
 			end
 		end
@@ -14930,28 +14984,8 @@ local Returns = table.freeze({
 	},
 	UnreliableServer = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Unreliable[13] ~= nil then
-				warn("[BlinkBlox]: \"UnreliableServer\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[13] = Listener
-			return function (): ()
-				if Events.Unreliable[13] == Listener then
-					Events.Unreliable[13] = nil
-				end
-			end
-		end,
-		Predict = function(Value: number): ()
-			if Events.Unreliable[13] ~= nil then
-				SerdesEvent = "UnreliableServer"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[13], Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-		end
-	},
-	UnreliableServerAsync = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
 			if Events.Unreliable[14] ~= nil then
-				warn("[BlinkBlox]: \"UnreliableServerAsync\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
+				warn("[BlinkBlox]: \"UnreliableServer\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
 			Events.Unreliable[14] = Listener
 			return function (): ()
@@ -14962,7 +14996,27 @@ local Returns = table.freeze({
 		end,
 		Predict = function(Value: number): ()
 			if Events.Unreliable[14] ~= nil then
-				Spawn(Events.Unreliable[14], Value)
+				SerdesEvent = "UnreliableServer"
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[14], Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+		end
+	},
+	UnreliableServerAsync = {
+		On = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Unreliable[15] ~= nil then
+				warn("[BlinkBlox]: \"UnreliableServerAsync\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Unreliable[15] = Listener
+			return function (): ()
+				if Events.Unreliable[15] == Listener then
+					Events.Unreliable[15] = nil
+				end
+			end
+		end,
+		Predict = function(Value: number): ()
+			if Events.Unreliable[15] ~= nil then
+				Spawn(Events.Unreliable[15], Value)
 			end
 		end
 	},
@@ -15235,20 +15289,20 @@ local Returns = table.freeze({
 	},
 	TupleUnreliable = {
 		On = function(Listener: (Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?) -> ()): () -> ()
-			if Events.Unreliable[16] ~= nil then
+			if Events.Unreliable[17] ~= nil then
 				warn("[BlinkBlox]: \"TupleUnreliable\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
-			Events.Unreliable[16] = Listener
+			Events.Unreliable[17] = Listener
 			return function (): ()
-				if Events.Unreliable[16] == Listener then
-					Events.Unreliable[16] = nil
+				if Events.Unreliable[17] == Listener then
+					Events.Unreliable[17] = nil
 				end
 			end
 		end,
 		Predict = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-			if Events.Unreliable[16] ~= nil then
+			if Events.Unreliable[17] ~= nil then
 				SerdesEvent = "TupleUnreliable"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[16], Value1, Value2, Value3, Value4, Value5)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[17], Value1, Value2, Value3, Value4, Value5)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -15658,20 +15712,20 @@ local Returns = table.freeze({
 	},
 	OrderedToClient = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Unreliable[18] ~= nil then
+			if Events.Unreliable[19] ~= nil then
 				warn("[BlinkBlox]: \"OrderedToClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
-			Events.Unreliable[18] = Listener
+			Events.Unreliable[19] = Listener
 			return function (): ()
-				if Events.Unreliable[18] == Listener then
-					Events.Unreliable[18] = nil
+				if Events.Unreliable[19] == Listener then
+					Events.Unreliable[19] = nil
 				end
 			end
 		end,
 		Predict = function(Value: number): ()
-			if Events.Unreliable[18] ~= nil then
+			if Events.Unreliable[19] ~= nil then
 				SerdesEvent = "OrderedToClient"
-				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[18], Value)
+				local ListenerRan, ListenerFailure = pcall(Events.Unreliable[19], Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end

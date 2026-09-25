@@ -7,6 +7,44 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.36.0 — 2026-09-25
+
+The numbers 0.35.0 left open, measured on a Mac with Studio: the unreliable payload limit, and the
+Studio benchmark against a fifth tool. **The wire format does not change.**
+
+### Changed
+
+- `MaxUnreliableSize` defaults to 980, up from 900, and counts 6 bytes for each Instance an event
+  sends beside its buffer. `benchmark/Probe.luau` measured what Roblox delivers, the same in both
+  directions: a buffer alone arrives up to 994 bytes, and each Instance beside it costs exactly 6
+  bytes more (988 with one, 970 with four, 898 with sixteen). The old 900 was a guess that left 100
+  bytes for the rest. Counting the buffer alone was not safe either way: sixteen Instances beside a
+  900-byte buffer are 1002 bytes, which Roblox drops. The compile-time check (`W3019`) and the check
+  on send both count Instances now, and the warning a dropped send prints gives the counted size.
+
+### Benchmarks
+
+- The Studio benchmark includes [Packet](https://devforum.roblox.com/t/packet-networking-library/3573907),
+  1.7.0, beside plain remotes, zap and ByteNet. Packet's server drops what a player sends past 8000
+  bytes a heartbeat, with no option to change it, so the harness raises that constant in its
+  downloaded copy, as the bench's schema raises BlinkBlox's own inbound limits.
+- The published Studio numbers are from 0.35.0 on an Apple M1, with the random benches and the fire
+  time. BlinkBlox is at 60 FPS on three benches and 52 on the fourth; zap is between 22 and 37, and
+  ByteNet, Packet and plain remotes between 15 and 18. A frame's thousand fires took BlinkBlox 4 to
+  15 ms, zap 21 to 35, ByteNet 38 to 45, Packet 50 to 77 and plain remotes 28 to 110.
+- The Lune tables are re-measured on the same M1, 0.34.0 and 0.35.0 back to back.
+- `lune run build --local` compiles the bench's schema with the checkout's compiler. The download
+  fetches the latest release, which had been 0.33.0 while 0.34.0 and 0.35.0 were merged.
+- The harness's disabled Warp mode is removed. Its download had never worked, and bundling it printed
+  a warning on every build.
+
+### Documentation
+
+- The site builds with no warnings, down from 25. Starlight's i18n collection is declared, the 404
+  page is the site's own (`docs/src/pages/404.astro`) rather than a lookup that warned on every
+  build, and Vite 8's notice about Astro's own `astro:head-inject` directive, one per MDX page, is
+  filtered by exactly that code and text.
+
 ## 0.35.0 — 2026-09-25
 
 Performance, measured before it was changed, and a benchmark that measures the right thing. **The

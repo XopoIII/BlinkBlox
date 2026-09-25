@@ -12,7 +12,7 @@ many bytes it costs to send. If anything is missing or wrong, please
 ## Size on the wire
 
 Every type below is written into a buffer, except `Instance` and `unknown`, which travel beside it in
-the remote's instance list. The compiler measures these sizes itself -- it is how it refuses an
+the remote's instance list, and cost an unreliable payload 6 bytes each. The compiler measures these sizes itself -- it is how it refuses an
 unreliable event that cannot fit in
 [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize).
 

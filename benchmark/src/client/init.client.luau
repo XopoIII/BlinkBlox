@@ -79,13 +79,13 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 	local Event = Events[Bench]
 	local Method
 
-	if Tool == "warp" then
-		Method = function(Data)
-			Event:Fire(true, Data)
-		end
-	elseif Tool == "roblox" then
+	if Tool == "roblox" then
 		Method = function(Data)
 			Event:FireServer(Data)
+		end
+	elseif Tool == "packet" then
+		Method = function(Data)
+			Event:Fire(Data)
 		end
 	else
 		Method = Event.Fire or Event.send

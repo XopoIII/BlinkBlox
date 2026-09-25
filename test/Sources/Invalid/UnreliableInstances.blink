@@ -1,0 +1,12 @@
+-- expect W3019
+-- 960 bytes of buffer fit the unreliable limit alone, but each Instance beside them costs the payload
+-- 6 bytes more, and four of them take it past. The buffer alone used to be all that was counted.
+option ClientOutput = "../../Network/UnreliableInstancesClient.luau"
+option ServerOutput = "../../Network/UnreliableInstancesServer.luau"
+
+event Telemetry {
+    From: Client,
+    Type: Unreliable,
+    Call: SingleSync,
+    Data: (u8[960], Instance[4])
+}

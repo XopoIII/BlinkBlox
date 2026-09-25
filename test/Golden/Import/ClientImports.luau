@@ -378,14 +378,17 @@ local EventNames: any = {
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
---> runtime, and says which event did it.
-local MAX_UNRELIABLE_SIZE = 900
+--> runtime, and says which event did it. Each Instance sent beside the buffer costs the
+--> payload bytes of its own, measured in Studio, so it counts against the same limit.
+local MAX_UNRELIABLE_SIZE = 980
+local UNRELIABLE_INSTANCE_BYTES = 6
 local function CheckUnreliableSize(Name: string): boolean
-	if SendCursor <= MAX_UNRELIABLE_SIZE then
+	local Size = SendCursor + #SendInstances * UNRELIABLE_INSTANCE_BYTES
+	if Size <= MAX_UNRELIABLE_SIZE then
 		return true
 	end
 
-	warn(`[BlinkBlox]: Dropped unreliable event "{Name}", {SendCursor} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+	warn(`[BlinkBlox]: Dropped unreliable event "{Name}", {Size} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
 	return false
 end
 local SerdesEvent = "?"

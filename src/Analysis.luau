@@ -10,6 +10,7 @@
 --- against this source would point at whatever text happens to sit there.
 
 local Error = require("./Modules/Error")
+local Grammar = require("./Modules/Grammar")
 local Lexer = require("./Lexer")
 local Size = require("./Modules/Size")
 local Walk = require("./Modules/Walk")
@@ -23,11 +24,13 @@ type Declaration = any
 type Options = any
 type Event = any
 
---- The largest buffer an unreliable event may send, unless the schema says otherwise. Roblox drops an
---- UnreliableRemoteEvent whose encoded payload passes 1000 bytes; this is the buffer's share of that,
---- see Grammar.Options. A live game drops it without a word, which is why the compiler refuses a
---- schema that cannot fit instead of leaving it to be discovered in production.
-local DEFAULT_MAX_UNRELIABLE_SIZE = 900
+--- The largest payload an unreliable event may send, unless the schema says otherwise: its buffer
+--- plus INSTANCE_BYTES per Instance. Roblox drops an UnreliableRemoteEvent whose encoded payload
+--- passes 1000 bytes, see Grammar.DEFAULTS for what was measured. A live game drops it without a
+--- word, which is why the compiler refuses a schema that cannot fit instead of leaving it to be
+--- discovered in production.
+local DEFAULT_MAX_UNRELIABLE_SIZE = Grammar.DEFAULTS.MaxUnreliableSize
+local INSTANCE_BYTES = Grammar.DEFAULTS.UnreliableInstanceBytes
 
 --- Checks the rate limiting fields. Same file-scoping rule as AnalyzeUnreliableSizes: imported
 --- declarations are diagnosed by the parse of the file they came from.
@@ -112,8 +115,11 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 		--> The event index is one byte, written ahead of the payload, and an ordered event adds its
 		--> sequence number on top of that.
 		local Header = 1 + (if Reliability == "OrderedUnreliable" then Size.OrderingBytes else 0)
+		--> Instances cost the payload bytes of their own, beside the buffer. `Refs` counts the most an
+		--> event can carry, not the fewest, so it raises the maximum only: the minimum is what makes
+		--> E3018 an error, and an optional Instance must not make an event that can fit refuse to build.
 		local Minimum = Header + (if Measured then Measured.Min else 0)
-		local Maximum = Header + (if Measured then Measured.Max else 0)
+		local Maximum = Header + (if Measured then Measured.Max + Measured.Refs * INSTANCE_BYTES else 0)
 		local Identifier = Event.Tokens.Identifier
 
 		if Minimum > Limit then

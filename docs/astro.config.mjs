@@ -26,11 +26,28 @@ const redirects = {
 
 export default defineConfig({
 	redirects,
+	vite: {
+		build: {
+			rolldownOptions: {
+				// Astro marks every MDX page with its own "use astro:head-inject" directive, and Vite 8's
+				// bundler warns once per page that it does not know it. Astro reads the directive itself,
+				// so only that warning is dropped; every other one still prints.
+				onwarn(warning, warn) {
+					if (warning.code === 'MODULE_LEVEL_DIRECTIVE' && warning.message.includes('astro:head-inject')) {
+						return;
+					}
+					warn(warning);
+				},
+			},
+		},
+	},
 	site: 'https://xopoiii.github.io',
 	base: '/BlinkBlox',
 	integrations: [
 		starlight({
 			title: 'BlinkBlox',
+			// src/pages/404.astro says why.
+			disable404Route: true,
 			description: 'An IDL compiler for Roblox buffer networking whose generated server is safe to point at the open internet.',
 			logo: { src: './src/assets/logo.png', alt: 'BlinkBlox' },
 			favicon: '/favicon-32.png',

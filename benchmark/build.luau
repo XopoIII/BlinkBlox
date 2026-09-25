@@ -4,16 +4,21 @@
 ---     lune run build              compile the definitions and build Benchmark.rbxl
 ---     lune run build --download   fetch the tools and packages first
 ---     lune run build --run        then run the place and write Benchmarks.md
+---     lune run build --local      compile with this checkout's compiler instead of the release
 ---
 --- Replaces build.bat, which only ran on Windows. It takes flags rather than asking: a prompt throws
 --- when no terminal is attached, which is every script and CI runner.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local serde = require("@lune/serde")
 
 local EXECUTABLE = if process.os == "windows" then ".exe" else ""
 
 local Download = table.find(process.args, "--download") ~= nil
 local Run = table.find(process.args, "--run") ~= nil
+--> The latest release lags the tree whenever a version is merged and not yet released, and the bench
+--> is most often run to measure exactly that.
+local Local = table.find(process.args, "--local") ~= nil
 
 local function Step(Program: string, Arguments: { string })
 	print(`> {Program} {table.concat(Arguments, " ")}`)
@@ -44,7 +49,25 @@ for _, Directory in { "./src/shared/zap", "./src/shared/blink" } do
 	end
 end
 Step(`./tools/zap{EXECUTABLE}`, { "./definitions/Definition.zap" })
-Step(`./tools/blinkblox{EXECUTABLE}`, { "./definitions/Definition.blink", "--yes" })
+if Local then
+	local Definition = `{process.cwd}definitions/Definition.blink`
+	print(`> lune run init {Definition} -- --yes (in ../src/CLI)`)
+	local Result = process.exec("lune", { "run", "init", Definition, "--", "--yes" }, {
+		cwd = "../src/CLI",
+		stdio = "inherit",
+	})
+	if not Result.ok then
+		error(`The checkout's compiler failed with exit code {Result.code}`, 0)
+	end
+
+	--> Benchmarks.md names each tool's version from here, which the download wrote for the release.
+	local Manifest = serde.decode("toml", fs.readFile("../pesde.toml"))
+	local Versions = serde.decode("json", fs.readFile("./tools/versions.json"))
+	Versions.blink = `v{Manifest.version} (checkout)`
+	fs.writeFile("./tools/versions.json", serde.encode("json", Versions))
+else
+	Step(`./tools/blinkblox{EXECUTABLE}`, { "./definitions/Definition.blink", "--yes" })
+end
 
 print("Building ROBLOX place")
 if not fs.isDir("./roblox") then

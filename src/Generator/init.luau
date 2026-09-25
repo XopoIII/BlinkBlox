@@ -26,6 +26,7 @@ local EVENT_SYNC_VALIDATION = Fragments.EVENT_SYNC_VALIDATION
 
 local DEFAULT_MAX_EVENTS_PER_PACKET = Fragments.DEFAULT_MAX_EVENTS_PER_PACKET
 local DEFAULT_MAX_UNRELIABLE_SIZE = Fragments.DEFAULT_MAX_UNRELIABLE_SIZE
+local UNRELIABLE_INSTANCE_BYTES = Fragments.UNRELIABLE_INSTANCE_BYTES
 
 local Sources = {
 	Base = require("./Templates/Base"),
@@ -350,14 +351,17 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 			"\n",
 			"--> Roblox drops an unreliable payload past this size and tells nobody. The compiler\n",
 			"--> refuses schemas that can never fit; this catches the ones that merely overflow at\n",
-			"--> runtime, and says which event did it.\n",
+			"--> runtime, and says which event did it. Each Instance sent beside the buffer costs the\n",
+			"--> payload bytes of its own, measured in Studio, so it counts against the same limit.\n",
 			`local MAX_UNRELIABLE_SIZE = {MaxUnreliableSize}\n`,
+			`local UNRELIABLE_INSTANCE_BYTES = {UNRELIABLE_INSTANCE_BYTES}\n`,
 			"local function CheckUnreliableSize(Name: string): boolean\n",
-			"\tif SendCursor <= MAX_UNRELIABLE_SIZE then\n",
+			"\tlocal Size = SendCursor + #SendInstances * UNRELIABLE_INSTANCE_BYTES\n",
+			"\tif Size <= MAX_UNRELIABLE_SIZE then\n",
 			"\t\treturn true\n",
 			"\tend\n",
 			"\n",
-			'\twarn(`[BlinkBlox]: Dropped unreliable event "{Name}", {SendCursor} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)\n',
+			'\twarn(`[BlinkBlox]: Dropped unreliable event "{Name}", {Size} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)\n',
 			"\treturn false\n",
 			"end\n",
 		}
