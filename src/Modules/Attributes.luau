@@ -54,18 +54,21 @@ export type Reader = {
 ---- Constants ----
 
 --> Closed, so a misspelt profile is an error rather than a statement that silently never compiles.
-local PROFILES: { [string]: true } = {
-	dev = true,
-	debug = true,
-	test = true,
-	release = true,
-}
+--> In the order the docs and the CLI's messages give them, which is the order the editor offers them.
+local ORDER = { "dev", "debug", "test", "release" }
+
+local PROFILES: { [string]: true } = {}
+for _, Name in ORDER do
+	PROFILES[Name] = true
+end
 
 --> Release, not dev. A statement marked dev is one somebody meant to keep out of a shipped game, and
 --> a build that forgot the flag should leave it out rather than ship it.
 local DEFAULT: Profile = "release"
 
 local Attributes = {}
+
+Attributes.PROFILES = table.freeze(table.clone(ORDER))
 
 ---- Public Functions ----
 

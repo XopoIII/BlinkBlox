@@ -32,6 +32,41 @@ RunClosure("Completion offers keywords, primitives and declared names where each
 		{ Text = "type A = u8", Cursor = 12, Expect = "" },
 		--> Nor does a keyword in the middle of a line.
 		{ Text = "type A str", Cursor = 11, Expect = "" },
+		{ Text = "op", Cursor = 3, Expect = "option" },
+		--> An option's name follows `option`, and its value `=` where the language fixes it.
+		{
+			Text = "option Max",
+			Cursor = 11,
+			Expect = "MaxEventsPerPacket,MaxInstancesPerPacket,MaxPacketSize,MaxUnreliableSize",
+		},
+		{ Text = "option Inb", Cursor = 11, Expect = "InboundBurst,InboundBytesPerSecond" },
+		{ Text = "option Casing = S", Cursor = 18, Expect = "Snake" },
+		{ Text = "option Predict = t", Cursor = 19, Expect = "true" },
+		{ Text = "option MaxPacketSize = 8", Cursor = 25, Expect = "" },
+		{ Text = "option ServerOutput = s", Cursor = 24, Expect = "" },
+		--> An attribute opens a line, and a profile goes inside it.
+		{ Text = "@p", Cursor = 3, Expect = "@profile" },
+		{ Text = '@profile("de', Cursor = 13, Expect = "dev,debug" },
+		--> An event or a function opens its lines with its fields, each once, and no keywords.
+		{ Text = "event X {\n  R", Cursor = 14, Expect = "Rate" },
+		{ Text = "function X {\n  C", Cursor = 17, Expect = "Concurrency" },
+		{ Text = "event X {\n  C", Cursor = 14, Expect = "Call" },
+		{ Text = "event X {\n  From: Client,\n  F", Cursor = 30, Expect = "" },
+		{ Text = "event X {\n  Data: struct { Type: u8 },\n  T", Cursor = 43, Expect = "Type" },
+		{ Text = '@profile("dev") event X {\n  Po', Cursor = 31, Expect = "Poll" },
+		{ Text = "function X {\n  Y", Cursor = 17, Expect = "Yield" },
+		--> A field takes its own values, a numeric one nothing, and `Data` a type.
+		{ Text = "event X {\n  From: C", Cursor = 20, Expect = "Client" },
+		{ Text = "event X {\n  Call: Many", Cursor = 23, Expect = "ManySync,ManyAsync" },
+		{ Text = "function X {\n  Yield: P", Cursor = 24, Expect = "Promise" },
+		{ Text = "event X {\n  Poll: t", Cursor = 20, Expect = "true" },
+		{ Text = "event X {\n  Rate: 1", Cursor = 20, Expect = "" },
+		{ Text = "function X {\n  Return: bo", Cursor = 26, Expect = "boolean" },
+		--> A brace in a comment or a string opens nothing.
+		{ Text = "-- event X {\nstr", Cursor = 17, Expect = "struct" },
+		{ Text = 'option ServerOutput = "{"\nstr', Cursor = 30, Expect = "struct" },
+		--> Inside a struct, a field's name is the author's: keywords as before.
+		{ Text = "struct S {\n  Type: u", Cursor = 21, Expect = "u8,u16,u24,u32,unknown" },
 	}
 
 	for _, Case in Cases do
@@ -50,6 +85,14 @@ RunClosure("Tab expands the chosen item over the word it completes", function()
 	local Cases = {
 		{ Text = "str\t", Tab = 4, Insert = "struct %s {}", Expect = "struct  {}", Cursor = 8 },
 		{ Text = "type A = u\tx", Tab = 11, Insert = "u16", Expect = "type A = u16x", Cursor = 13 },
+		{
+			Text = '@profile("de\t',
+			Tab = 13,
+			Insert = '@profile("dev")',
+			Expect = '@profile("dev")',
+			Cursor = 16,
+		},
+		{ Text = "option Ca\t", Tab = 10, Insert = "Casing = ", Expect = "option Casing = ", Cursor = 17 },
 	}
 
 	for _, Case in Cases do

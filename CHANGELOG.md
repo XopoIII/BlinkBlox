@@ -7,6 +7,36 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+**The wire format does not change.**
+
+### Added
+
+- The Studio plugin's editor completes more than keywords and types. `option` is offered at the
+  start of a line, followed by every option's name and, where the language fixes it, its value.
+  Inside an `event` or a `function` a line starts with the fields it takes and has not been given
+  yet, and each field is followed by the values it accepts, where before every `:` offered the
+  primitive types. `@profile` is offered at the start of a line, and a profile inside it.
+
+### Fixed
+
+- `--help` said `--compact` prints the full message after the compacted one. It prints only the one
+  line.
+
+### Documentation
+
+- The docs, the README and the llms files were checked against every release from 0.26.0 on. What
+  they had wrong: a malformed event ending only itself (it ends its packet), `InboundBurst`'s default
+  and minimum, the open side of an `f16` or `f24` range, `--json` on the runs that print plain text,
+  the names `E3005` covers, and the release `E3030` arrived in. What they had left out: `Concurrency`
+  in the server's check order and the rate-limit handler, send-side length checks below a minimum,
+  `f24`'s subnormals, trailing commas and strict modules. The version strings, the benchmark tables
+  and the wire table are brought up to 0.36.2.
+- `llms-full.txt` and `llms-small.txt` follow the sidebar's order, with the benchmarks and the
+  changelog last in the full file and left out of the small one. The small one keeps its notes,
+  which carry rules, and `llms.txt` carries a short brief.
+
 ## 0.36.2 — 2026-09-25
 
 **The wire format does not change.**

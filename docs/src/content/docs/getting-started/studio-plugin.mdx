@@ -280,9 +280,15 @@ which is how `Hit:` reads differently from a reference to `Hit`.
 A popup offers completions as you type:
 
 - At the start of a line, the declaration keywords: `set`, `map`, `type`, `enum`, `struct`,
-  `event`, `function`, `import`, `scope` and `export`.
-- After a field's `:` or a declaration's `=`, the primitive types and the names your schema declares
-  -- as of the last time it parsed without an error.
+  `event`, `function`, `import`, `scope`, `export` and `option`, and the `@profile` attribute.
+  Inside `@profile("`, the four [profiles](/BlinkBlox/language/profiles/).
+- After `option`, every option's name, and after `option Name =` its value where the language fixes
+  it: `true` or `false`, or a `Casing`.
+- At the start of a line inside an `event` or a `function`, the fields it takes and has not been given
+  yet -- `From`, `Type`, `Call`, `Rate`, `Concurrency` and the rest. After one of them and its `:`,
+  the values it accepts: `Client` or `Server`, `Reliable`, `Coroutine`, and so on.
+- After `Data:`, `Return:`, a struct field's `:` or a declaration's `=`, the primitive types and the
+  names your schema declares -- as of the last time it parsed without an error.
 
 <kbd>Tab</kbd> accepts the highlighted item and <kbd>Up</kbd> / <kbd>Down</kbd> move through the
 list. A keyword expands to its skeleton with the cursor where the name goes: `struct` becomes a

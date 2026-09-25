@@ -1,9 +1,12 @@
 --!strict
---- What the editor offers to complete at the cursor: a keyword at the start of a line, and after a
---- `:` or `=` a primitive or a name the schema declares.
+--- What the editor offers to complete at the cursor: a keyword or `@profile` at the start of a line,
+--- an option's name and value, an event's or function's field and the values it takes, and where a
+--- type goes, a primitive or a name the schema declares.
 ---
 --- A pure function of the text, the cursor and the declared names, so it can be checked outside
 --- Studio; the popup that shows the result stays in init.luau.
+local Attributes = require("@compiler/Modules/Attributes")
+local Grammar = require("@compiler/Modules/Grammar")
 local Settings = require("@compiler/Settings")
 local Utility = require("./Utility")
 
@@ -41,6 +44,35 @@ local KEYWORDS: { Symbol } = {
 	{ Label = "import", Insert = "import %s as " },
 	{ Label = "scope", Insert = "scope %s {}" },
 	{ Label = "export", Insert = "export " },
+	{ Label = "option", Insert = "option %s = " },
+}
+
+--> Every option but the deprecated `UseColon`, in name order.
+local OPTIONS: { Symbol } = {}
+for Name in Grammar.OPTIONS do
+	if Name ~= "UseColon" then
+		table.insert(OPTIONS, { Label = Name, Insert = `{Name} = ` })
+	end
+end
+table.sort(OPTIONS, function(a, b)
+	return a.Label < b.Label
+end)
+
+--> What an option's value can be, where the language fixes it.
+local BOOLEANS = { "true", "false" }
+local OPTION_VALUES: { [string]: { string } } = {
+	Casing = { "Pascal", "Camel", "Snake" },
+}
+for Name, Type in Grammar.OPTIONS do
+	if Type == "Boolean" then
+		OPTION_VALUES[Name] = BOOLEANS
+	end
+end
+
+--> The fields of an `event` and of a `function`, in the order the docs write them.
+local FIELDS: { [string]: { Grammar.EventOption } } = {
+	event = Grammar.EVENT,
+	["function"] = Grammar.FUNCTION,
 }
 
 --> Shortest first, so the closest match to what has been typed is at the top. Labels of one length go
@@ -62,6 +94,68 @@ local function Extends(Label: string, Typed: string): boolean
 	return Stub == Typed and Stub ~= Label
 end
 
+--- The declaration whose braces hold `Position`, if it is an `event` or a `function`, and the text of
+--- its body up to there. Comments and strings are skipped, so a brace in either does not count.
+local function Enclosing(Text: string, Position: number): (string?, string)
+	local Opened: { number } = {}
+	local Index = 1
+	--> Called on every keystroke, so it jumps between the characters that matter rather than stepping
+	--> through each one.
+	while true do
+		local At = string.find(Text, '[{}"%-]', Index)
+		if not At or At >= Position then
+			break
+		end
+
+		local Character = string.sub(Text, At, At)
+		if Character == "-" and string.sub(Text, At + 1, At + 1) == "-" then
+			local Level = string.match(Text, "^%-%-%[(=*)%[", At)
+			local Close = if Level then `]{Level}]` else "\n"
+			local _, End = string.find(Text, Close, At + 2, true)
+			Index = (End or #Text) + 1
+		elseif Character == '"' then
+			local _, End = string.find(Text, '"', At + 1, true)
+			Index = (End or #Text) + 1
+		else
+			if Character == "{" then
+				table.insert(Opened, At)
+			elseif Character == "}" then
+				table.remove(Opened)
+			end
+			Index = At + 1
+		end
+	end
+
+	local Brace = Opened[#Opened]
+	if not Brace then
+		return nil, ""
+	end
+
+	--> The header is what precedes the brace in its statement: `event Hit {`, after any attribute.
+	--> Found by walking back from the brace: a pattern anchored only at the end tries every start.
+	local From = Brace - 1
+	while From > 0 and not string.find("{}\n", string.sub(Text, From, From), 1, true) do
+		From -= 1
+	end
+	local Header = string.sub(Text, From + 1, Brace - 1)
+	Header = string.gsub(Header, "^%s*@%a+%b()", "")
+	local Keyword = string.match(Header, "^%s*(%a+)%s+[%a_][%w_]*%s*$")
+
+	if Keyword and FIELDS[Keyword] then
+		--> A nested struct's own fields are not the declaration's.
+		local Body = string.gsub(string.sub(Text, Brace + 1, Position - 1), "%b{}", "")
+		return Keyword, Body
+	end
+
+	return nil, ""
+end
+
+local function Offer(Items: { Item }, Icon: string, Typed: string, Label: string, Insert: string)
+	if Extends(Label, Typed) then
+		table.insert(Items, { Icon = Icon, Label = Label, Insert = Insert })
+	end
+end
+
 local Completion = {}
 
 --- The items to offer with the cursor at `Cursor` in `Text`. `Symbols` are the names the last
@@ -76,33 +170,86 @@ function Completion.Match(Text: string, Cursor: number, Symbols: { [string]: tru
 		return Items
 	end
 
-	--> A keyword opens a line.
-	if Word.Index == 1 then
-		for _, Symbol in KEYWORDS do
-			if Extends(Symbol.Label, Typed) then
-				table.insert(Items, { Icon = ICONS.Keyword, Label = Symbol.Label, Insert = Symbol.Insert })
-			end
+	local Block, Body = Enclosing(Text, Line.Start + Word.Start - 1)
+
+	--> A profile inside `@profile("`: the whole word is replaced, so the insert is the whole attribute.
+	local Profile = string.match(Typed, '^@profile%("(%a*)$')
+	if Profile and Word.Index == 1 then
+		for _, Name in Attributes.PROFILES do
+			Offer(Items, ICONS.Keyword, Profile, Name, `@profile("{Name}")`)
 		end
+
+		return Items
 	end
 
-	--> A type follows a field's `:` or a declaration's `=`.
+	if Word.Index == 1 then
+		if Block then
+			--> A field opens a line in an event or a function, once each.
+			for _, Field in FIELDS[Block] do
+				local Written = string.find(Body, `%f[%w_]{Field.Key}%s*:`)
+				if not Written then
+					Offer(Items, ICONS.Field, Typed, Field.Key, `{Field.Key}: `)
+				end
+			end
+		else
+			--> A keyword or an attribute opens a line everywhere else.
+			for _, Symbol in KEYWORDS do
+				Offer(Items, ICONS.Keyword, Typed, Symbol.Label, Symbol.Insert)
+			end
+			Offer(Items, ICONS.Snippet, Typed, "@profile", '@profile("%s")')
+		end
+
+		return Items
+	end
+
 	local Previous = Utility.GetWordRangeBeforePosition(Line.Text, Word.Start - 1)
 	if Previous.Text == "" then
 		return Items
 	end
 
+	--> `option` is followed by the option's name, and `option Name =` by its value.
+	local Leading = Utility.GetWordRangeAtPosition(Line.Text, 1)
+	if Leading.Text == "option" then
+		if Word.Index == 2 then
+			for _, Symbol in OPTIONS do
+				Offer(Items, ICONS.Keyword, Typed, Symbol.Label, Symbol.Insert)
+			end
+		elseif Word.Index == 4 and Previous.Text == "=" then
+			local Name = Utility.GetWordRangeBeforePosition(Line.Text, Previous.Start - 1).Text
+			local Values: { string } = OPTION_VALUES[Name] or {}
+			for _, Value in Values do
+				Offer(Items, ICONS.Keyword, Typed, Value, Value)
+			end
+		end
+
+		return Items
+	end
+
+	--> A field of an event or a function takes its own values, and `Data` and `Return` a type.
+	local Key = string.match(Previous.Text, "^([%a_][%w_]*):$")
+	if Block and Key then
+		for _, Field in FIELDS[Block] do
+			if Field.Key == Key and #Field.Values > 0 then
+				for _, Value in Field.Values do
+					Offer(Items, ICONS.Keyword, Typed, tostring(Value), tostring(Value))
+				end
+
+				return Items
+			elseif Field.Key == Key and Field.Numeric then
+				return Items
+			end
+		end
+	end
+
+	--> A type follows a field's `:` or a declaration's `=`.
 	if string.match(Previous.Text, ":$") or Previous.Text == "=" then
 		for _, Symbol in PRIMITIVES do
-			if Extends(Symbol.Label, Typed) then
-				table.insert(Items, { Icon = ICONS.Primitive, Label = Symbol.Label, Insert = Symbol.Label })
-			end
+			Offer(Items, ICONS.Primitive, Typed, Symbol.Label, Symbol.Label)
 		end
 
 		if Symbols then
 			for Symbol in Symbols do
-				if Extends(Symbol, Typed) then
-					table.insert(Items, { Icon = ICONS.Variable, Label = Symbol, Insert = Symbol })
-				end
+				Offer(Items, ICONS.Variable, Typed, Symbol, Symbol)
 			end
 		end
 	end
