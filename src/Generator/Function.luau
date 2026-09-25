@@ -206,12 +206,19 @@ function Declarations.Function(Declaration: Parser.Function)
 			:End()
 			:End()
 
-		TrueListener:Compare("Success", "true", "Not")
+		TrueListener
+			:Compare("Success", "true", "Not")
 			:Line("local Position = Allocate(3)")
 			:Line(`buffer.writeu8(SendBuffer, Position, {Index})`)
 			:Line(`buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)`)
 			:Line(`buffer.writeu8(SendBuffer, Position + 2, 0)`)
-			:Line(`warn(\`"{Name}" encountered an error, \{Error\}\`)`)
+			--> On the server the error is the game's to hear through SetListenerErrorHandler, a throwing
+			--> return serialiser included; the warning is what it gets without one, as before.
+			:Line(
+				if OnServer
+					then `if not ListenerFailed(Player, "{Name}", Error) then warn(\`"{Name}" encountered an error, \{Error\}\`) end`
+					else `warn(\`"{Name}" encountered an error, \{Error\}\`)`
+			)
 			:End()
 
 		--> The reply is written, success or failure: the call is no longer running.

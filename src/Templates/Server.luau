@@ -105,6 +105,7 @@ Players.PlayerRemoving:Connect(function(Player)
     InboundBudgets[Player] = nil
     Reports[Player] = nil
     Drops[Player] = nil
+    ListenerErrors[Player] = nil
     InFlight[Player] = nil
     InFlightRefused[Player] = nil
 

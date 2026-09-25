@@ -108,8 +108,8 @@ Each declaration mirrors the Luau API on its side, with the same [`Casing`](/Bli
 
 The full list of functions on each side is in [Generated API](/BlinkBlox/reference/generated-api/).
 
-The three handler setters, `SetRateLimitHandler`, `SetDecodeErrorHandler` and `SetPacketDropHandler`,
-are declared on both sides, in the module's `Casing`. Before 0.37.0 the first two were missing from
+The four handler setters, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` and
+`SetListenerErrorHandler`, are declared on both sides, in the module's `Casing`. Before 0.37.0 the first two were missing from
 the `.d.ts` and had to be reached through a cast.
 
 ```ts title="src/server/security.server.ts"

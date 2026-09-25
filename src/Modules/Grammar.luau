@@ -188,6 +188,7 @@ Grammar.RESERVED = {
 	SetRateLimitHandler = true,
 	SetDecodeErrorHandler = true,
 	SetPacketDropHandler = true,
+	SetListenerErrorHandler = true,
 }
 
 --- Luau's built-in type names. A declared type becomes an exported Luau type of the same name, and
@@ -284,6 +285,8 @@ Grammar.WRAPPER_NAMES = {
 	Listener = true,
 	ListenerRan = true,
 	ListenerFailure = true,
+	ListenerFailed = true,
+	RunListener = true,
 	SerdesEvent = true,
 	Spawn = true,
 	pcall = true,
