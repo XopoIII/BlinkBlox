@@ -21,16 +21,21 @@ next, so a hostile packet is refused as early as possible.
 
 | Order | Check | On failure |
 |---|---|---|
-| 1 | The remote's arguments are a `buffer` and a table. | Dropped unread, warned. |
-| 2 | The packet is at most [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) bytes (8192). | Dropped unread, warned. |
-| 3 | The player's [inbound byte budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) can pay for it (65536 bytes a second, each packet costing at least 128). | Dropped unread, warned, rate-limit handler called with `Event = nil`. |
-| 4 | It carries at most [`MaxInstancesPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) instance references (256). | Dropped unread, warned. |
+| 1 | The remote's arguments are a `buffer` and a table. | Dropped unread, reported as `Malformed`. |
+| 2 | The packet is at most [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) bytes (8192). | Dropped unread, reported as `Oversized`. |
+| 3 | The player's [inbound byte budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) can pay for it (65536 bytes a second, each packet costing at least 128). | Dropped unread, reported as `Budget`. |
+| 4 | It carries at most [`MaxInstancesPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) instance references (256). | Dropped unread, reported as `Instances`. |
 | 5 | Decoding runs one event at a time, and stops when the player has left. | The rest of the packet is skipped. |
-| 6 | At most [`MaxEventsPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) events are decoded from one packet (64). | The rest of the packet is dropped, warned. |
+| 6 | At most [`MaxEventsPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) events are decoded from one packet (64). | The rest of the packet is dropped, reported as `Events`. |
 | 7 | Each event is decoded inside a `pcall`. An index that names no event, a truncated payload, a length or count that the packet cannot back, a value outside its range or an Instance of the wrong class all fail here. | The rest of the packet is dropped; your decode-error handler is called. |
 | 8 | The event's [rate bucket](/BlinkBlox/language/events/#rate-burst) has a token, if the event has a rate. | The event is dropped before any listener runs, and a function call is answered with a failure; the rate-limit handler is called. |
 | 9 | A function with [`Concurrency`](/BlinkBlox/language/functions/#concurrency) has fewer than that many of this player's calls still running. | The call is answered with a failure, warned; the rate-limit handler is called. |
 | 10 | A reliable event or a function call with no listener is queued, up to 256. | Further events are dropped silently; a further call is answered with a failure. |
+
+"Reported" in steps 1 to 4 and 6 means your
+[packet-drop handler](/BlinkBlox/reference/generated-api/#module-members) is called with that reason, or, without one, a warning
+is printed -- and for `Budget` the rate-limit handler is called with `Event = nil`, as it was before
+0.37.0.
 
 Some of what step 7 covers is worth knowing in detail:
 
@@ -148,7 +153,7 @@ None of this needs an option. The limits it uses have defaults you can change, b
    |---|---|---|
    | `MaxPacketSize` | `8192` | Bytes in one packet. |
    | `MaxEventsPerPacket` | `64` | Events decoded from one packet. |
-   | `MaxInstancesPerPacket` | `256` | Instance and `unknown` values carried by one packet. |
+   | `MaxInstancesPerPacket` | `256` | Instance and `unknown` values carried by one packet. `0` if clients send none. |
    | `InboundBytesPerSecond` | `8 * MaxPacketSize` (65536) | Bytes a second each player's packets may cost. |
    | `InboundBurst` | the larger of the two above (65536) | The most budget a player may bank. |
 
@@ -161,11 +166,13 @@ None of this needs an option. The limits it uses have defaults you can change, b
 
    Whatever you allow a real client, you also allow an attacker. Raise a limit only as far as your
    traffic needs. `InboundBurst` may not be below `MaxPacketSize`, nor below 128 (`E2003`), or the
-   largest packet could never be afforded. See
+   largest packet could never be afforded. If your clients never send an `Instance` or `unknown`, set
+   `MaxInstancesPerPacket = 0`: any packet that carries one is then refused unread, and a client-sent
+   declaration that carries one fails the build (`E3031`). See
    [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket)
    and [`InboundBytesPerSecond`](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst).
 
-4. **Install the two handlers.**
+4. **Install the handlers.**
 
    The server warns about refused traffic, once a second per player. To act on it -- log it, flag the
    account, kick -- give it a handler. Nothing is kicked automatically: a false positive under server
@@ -174,7 +181,7 @@ None of this needs an option. The limits it uses have defaults you can change, b
    ```luau title="Security.server.luau"
    local Net = require(ServerScriptService.Network.Server)
 
-   -- Event is nil when whole packets were refused over the inbound byte budget.
+   -- Event is nil for packets over the inbound byte budget, while no packet-drop handler is set.
    -- Refused counts the refusals this call stands for, since the last one.
    Net.SetRateLimitHandler(function(Player: Player, Event: string?, Refused: number)
        Analytics:Record(Player, "RateLimited", Event, Refused)
@@ -184,10 +191,26 @@ None of this needs an option. The limits it uses have defaults you can change, b
    Net.SetDecodeErrorHandler(function(Player: Player, Event: string?, Failure: string)
        Analytics:Record(Player, "DecodeFailure", Event, Failure)
    end)
+
+   -- Packets refused whole, before decoding, or cut short at the event cap. No honest client
+   -- sends a malformed, oversized or instance-stuffed packet, so these are worth a strike.
+   Net.SetPacketDropHandler(function(Player: Player, Reason, Refused: number, Detail: number)
+       Analytics:Record(Player, "PacketDropped", Reason, Refused, Detail)
+       if Reason ~= "Budget" then
+           Strikes:Add(Player, Refused)
+       end
+   end)
    ```
 
-   Both handlers are called on a thread of their own, at most once a second per player (and per
-   event), so a handler that yields or throws does not disturb decoding. Without a decode-error handler
+   `Reason` is `"Malformed"`, `"Oversized"`, `"Budget"`, `"Instances"` or `"Events"`, and `Refused`
+   counts the packets this call stands for. `Detail` is the packet's length in bytes for `Oversized`
+   and `Budget`, its instance count for `Instances`, the events decoded for `Events`, and 0 for
+   `Malformed`. With a packet-drop handler installed, those refusals are no longer printed, and
+   `Budget` goes to it instead of to the rate-limit handler. `Budget` can come from an honest client
+   after a network hitch, so weigh it lightly.
+
+   All three handlers are called on a thread of their own, at most once a second per player (and per
+   event or reason), so a handler that yields or throws does not disturb decoding. Without a decode-error handler
    the server says nothing about packets that fail to decode, so that a client sending garbage every
    frame cannot fill the output. See
    [Packets that cannot be decoded](/BlinkBlox/language/events/#packets-that-cannot-be-decoded).

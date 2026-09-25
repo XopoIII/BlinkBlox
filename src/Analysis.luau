@@ -11,6 +11,7 @@
 
 local Error = require("./Modules/Error")
 local Grammar = require("./Modules/Grammar")
+local InstanceSlots = require("./Modules/InstanceSlots")
 local Lexer = require("./Lexer")
 local Size = require("./Modules/Size")
 local Walk = require("./Modules/Walk")
@@ -446,6 +447,7 @@ local function Run(Source: string, File: string?, Declarations: { Declaration },
 	CostlessRepetitions(Source, File, Declarations)
 	MapKeys(Source, File, Declarations)
 	Rotations(Source, File, Declarations)
+	InstanceSlots.Check(Source, File, Declarations, Options)
 end
 
 return {

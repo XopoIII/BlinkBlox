@@ -22,7 +22,8 @@ A few rules hold for all of them:
   may each set `MaxPacketSize`, but not alongside an unmarked setting of it.
 - **Values are typed.** A boolean option takes `true` or `false`, a path takes a quoted string,
   `Casing` takes a bare word, and every **numeric option takes a positive whole number** -- `0`,
-  `-5` and `0.5` are all refused (`E2003`). An unknown option name is refused too, with the list of
+  `-5` and `0.5` are all refused (`E2003`), except that `MaxInstancesPerPacket` may be `0`. An
+  unknown option name is refused too, with the list of
   the ones that exist.
 
 ## At a glance
@@ -107,6 +108,7 @@ option Casing = Camel
 | `StepReplication` | `stepReplication` | `step_replication` |
 | `SetRateLimitHandler` | `setRateLimitHandler` | `set_rate_limit_handler` |
 | `SetDecodeErrorHandler` | `setDecodeErrorHandler` | `set_decode_error_handler` |
+| `SetPacketDropHandler` | `setPacketDropHandler` | `set_packet_drop_handler` |
 
 ### `RemoteScope`
 Default: `""`
@@ -362,8 +364,20 @@ option MaxInstancesPerPacket = 512
 ```
 
 Before any of that, both remotes check that what arrived is a buffer and a table at all -- a client
-can call `FireServer` with any arguments it likes. Each kind of refusal warns at most once a second
-per player, so a client sending garbage every frame cannot flood the output.
+can call `FireServer` with any arguments it likes. Each kind of refusal is reported at most once a
+second per player, so a client sending garbage every frame cannot flood the output: to the
+[packet-drop handler](/BlinkBlox/reference/generated-api/#module-members) when the game installed
+one, as a warning when it did not.
+
+`MaxInstancesPerPacket` may be `0`, the one limit that can: a game whose clients never send an
+`Instance` or `unknown` says so, and the server refuses every packet that carries one before reading
+it. A client-sent declaration that carries one -- the data of a `From: Client` event or function, or
+the return of a `From: Server` function -- is then a compile error (`E3031`), since none of its
+packets could arrive. Every other numeric option is at least 1.
+
+```blink
+option MaxInstancesPerPacket = 0
+```
 
 <Aside>
 The defaults are generous for real traffic -- a client batches a handful of events per frame into a
@@ -401,9 +415,11 @@ Every unreliable `Fire` is a packet of its own. A client that fires more than ab
 events a frame will reach the default budget; raise `InboundBytesPerSecond` for it.
 </Aside>
 
-Refusals are reported the way refused events are: a warning at most once per player per second, and
-a call to [`SetRateLimitHandler`](/BlinkBlox/language/events/#rate-burst)'s handler with `Event` set to
-`nil`.
+Refusals are reported at most once per player per second. With a
+[packet-drop handler](/BlinkBlox/reference/generated-api/#module-members) installed they go to it,
+with the reason `Budget` and the refused packet's length. Without one they are reported the way
+refused events are: a warning, and a call to
+[`SetRateLimitHandler`](/BlinkBlox/language/events/#rate-burst)'s handler with `Event` set to `nil`.
 
 ## Rate limits
 

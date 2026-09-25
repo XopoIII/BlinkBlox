@@ -43,6 +43,7 @@ in the same Luau environment errors: `An instance of BlinkBlox is already runnin
 | `StepReplication()` | Sends every player's queued reliable traffic. | Sends the client's queued reliable traffic. |
 | `SetRateLimitHandler(Handler?)` | `Handler: (Player: Player, Event: string?, Refused: number) -> ()` | Accepted and ignored: the client does not rate-limit. |
 | `SetDecodeErrorHandler(Handler?)` | `Handler: (Player: Player, Event: string?, Failure: string) -> ()` | `Handler: (Event: string?, Failure: string) -> ()` |
+| `SetPacketDropHandler(Handler?)` | `Handler: (Player: Player, Reason: "Malformed" \| "Oversized" \| "Budget" \| "Instances" \| "Events", Refused: number, Detail: number) -> ()` | Accepted and ignored: the client does not refuse packets. |
 
 - `StepReplication` is connected to `RunService.Heartbeat` unless
   [`ManualReplication`](/BlinkBlox/language/options/#manualreplication) is set, in which case you call
@@ -52,11 +53,28 @@ in the same Luau environment errors: `An instance of BlinkBlox is already runnin
   `Rate`, a call over its function's [`Concurrency`](/BlinkBlox/language/functions/#concurrency)
   (with the function's name as `Event`), and whole packets over the
   [inbound byte budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst), with `Event`
-  `nil`.
+  `nil` -- the last only while no packet-drop handler is installed.
+- The packet-drop handler hears every packet the server refuses before decoding it, and every packet
+  cut short at the event cap. It is called at most once a second per player and reason, with
+  `Refused` the packets refused since the last call, and `Detail`:
+
+  | `Reason` | Refused because | `Detail` |
+  |---|---|---|
+  | `Malformed` | the remote's arguments were not a buffer and a table | 0 |
+  | `Oversized` | the packet was over [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | its length in bytes |
+  | `Budget` | the player's [inbound byte budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) could not pay for it | its length in bytes |
+  | `Instances` | it carried more than `MaxInstancesPerPacket` Instances | its instance count |
+  | `Events` | `MaxEventsPerPacket` events were decoded and the rest dropped | the events decoded |
+
+  With one installed, the server prints none of these warnings, and `Budget` no longer reaches the
+  rate-limit handler. Without one, both behave as before 0.37.0. Nothing but a modified client sends
+  a malformed, oversized or instance-stuffed packet; an honest one can overrun its budget after a
+  network hitch.
 - The decode-error handler receives the event the packet claimed to carry, or `nil` if its index
   named none. On the server it is called at most once a second per player, channel and event, and
   without one the server is silent. On the client, without one, each failure is a warning.
-- Both handlers run on a thread of their own. Pass `nil` to remove one.
+- Every handler runs on a thread of its own, so one that yields or throws does not disturb
+  decoding. Pass `nil` to remove one.
 
 ## Events
 
@@ -199,6 +217,7 @@ your own declarations are never changed.
 | `StepReplication` | `stepReplication` | `step_replication` |
 | `SetRateLimitHandler` | `setRateLimitHandler` | `set_rate_limit_handler` |
 | `SetDecodeErrorHandler` | `setDecodeErrorHandler` | `set_decode_error_handler` |
+| `SetPacketDropHandler` | `setPacketDropHandler` | `set_packet_drop_handler` |
 
 ## Edit mode
 
@@ -212,7 +231,7 @@ Flipbook) -- no remotes exist, and both modules return stubs that keep the real 
 | `Iter`, `Next` | returns an iterator that ends at once, so a `for` loop runs zero times |
 | `Predict` | does nothing |
 | `Invoke` | does nothing and returns `nil` |
-| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler` | do nothing |
+| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | do nothing |
 | exported `Read`, `Write` | work normally |
 
 The stub is returned before the module checks which side it is on, so a story can require either
@@ -228,7 +247,7 @@ its result (`:andThen(...)`) errors in a story. Guard it with `RunService:IsRunn
 
 | Name | Why |
 |---|---|
-| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler` | Module members. A top-level declaration may not take these names (`E3005`). |
+| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | Module members. A top-level declaration may not take these names (`E3005`). |
 | Built-in Luau types: `any`, `never`, `number`, `thread` | A declared type is exported under its own name, and Luau refuses `export type number = number` (`E3005`, since 0.32.0). |
 | Roblox types the module uses: `Player`, `RemoteEvent`, `UnreliableRemoteEvent`, `Vector3`, and any class the schema names in `Instance(...)` | A top-level type of that name would refer to itself and shadow every use of the Roblox type in the module (`E3005`, since 0.32.0). A type inside a `scope` is exported with the scope's name in front, so it may take these names. |
 | BlinkBlox's own types: `boolean`, `buffer`, `string`, `unknown`, `Instance`, `CFrame`, `Color3`, `DateTime`, `BrickColor` and the rest | The parser reads them as primitives, so a declaration cannot be named after one (`E2002`). |

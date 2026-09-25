@@ -108,23 +108,19 @@ Each declaration mirrors the Luau API on its side, with the same [`Casing`](/Bli
 
 The full list of functions on each side is in [Generated API](/BlinkBlox/reference/generated-api/).
 
+The three handler setters, `SetRateLimitHandler`, `SetDecodeErrorHandler` and `SetPacketDropHandler`,
+are declared on both sides, in the module's `Casing`. Before 0.37.0 the first two were missing from
+the `.d.ts` and had to be reached through a cast.
+
+```ts title="src/server/security.server.ts"
+import { SetPacketDropHandler } from "./network";
+
+SetPacketDropHandler((player, reason, refused, detail) => warn(player.Name, reason, refused, detail));
+```
+
 ## Current gaps
 
 The declarations lag the Luau API in a few places. Until they are closed, work around them:
-
-- **The two server handlers are not declared.** `SetRateLimitHandler` and `SetDecodeErrorHandler`
-  exist on the module but not in the `.d.ts`. Cast to reach them:
-
-  ```ts title="src/server/security.server.ts"
-  import * as Network from "./network";
-
-  const Handlers = Network as unknown as {
-  	SetRateLimitHandler(handler: (player: Player, event: string | undefined, refused: number) => void): void;
-  	SetDecodeErrorHandler(handler: (player: Player, event: string | undefined, failure: string) => void): void;
-  };
-
-  Handlers.SetRateLimitHandler((player, event, refused) => warn(player.Name, event, refused));
-  ```
 
 - **Schema types are not exported.** A named type such as `struct Pos` is declared in the `.d.ts` but
   not exported, and neither is an `export`ed type's `Read`/`Write` pair. Derive a type from a function

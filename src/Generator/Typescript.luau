@@ -262,6 +262,23 @@ function Generators.Tree(State: State, Tree: { Parser.Declaration })
 	end
 end
 
+--- The module members that install the game's handlers, typed as the Luau module types them. The
+--- client's rate-limit and packet-drop setters take the server's handler type and ignore it, so code
+--- shared between the two sides can install one without branching.
+local DROP_REASON = `"Malformed" | "Oversized" | "Budget" | "Instances" | "Events"`
+
+local function HandlerDeclarations(FileContext: Context, Casing: Settings.Cases): { string }
+	local Decode = if FileContext == "Server"
+		then "(player: Player, event: string | undefined, failure: string) => void"
+		else "(event: string | undefined, failure: string) => void"
+
+	return {
+		`export declare const {Casing.SetRateLimitHandler}: (handler?: (player: Player, event: string | undefined, refused: number) => void) => void`,
+		`export declare const {Casing.SetDecodeErrorHandler}: (handler?: {Decode}) => void`,
+		`export declare const {Casing.SetPacketDropHandler}: (handler?: (player: Player, reason: {DROP_REASON}, refused: number, detail: number) => void) => void`,
+	}
+end
+
 return function(FileContext: Context, AbstractSyntaxTree: AbstractSyntaxTree): string
 	local Options = AbstractSyntaxTree.Value.Options
 	local Casing = Settings.GetCasing(Options.Casing or "Pascal" :: any)
@@ -269,6 +286,9 @@ return function(FileContext: Context, AbstractSyntaxTree: AbstractSyntaxTree): s
 
 	StringBuilder.Push(VERSION_HEADER)
 	StringBuilder.Push(`export declare const {Casing.StepReplication}: () => void`)
+	for _, Line in HandlerDeclarations(FileContext, Casing) do
+		StringBuilder.Push(Line)
+	end
 
 	if _G.VERSION == nil then
 		StringBuilder.Push(TESTING_HEADER)

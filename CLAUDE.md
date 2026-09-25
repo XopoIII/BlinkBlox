@@ -282,6 +282,20 @@ Studio benchmark gained Packet, whose hard-coded 8000-byte inbound cap the harne
 the bench's schema raises BlinkBlox's own limits, and `--local`, since the download fetches the
 latest release and that had lagged two versions behind main.
 
+0.37.0 came out of a downstream game that wanted to strike and ban, and it is the thesis again: the
+server refused hostile packets and told only the output. A packet refused before decoding --
+malformed arguments, oversized, over the inbound budget, too many instances -- or cut short at the
+event cap now goes to `SetPacketDropHandler` as `(Player, Reason, Refused, Detail)`, once a second per
+player and reason, through one helper, `ReportDrop`, on the schedule the warnings already kept. With
+no handler installed nothing changes, word for word, and Budget still reaches the rate-limit handler
+with `Event` nil -- a game written against 0.27 to 0.36 hears what it always heard; with one, the
+game has said where it wants to hear about packets and the warnings stop. `MaxInstancesPerPacket`
+may be 0, and a client-sent Instance beside it is `E3031`, a check that walks imports because they
+share the remote. Adding it took `src/Templates/Server.luau` to the size cap, so the server's limits
+moved into `src/Templates/Limits.luau`, spliced at a second `-- SPLIT --`. The TypeScript output had
+never declared the two older handlers; it declares all three now. Neither the wire nor the schema
+signature changed.
+
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of
@@ -434,9 +448,14 @@ the config.
 
 ## Downstream
 
-`dibby-roblox` was the only consumer, and it is archived. Nothing outside this repository
-post-processes the generated text any more, so **the emitted output shape is no longer frozen** —
-the old warning about an anchor-matching patch script no longer applies.
+`dibby-roblox` was the first consumer, and it is archived. The consumer now is **Grabby Pit**, the
+owner's Roblox game (the `gg` repository on github.com/XopoIII): it compiles its `net/Game.blink` with
+BlinkBlox and uses `SetPacketDropHandler` to strike and ban on packet-level refusals, beside the
+rate-limit and decode-error handlers. A change to a handler's signature, a `Reason`, or which
+refusals reach which handler is a change that game feels; say so in the CHANGELOG.
+
+Nothing outside this repository post-processes the generated text, so **the emitted output shape is
+not frozen** — the old warning about an anchor-matching patch script no longer applies.
 
 What replaced it as the safety net is `test/Golden/`: a committed copy of every test schema's
 generated modules. Any change to the emitter shows up there as a reviewable diff instead of as

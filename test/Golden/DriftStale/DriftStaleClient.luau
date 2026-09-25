@@ -394,6 +394,7 @@ if not RunService:IsRunning() then
 		StepReplication = NOOP,
 		SetRateLimitHandler = NOOP,
 		SetDecodeErrorHandler = NOOP,
+		SetPacketDropHandler = NOOP,
 	Alpha = {
 		On = NOOP_RETURNING
 	},
@@ -445,6 +446,11 @@ end
 --> Present so code shared between contexts can install a handler without branching on which module
 --> it got. The client never rate limits: it is talking to the server, which is trusted.
 local function SetRateLimitHandler(_Handler: ((Player: Player, Event: string?, Refused: number) -> ())?) end
+
+--> The same for packets: only the server refuses them.
+local function SetPacketDropHandler(
+    _Handler: ((Player: Player, Reason: "Malformed" | "Oversized" | "Budget" | "Instances" | "Events", Refused: number, Detail: number) -> ())?
+) end
 
 --> A packet from the server that cannot be decoded is a bug in the game rather than an attack --
 --> usually a Sync listener that yielded, or a client built from a different schema. It is said out
@@ -568,6 +574,8 @@ local Returns = table.freeze({
 	SetRateLimitHandler = SetRateLimitHandler,
 
 	SetDecodeErrorHandler = SetDecodeErrorHandler,
+
+	SetPacketDropHandler = SetPacketDropHandler,
 
 	Alpha = {
 		On = function(Listener: (Value: number) -> ()): () -> ()

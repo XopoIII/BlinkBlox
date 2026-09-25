@@ -1,0 +1,11 @@
+-- expect E3005
+-- SetPacketDropHandler is a member of the generated module, so a declaration may not take its name.
+option ClientOutput = "../../Network/ReservedDropHandlerClient.luau"
+option ServerOutput = "../../Network/ReservedDropHandlerServer.luau"
+
+event SetPacketDropHandler {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}
