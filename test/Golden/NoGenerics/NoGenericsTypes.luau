@@ -37,8 +37,35 @@ type BufferSave = {
     Size: number, 
     Cursor: number, 
     Buffer: buffer, 
-    Instances: {Instance}
+    Instances: {Instance},
+    --> Consecutive flushes that used under a quarter of Buffer; see ShouldShrink.
+    Underused: number?
 }
+
+--> Whether a send buffer that has just been flushed should be let go, given how many flushes in a row
+--> have now used under a quarter of it.
+-->
+--> Buffers are kept between flushes so that a steady sender grows its buffer once rather than every
+--> frame. They used to be let go outright past 4 KB, which meant the heaviest senders -- the ones the
+--> keeping was for -- regrew theirs from 64 bytes on every flush, twenty-odd `buffer.create` and
+--> `buffer.copy` a frame for a 600 KB batch. Now a buffer is let go only once it has been mostly empty
+--> for a second's worth of flushes: a burst is not held for the session, and a steady load keeps its
+--> buffer for as long as it lasts.
+local SHRINK_ABOVE = 4096
+local SHRINK_AFTER = 60
+
+local function ShouldShrink(Size: number, Used: number, Underused: number): (boolean, number)
+    if Size <= SHRINK_ABOVE or Used * 4 >= Size then
+        return false, 0
+    end
+
+    Underused += 1
+    if Underused >= SHRINK_AFTER then
+        return true, 0
+    end
+
+    return false, Underused
+end
 
 local function Read(Bytes: number)
     local Offset = RecieveCursor
@@ -792,7 +819,7 @@ return {
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
 				-- Value: Standalone
-				local Value = {} :: any
+				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
 				Value.One = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				-- Value.Two: Two
@@ -806,7 +833,7 @@ return {
 					-- Read BLOCK: 10 bytes
 					local BLOCK_START = Read(10)
 					-- Value.Event: Join
-					Value.Event = {} :: any
+					Value.Event = {Name = false, UserId = false} :: any
 					-- Value.Event.Name: Name
 					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -818,7 +845,7 @@ return {
 					-- Read BLOCK: 10 bytes
 					local BLOCK_START = Read(10)
 					-- Value.Event: Chat
-					Value.Event = {} :: any
+					Value.Event = {UserId = false, Message = false} :: any
 					-- Value.Event.UserId: UserId
 					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 					-- Value.Event.Message: Message
@@ -830,7 +857,7 @@ return {
 					-- Read BLOCK: 8 bytes
 					local BLOCK_START = Read(8)
 					-- Value.Event: Leave
-					Value.Event = {} :: any
+					Value.Event = {UserId = false} :: any
 					-- Value.Event.UserId: UserId
 					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 					Value.Event.Type = "Leave"
@@ -838,7 +865,7 @@ return {
 					error(`Unexpected variant: {Tag}`)
 				end
 				-- Value.Nested: Nested
-				Value.Nested = {} :: any
+				Value.Nested = {Four = false, Five = false} :: any
 				-- Value.Nested.Four: Four
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end

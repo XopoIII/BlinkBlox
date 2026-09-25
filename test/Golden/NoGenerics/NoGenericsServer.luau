@@ -49,8 +49,35 @@ type BufferSave = {
     Size: number, 
     Cursor: number, 
     Buffer: buffer, 
-    Instances: {Instance}
+    Instances: {Instance},
+    --> Consecutive flushes that used under a quarter of Buffer; see ShouldShrink.
+    Underused: number?
 }
+
+--> Whether a send buffer that has just been flushed should be let go, given how many flushes in a row
+--> have now used under a quarter of it.
+-->
+--> Buffers are kept between flushes so that a steady sender grows its buffer once rather than every
+--> frame. They used to be let go outright past 4 KB, which meant the heaviest senders -- the ones the
+--> keeping was for -- regrew theirs from 64 bytes on every flush, twenty-odd `buffer.create` and
+--> `buffer.copy` a frame for a 600 KB batch. Now a buffer is let go only once it has been mostly empty
+--> for a second's worth of flushes: a burst is not held for the session, and a steady load keeps its
+--> buffer for as long as it lasts.
+local SHRINK_ABOVE = 4096
+local SHRINK_AFTER = 60
+
+local function ShouldShrink(Size: number, Used: number, Underused: number): (boolean, number)
+    if Size <= SHRINK_ABOVE or Used * 4 >= Size then
+        return false, 0
+    end
+
+    Underused += 1
+    if Underused >= SHRINK_AFTER then
+        return true, 0
+    end
+
+    return false, Underused
+end
 
 local function Read(Bytes: number)
     local Offset = RecieveCursor
@@ -440,7 +467,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
 	-- Value: ClientPollEvent
-	local Value = {} :: any
+	local Value = {Enum = false, Nested = false} :: any
 	-- Value.Field: Field
 	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
@@ -494,7 +521,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		error(`Unexpected enum: {Index}`)
 	end
 	-- Value.Nested: Nested
-	Value.Nested = {} :: any
+	Value.Nested = {Guh = false, Array = false} :: any
 	-- Value.Nested.Guh: Guh
 	Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 	-- Value.Nested.Array: Array
@@ -537,7 +564,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
 	-- Value: ClientUnreliablePollEvent
-	local Value = {} :: any
+	local Value = {Enum = false, Nested = false} :: any
 	-- Value.Field: Field
 	local BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_0, 0x01) == true then
@@ -591,7 +618,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		error(`Unexpected enum: {Index}`)
 	end
 	-- Value.Nested: Nested
-	Value.Nested = {} :: any
+	Value.Nested = {Guh = false, Array = false} :: any
 	-- Value.Nested.Guh: Guh
 	Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 	-- Value.Nested.Array: Array
@@ -1181,12 +1208,25 @@ function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
 	local Value = table.create(Length)
 	do
 		local PACKED_OFFSET = Read((Length + 7) // 8)
-		local PACKED_BITS = 0
-		for Index = 0, Length - 1 do
-			if Index % 8 == 0 then
-				PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + Index // 8)
+		local PACKED_WHOLE = Length // 8
+		for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+			local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+			local PACKED_BASE = PACKED_BYTE * 8
+			Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+			Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+			Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+			Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+			Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+			Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+			Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+			Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+		end
+		if Length % 8 ~= 0 then
+			local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+			local PACKED_BASE = PACKED_WHOLE * 8
+			for PACKED_BIT = 0, Length % 8 - 1 do
+				Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
 			end
-			table.insert(Value, bit32.btest(PACKED_BITS, bit32.lshift(1, Index % 8)))
 		end
 	end
 	-- END ARRAY
@@ -2592,7 +2632,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
 				-- Value: Standalone
-				local Value = {} :: any
+				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
 				Value.One = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				-- Value.Two: Two
@@ -2606,7 +2646,7 @@ if not RunService:IsRunning() then
 					-- Read BLOCK: 10 bytes
 					local BLOCK_START = Read(10)
 					-- Value.Event: Join
-					Value.Event = {} :: any
+					Value.Event = {Name = false, UserId = false} :: any
 					-- Value.Event.Name: Name
 					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -2618,7 +2658,7 @@ if not RunService:IsRunning() then
 					-- Read BLOCK: 10 bytes
 					local BLOCK_START = Read(10)
 					-- Value.Event: Chat
-					Value.Event = {} :: any
+					Value.Event = {UserId = false, Message = false} :: any
 					-- Value.Event.UserId: UserId
 					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 					-- Value.Event.Message: Message
@@ -2630,7 +2670,7 @@ if not RunService:IsRunning() then
 					-- Read BLOCK: 8 bytes
 					local BLOCK_START = Read(8)
 					-- Value.Event: Leave
-					Value.Event = {} :: any
+					Value.Event = {UserId = false} :: any
 					-- Value.Event.UserId: UserId
 					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 					Value.Event.Type = "Leave"
@@ -2638,7 +2678,7 @@ if not RunService:IsRunning() then
 					error(`Unexpected variant: {Tag}`)
 				end
 				-- Value.Nested: Nested
-				Value.Nested = {} :: any
+				Value.Nested = {Four = false, Five = false} :: any
 				-- Value.Nested.Four: Four
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -3426,7 +3466,18 @@ local function SavePlayerBuffer(Player: Player)
         return
     end
 
-    PlayersMap[Player] = Save()
+    --> Written into the entry the player already has, rather than a new one each time: this runs on
+    --> every reliable send to a player, and the entry also carries its shrink count.
+    local Entry = PlayersMap[Player]
+    if Entry == nil then
+        PlayersMap[Player] = Save()
+        return
+    end
+
+    Entry.Size = SendSize
+    Entry.Cursor = SendCursor
+    Entry.Buffer = SendBuffer
+    Entry.Instances = SendInstances
 end
 
 local function StepReplication()
@@ -3439,24 +3490,27 @@ local function StepReplication()
             continue
         end
 
-        if Send.Cursor <= 0 then
-            continue
-        end
+        local Used = Send.Cursor
+        if Used > 0 then
+            local Buffer = buffer.create(Used)
+            buffer.copy(Buffer, 0, Send.Buffer, 0, Used)
+            Reliable:FireClient(Player, Buffer, Send.Instances)
 
-        local Buffer = buffer.create(Send.Cursor)
-        buffer.copy(Buffer, 0, Send.Buffer, 0, Send.Cursor)
-        Reliable:FireClient(Player, Buffer, Send.Instances)
+            Send.Cursor = 0
+            table.clear(Send.Instances)
+        end
 
         --> The buffer this player's writes grew is kept for the next frame rather than regrown from
         --> 64 bytes every Heartbeat: only the exact-size copy above goes on the wire, and every writer
-        --> writes whole bytes, so what is left past the cursor is never read. One that a burst grew
-        --> past 4 KB is let go, so a single large frame is not held for the rest of the session.
-        Send.Cursor = 0
-        if Send.Size > 4096 then
+        --> writes whole bytes, so what is left past the cursor is never read. One that has sat mostly
+        --> empty for a second is let go, so a burst is not held for the rest of the session; see
+        --> ShouldShrink.
+        local Shrink, Underused = ShouldShrink(Send.Size, Used, Send.Underused or 0)
+        Send.Underused = Underused
+        if Shrink then
             Send.Size = 64
             Send.Buffer = buffer.create(64)
         end
-        table.clear(Send.Instances)
     end
 end
 RunService.Heartbeat:Connect(StepReplication)
@@ -4093,7 +4147,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
 				-- Value: Standalone
-				local Value = {} :: any
+				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
 				Value.One = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				-- Value.Two: Two
@@ -4107,7 +4161,7 @@ local Returns = table.freeze({
 					-- Read BLOCK: 10 bytes
 					local BLOCK_START = Read(10)
 					-- Value.Event: Join
-					Value.Event = {} :: any
+					Value.Event = {Name = false, UserId = false} :: any
 					-- Value.Event.Name: Name
 					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -4119,7 +4173,7 @@ local Returns = table.freeze({
 					-- Read BLOCK: 10 bytes
 					local BLOCK_START = Read(10)
 					-- Value.Event: Chat
-					Value.Event = {} :: any
+					Value.Event = {UserId = false, Message = false} :: any
 					-- Value.Event.UserId: UserId
 					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 					-- Value.Event.Message: Message
@@ -4131,7 +4185,7 @@ local Returns = table.freeze({
 					-- Read BLOCK: 8 bytes
 					local BLOCK_START = Read(8)
 					-- Value.Event: Leave
-					Value.Event = {} :: any
+					Value.Event = {UserId = false} :: any
 					-- Value.Event.UserId: UserId
 					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 					Value.Event.Type = "Leave"
@@ -4139,7 +4193,7 @@ local Returns = table.freeze({
 					error(`Unexpected variant: {Tag}`)
 				end
 				-- Value.Nested: Nested
-				Value.Nested = {} :: any
+				Value.Nested = {Four = false, Five = false} :: any
 				-- Value.Nested.Four: Four
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end

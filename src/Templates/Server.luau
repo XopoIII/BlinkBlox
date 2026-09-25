@@ -385,7 +385,18 @@ local function SavePlayerBuffer(Player: Player)
         return
     end
 
-    PlayersMap[Player] = Save()
+    --> Written into the entry the player already has, rather than a new one each time: this runs on
+    --> every reliable send to a player, and the entry also carries its shrink count.
+    local Entry = PlayersMap[Player]
+    if Entry == nil then
+        PlayersMap[Player] = Save()
+        return
+    end
+
+    Entry.Size = SendSize
+    Entry.Cursor = SendCursor
+    Entry.Buffer = SendBuffer
+    Entry.Instances = SendInstances
 end
 
 local function StepReplication()
@@ -398,24 +409,27 @@ local function StepReplication()
             continue
         end
 
-        if Send.Cursor <= 0 then
-            continue
-        end
+        local Used = Send.Cursor
+        if Used > 0 then
+            local Buffer = buffer.create(Used)
+            buffer.copy(Buffer, 0, Send.Buffer, 0, Used)
+            Reliable:FireClient(Player, Buffer, Send.Instances)
 
-        local Buffer = buffer.create(Send.Cursor)
-        buffer.copy(Buffer, 0, Send.Buffer, 0, Send.Cursor)
-        Reliable:FireClient(Player, Buffer, Send.Instances)
+            Send.Cursor = 0
+            table.clear(Send.Instances)
+        end
 
         --> The buffer this player's writes grew is kept for the next frame rather than regrown from
         --> 64 bytes every Heartbeat: only the exact-size copy above goes on the wire, and every writer
-        --> writes whole bytes, so what is left past the cursor is never read. One that a burst grew
-        --> past 4 KB is let go, so a single large frame is not held for the rest of the session.
-        Send.Cursor = 0
-        if Send.Size > 4096 then
+        --> writes whole bytes, so what is left past the cursor is never read. One that has sat mostly
+        --> empty for a second is let go, so a burst is not held for the rest of the session; see
+        --> ShouldShrink.
+        local Shrink, Underused = ShouldShrink(Send.Size, Used, Send.Underused or 0)
+        Send.Underused = Underused
+        if Shrink then
             Send.Size = 64
             Send.Buffer = buffer.create(64)
         end
-        table.clear(Send.Instances)
     end
 end
 ]]
