@@ -76,7 +76,7 @@ if Local then
 	--> Benchmarks.md names each tool's version from here, which the download wrote for the release.
 	local Manifest = serde.decode("toml", fs.readFile("../pesde.toml"))
 	local Versions = serde.decode("json", fs.readFile("./tools/versions.json"))
-	Versions.blink = `v{Manifest.version} (checkout)`
+	Versions.blink = `v{Manifest.version}, compiled from this repository`
 	fs.writeFile("./tools/versions.json", serde.encode("json", Versions))
 else
 	Step(`./tools/blinkblox{EXECUTABLE}`, { "./definitions/Definition.blink", "--yes" })

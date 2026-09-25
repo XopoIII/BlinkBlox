@@ -62,17 +62,30 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 
 ## Performance
 
-Each tool fires 1000 events a frame from client to server. The run was in Studio on an Apple M1, on
-BlinkBlox 0.35.0, and the numbers are the median frame rate and the milliseconds a frame's thousand
-fires took.
+Each tool fires 1000 events a frame from client to server. Blink is the original project BlinkBlox
+forked from, at its last release, 0.18.9. The runs were made on an Apple M1, on BlinkBlox 0.36.2.
 
-| Payload | Roblox remotes | BlinkBlox | zap | ByteNet | Packet |
+In Studio, the numbers are the median frame rate and the milliseconds a frame's thousand fires took.
+
+| Payload | Roblox remotes | BlinkBlox | Blink | zap | ByteNet | Packet |
+|---|---|---|---|---|---|---|
+| 1000 booleans | 16 FPS, 29.2 ms | **60 FPS**\*, **4.2 ms** | 53 FPS, 8.4 ms | 35 FPS, 25.9 ms | 17 FPS, 41.3 ms | 15 FPS, 67.3 ms |
+| 1000 booleans, each different | 16 FPS, 29.4 ms | **60 FPS**\*, **8.7 ms** | 36 FPS, 20.5 ms | 26 FPS, 34.4 ms | 15 FPS, 44.7 ms | 15 FPS, 77.5 ms |
+| 100 entities | 16 FPS, 110.1 ms | **56 FPS**, **4.0 ms** | 22 FPS, 4.6 ms | 22 FPS, 20.5 ms | 18 FPS, 37.8 ms | 15 FPS, 50.3 ms |
+| 100 entities, each different | 15 FPS, 115.6 ms | **51 FPS**, 5.1 ms | 22 FPS, **5.0 ms** | 22 FPS, 20.4 ms | 17 FPS, 38.3 ms | 15 FPS, 53.1 ms |
+
+\* Studio caps the frame rate at 60.
+
+On Lune, without Roblox, the numbers are the milliseconds a frame's thousand fires took
+interpreted, as most players' clients run them, then the milliseconds the server took to decode
+them natively, and the bytes one event takes before compression.
+
+| Payload | BlinkBlox | Blink | zap | ByteNet | Packet |
 |---|---|---|---|---|---|
-| 1000 booleans | 16 FPS, 28.0 ms | **60 FPS**\*, **5.6 ms** | 37 FPS, 25.7 ms | 17 FPS, 41.3 ms | 15 FPS, 67.8 ms |
-| 100 entities | 16 FPS, 109.5 ms | **60 FPS**\*, **4.0 ms** | 23 FPS, 20.8 ms | 18 FPS, 38.0 ms | 15 FPS, 50.3 ms |
-| 100 entities, each different | 15 FPS, 110.2 ms | **52 FPS**, **5.1 ms** | 22 FPS, 20.6 ms | 17 FPS, 38.2 ms | 15 FPS, 52.4 ms |
+| 1000 booleans | **38.2 / 4.4 ms, 128 B** | 68.8 / 12.1 ms, 1003 B | 174.0 / 13.4 ms, 1003 B | 126.6 / 122.2 ms, 1003 B | 124.8 / 116.1 ms, 1003 B |
+| 100 entities | 33.5 / **12.6 ms**, 603 B | **33.4** / 73.3 ms, 603 B | 83.8 / 73.8 ms, 603 B | 109.1 / 111.4 ms, 603 B | 100.5 / 163.2 ms, 603 B |
 
-\* Studio caps the frame rate at 60. The methodology, the bandwidth and the full percentiles are in
+The methodology, the bandwidth, the random payloads and the full percentiles are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
 [`benchmark/Benchmarks.md`](benchmark/Benchmarks.md).
 

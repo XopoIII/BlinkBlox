@@ -13,7 +13,7 @@
 --- its listener -- each on its own, and counts the bytes each event cost: as the encoder wrote them,
 --- and after zstd, which is what Roblox compresses a remote's packets with.
 ---
---- It runs every tool Studio compares -- BlinkBlox, zap, ByteNet, Packet -- on the same pools, so
+--- It runs every tool Studio compares -- BlinkBlox, Blink, zap, ByteNet, Packet -- on the same pools, so
 --- the tools can be compared where Studio cannot: interpreted, as most Roblox clients run code, and
 --- decoding, which Studio does not time. See runtime/Tools.luau for how each is loaded.
 ---
@@ -25,9 +25,10 @@ local process = require("@lune/process")
 local serde = require("@lune/serde")
 
 local Attributes = require("../src/Modules/Attributes")
-local Tools = require("./runtime/Tools")
 local Generator = require("../src/Generator")
+local Names = require("./Names")
 local Parser = require("../src/Parser")
+local Tools = require("./runtime/Tools")
 
 local EVENTS_PER_FRAME = 1000
 local WARMUP_FRAMES = 10
@@ -216,7 +217,7 @@ for _, Bench in BENCHES do
 			--> A fresh load per run: listeners, buffers and the inbound budget start from nothing.
 			local Result = Run(Tools.Load(Name, Native, Bench, Sources), Bench, Pool)
 			local Cells: { string } = {
-				Name,
+				Names.Display(Name),
 				if Native then "native" else "interpreted",
 				Format(Result.Fire.Median),
 				Format(Result.Fire.P99),
