@@ -28,29 +28,32 @@ thousand different payloads a frame instead of one payload a thousand times, and
 
 Natively compiled, as a Roblox server runs the module:
 
-| Bench | Fire 0.34.0 | Fire 0.35.0 | Decode 0.34.0 | Decode 0.35.0 | Bytes |
-|---|---|---|---|---|---|
-| Booleans | 8.97 | **6.10** | 15.16 | **4.37** | 128 |
-| Entities | 3.57 | **3.19** | 72.95 | **11.31** | 603 |
-| BooleansRandom | 20.14 | **17.39** | 15.40 | **5.40** | 128 |
-| EntitiesRandom | 4.07 | **3.66** | 75.96 | **15.81** | 603 |
-| Tiny | 0.13 | 0.13 | 0.54 | **0.36** | 2 |
+| Bench | Fire 0.34.0 | Fire 0.35.0 | Fire 0.36.2 | Decode 0.34.0 | Decode 0.35.0 | Decode 0.36.2 | Bytes |
+|---|---|---|---|---|---|---|---|
+| Booleans | 8.97 | 6.10 | **3.73** | 15.16 | **4.37** | 4.43 | 128 |
+| Entities | 3.57 | **3.19** | **3.19** | 72.95 | **11.31** | 12.65 | 603 |
+| BooleansRandom | 20.14 | 17.39 | **8.60** | 15.40 | 5.40 | **4.86** | 128 |
+| EntitiesRandom | 4.07 | **3.66** | 3.71 | 75.96 | 15.81 | **10.81** | 603 |
+| Tiny | 0.13 | 0.13 | 0.14 | 0.54 | **0.36** | 0.38 | 2 |
 
 Interpreted, as most Roblox clients run it:
 
-| Bench | Fire 0.34.0 | Fire 0.35.0 | Decode 0.34.0 | Decode 0.35.0 |
-|---|---|---|---|---|
-| Booleans | 92.12 | **36.98** | 107.64 | **45.13** |
-| Entities | 34.13 | 33.52 | 103.77 | **54.04** |
-| BooleansRandom | 82.66 | **41.83** | 108.28 | **46.19** |
-| EntitiesRandom | 33.89 | 33.60 | 107.44 | **57.65** |
-| Tiny | 0.35 | 0.35 | 0.78 | **0.62** |
+| Bench | Fire 0.34.0 | Fire 0.35.0 | Fire 0.36.2 | Decode 0.34.0 | Decode 0.35.0 | Decode 0.36.2 |
+|---|---|---|---|---|---|---|
+| Booleans | 92.12 | **36.98** | 38.22 | 107.64 | **45.13** | 45.22 |
+| Entities | 34.13 | 33.52 | **33.46** | 103.77 | **54.04** | 54.64 |
+| BooleansRandom | 82.66 | 41.83 | **40.40** | 108.28 | 46.19 | **45.70** |
+| EntitiesRandom | 33.89 | 33.60 | **33.58** | 107.44 | 57.65 | **52.83** |
+| Tiny | 0.35 | 0.35 | 0.35 | 0.78 | **0.62** | 0.64 |
 
-Both versions were run back to back on 2026-09-25, with Lune 0.10.5 on an Apple M1 with 16 GB of
-memory, by the same harness: 0.34.0's compiler with 0.35.0's `benchmark/Runtime.luau`. A difference
-of a few hundredths of a millisecond is noise. The flush, which copies the batch into an exact-size
-buffer, took under 0.035 ms in every case. The [changelog](/BlinkBlox/changelog/) says what changed
-in 0.35.0.
+0.34.0 and 0.35.0 were run back to back on 2026-09-25, with Lune 0.10.5 on an Apple M1 with 16 GB
+of memory, by the same harness: 0.34.0's compiler with 0.35.0's `benchmark/Runtime.luau`. The 0.36.2
+columns are BlinkBlox's rows of the later run in
+[`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md),
+on the same machine; 0.36.2 writes a `boolean[]` faster, which is what moved its fire times. A
+difference of a few hundredths of a millisecond is noise. The flush, which copies the batch into an
+exact-size buffer, took under 0.035 ms in every case. The [changelog](/BlinkBlox/changelog/) says
+what changed in each release.
 
 Entities' fire time barely moves, natively or not, because there is nothing left to take out of it:
 each element is six `buffer.writeu8` calls into a block allocated once for the whole array.
@@ -82,7 +85,7 @@ in [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/be
 | | zap | 173.20 | 13.07 | 1003 |
 | | ByteNet | 134.53 | 129.69 | 1003 |
 | | Packet | 132.15 | 125.31 | 1003 |
-| EntitiesRandom | **BlinkBlox** | 33.58 | **10.81** | 603 |
+| EntitiesRandom | **BlinkBlox** | **33.58** | **10.81** | 603 |
 | | Blink | 33.61 | 73.81 | 603 |
 | | zap | 84.13 | 73.77 | 603 |
 | | ByteNet | 109.45 | 109.40 | 603 |
@@ -100,8 +103,7 @@ numbers below are medians. The percentiles, and the harness itself, are in
 [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
 
 The run was made on 2026-09-25 on an Apple M1 with 16 GB of memory, in Roblox Studio. The versions
-were BlinkBlox 0.36.2, Blink 0.18.9, zap 0.6.29, ByteNet 0.4.3 and Packet 1.7.0. Blink is the original project BlinkBlox forked from, at its last release,
-compiling the same schema with its own compiler.
+were BlinkBlox 0.36.2, Blink 0.18.9, zap 0.6.29, ByteNet 0.4.3 and Packet 1.7.0.
 
 "Fire ms" is the CPU time a frame's thousand fires took on the client. It is the column to read when
 two tools are both at Studio's 60 FPS cap. "Bytes" is what one event cost on the wire after Roblox
@@ -178,8 +180,8 @@ The same shape as Entities, with different structs in every event.
 
 <Aside type="caution" title="60 FPS is Studio's cap">
 Studio does not render faster than 60 frames a second. A tool at 60 FPS is limited by the cap, not by
-its own cost, so the frame rate shows only that BlinkBlox kept up. The fire time is not capped, and
-it shows by how much.
+its own cost, so on the boolean benches the frame rate shows only that BlinkBlox kept up. The fire
+time is not capped, and it shows by how much.
 </Aside>
 
 <Aside type="caution" title="Bytes are counted after compression">
@@ -225,7 +227,9 @@ The harness lives in [`benchmark/`](https://github.com/XopoIII/BlinkBlox/tree/ma
 runs on Windows, macOS and Linux.
 
 - `lune run Runtime` times the generated code. `lune run Runtime -- Entities` runs only the benches
-  whose name contains `Entities`, and `--frames 50` makes the run shorter.
+  whose name contains `Entities`, `lune run Runtime -- --frames 50` makes the run shorter, and
+  `lune run Runtime -- --tools blink,zap` runs only the tools listed. The harness knows BlinkBlox as
+  `blink` and Blink as `upstream`; the others by their lower-case names.
 - `lune run Performance` times the compiler itself: lexing, parsing and generating the test schema.
 - `lune run build --download --run` fetches zap, BlinkBlox, ByteNet and Packet for the machine it
   runs on, and the source of Blink, the original project, builds the Studio place, runs it with `run-in-roblox`, and

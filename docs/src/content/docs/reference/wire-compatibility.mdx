@@ -95,6 +95,10 @@ hashes `WIRE_VERSION`, a number the compiler bumps by hand whenever a type's byt
 | 0.32.0 | No change to the format. | 0.27.0 onward. |
 | 0.33.0 | No change to the format. | 0.27.0 onward. |
 | 0.34.0 | `u24`, `i24` and `f24` added. No existing type's encoding changed, so only schemas that use them are affected. | 0.27.0 onward. |
+| 0.35.0 | No change to the format. | 0.27.0 onward. |
+| 0.36.0 | No change to the format. `MaxUnreliableSize` defaults to 980 and counts 6 bytes per Instance, which changes what a sender refuses, not what a receiver reads. | 0.27.0 onward. |
+| 0.36.1 | No change to the format. | 0.27.0 onward. |
+| 0.36.2 | No change to the format: a `boolean[]` is written faster, into the same bytes. | 0.27.0 onward. |
 
 Modules from different releases with the same `WIRE_VERSION` interoperate, but a fix to how a value is
 read or handled applies only on the side built by the release that has it. Ship both sides from one
@@ -105,5 +109,5 @@ release.
 Each channel numbers its declarations with a single byte: reliable events and functions share one
 channel, `Unreliable` and `OrderedUnreliable` events the other. So each channel holds at most 256
 declarations, counting what the schema imports and not counting what its profile leaves out. The
-compiler refuses a 257th (`E3030`); before 0.30.0 it compiled, and was sent with the first one's
+compiler refuses a 257th (`E3030`); before 0.31.0 it compiled, and was sent with the first one's
 index.

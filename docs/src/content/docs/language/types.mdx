@@ -95,7 +95,8 @@ A full range has both a minimum and a maximum: `0..100`.
 
 ### Half Ranges
 A half range gives only one side: `0..` or `..100`. The open side is the limit of the type -- `255`
-for a `u8`, unbounded for a float.
+for a `u8`, `65,504` for an `f16`, `4,294,950,912` for an `f24`, and unbounded for an `f32` or
+`f64`.
 
 ### Exact Ranges
 An exact range has a single value, such as `0` or `100`. On a length it means exactly that length.
@@ -113,7 +114,9 @@ A range must fit its type (`u8(0..300)` is refused), and a range on an integer, 
 use whole numbers. Floats accept negative and fractional bounds: `f32(-0.5..0.5)`.
 
 The **receiving** side always checks a value against its range, and abandons the packet at that
-event if it fails; a ranged float refuses `NaN` too. The sending side checks only under
+event if it fails; a ranged float refuses `NaN` too. An `f16`, `f24` or `f32` arrives rounded to its
+precision, so the receiver checks it against the bounds rounded the same way: `f24(0.1..0.7)` accepts
+a value sent as exactly `0.1` or `0.7`, and refuses anything sent outside them. The sending side checks only under
 [`WriteValidations`](/BlinkBlox/language/options/#writevalidations) -- except for lengths, where a
 value outside the range would corrupt the packet, so those are always checked.
 
@@ -164,18 +167,22 @@ lists the largest integer each type represents exactly.
 |`f32`|`4 bytes`|`16,777,216`|about `3.4e38`|
 |`f64`|`8 bytes`|`9,007,199,254,740,992`|about `1.8e308`|
 
-A range on a float may go past the exact-integer limit, and an open side of one, as in `f32(0..)`, is
-not bounded at all. A value past `65,504` sent as an `f16` arrives as infinity. Every float type
+A range on a float may go past the exact-integer limit. An open side of one takes the type's largest
+value: `f32(0..)` and `f64(0..)` are not bounded above at all, `f16(0..)` stops at `65,504` and
+`f24(0..)` at `4,294,950,912`, so a value that arrived as infinity is refused there. A value past `65,504` sent as an `f16` arrives as infinity. Every float type
 carries `NaN`, both infinities and `-0`, though a ranged float refuses `NaN`.
 
 `f24` has a sign, six bits of exponent and seventeen of mantissa, so it holds 18 significant bits
-where `f16` holds 11. It rounds to the nearest value it can hold, where `f16` truncates. Between 512
+where `f16` holds 11. It rounds to the nearest value it can hold, a tie away from zero, where `f16`
+truncates. Its smallest normal value is 2^-30, about `9.3e-10`, and below that it keeps subnormals down
+to 2^-47, about `7.1e-15`. Between 512
 and 1024 its step is about `0.004`, so a position a thousand studs from the origin arrives within
 `0.002` of where it was sent. A value that rounds past its largest finite value, `4,294,950,912`,
 arrives as infinity.
 
 <Aside>
-Luau stores every number as an `f64`, so `f64` is lossless and the smaller floats round.
+Luau stores every number as an `f64`, so `f64` is lossless and the smaller floats lose precision:
+`f32` and `f24` round to the nearest value, `f16` truncates.
 
 The `f16` and `f24` types are not natively supported by the buffer library, which makes them slower
 to read and write than the other number types. `u24` and `i24` are not native either; each is
@@ -295,9 +302,11 @@ type RecentIds = f64[..50]
 type Corners = vector[4]
 ```
 
-`[4]` is exactly four elements and sends no length. Like an exact-length string, a longer array is
-refused on send under [`WriteValidations`](/BlinkBlox/language/options/#writevalidations) and cut to
-its first elements without it. A variable length is sent like a string's, and an
+`[4]` is exactly four elements and sends no length. Like an exact-length string, an array of any
+other length is refused on send under
+[`WriteValidations`](/BlinkBlox/language/options/#writevalidations). Without it, a longer array is cut
+to its first elements and a shorter one fails to write. In an array of optionals, `u8?[4]`, only an
+element past the fourth is refused, since the absent ones are holes. A variable length is sent like a string's, and an
 array holds at most 65535 elements. Before allocating, the receiver checks the length against what the
 rest of the packet can hold, so a length prefix of 65535 on a two-byte packet buys nothing.
 
@@ -381,13 +390,15 @@ set Flags = {
 
 In Luau a set is a table with every flag as a key: `{ FeatureA: boolean, FeatureB: boolean, ... }`.
 On the wire the flags are packed into groups of up to 32 -- one byte for up to 8 flags, two for up to
-16, four for up to 32 -- so the three flags above cost one byte.
+16, four for up to 32 -- so the three flags above cost one byte. A flag named twice is refused
+(`E3004`).
 
 ## Enums
 BlinkBlox supports two kinds of enum: unit enums and tagged enums.
 
 Either kind travels as a one-byte index, so an enum holds between 1 and 256 values or variants. An empty
-one, or one past 256, is refused at compile time (`E3029`), as is a repeated value or variant.
+one, or one past 256, is refused at compile time (`E3029`); a repeated value or variant is refused as
+a duplicate (`E3004`).
 
 ### Unit Enums
 A set of possible values, declared with the `enum` keyword. The state of a character:
@@ -477,6 +488,10 @@ struct Entity {
 
 A field name that is not an identifier can be quoted: `["Display Name"]: string`. Fields are sent in
 order with no names on the wire, so a struct costs exactly the sum of its fields.
+
+A trailing comma is accepted after the last field, and after the last item of every other list in a
+schema: set flags, enum values and variants, generic parameters and arguments, type packs, and an
+event's or function's fields.
 
 ### Merging
 A struct can merge the fields of other structs into itself, the equivalent of a table union in Luau.
@@ -599,9 +614,12 @@ type Target = Instance(Player)
 type Part = Instance(BasePart)
 ```
 
-A declared type is exported to Luau under its own name, so it cannot take the name of a Roblox type the
-module uses -- `Player`, `Instance`, `CFrame`, `Vector3`, a class it names in parentheses -- or of a
-built-in Luau type such as `number` (`E3005`).
+A declared type is exported to Luau under its own name, so it cannot take the name of a built-in Luau
+type such as `number`, and a top-level type cannot take the name of a Roblox type the module uses --
+`Player`, `Vector3`, a class it names in parentheses (`E3005`). A type inside a scope is exported
+under its scope's name, so the Roblox names are free there. Names BlinkBlox itself uses for a type,
+such as `Instance`, `CFrame` or `string`, are refused earlier, as a primitive where a name was
+expected (`E2002`).
 
 The receiver checks the class with `IsA`, so subclasses are accepted: an Instance typed as `BasePart`
 also accepts a `Part`. An instance of the wrong class fails the packet like any other bad value.

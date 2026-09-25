@@ -133,8 +133,8 @@ the 1000-byte limit Roblox enforces; bound the field it names.
   [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) (10 seconds) fails the same way
   an errored handler does, instead of waiting forever. At most 32 may be outstanding at once; the
   33rd errors.
-- **`Fire` enforces length bounds.** A string, buffer or array longer than its declared bound makes
-  `Fire` throw even with `WriteValidations` off, instead of sending a length prefix that wrapped. When
+- **`Fire` enforces length bounds.** A string, buffer or array outside its declared length bounds,
+  or a map past 65535 entries, makes `Fire` throw even with `WriteValidations` off, instead of sending a length prefix that wrapped. When
   any write throws, the half-written event is taken back out, so the rest of the frame's batch is
   unaffected.
 - **A second `.On` on a `Single` event warns.** It still replaces the first listener, and the first

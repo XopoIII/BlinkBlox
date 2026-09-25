@@ -45,7 +45,7 @@ A few rules hold for all of them:
 | `MaxEventsPerPacket` | events | `64` | [Inbound limits](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) |
 | `MaxInstancesPerPacket` | instances | `256` | [Inbound limits](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) |
 | `InboundBytesPerSecond` | bytes | `8 * MaxPacketSize` | [Inbound limits](#inboundbytespersecond-inboundburst) |
-| `InboundBurst` | bytes | one second of the above | [Inbound limits](#inboundbytespersecond-inboundburst) |
+| `InboundBurst` | bytes | the larger of the above and `MaxPacketSize` | [Inbound limits](#inboundbytespersecond-inboundburst) |
 | `DefaultRate` | events a second | none | [Rate limits](#defaultrate-requirerates) |
 | `RequireRates` | boolean | `false` | [Rate limits](#defaultrate-requirerates) |
 | `InvocationTimeout` | seconds | `10` | [Invocations](#invocationtimeout) |
@@ -102,7 +102,7 @@ option Casing = Camel
 | `Pascal` | `Camel` | `Snake` |
 |---|---|---|
 | `Fire`, `FireAll`, `FireList`, `FireExcept` | `fire`, `fireAll`, `fireList`, `fireExcept` | `fire`, `fire_all`, `fire_list`, `fire_except` |
-| `On`, `Invoke`, `Predict`, `Iter` | `on`, `invoke`, `predict`, `iter` | `on`, `invoke`, `predict`, `iter` |
+| `On`, `Invoke`, `Predict`, `Iter`, `Next` | `on`, `invoke`, `predict`, `iter`, `next` | `on`, `invoke`, `predict`, `iter`, `next` |
 | `Read`, `Write` | `read`, `write` | `read`, `write` |
 | `StepReplication` | `stepReplication` | `step_replication` |
 | `SetRateLimitHandler` | `setRateLimitHandler` | `set_rate_limit_handler` |
@@ -368,7 +368,8 @@ that whatever you allow is also what an attacker is allowed.
 </Aside>
 
 ### `InboundBytesPerSecond`, `InboundBurst`
-Defaults: `8 * MaxPacketSize` (65536) bytes a second, and a burst of one second of that
+Defaults: `8 * MaxPacketSize` (65536) bytes a second, and a burst of one second of that or one
+`MaxPacketSize`, whichever is larger
 
 Bound how many bytes a second each player's packets may cost the server, before any of them is
 decoded.
@@ -386,8 +387,8 @@ option InboundBurst = 131072
 
 At the defaults that is eight full-size packets a second, or 512 small ones. The default rate follows
 `MaxPacketSize`, so raising that raises the budget with it. `InboundBurst` must be at least
-`MaxPacketSize` (`E2003` otherwise), or the largest packet could never be afforded however long the
-client waited. The burst is a whole second because the clock is the server's: after a network hitch,
+`MaxPacketSize`, and never below `128` (`E2003` otherwise), or the largest packet could never be
+afforded however long the client waited. The burst is a whole second because the clock is the server's: after a network hitch,
 Roblox delivers the packets that queued up together, and a refused reliable packet takes every event
 in it along.
 

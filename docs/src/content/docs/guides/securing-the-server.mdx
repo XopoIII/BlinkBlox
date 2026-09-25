@@ -28,8 +28,9 @@ next, so a hostile packet is refused as early as possible.
 | 5 | Decoding runs one event at a time, and stops when the player has left. | The rest of the packet is skipped. |
 | 6 | At most [`MaxEventsPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) events are decoded from one packet (64). | The rest of the packet is dropped, warned. |
 | 7 | Each event is decoded inside a `pcall`. An index that names no event, a truncated payload, a length or count that the packet cannot back, a value outside its range or an Instance of the wrong class all fail here. | The rest of the packet is dropped; your decode-error handler is called. |
-| 8 | The event's [rate bucket](/BlinkBlox/language/events/#rate-burst) has a token, if the event has a rate. | The event is dropped before any listener runs; the rate-limit handler is called. |
-| 9 | A reliable event with no listener is queued, up to 256. | Further events are dropped silently. |
+| 8 | The event's [rate bucket](/BlinkBlox/language/events/#rate-burst) has a token, if the event has a rate. | The event is dropped before any listener runs, and a function call is answered with a failure; the rate-limit handler is called. |
+| 9 | A function with [`Concurrency`](/BlinkBlox/language/functions/#concurrency) has fewer than that many of this player's calls still running. | The call is answered with a failure, warned; the rate-limit handler is called. |
+| 10 | A reliable event or a function call with no listener is queued, up to 256. | Further events are dropped silently; a further call is answered with a failure. |
 
 Some of what step 7 covers is worth knowing in detail:
 
@@ -48,11 +49,11 @@ And outside the decode loop:
 - Both remotes are checked for the right class when the module loads, so an instance of the wrong
   class planted under the remote's name is refused rather than used.
 - Every warning the server prints about a client's traffic, and every call it makes to your handlers
-  about it, happens at most once a second per player (per kind, and per event for decode failures and
-  rate limits). A client cannot use a stream of bad packets to fill your output or spawn your handler
+  about it, happens at most once a second per player (per kind, per event for decode failures and
+  rate limits, and per function for `Concurrency`). A client cannot use a stream of bad packets to fill your output or spawn your handler
   hundreds of times a second.
-- A player who leaves has their buffers, rate buckets, budgets and outstanding invocations released
-  on `PlayerRemoving`.
+- A player who leaves has their buffers, rate buckets, budgets, `Concurrency` counts and outstanding
+  invocations released on `PlayerRemoving`.
 
 None of this needs an option. The limits it uses have defaults you can change, below.
 
@@ -103,18 +104,19 @@ None of this needs an option. The limits it uses have defaults you can change, b
    A rate on a `From: Server` event or function does nothing and warns (`W3020`): only inbound
    traffic is limited. A `Burst` with no `Rate` behind it is an error (`E3020`).
 
+   The rate check runs after the event is decoded and before it is dispatched, so it protects your
+   listener and the game logic behind it. It cannot run sooner: an event carries no length of its
+   own, so the only way to find where the next event in a packet starts is to read this one. The
+   decoding itself is bounded by the packet limits and `InboundBytesPerSecond` (step 3). A refused
+   function call is still answered, with a failure, so the caller raises at once instead of waiting
+   out the timeout. See [`Rate`, `Burst`](/BlinkBlox/language/events/#rate-burst) and
+   [`DefaultRate`, `RequireRates`](/BlinkBlox/language/options/#defaultrate-requirerates).
+
    A function whose listener waits -- a DataStore save, a purchase, anything that yields -- also
    wants a [`Concurrency`](/BlinkBlox/language/functions/#concurrency): how many of one player's calls
    may be running at once. `Rate` bounds how many start; `Concurrency` bounds how many are still
-   waiting, which is what a stream of calls turns into when each one takes seconds to answer.
-
-   The check runs after the event is decoded and before it is dispatched, so it protects your
-   listener and the game logic behind it. It cannot run sooner: an event carries no length of its
-   own, so the only way to find where the next event in a packet starts is to read this one. The
-   decoding itself is bounded by the packet limits and `InboundBytesPerSecond` (step 3). A refused function call is still answered, with a failure,
-   so the caller raises at once instead of waiting out the timeout. See
-   [`Rate`, `Burst`](/BlinkBlox/language/events/#rate-burst) and
-   [`DefaultRate`, `RequireRates`](/BlinkBlox/language/options/#defaultrate-requirerates).
+   waiting, which is what a stream of calls turns into when each one takes seconds to answer. It is
+   checked after the rate, so a call the rate refused does not count as running.
 
 2. **Bound every variable-length field and every number the game relies on.**
 
@@ -132,8 +134,8 @@ None of this needs an option. The limits it uses have defaults you can change, b
 
    The bound also sizes the length prefix, so a tighter range is usually a smaller packet as well; see
    [Bandwidth](/BlinkBlox/guides/bandwidth/). Lengths are checked on send too, whatever
-   `WriteValidations` says: a value longer than its bound makes `Fire` throw rather than put a corrupt
-   packet on the wire.
+   `WriteValidations` says: a length outside its bounds, or a map with more entries than its count can
+   hold, makes `Fire` throw rather than put a corrupt packet on the wire.
 
    <Aside type="caution">
    A range on a number does not make it smaller on the wire. `u32(0..10)` still costs four bytes; pick
@@ -158,8 +160,8 @@ None of this needs an option. The limits it uses have defaults you can change, b
    `InboundBytesPerSecond` if your game genuinely sends more.
 
    Whatever you allow a real client, you also allow an attacker. Raise a limit only as far as your
-   traffic needs. `InboundBurst` may not be below `MaxPacketSize` (`E2003`), or the largest packet could
-   never be afforded. See
+   traffic needs. `InboundBurst` may not be below `MaxPacketSize`, nor below 128 (`E2003`), or the
+   largest packet could never be afforded. See
    [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket)
    and [`InboundBytesPerSecond`](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst).
 

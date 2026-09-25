@@ -23,12 +23,14 @@ startup instead of misreading packets.
   only reads the elements costs the same on both. The forms without a branch -- `v and k or 0`, a
   `{ [true] = 1 }` lookup -- measured no faster or slower. The reader already did not depend on
   the data, and a lookup table there was three times slower natively, so it stays as it was.
+  These timings are from the run the change was developed against, not the published M1 run;
+  `benchmark/Benchmarks.md` has the published numbers.
 
 ### Benchmarks
 
 - Blink 0.18.9, the last release of the original project BlinkBlox forked from, is benchmarked
   beside it, compiling the same schema with its own compiler, in Studio and on Lune.
-- The tables name the tools BlinkBlox, Blink, zap, ByteNet, Packet and Roblox remotes, always in
+- The tables name the tools Roblox remotes, BlinkBlox, Blink, zap, ByteNet and Packet, always in
   that order, where they had printed the harness's ids (`blink`, `upstream`) in no fixed order.
 - `lune run Runtime` times zap, ByteNet, Packet and Blink as well as BlinkBlox, natively
   compiled and interpreted, and times the server decoding what they sent, which Studio does not.
@@ -93,7 +95,9 @@ wire format does not change.**
 ### Changed
 
 The generated code is faster on both sides. Each change was kept only if `benchmark/Runtime.luau`
-showed it was faster. Medians for 1000 events a frame, natively compiled, 0.34.0 then 0.35.0:
+showed it was faster. Medians for 1000 events a frame, natively compiled, 0.34.0 then 0.35.0, from
+the run the changes were developed against; the published M1 numbers are in
+`benchmark/Benchmarks.md`:
 
 | Bench | Fire (ms) | Decode (ms) |
 |---|---|---|
@@ -373,6 +377,11 @@ whole. **The wire format does not change.**
 ### Language
 
 - Repeated flags, values and variants are refused.
+- An enum with no values or variants is refused (`E3029`).
+- A `Burst` below 1 is refused (`E2003`): an event spends one whole token, so such a bucket refused
+  every event.
+- A type-pack element named after a name the generated `Fire` or `Invoke` already uses, such as
+  `Player` or `Buffer`, is refused (`E3005`).
 - The TypeScript tag is quoted.
 - A trailing comma is accepted in every list.
 
@@ -414,7 +423,9 @@ Ideas taken from reading ByteNet-Max, Warp and satset. **Recompile both modules*
   `option InboundBurst`. Each server connection charges a per-player token bucket before it decodes
   anything. A packet costs its size, and never less than 128 bytes. The burst is a whole second,
   because after a hitch Roblox delivers the backlog at once, and a refused reliable packet takes
-  every event in it along. Refusals go to the rate-limit handler with `Event` nil.
+  every event in it along. Refusals go to the rate-limit handler with `Event` nil. An
+  `InboundBurst` below `MaxPacketSize`, or below 128, is refused (`E2003`): the largest packet could
+  never be afforded.
 - **`boolean[]` is packed eight to a byte.**
 - **`CFrame<quat>`** encodes a rotation in 7 bytes instead of 12. It is opt-in, because it is lossy.
 

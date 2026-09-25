@@ -8,7 +8,8 @@ import { Aside } from '@astrojs/starlight/components';
 A schema compiles to a server module, a client module and, with
 [`TypesOutput`](/BlinkBlox/language/options/#serveroutput-clientoutput-typesoutput), a shared types
 module. This page lists everything they expose. Names are shown in the default `Pascal`
-[casing](#casing).
+[casing](#casing). Every module declares `--!strict` and passes it, so the types below are what a
+strict script sees.
 
 In the signatures below, `...Data` stands for an event's or function's `Data` as parameters: one
 parameter named `Value` for a single type, or one per element of a
@@ -48,7 +49,9 @@ in the same Luau environment errors: `An instance of BlinkBlox is already runnin
   it.
 - The rate-limit handler is called at most once a second per player and event, with `Refused` the
   number of refusals since the last call. `Event` is `nil` when whole packets were refused over the
-  [inbound byte budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst).
+  [inbound byte budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst). Calls a
+  function's [`Concurrency`](/BlinkBlox/language/functions/#concurrency) refused arrive here too, with
+  the function's name, reported separately from its `Rate` refusals.
 - The decode-error handler receives the event the packet claimed to carry, or `nil` if its index
   named none. On the server it is called at most once a second per player, channel and event, and
   without one the server is silent. On the client, without one, each failure is a warning.
@@ -79,9 +82,10 @@ is set.
 
 - A **reliable** send is written into the recipient's batch and sent on the next `StepReplication`.
 - An **unreliable** send is sent at once, as its own packet. One larger than
-  [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) is dropped with a warning.
-- A send throws if a value fails validation: always for a string, buffer or array longer than its
-  bound, and for types, ranges and classes with
+  [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize), counting 6 bytes for each
+  Instance it carries, is dropped with a warning.
+- A send throws if a value fails validation: always for a string, buffer or array length outside its
+  bounds or a map with more than 65535 entries, and for types, ranges and classes with
   [`WriteValidations`](/BlinkBlox/language/options/#writevalidations). Whatever the throw had already
   written is taken back out, so the rest of the batch is unaffected.
 
@@ -140,7 +144,8 @@ What `Invoke` returns depends on the function's [`Yield`](/BlinkBlox/language/fu
 | `Promise` | `Promise.new(...)` resolving with the return values | the promise rejects; cancelling it releases the call |
 
 - A call fails when the listener errors, when its return value fails to serialise, when a rate limit
-  refuses it, when the call is not answered within
+  or its [`Concurrency`](/BlinkBlox/language/functions/#concurrency) refuses it, when the server's
+  queue for a function with no listener is full, when the call is not answered within
   [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) (10 seconds), and, on the
   server, when the player leaves or has already left.
 - At most **32** calls may be outstanding at once: per client, and per player on the server. The 33rd
@@ -240,6 +245,7 @@ that name. Avoid those names.
 | Invocation timeout | `InvocationTimeout`, 10 seconds by default |
 | Queued reliable events with no listener | 256 per event (server drops, client warns) |
 | Queued calls with no listener | 256 per function on the server, then answered with a failure |
+| Calls running per player | `Concurrency` per function on the server, when set |
 | Polled queue on the server | 256 x `Players.MaxPlayers` rows per event |
 | Enum values or tagged-enum variants | 256 |
 | Declarations per channel | 256 (reliable events and functions share one channel, unreliable events the other) |

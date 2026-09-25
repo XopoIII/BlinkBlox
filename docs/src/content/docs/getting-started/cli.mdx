@@ -44,7 +44,7 @@ What gets written:
 On success it prints its progress and stops:
 
 ```text
-BlinkBlox 0.33.0
+BlinkBlox 0.36.2
 Reading source from net.blink...
 Parsing source into AST...
 Generating output files...
@@ -113,7 +113,7 @@ event Chat {
 the compiler prints:
 
 ```text
-BlinkBlox 0.33.0
+BlinkBlox 0.36.2
 Reading source from net.blink...
 Parsing source into AST...
 [E3020] Error: Inbound "Chat" has no rate limit
@@ -158,8 +158,10 @@ Every code, and what to do about it, is listed in the
 | `1` | Anything else: a diagnostic error in the schema, an unknown `--profile`, a schema file that does not exist, a schema without `ServerOutput` or `ClientOutput`, a refused directory prompt, or `--json` combined with `--watch`. |
 
 Only diagnostics are rendered as above. A missing schema file or a refused prompt is reported as a
-plain error message followed by a stack trace. Under [`--json`](#json-output) every one of these is
-reported in the document instead.
+plain error message followed by a stack trace. Under [`--json`](#json-output) every failure of a
+compile -- a diagnostic, a missing file, a missing output path, a refused prompt -- is reported in the
+document instead. An unknown `--profile` and `--json` combined with `--watch` are refused before
+anything is compiled, and print a plain line.
 
 ## Checking without writing
 
@@ -250,8 +252,10 @@ column counts bytes, so a tab is one column.
 
 A failure that is not a diagnostic -- a schema file that does not exist, a schema without
 `ServerOutput` -- is reported the same way, with `code`, `name` and `range` set to `null` and the
-error in `message`. Standard output is a JSON document on every run, including the ones that fail
-before the schema is read.
+error in `message`. Standard output is a JSON document on every run that reaches the compile,
+including the ones that fail before the schema is read. The runs that do not reach it print plain
+text: an unknown `--profile`, `--json` with `--watch` (below), `--version`, and `--help` or a command
+line with no schema.
 
 `--json` cannot be combined with `--watch`: watch mode never finishes, so its document would never
 be complete. The compiler refuses the pair and exits with `1`.
@@ -267,7 +271,7 @@ file it imports changes -- imports of imports included. It prints what it is wat
 starts, and again whenever an edit changes how many imports there are:
 
 ```text
-BlinkBlox 0.33.0
+BlinkBlox 0.36.2
 BlinkBlox is watching for changes:
 	Entry: net.blink
 	Imports: 2

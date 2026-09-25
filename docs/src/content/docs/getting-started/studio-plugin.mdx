@@ -291,7 +291,7 @@ struct declaration with empty braces, `map` a map with an empty `[]:` pair, and 
 <PluginWindow
 	title="Configuration Editor"
 	width={440}
-	label="The editor with a struct being typed. On line 5 the text reads Damage: u, with a red caret under the u. Below the cursor a popup lists u8, highlighted, then u16, u32 and unknown."
+	label="The editor with a struct being typed. On line 5 the text reads Damage: u, with a red caret under the u. Below the cursor a popup lists u8, highlighted, then u16, u24, u32 and unknown."
 >
 	<Editor lines={typing.lines} rows={10} activeLine={5} cursor={{ line: 5, column: 10 }} underline={{ line: 5, start: 9, end: 10, severity: 'Error' }}>
 		<CompletionPopup
@@ -299,6 +299,7 @@ struct declaration with empty braces, `map` a map with an empty `[]:` pair, and 
 			items={[
 				{ label: 'u8', kind: 'primitive' },
 				{ label: 'u16', kind: 'primitive' },
+				{ label: 'u24', kind: 'primitive' },
 				{ label: 'u32', kind: 'primitive' },
 				{ label: 'unknown', kind: 'primitive' },
 			]}

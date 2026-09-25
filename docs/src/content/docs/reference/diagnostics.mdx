@@ -61,7 +61,7 @@ instead, which gives each one's code, file, line and column, labels and notes as
 | `E2001` | Unexpected end of file | A declaration or list was left open. Close the brace, bracket or parenthesis. |
 | `E2002` | Unexpected token | The grammar expected something else here; the label says what. Often a missing comma, `:` or `=`. |
 | `E2003` | Unknown option "X" | An `option` name that does not exist, or an event or function field that does not. The label lists the valid ones. |
-| `E2003` | Invalid value for option "X" | A numeric option that is not a positive whole number, a `Casing` other than `Pascal`, `Camel` or `Snake`, or an `InboundBurst` below `MaxPacketSize`. |
+| `E2003` | Invalid value for option "X" | A numeric option that is not a positive whole number, a `Casing` other than `Pascal`, `Camel` or `Snake`, or an `InboundBurst` below `MaxPacketSize` or below 128. |
 | `E2003` | Unknown option "X" (on a field's value) | A `From`, `Type`, `Call` or `Yield` value that is not one of the allowed words. |
 | `E2003` | Invalid value for "Rate" / "Burst" / "Concurrency" | `Rate` must be above zero; `Burst` must be at least 1, since each event spends a whole token; `Concurrency` must be a whole number of at least 1. |
 | `E2005` | Field "X" is missing | An event needs `From`, `Type` and `Call`; a function needs `Yield`. Add the field. |
@@ -80,7 +80,7 @@ instead, which gives each one's code, file, line and column, labels and notes as
 | `E3004` | Merged struct contains a duplicate field | Two merged structs, or a merge and a field, share a field name. |
 | `E3005` | Reserved identifier | `StepReplication`, `SetRateLimitHandler` and `SetDecodeErrorHandler` name module members. Rename the declaration. |
 | `E3005` | "X" cannot name a type pack element | A named element becomes a parameter: it must be a Luau identifier, not a keyword, and not a name the generated function already uses, such as `Player`. |
-| `E3005` | Reserved identifier (a type named `number`, `Player`, ...) | A declared type is exported to Luau under its own name. It cannot take a built-in Luau type's name (`any`, `boolean`, `buffer`, `never`, `number`, `string`, `thread`, `unknown`), and a top-level type cannot take the name of a Roblox type the module uses: `Player`, `Instance`, `RemoteEvent`, `UnreliableRemoteEvent`, `CFrame`, `Vector3`, `Color3`, `DateTime`, `BrickColor`, or a class the schema names in `Instance(...)`. Rename it. |
+| `E3005` | Reserved identifier (a type named `number`, `Player`, ...) | A declared type is exported to Luau under its own name. It cannot take a built-in Luau type's name (`any`, `never`, `number`, `thread`), and a top-level type cannot take the name of a Roblox type the module uses: `Player`, `RemoteEvent`, `UnreliableRemoteEvent`, `Vector3`, or a class the schema names in `Instance(...)`. A type inside a scope is exempt from the Roblox names. Names that are BlinkBlox types themselves -- `boolean`, `buffer`, `string`, `unknown`, `Instance`, `CFrame`, `Color3`, `DateTime`, `BrickColor` -- are refused earlier with `E2002`. Rename it. |
 | `E3005` | Enum tag used as field in variant | A tagged enum's tag field may not also be a field of a variant. |
 | `E3007` | Unknown reference | The name is not declared, or not declared yet: a declaration is in scope only after it closes. |
 | `E3008` | Type doesn't accept a range | Only numbers, `string`, `buffer`, `vector` and arrays take a range. |
@@ -142,6 +142,7 @@ server prints about a client's traffic are limited to one a second per player an
 | `Dropped the rest of a packet from X, too many events.` | server | `MaxEventsPerPacket` events were decoded; the rest was dropped. |
 | `Dropped packets from X over the inbound budget of N bytes a second, N refused.` | server | The player's `InboundBytesPerSecond` budget ran out. |
 | `Rate limited event "E" from X, N refused.` | server | The event's `Rate` refused it. |
+| `"F" from X already has N calls running, N refused.` | server | The function's [`Concurrency`](/BlinkBlox/language/functions/#concurrency) refused a call; it was answered with a failure. |
 | `Dropped a packet that could not be decoded, at event "E": ...` | client | A packet from the server failed to decode and no decode-error handler is installed. |
 | `Event queue of "E" exceeded 256, did you forget to implement a listener?` | client | Reliable events are queuing for a listener that never connected. |
 | `"E" already has a listener. ... keeps only the newest one, and the replaced listener's disconnect stops working.` | both | A second `On` on a `Single` event. |

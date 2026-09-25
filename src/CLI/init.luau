@@ -38,7 +38,7 @@ local ARGUMENTS: { [string]: Argument } = {
 	},
 	Compact = {
 		Aliases = { "-c", "--compact" },
-		Description = "Compacts error output, the full message is still printed out after a compacted version.",
+		Description = "Prints each diagnostic as a single line instead of the full rendering.",
 	},
 	YesToAll = {
 		Aliases = { "-y", "--yes" },

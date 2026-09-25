@@ -49,16 +49,21 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 - **Bounded inbound traffic.** Packet size, the number of events in a packet and the number of
   instance references are capped before anything is parsed. Each player also gets a byte budget.
 - **Rate limits per player and per event.** Set `Rate` and `Burst` on an event, or a default for
-  the whole schema. Refused events go to a handler you provide, and nobody is kicked automatically.
+  the whole schema, and `Concurrency` on a function to bound the calls still running. Refused events
+  go to a handler you provide, and nobody is kicked automatically.
 - **Hostile input costs the attacker, not the server.** Every length is checked before the read and
-  the allocation it pays for. A malformed event drops only itself.
+  the allocation it pays for. A malformed event ends its packet without throwing: the events
+  before it are delivered, and the failure goes to a handler you provide.
 - **Mismatched builds refuse each other.** A client and a server built from different schemas stop
   at startup instead of decoding one event as another.
 - **Small on the wire.** Booleans and optional flags share a bitfield, and `boolean[]` packs eight
-  to a byte. A length is sent relative to its range, and `CFrame<quat>` fits a rotation in 7 bytes.
-  An unreliable event that cannot fit is refused at compile time.
-- **Tooling.** The CLI has watch mode and `@profile` builds that keep debug remotes out of release.
-  You also get TypeScript definitions and a Studio plugin with live diagnostics.
+  to a byte. A length is sent relative to its range, `CFrame<quat>` fits a rotation in 7 bytes, and
+  `u24`, `i24` and `f24` fill the gap between 16 and 32 bits, so `vector<f24>` is 9 bytes instead of
+  12. An unreliable event that cannot fit is refused at compile time.
+- **Tooling.** The CLI has watch mode and `@profile` builds that keep debug remotes out of release,
+  and `--check --json` reports every diagnostic as JSON for editors and AI assistants. The generated
+  modules pass their own `--!strict`. You also get TypeScript definitions and a Studio plugin with
+  live diagnostics.
 
 ## Performance
 
