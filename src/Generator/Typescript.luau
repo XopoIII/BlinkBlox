@@ -3,7 +3,10 @@
 local Parser = require("../Parser")
 local Settings = require("../Settings")
 
+local Lifecycle = require("./Lifecycle")
+local Limits = require("./Limits")
 local Prefabs = require("./Prefabs")
+local Traffic = require("./Traffic")
 local Util = require("./Util")
 
 local Builder = require("../Modules/Builder")
@@ -183,7 +186,7 @@ function Generators.Event(State: State, Event: Parser.Event)
 	local Casing = State.Casing
 	local StringBuilder = State.Builder
 
-	local IsPolling = Value.Call == "Polling" or State.Options.UsePolling
+	local IsPolling = not Value.Stream and (Value.Call == "Polling" or State.Options.UsePolling)
 
 	local _, Values = "", "Value: void"
 	if Value.Data then
@@ -203,7 +206,15 @@ function Generators.Event(State: State, Event: Parser.Event)
 	StringBuilder.Push(`export {GetPrefix(Indent)}const {Name}: \{`, 0, Indent)
 
 	if Value.From == State.Context then
-		if Value.From == "Server" then
+		if Value.Stream then
+			--> A stream's server sends on a schedule; the game hands it the state. The client listens to
+			--> the wire type, `(Value: T | undefined, ServerTime: number)`, like any event.
+			local StreamType = GetTypescriptType(State, Value.Stream.Value)
+			StringBuilder.Push(`{Casing.Set}: (Value: {StreamType}) => void`, 0, Indent + 1)
+			StringBuilder.Push(`{Casing.Clear}: () => void`, 0, Indent + 1)
+			StringBuilder.Push(`{Casing.Urgent}: () => void`, 0, Indent + 1)
+			StringBuilder.Push(`{Casing.SetFast}: (Fast: boolean) => void`, 0, Indent + 1)
+		elseif Value.From == "Server" then
 			StringBuilder.Push(`{Casing.Fire}: (Player: Player, {Values}) => void`, 0, Indent + 1)
 			StringBuilder.Push(`{Casing.FireAll}: ({Values}) => void`, 0, Indent + 1)
 			StringBuilder.Push(`{Casing.FireExcept}: (Except: Player, {Values}) => void`, 0, Indent + 1)
@@ -263,8 +274,8 @@ function Generators.Tree(State: State, Tree: { Parser.Declaration })
 end
 
 --- The module members that install the game's handlers, typed as the Luau module types them. The
---- client's rate-limit and packet-drop setters take the server's handler type and ignore it, so code
---- shared between the two sides can install one without branching.
+--- client's rate-limit, packet-drop and listener-error setters take the server's handler type and
+--- ignore it, so code shared between the two sides can install one without branching.
 local DROP_REASON = `"Malformed" | "Oversized" | "Budget" | "Instances" | "Events"`
 
 local function HandlerDeclarations(FileContext: Context, Casing: Settings.Cases): { string }
@@ -276,6 +287,7 @@ local function HandlerDeclarations(FileContext: Context, Casing: Settings.Cases)
 		`export declare const {Casing.SetRateLimitHandler}: (handler?: (player: Player, event: string | undefined, refused: number) => void) => void`,
 		`export declare const {Casing.SetDecodeErrorHandler}: (handler?: {Decode}) => void`,
 		`export declare const {Casing.SetPacketDropHandler}: (handler?: (player: Player, reason: {DROP_REASON}, refused: number, detail: number) => void) => void`,
+		`export declare const {Casing.SetListenerErrorHandler}: (handler?: (player: Player, event: string, failure: string, count: number) => void) => void`,
 	}
 end
 
@@ -288,6 +300,28 @@ return function(FileContext: Context, AbstractSyntaxTree: AbstractSyntaxTree): s
 	StringBuilder.Push(`export declare const {Casing.StepReplication}: () => void`)
 	for _, Line in HandlerDeclarations(FileContext, Casing) do
 		StringBuilder.Push(Line)
+	end
+	if FileContext ~= "Shared" then
+		for _, Line in Traffic.Typescript(Options, Casing) do
+			StringBuilder.Push(Line)
+		end
+	end
+
+	--> The members Generator/Lifecycle adds, under the same conditions.
+	StringBuilder.Push(
+		`export declare const {Casing.Remotes}: \{ readonly Reliable: string; readonly Unreliable: string }`
+	)
+	if Lifecycle.Bounded(FileContext, Options) then
+		StringBuilder.Push(`export declare const {Casing.Connected}: boolean`)
+	end
+	if Lifecycle.Deferred(FileContext, Options) then
+		StringBuilder.Push(`export declare const {Casing.Start}: () => void`)
+	end
+
+	if Options.ExportLimits then
+		local Word = Limits.Words(Options.Casing :: Settings.Case?)
+		local Limit = Limits.Declarations(AbstractSyntaxTree.Value.Declarations, Word)
+		StringBuilder.Push(`export declare const {Word("Limits")}: {Limits.Typescript(Limit, Word)}`)
 	end
 
 	if _G.VERSION == nil then

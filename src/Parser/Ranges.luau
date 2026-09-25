@@ -82,13 +82,25 @@ function Parser.NumberRange(self: Parser, Token: Lexer.Token, Bounds: NumberRang
 	return Range
 end
 
-function Parser.Range(self: Parser, Primitive: Settings.Primitive): { Range: NumberRange, Token: Token }?
+--- A scaled number's range is written in real units, `u16<0.1>(0..6553.5)`, so it is checked against
+--- the scaled bounds, may be fractional, and must land on whole steps.
+function Parser.Range(
+	self: Parser,
+	Primitive: Settings.Primitive,
+	Scale: number?
+): { Range: NumberRange, Token: Token }?
 	local Token = self:TryConsume("Range")
 	if Token == nil then
 		return
 	end
 
-	local ParsedRange = self:NumberRange(Token, Primitive.Bounds or DOUBLE_BOUNDS, Primitive.Integer)
+	local ParsedRange
+	if Scale then
+		ParsedRange = self:NumberRange(Token, self:ScaledBounds(Primitive, Scale), false)
+		self:CheckScaledRange(ParsedRange, Token, Scale)
+	else
+		ParsedRange = self:NumberRange(Token, Primitive.Bounds or DOUBLE_BOUNDS, Primitive.Integer)
+	end
 
 	return {
 		Range = ParsedRange,

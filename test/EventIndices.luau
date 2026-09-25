@@ -49,6 +49,13 @@ RunClosure("Every event index is routed or refused, on every test schema's serve
 
 		--> Named in the schema's own casing.
 		local Server = Pair.Server
+
+		--> A server built with `AutoStart = false` listens only once started.
+		local Start = Server.Start or Server.start
+		if Start then
+			Start()
+		end
+
 		local SetHandler = Server.SetDecodeErrorHandler
 			or Server.setDecodeErrorHandler
 			or Server.set_decode_error_handler
@@ -92,7 +99,7 @@ RunClosure("Every event index is routed or refused, on every test schema's serve
 		Shared.DrainWarnings()
 	end
 
-	if Schemas < 9 then
+	if Schemas < 10 then
 		ErrorPrint(`Failed "event indices": only {Schemas} test schemas were found.`)
 	end
 end)

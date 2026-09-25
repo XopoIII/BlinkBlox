@@ -1,0 +1,13 @@
+-- expect E3018
+-- The state travels as optional, since a clear arrives as nil, but every other packet carries it
+-- whole: 980 bytes of state can never fit beside the stream's six bytes of header.
+option ClientOutput = "../../Network/OversizeStreamClient.luau"
+option ServerOutput = "../../Network/OversizeStreamServer.luau"
+
+event Snapshot {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Stream: { Rate: 10 },
+    Data: u8[980]
+}

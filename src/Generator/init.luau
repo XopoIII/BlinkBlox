@@ -11,8 +11,12 @@ local Table = require("./Modules/Table")
 local Blocks = require("@self/Blocks")
 local Fragments = require("@self/Fragments")
 local GenerateTypescript = require("@self/Typescript")
+local Lifecycle = require("@self/Lifecycle")
+local Limits = require("@self/Limits")
 local Prefabs = require("@self/Prefabs")
 local Serde = require("@self/Serde")
+--> `option TrafficStats`; every call below emits nothing when it is off.
+local Traffic = require("@self/Traffic")
 --> Everything one generation run builds up, shared with the generator's other files. See State.luau.
 local State = require("@self/State")
 local Util = require("@self/Util")
@@ -28,15 +32,14 @@ local DEFAULT_MAX_EVENTS_PER_PACKET = Fragments.DEFAULT_MAX_EVENTS_PER_PACKET
 local DEFAULT_MAX_UNRELIABLE_SIZE = Fragments.DEFAULT_MAX_UNRELIABLE_SIZE
 local UNRELIABLE_INSTANCE_BYTES = Fragments.UNRELIABLE_INSTANCE_BYTES
 
---> The server template's second split marks where its limits go: after the remotes, before the
---> PlayerRemoving handler that clears their tables. Templates/Limits.luau holds them.
-local ServerParts = string.split(require("./Templates/Server"), "-- SPLIT --")
+--> The stream runtime: the server's half, then the client's. Spliced only into a module whose schema
+--> declares a stream.
+local StreamParts = string.split(require("./Templates/Stream"), "-- SPLIT --")
 
+--> The client's and the server's halves depend on the options; Lifecycle assembles them.
 local Sources = {
 	Base = require("./Templates/Base"),
 	Shared = { "", "" },
-	Client = string.split(require("./Templates/Client"), "-- SPLIT --"),
-	Server = { ServerParts[1], ServerParts[2] .. require("./Templates/Limits") .. ServerParts[3] },
 }
 
 type Context = State.Context
@@ -56,6 +59,7 @@ local Generator = {}
 
 function Generator.Reset()
 	State.Reset()
+	Traffic.Reset()
 end
 
 function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Body): string
@@ -78,9 +82,16 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> `Iter` returned nil, so `for _ in Net.Foo.Iter() do` raised instead of iterating zero times;
 	--> and `StepReplication` was missing altogether, so it was nil under ManualReplication -- while
 	--> the real Returns table has always carried it.
-	State.Noop.Push(`if not RunService:IsRunning() then`)
+	-->
+	--> Under ClientConnectTimeout the same stubs are what a client that could not connect returns;
+	--> see Lifecycle.
+	local Preamble, StubCondition = Lifecycle.Stubs(State.Context, State.Options)
+	State.Noop.Push(StubCondition)
 	State.Noop.Push(`local NOOP = function() end`, 0, 1)
 	State.Noop.Push(`local NOOP_RETURNING = function() return NOOP end`, 0, 1)
+	if Lifecycle.InvokeStub(State.Context, State.Options) ~= "NOOP" then
+		State.Noop.Push(Lifecycle.NOOP_INVOKE, 0, 1)
+	end
 	State.Noop.Push(`local Returns = table.freeze(\{`, 0, 1)
 
 	--> Setup remote events
@@ -100,6 +111,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 
 	State.Reliables:Lines(EVENT_BODY, 1)
 	State.Unreliables:Lines(EVENT_BODY, 1)
+	Traffic.Packet(State.Reliables, false)
+	Traffic.Packet(State.Unreliables, true)
 
 	if State.Options.SyncValidation then
 		State.Reliables:Lines(EVENT_SYNC_VALIDATION, 1)
@@ -164,6 +177,20 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	State.Noop.Push(`{State.Casing.SetDecodeErrorHandler} = NOOP,`, 0, 2)
 	State.Return.Push(`{State.Casing.SetPacketDropHandler} = SetPacketDropHandler,`, 1, 1)
 	State.Noop.Push(`{State.Casing.SetPacketDropHandler} = NOOP,`, 0, 2)
+	State.Return.Push(`{State.Casing.SetListenerErrorHandler} = SetListenerErrorHandler,`, 1, 1)
+	State.Noop.Push(`{State.Casing.SetListenerErrorHandler} = NOOP,`, 0, 2)
+
+	local Returned, Stubbed = Lifecycle.Members(State.Context, State.Options, State.Casing)
+	for Index, Line in Returned do
+		State.Return.Push(Line, 1, 1)
+		State.Noop.Push(Stubbed[Index], 0, 2)
+	end
+	Traffic.Members()
+	if State.Options.ExportLimits then
+		local Member = Limits.Words(State.Options.Casing :: Settings.Case?)("Limits")
+		State.Return.Push(`{Member} = {Limits.LOCAL},`, 1, 1)
+		State.Noop.Push(`{Member} = {Limits.LOCAL},`, 0, 2)
+	end
 
 	if not State.Options.ManualReplication then
 		Replication.Push("RunService.Heartbeat:Connect(StepReplication)")
@@ -184,7 +211,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	end
 
 	--> Generate context source
-	local Source = Sources[State.Context]
+	local Source = Lifecycle.Sources(State.Context, State.Options)
 
 	--> An unknown event index means the packet is not what it claims to be: the byte came from a
 	--> client, and the cursor is no longer at an event boundary, so nothing after it can be trusted.
@@ -393,6 +420,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		{ "local SerdesFunctions = {}\n" },
 		Util.Constants(State.Options.RemoteScope, AbstractSyntaxTree),
 		string.split(Sources.Base, "\r"),
+		Traffic.Body(),
 		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
 		RateTemplateBody,
 		OrderingBody,
@@ -401,11 +429,17 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		State.Events.DumpLines(),
 		State.LuauTypes.DumpLines(),
 		State.UserTypes.DumpLines(),
+		Limits.Body(AbstractSyntaxTree),
+		Preamble,
 		State.Noop.DumpLines(),
-		string.split(Source[2], "\r"),
-		Replication.DumpLines(),
-		State.Reliables.Content,
-		State.Unreliables.Content,
+		string.split(Traffic.Template(Source[2]), "\r"),
+		(if State.UsesStreams then { StreamParts[if State.Context == "Server" then 1 else 2] } else {}),
+		State.Streams.DumpLines(),
+		Lifecycle.Connections(
+			State.Context,
+			State.Options,
+			Table.Merge(Replication.DumpLines(), State.Reliables.Content, State.Unreliables.Content)
+		),
 		State.Return.DumpLines(),
 		{ `type {EVENTS_TYPE} = typeof(Returns)\n`, `return Returns :: {EVENTS_TYPE}` }
 	)
@@ -419,11 +453,15 @@ function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 	State.Options = AbstractSyntaxTree.Value.Options
 	State.Casing = Settings.GetCasing((State.Options.Casing :: Settings.Case) or "Pascal")
 
+	if State.Options.ExportLimits then
+		State.Return.Push(`{Limits.Words(State.Options.Casing :: Settings.Case?)("Limits")} = {Limits.LOCAL},`, 1, 1)
+	end
+
 	--> Parse declarations
 	Generators.AbstractSyntaxTree(AbstractSyntaxTree.Value.Declarations)
 
 	--> Generate context source
-	local Source = Sources[State.Context]
+	local Source = Sources.Shared
 	local MergedOutput = Table.Merge(
 		DIRECTIVES,
 		VERSION_HEADER,
@@ -434,6 +472,7 @@ function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 		{ "\n" },
 		State.UserTypes.DumpLines(),
 		string.split(Source[2], "\r"),
+		Limits.Body(AbstractSyntaxTree),
 		{ "\n" },
 		{ `\nreturn \{\n` },
 		State.Return.DumpLines(),

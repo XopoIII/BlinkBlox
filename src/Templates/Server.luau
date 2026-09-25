@@ -8,6 +8,7 @@ if not RunService:IsServer() then
     error("Server network module can only be required from the server.")
 end
 
+-- REMOTES --
 local Reliable: RemoteEvent = ReplicatedStorage:FindFirstChild(BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
 if not Reliable then
     local RemoteEvent = Instance.new("RemoteEvent")
@@ -38,6 +39,7 @@ end
 --> require time beats failing per packet, forever, at runtime.
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+-- REMOTES --
 
 local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
 
@@ -66,6 +68,7 @@ local MAX_POLLED = 256 * math.max(Players.MaxPlayers, 1)
 local PlayerInvocations: {[Player]: BLINK_INVOCATIONS} = {}
 
 local function InvokePlayer(Player: Player, Index: number): number
+-- STARTED --
     --> Checked before an id is claimed. A player who already left gets no answer from anyone, and
     --> PlayerRemoving has cleared their set, so claiming here would put back a set nothing removes
     --> again and park the caller for the whole timeout to learn what is already known.
@@ -105,6 +108,7 @@ Players.PlayerRemoving:Connect(function(Player)
     InboundBudgets[Player] = nil
     Reports[Player] = nil
     Drops[Player] = nil
+    ListenerErrors[Player] = nil
     InFlight[Player] = nil
     InFlightRefused[Player] = nil
 
@@ -135,6 +139,7 @@ end)
 --> again: StepReplication would allocate a buffer and fire a remote at a player who is gone, on
 --> every Heartbeat, for the lifetime of the server.
 local function SavePlayerBuffer(Player: Player)
+-- STARTED --
     if not Player:IsDescendantOf(Players) then
         return
     end

@@ -1,0 +1,3 @@
+-- expect E3032
+-- A float carries its own fraction; only an integer takes a scale.
+type Frame = f32<0.1>

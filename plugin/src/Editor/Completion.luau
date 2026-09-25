@@ -75,10 +75,18 @@ local FIELDS: { [string]: { Grammar.EventOption } } = {
 	["function"] = Grammar.FUNCTION,
 }
 
+--> Blocks nested in a declaration's body, by the field that opens them: `Stream: { Rate: 10 }`. Kept
+--> apart from FIELDS, whose keys are the keywords NearestBlock searches the text for.
+local NESTED: { [string]: { Grammar.EventOption } } = {
+	Stream = Grammar.STREAM,
+}
+
 local FIELD_KEYS: { [string]: true } = {}
-for _, Fields in FIELDS do
-	for _, Field in Fields do
-		FIELD_KEYS[Field.Key] = true
+for _, Group in { FIELDS, NESTED } do
+	for _, Fields in Group do
+		for _, Field in Fields do
+			FIELD_KEYS[Field.Key] = true
+		end
 	end
 end
 
@@ -173,15 +181,16 @@ end
 
 --- The declaration whose braces hold `Position`, if it is an `event` or a `function`, and the text of
 --- its body up to there. Braces are counted from the nearest such declaration, skipping comments and
---- strings, and only until its block closes: its body is short, whatever the schema's length.
-local function Enclosing(Text: string, Position: number): (string?, string)
+--- strings, and only until its block closes: its body is short, whatever the schema's length. Inside
+--- a nested block that one of its fields opens, `Stream: {`, that block's fields instead.
+local function Enclosing(Text: string, Position: number): ({ Grammar.EventOption }?, string, boolean)
 	local Keyword, Start = NearestBlock(Text, Position)
 	if not Keyword then
-		return nil, ""
+		return nil, "", false
 	end
 
-	--> The cursor is in the body only at depth one; deeper is a nested struct.
-	local Depth, Brace = 0, 0
+	--> The cursor is in the body only at depth one; deeper is a nested struct, or a nested block.
+	local Depth, Brace, Inner = 0, 0, 0
 	local Index = Start
 	while true do
 		local At = string.find(Text, '[{}"%-]', Index)
@@ -203,25 +212,35 @@ local function Enclosing(Text: string, Position: number): (string?, string)
 				Depth += 1
 				if Depth == 1 then
 					Brace = At
+				elseif Depth == 2 then
+					Inner = At
 				end
 			elseif Character == "}" then
 				Depth -= 1
 				if Depth == 0 then
 					--> The declaration closed before the cursor.
-					return nil, ""
+					return nil, "", false
 				end
 			end
 			Index = At + 1
 		end
 	end
 
+	if Depth == 2 then
+		local Opener = string.match(string.sub(Text, Brace + 1, Inner - 1), "([%a_][%w_]*)%s*:%s*$")
+		local Nested = if Opener and Keyword == "event" then NESTED[Opener] else nil
+		if Nested then
+			return Nested, string.sub(Text, Inner + 1, Position - 1), true
+		end
+	end
+
 	if Depth ~= 1 then
-		return nil, ""
+		return nil, "", false
 	end
 
 	--> A nested struct's own fields are not the declaration's.
 	local Body = string.gsub(string.sub(Text, Brace + 1, Position - 1), "%b{}", "")
-	return Keyword, Body
+	return FIELDS[Keyword], Body, false
 end
 
 local function Offer(Items: { Item }, Icon: string, Typed: string, Label: string, Insert: string)
@@ -259,7 +278,7 @@ function Completion.Match(Text: string, Cursor: number, Symbols: { [string]: tru
 		local Block, Body = Enclosing(Text, WordStart)
 		if Block then
 			--> A field opens a line in an event or a function, once each.
-			for _, Field in FIELDS[Block] do
+			for _, Field in Block do
 				local Written = string.find(Body, `%f[%w_]{Field.Key}%s*:`)
 				if not Written then
 					Offer(Items, ICONS.Field, Typed, Field.Key, `{Field.Key}: `)
@@ -281,6 +300,19 @@ function Completion.Match(Text: string, Cursor: number, Symbols: { [string]: tru
 		return Items
 	end
 
+	--> `saturate` goes in a number's brackets, first or after a scale: `u16<sat`, `u16<0.1, sat`. It is
+	--> an identifier rather than a keyword, so this is the one place it is offered.
+	local Number, Partial = string.match(Typed, "^([%a_][%w_]*)<(%a*)$")
+	if not Number and string.match(Typed, "^%a+$") then
+		Number, Partial = string.match(Previous.Text, "^([%a_][%w_]*)<[^>]*,$"), Typed
+	end
+	local Primitive = if Number then Settings.Primtives[Number] else nil
+	if Primitive and Primitive.Component and Primitive.Bounds and Partial then
+		local Head = string.sub(Typed, 1, #Typed - #Partial)
+		Offer(Items, ICONS.Keyword, Partial, "saturate", `{Head}saturate`)
+		return Items
+	end
+
 	--> `option` is followed by the option's name, and `option Name =` by its value.
 	local Leading = Utility.GetWordRangeAtPosition(Line.Text, 1)
 	if Leading.Text == "option" then
@@ -299,19 +331,34 @@ function Completion.Match(Text: string, Cursor: number, Symbols: { [string]: tru
 		return Items
 	end
 
+	--> A nested block is often written on one line, `Stream: { Rate: 10, Fa`: there its fields follow
+	--> the brace or a comma, once each.
+	if Previous.Text == "{" or string.match(Previous.Text, ",$") then
+		local Block, Body, Nested = Enclosing(Text, WordStart)
+		if Block and Nested then
+			for _, Field in Block do
+				if not string.find(Body, `%f[%w_]{Field.Key}%s*:`) then
+					Offer(Items, ICONS.Field, Typed, Field.Key, `{Field.Key}: `)
+				end
+			end
+
+			return Items
+		end
+	end
+
 	--> A field of an event or a function takes its own values, and `Data` and `Return` a type. Only a
 	--> key one of them has is worth finding the enclosing declaration for.
 	local Key = string.match(Previous.Text, "^([%a_][%w_]*):$")
 	local Block = if Key and FIELD_KEYS[Key] then Enclosing(Text, WordStart) else nil
 	if Block and Key then
-		for _, Field in FIELDS[Block] do
+		for _, Field in Block do
 			if Field.Key == Key and #Field.Values > 0 then
 				for _, Value in Field.Values do
 					Offer(Items, ICONS.Keyword, Typed, tostring(Value), tostring(Value))
 				end
 
 				return Items
-			elseif Field.Key == Key and Field.Numeric then
+			elseif Field.Key == Key and (Field.Numeric or Field.Fields) then
 				return Items
 			end
 		end

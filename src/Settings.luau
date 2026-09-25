@@ -24,10 +24,20 @@ export type Cases = {
 	SetRateLimitHandler: string,
 	SetDecodeErrorHandler: string,
 	SetPacketDropHandler: string,
+	SetListenerErrorHandler: string,
+	Remotes: string,
+	Start: string,
+	Connected: string,
+	GetTrafficStats: string,
+	ResetTrafficStats: string,
 	Next: string,
 	Iter: string,
 	Read: string,
 	Write: string,
+	Set: string,
+	Clear: string,
+	Urgent: string,
+	SetFast: string,
 }
 
 export type Primitive = {
@@ -68,10 +78,24 @@ local Cases: { [string]: { string } } = {
 	SetRateLimitHandler = { "SetRateLimitHandler", "setRateLimitHandler", "set_rate_limit_handler" },
 	SetDecodeErrorHandler = { "SetDecodeErrorHandler", "setDecodeErrorHandler", "set_decode_error_handler" },
 	SetPacketDropHandler = { "SetPacketDropHandler", "setPacketDropHandler", "set_packet_drop_handler" },
+	SetListenerErrorHandler = {
+		"SetListenerErrorHandler",
+		"setListenerErrorHandler",
+		"set_listener_error_handler",
+	},
+	Remotes = { "Remotes", "remotes", "remotes" },
+	Start = { "Start", "start", "start" },
+	Connected = { "Connected", "connected", "connected" },
+	GetTrafficStats = { "GetTrafficStats", "getTrafficStats", "get_traffic_stats" },
+	ResetTrafficStats = { "ResetTrafficStats", "resetTrafficStats", "reset_traffic_stats" },
 	Next = { "Next", "next", "next" },
 	Iter = { "Iter", "iter", "iter" },
 	Read = { "Read", "read", "read" },
 	Write = { "Write", "write", "write" },
+	Set = { "Set", "set", "set" },
+	Clear = { "Clear", "clear", "clear" },
+	Urgent = { "Urgent", "urgent", "urgent" },
+	SetFast = { "SetFast", "setFast", "set_fast" },
 }
 
 local Primitives: { [string]: Primitive } = {

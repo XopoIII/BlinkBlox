@@ -990,3 +990,23 @@ type Queue = u8
 type BufferSave = u8
 type Invocations = u8
 type DropReason = u8
+
+-- Scaled integers and saturation (test/Numbers.luau, and the property draws).
+export type FixedTenths = u16<0.1>
+export type FixedRanged = u16<0.1>(0..6553.5)
+export type FixedSigned = i16<0.25>(-100..100)
+export type FixedCoarse = u8<2.5>
+export type FixedTriple = i24<0.001>
+export type FixedWide = u32<0.01>(..1000)
+export type FixedWhole = u16<1>
+export type SaturatedCount = u8<saturate>(1..255)
+export type SaturatedSigned = i8<saturate>(-5..5)
+export type SaturatedNegative = i16<saturate>(-10..-5)
+export type SaturatedTenths = u16<0.1, saturate>(0..100)
+export type SaturatedHalf = f16<saturate>
+export type SaturatedUnit = f32<saturate>(0..1)
+export struct FixedStruct {
+	A: u16<saturate, 0.1>,
+	B: i16<0.5>(-10..10)?,
+	C: u8<1>[..4],
+}

@@ -1,0 +1,12 @@
+-- expect E3005
+-- GetTrafficStats is a member of the generated module under option TrafficStats, and is reserved
+-- without it too, so that turning the option on never starts refusing a schema.
+option ClientOutput = "../../Network/ReservedTrafficStatsClient.luau"
+option ServerOutput = "../../Network/ReservedTrafficStatsServer.luau"
+
+event GetTrafficStats {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

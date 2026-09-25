@@ -43,6 +43,7 @@ const sidebar = [
 			'language/imports',
 			'language/types',
 			'language/events',
+			'language/streams',
 			'language/functions',
 			'language/profiles',
 		],
@@ -51,7 +52,9 @@ const sidebar = [
 		label: 'Guides',
 		items: [
 			'guides/securing-the-server',
+			'guides/places-without-a-server',
 			'guides/bandwidth',
+			'guides/streaming-state',
 			'guides/benchmarks',
 			'guides/migrating-from-blink',
 			'guides/roblox-ts',

@@ -1,0 +1,12 @@
+-- expect E2005
+-- A stream's block has to say how often it sends.
+option ClientOutput = "../../Network/StreamWithoutRateClient.luau"
+option ServerOutput = "../../Network/StreamWithoutRateServer.luau"
+
+event Position {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Stream: { Keepalive: 2 },
+    Data: vector
+}

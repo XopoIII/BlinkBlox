@@ -1,0 +1,3 @@
+-- expect E3032
+-- Only a number or `saturate` goes in a number's brackets.
+type Frame = u16<fast>

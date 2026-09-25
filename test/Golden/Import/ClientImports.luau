@@ -19,6 +19,7 @@ local RunService = game:GetService("RunService")
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
 local SCHEMA_SIGNATURE = "e4412fa3347eac81"
+local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -530,6 +531,8 @@ if not RunService:IsRunning() then
 		SetRateLimitHandler = NOOP,
 		SetDecodeErrorHandler = NOOP,
 		SetPacketDropHandler = NOOP,
+		SetListenerErrorHandler = NOOP,
+		Remotes = REMOTE_NAMES,
 	Generics = {
 		Entity = {
 			Read = function(Buffer: buffer): (Generics_Entity)
@@ -724,6 +727,11 @@ local function SetPacketDropHandler(
     _Handler: ((Player: Player, Reason: "Malformed" | "Oversized" | "Budget" | "Instances" | "Events", Refused: number, Detail: number) -> ())?
 ) end
 
+--> And for listener errors. A listener on the client runs what the trusted server sent, so an error
+--> there is the game's own bug with no hostile volume to bound and no player to name: it surfaces in
+--> the output as it always has.
+local function SetListenerErrorHandler(_Handler: ((Player: Player, Event: string, Failure: string, Count: number) -> ())?) end
+
 --> A packet from the server that cannot be decoded is a bug in the game rather than an attack --
 --> usually a Sync listener that yielded, or a client built from a different schema. It is said out
 --> loud unless a handler takes it over, and either way it names the event and the error, because
@@ -834,6 +842,10 @@ local Returns = table.freeze({
 	SetDecodeErrorHandler = SetDecodeErrorHandler,
 
 	SetPacketDropHandler = SetPacketDropHandler,
+
+	SetListenerErrorHandler = SetListenerErrorHandler,
+
+	Remotes = REMOTE_NAMES,
 
 	Generics = {
 		Entity = {

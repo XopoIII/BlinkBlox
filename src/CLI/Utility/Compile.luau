@@ -13,6 +13,7 @@ local GetDefinitionFilePath = require("./GetDefinitionFilePath")
 local Parser = require("../../Parser")
 local PathParser = require("../../Modules/Path")
 local Report = require("./Report")
+local Verify = require("./Verify")
 
 ---- Settings ----
 
@@ -29,6 +30,16 @@ export type CompileOptions = {
 	--> Print the diagnostics as one JSON document on standard output instead of rendering them:
 	--> `--json`. See Report.luau.
 	Json: boolean?,
+	--> Compare every would-be output with the file on disk and write nothing: `--verify`. Implies
+	--> `Check`. See Verify.luau.
+	Verify: boolean?,
+}
+
+--- What one compile produced besides its diagnostics: the paths written, and under `--verify` the
+--- comparison of each would-be output with the disk.
+type Results = {
+	Outputs: { string },
+	Verified: { Verify.Entry },
 }
 
 ---- Constants ----
@@ -87,18 +98,22 @@ local function CreateDirectoryIfNotFound(Path: string, Options: CompileOptions)
 	error("User refused prompt to create directory")
 end
 
---- Writes one output and records its path. A check writes and records nothing.
-local function Write(Path: string, Contents: string, Options: CompileOptions, Outputs: { string })
-	if Options.Check then
+--- Writes one output and records its path. A check writes and records nothing; a verify compares
+--- the output with the file already at its path, and records that instead.
+local function Write(Path: string, Contents: string, Options: CompileOptions, Results: Results)
+	if Options.Verify then
+		table.insert(Results.Verified, Verify.Compare(Path, Contents))
+		return
+	elseif Options.Check then
 		return
 	end
 
 	fs.writeFile(Path, Contents)
-	table.insert(Outputs, PathParser.Normalise(Path))
+	table.insert(Results.Outputs, PathParser.Normalise(Path))
 end
 
---- The whole compile. `Outputs` collects every path written, for `--json` to report.
-local function Build(Path: string, Options: CompileOptions, Outputs: { string })
+--- The whole compile. `Results` collects every path written, for `--json` to report.
+local function Build(Path: string, Options: CompileOptions, Results: Results)
 	local FilePath = GetDefinitionFilePath(Path)
 	Error.SetCompact(Options.Compact)
 
@@ -209,23 +224,29 @@ local function Build(Path: string, Options: CompileOptions, Outputs: { string })
 	end
 
 	local FilesTime = (os.clock() - FilesStart)
-	Write(ServerOutput, ServerSource, Options, Outputs)
-	Write(ClientOutput, ClientSource, Options, Outputs)
+	Write(ServerOutput, ServerSource, Options, Results)
+	Write(ClientOutput, ClientSource, Options, Results)
 
 	if TypesSource and TypesOutput then
 		if not Options.Check then
 			CreateDirectoryIfNotFound(TypesOutput, Options)
 		end
 
-		Write(TypesOutput, TypesSource, Options, Outputs)
+		Write(TypesOutput, TypesSource, Options, Results)
 	end
 
 	if ClientTypescriptSource and ServerTypescriptSource then
-		Write(ClientTypescriptPath, ClientTypescriptSource, Options, Outputs)
-		Write(ServerTypescriptPath, ServerTypescriptSource, Options, Outputs)
+		Write(ClientTypescriptPath, ClientTypescriptSource, Options, Results)
+		Write(ServerTypescriptPath, ServerTypescriptSource, Options, Results)
 	end
 
-	Message("green", Options, if Options.Check then "Schema checked, nothing written." else "Network files generated!")
+	if not Options.Verify then
+		Message(
+			"green",
+			Options,
+			if Options.Check then "Schema checked, nothing written." else "Network files generated!"
+		)
+	end
 
 	if Options.Debug and not Options.Silent then
 		print(`[DEBUG]: Parsed source in {FormatTime(ParseTime)}.`)
@@ -239,8 +260,22 @@ end
 ---- Public Functions ----
 
 function Utility.Compile(Path: string, Options: CompileOptions)
+	--> A verify must never touch the disk, so it is a check first: no directory created, no prompt.
+	if Options.Verify then
+		Options = table.clone(Options)
+		Options.Check = true
+	end
+
 	if not Options.Json then
-		Build(Path, Options, {})
+		local Results: Results = { Outputs = {}, Verified = {} }
+		Build(Path, Options, Results)
+		if Options.Verify and not Options.OutputAbstractSyntaxTree then
+			Verify.Print(Results.Verified, Options.Silent)
+			if not Verify.Passed(Results.Verified) then
+				process.exit(1)
+			end
+		end
+
 		return
 	end
 
@@ -251,9 +286,9 @@ function Utility.Compile(Path: string, Options: CompileOptions)
 	Quiet.Debug = false
 
 	local Collector = Report.Collect()
-	local Outputs: { string } = {}
+	local Results: Results = { Outputs = {}, Verified = {} }
 	local Success, Why = pcall(function(): nil
-		Build(Path, Quiet, Outputs)
+		Build(Path, Quiet, Results)
 		return nil
 	end)
 	Error.OnEmit = nil
@@ -265,7 +300,12 @@ function Utility.Compile(Path: string, Options: CompileOptions)
 		Report.Fail(Collector, PathParser.Normalise(if Resolved then FilePath else Path), tostring(Why))
 	end
 
-	print(Report.Encode(Collector, Outputs))
+	--> A stale or missing file fails the run as an error would, so `success` keeps meaning exit code 0.
+	if Options.Verify and Success and not Verify.Passed(Results.Verified) then
+		Collector.Failed = true
+	end
+
+	print(Report.Encode(Collector, Results.Outputs, if Options.Verify then Results.Verified else nil))
 	if Collector.Failed then
 		process.exit(1)
 	end

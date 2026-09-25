@@ -1,0 +1,15 @@
+-- expect E3005
+-- Under Camel casing the module's member is resetTrafficStats; a scope becomes a member too.
+option Casing = Camel
+option TrafficStats = true
+option ClientOutput = "../../Network/ReservedCamelTrafficResetClient.luau"
+option ServerOutput = "../../Network/ReservedCamelTrafficResetServer.luau"
+
+scope resetTrafficStats {
+    event Ping {
+        From: Server,
+        Type: Reliable,
+        Call: SingleSync,
+        Data: u8
+    }
+}

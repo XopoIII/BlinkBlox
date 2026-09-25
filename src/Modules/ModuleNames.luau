@@ -26,7 +26,10 @@ local MODULE_TYPES = {
 	BLINK_BUFFER_SAVE = true,
 	BLINK_INVOCATIONS = true,
 	BLINK_DROP_REASON = true,
+	BLINK_TRAFFIC_COUNTS = true,
+	BLINK_TRAFFIC_STATS = true,
 	BLINK_EVENTS_SYMBOL = true,
+	BLINK_STREAM = true,
 }
 
 --- The token naming a top-level declaration, wherever its kind keeps it.
@@ -63,12 +66,48 @@ local function Check(Source: string, File: string?, Declarations: { Declaration 
 		Members[(Casing :: any)[Member]] = Member
 	end
 
+	--> Members the parser does not know about, so no spelling of them is refused before here: the
+	--> remote names every module exports, and the two that exist only under an option. A schema that
+	--> declared one of these before it became a member keeps compiling until it turns the option on.
+	local Added: { [string]: string } = { [Casing.Remotes] = "Remotes" }
+	if Options.AutoStart == false then
+		Added[Casing.Start] = "Start"
+	end
+	if Options.ClientConnectTimeout ~= nil then
+		Added[Casing.Connected] = "Connected"
+	end
+
+	--> `Limits` is a member only under `option ExportLimits`, so the parser's own check never refuses
+	--> its Pascal spelling, and every kind is refused here.
+	local LimitsMember = if Options.ExportLimits
+		then (if Options.Casing and Options.Casing ~= "Pascal" then "limits" else "Limits")
+		else nil
+
 	for _, Declaration in Declarations do
 		local Name = Declaration.Name
 		local Kind = Declaration.Type
 		local Member = Members[Name]
 
-		if Member and (Name ~= Member or Kind == "Scope") then
+		--> Only what becomes a key of the module: a type that is not exported is a Luau type, which
+		--> lives in a namespace of its own.
+		local Keyed = Kind == "Event" or Kind == "Function" or Kind == "Scope" or Declaration.Value.Export == true
+		if Name == LimitsMember then
+			Refuse(
+				Source,
+				File,
+				Declaration,
+				`"{Name}" is the module's Limits`,
+				"`option ExportLimits` adds a Limits member to the module, and this would replace it. Rename it."
+			)
+		elseif Added[Name] and Keyed then
+			Refuse(
+				Source,
+				File,
+				Declaration,
+				`"{Name}" is the module's {Added[Name]}`,
+				"A top-level declaration becomes a member of the module, and this one would replace it. Rename it."
+			)
+		elseif Member and (Name ~= Member or Kind == "Scope") then
 			Refuse(
 				Source,
 				File,

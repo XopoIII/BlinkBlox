@@ -57,12 +57,17 @@ event Point { From: Server, Type: Reliable, Call: ManySync, Data: struct { Parts
 	end
 end)
 
-RunClosure("The TypeScript declarations type all three handler setters", function()
+RunClosure("The TypeScript declarations type all four handler setters", function()
 	local REASON = `"Malformed" | "Oversized" | "Budget" | "Instances" | "Events"`
 	local Spellings = {
-		Pascal = { "SetRateLimitHandler", "SetDecodeErrorHandler", "SetPacketDropHandler" },
-		Camel = { "setRateLimitHandler", "setDecodeErrorHandler", "setPacketDropHandler" },
-		Snake = { "set_rate_limit_handler", "set_decode_error_handler", "set_packet_drop_handler" },
+		Pascal = { "SetRateLimitHandler", "SetDecodeErrorHandler", "SetPacketDropHandler", "SetListenerErrorHandler" },
+		Camel = { "setRateLimitHandler", "setDecodeErrorHandler", "setPacketDropHandler", "setListenerErrorHandler" },
+		Snake = {
+			"set_rate_limit_handler",
+			"set_decode_error_handler",
+			"set_packet_drop_handler",
+			"set_listener_error_handler",
+		},
 	}
 
 	for Casing, Names in Spellings do
@@ -78,6 +83,7 @@ RunClosure("The TypeScript declarations type all three handler setters", functio
 				`export declare const {Names[1]}: (handler?: (player: Player, event: string | undefined, refused: number) => void) => void`,
 				`export declare const {Names[2]}: (handler?: {Decode}) => void`,
 				`export declare const {Names[3]}: (handler?: (player: Player, reason: {REASON}, refused: number, detail: number) => void) => void`,
+				`export declare const {Names[4]}: (handler?: (player: Player, event: string, failure: string, count: number) => void) => void`,
 			}
 
 			local Declaration = Generator.GenerateTypescript(Context :: any, Tree)

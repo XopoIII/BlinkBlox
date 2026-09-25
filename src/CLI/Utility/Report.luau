@@ -13,6 +13,7 @@
 ---- Imports ----
 
 local Error = require("../../Modules/Error")
+local Verify = require("./Verify")
 
 ---- Settings ----
 
@@ -202,18 +203,39 @@ function Utility.Fail(Collector: Collector, File: string, Message: string)
 	)
 end
 
-function Utility.Encode(Collector: Collector, Outputs: { string }): string
+--- `Verified` is given under `--verify` alone, and only then does the document carry a `verify`
+--- field: its absence tells a reader that nothing was compared, where an empty list could not.
+function Utility.Encode(Collector: Collector, Outputs: { string }, Verified: { Verify.Entry }?): string
 	local Written: { Value } = {}
 	for _, Path in Outputs do
 		table.insert(Written, Path)
 	end
 
-	return Encode(Object({
+	local Fields: { { any } } = {
 		{ "version", FORMAT_VERSION },
 		{ "success", not Collector.Failed },
 		{ "diagnostics", { Items = Collector.Diagnostics } :: Array },
 		{ "outputs", { Items = Written } :: Array },
-	}))
+	}
+
+	if Verified then
+		local Compared: { Value } = {}
+		for _, Entry in Verified do
+			table.insert(
+				Compared,
+				Object({
+					{ "file", Entry.Path },
+					{ "status", Entry.Status },
+					{ "line", if Entry.Line then Entry.Line else Null },
+				})
+			)
+		end
+
+		local Field: { any } = { "verify", { Items = Compared } :: Array }
+		table.insert(Fields, Field)
+	end
+
+	return Encode(Object(Fields))
 end
 
 return Utility

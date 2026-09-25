@@ -92,7 +92,7 @@ misbehaved at runtime -- usually silently -- and is refused at compile time inst
 |---|---|---|
 | `E3001` | A map keyed by a struct, tagged enum, map, set, array or type pack. Each decoded key is a fresh table that nothing can look up. | Key by a string, number, boolean or enum; move the rest into the value. |
 | `E3004` | A set flag, enum value or tagged-enum variant named twice. | Remove the duplicate. |
-| `E3005` | A declaration named `SetRateLimitHandler`, `SetDecodeErrorHandler` or `SetPacketDropHandler`, which the module now uses; a type-pack element named after a Luau keyword or a name the generated code uses; a type named after a built-in Luau type (`number`, `string`, ...) or a Roblox type the module uses (`Player`, `Instance`, ...). | Rename it. |
+| `E3005` | A declaration named `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` or `SetListenerErrorHandler`, which the module now uses; a type-pack element named after a Luau keyword or a name the generated code uses; a type named after a built-in Luau type (`number`, `string`, ...) or a Roblox type the module uses (`Player`, `Instance`, ...). | Rename it. |
 | `E3013` | An exported type containing an `Instance` or `unknown`. | Drop `export`, or move the Instance out of the type. |
 | `E3018` | An unreliable event whose smallest payload cannot fit in an unreliable packet. | Send it `Reliable`, or shrink it. |
 | `E3021` | An unbounded array or a map whose elements cost nothing to decode, such as `struct {}[]`. | Bound it (`[..16]`) or give the element a field. |
@@ -163,7 +163,7 @@ but more than a version bump. Everything below is in the [Changelog](/BlinkBlox/
   A game that sends more than that from one client must raise it. Refusals reach the rate-limit
   handler with `Event` nil, which is why the handler's `Event` is `string?` since 0.27.0.
 - **The binary and release assets are renamed** from `blink` to `blinkblox` (0.28.0). Replace the
-  tool's line in `rokit.toml` with `blinkblox = "XopoIII/BlinkBlox@0.37.1"`, or run
+  tool's line in `rokit.toml` with `blinkblox = "XopoIII/BlinkBlox@0.38.0"`, or run
   `rokit add XopoIII/BlinkBlox blinkblox`, and update scripts that call `blink`. Rokit may ask you to
   trust the tool again under its new name (`rokit trust XopoIII/BlinkBlox`). The remotes,
   `_G._BLINK` and the `.blink` extension keep their names.

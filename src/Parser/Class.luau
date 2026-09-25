@@ -38,6 +38,7 @@ export type Generic = AST.Generic
 export type Tuple = AST.Tuple
 export type EventCall = AST.EventCall
 export type Event = AST.Event
+export type StreamSettings = AST.StreamSettings
 export type Function = AST.Function
 export type ScopeNode = AST.ScopeNode
 
@@ -86,10 +87,20 @@ export type Methods = {
 
 	--> Ranges.luau
 	NumberRange: (self: Parser, Token: Lexer.Token, Bounds: NumberRange, Integer: boolean?) -> NumberRange,
-	Range: (self: Parser, Primitive: Settings.Primitive) -> { Range: NumberRange, Token: Token }?,
+	Range: (self: Parser, Primitive: Settings.Primitive, Scale: number?) -> { Range: NumberRange, Token: Token }?,
 	Array: (self: Parser) -> { Range: NumberRange, Token: Token }?,
 	Components: (self: Parser, Primitive: Settings.Primitive) -> { string }?,
 	Optional: (self: Parser) -> Token?,
+
+	--> Scales.luau
+	IsNumber: (self: Parser, Primitive: Settings.Primitive) -> boolean,
+	NumberModifiers: (
+		self: Parser,
+		Primitive: Settings.Primitive,
+		Type: Token
+	) -> { Scale: number?, Saturate: boolean?, Token: Token }?,
+	ScaledBounds: (self: Parser, Primitive: Settings.Primitive, Scale: number) -> NumberRange,
+	CheckScaledRange: (self: Parser, Range: NumberRange, Token: Token, Scale: number) -> (),
 
 	--> Document.luau
 	Parse: (self: Parser, Source: string, Scope: Scope?) -> Body,
@@ -102,6 +113,9 @@ export type Methods = {
 	Event: (self: Parser, Name: Token) -> Event,
 	Function: (self: Parser, Name: Token) -> Function,
 	Namespace: (self: Parser, Name: Token) -> ScopeNode,
+
+	--> Streams.luau
+	StreamData: (self: Parser, Name: Token, Structure: { [string]: any }) -> (Tuple, StreamSettings),
 
 	--> Types.luau
 	Type: (self: Parser, Name: Token, Keyword: Token?, IsDataField: boolean?) -> TypeNode,

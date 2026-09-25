@@ -6,6 +6,8 @@
 --- matters where noted: some specs leave state the next one in its file relies on, and the CLI specs
 --- remove what the others read.
 require("./Ranges")
+require("./Numbers")
+require("./NumberLimits")
 require("./Buffers")
 require("./Listeners")
 require("./SizeAnalysis")
@@ -14,6 +16,8 @@ require("./Refusals")
 require("./Predict")
 require("./InboundBudget")
 require("./PacketDrops")
+require("./ListenerErrors")
+require("./TrafficStats")
 require("./ModuleNames")
 require("./Invocations")
 require("./Concurrency")
@@ -29,6 +33,10 @@ require("./Completion")
 require("./EditorAnalysis")
 require("./WireFormat")
 require("./Ordering")
+require("./Streams")
+require("./StreamPackets")
+require("./StreamApi")
+require("./Crossings")
 require("./Encodings")
 require("./Properties")
 require("./HalfFloats")
@@ -39,11 +47,14 @@ require("./Locals")
 require("./SharedModules")
 require("./Decoding")
 require("./BufferIntegrity")
+require("./Lifecycle")
 require("./DocExamples")
 
 --> LAST, and deliberately so: the CLI specs delete ../Network to prove the compiler recreates a
 --> missing output directory, and then recompile only Test.blink. Everything generated from the other
 --> schemas is gone afterwards, so any spec that reads a generated FILE has to have run already.
 require("./CommandLine")
+--> After it only because it is a CLI spec too; it compiles its own schema into test/Network/Verify.
+require("./Verify")
 
 return {}

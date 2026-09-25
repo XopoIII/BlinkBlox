@@ -29,8 +29,8 @@ local Net = require(ReplicatedStorage.Network.Client)
 
 | Module | Requirable from | When it loads |
 |---|---|---|
-| Server | the server only; errors elsewhere | Creates the two remotes if they are missing, publishes the schema signature, and checks both remotes' classes. |
-| Client | a client only; errors elsewhere | Waits for the two remotes, checks their classes, then checks the [schema signature](/BlinkBlox/reference/wire-compatibility/) and errors on a mismatch. May yield. |
+| Server | the server only; errors elsewhere | Creates the two remotes if they are missing, publishes the schema signature, and checks both remotes' classes. Under [`AutoStart = false`](/BlinkBlox/language/options/#autostart), none of this happens until `Start()`. |
+| Client | a client only; errors elsewhere | Waits for the two remotes, checks their classes, then checks the [schema signature](/BlinkBlox/reference/wire-compatibility/) and errors on a mismatch. May yield -- for ever, unless [`ClientConnectTimeout`](/BlinkBlox/language/options/#clientconnecttimeout) bounds the wait. |
 | Types | anywhere | Nothing: it holds types and exported `Read`/`Write` pairs. |
 
 Requiring a second server or client module with the same [`RemoteScope`](/BlinkBlox/language/options/#remotescope)
@@ -43,7 +43,12 @@ in the same Luau environment errors: `An instance of BlinkBlox is already runnin
 | `StepReplication()` | Sends every player's queued reliable traffic. | Sends the client's queued reliable traffic. |
 | `SetRateLimitHandler(Handler?)` | `Handler: (Player: Player, Event: string?, Refused: number) -> ()` | Accepted and ignored: the client does not rate-limit. |
 | `SetDecodeErrorHandler(Handler?)` | `Handler: (Player: Player, Event: string?, Failure: string) -> ()` | `Handler: (Event: string?, Failure: string) -> ()` |
+| `Limits` | With [`ExportLimits`](/BlinkBlox/language/options/#exportlimits): a frozen table of the schema's bounds. | The same table. |
 | `SetPacketDropHandler(Handler?)` | `Handler: (Player: Player, Reason: "Malformed" \| "Oversized" \| "Budget" \| "Instances" \| "Events", Refused: number, Detail: number) -> ()` | Accepted and ignored: the client does not refuse packets. |
+| `SetListenerErrorHandler(Handler?)` | `Handler: (Player: Player, Event: string, Failure: string, Count: number) -> ()` | Accepted and ignored: a client listener's error surfaces in the output. |
+| `Remotes` | `{ Reliable: string, Unreliable: string }`, the remotes' names in `ReplicatedStorage` | The same. |
+| `Start()` | Only under `AutoStart = false`: creates and connects the remotes and the Heartbeat. A second call does nothing. | -- |
+| `Connected` | -- | Only under `ClientConnectTimeout`: `true` when the remotes were found in time, `false` when the module returned stubs. |
 
 - `StepReplication` is connected to `RunService.Heartbeat` unless
   [`ManualReplication`](/BlinkBlox/language/options/#manualreplication) is set, in which case you call
@@ -73,8 +78,58 @@ in the same Luau environment errors: `An instance of BlinkBlox is already runnin
 - The decode-error handler receives the event the packet claimed to carry, or `nil` if its index
   named none. On the server it is called at most once a second per player, channel and event, and
   without one the server is silent. On the client, without one, each failure is a warning.
+- The listener-error handler hears every error a server listener throws: an event's, `Sync` or
+  `Async`, `Single` or `Many`, reliable or unreliable, whether it arrived live, through `Predict`, or
+  from the queue replayed when `.On` connects; and a function's, including a return value its
+  serialiser refuses -- that call is still answered with a failure. It is called at most once a second
+  per player and event, with `Failure` the error that call is about and `Count` the errors since the
+  last call, that one included. A player who has already left is reported at once with `Count` 1.
+  A polled event has no listener: the code iterating it is the game's own.
+  With one installed, the server prints none of those errors. Without one, they surface as they
+  always have: a `Sync` listener's raised on a thread of its own, an `Async` one's on the thread it
+  ran on, a function's as the warning `"Name" encountered an error, ...`.
 - Every handler runs on a thread of its own, so one that yields or throws does not disturb
   decoding. Pass `nil` to remove one.
+
+### Traffic counters
+
+With [`option TrafficStats`](/BlinkBlox/language/options/#trafficstats), and only with it, both
+modules have two more members:
+
+| Member | Server and client |
+|---|---|
+| `GetTrafficStats()` | Returns `{ Events: { [string]: Counts }, Reliable: Counts, Unreliable: Counts }`, where `Counts` is `{ Sent: number, SentBytes: number, Received: number, ReceivedBytes: number }`. |
+| `ResetTrafficStats()` | Sets every count back to zero. |
+
+- **The totals run from the module's start or the last `ResetTrafficStats()`.** Each call returns a
+  fresh table, so keep one and subtract it from the next to get a rate.
+- **`Events`** has one entry per event this module sends or receives, keyed by its path as the module
+  exposes it -- `"Chat"`, or `"Inner.Poll"` inside a scope -- present from the start with zeros. An
+  event counts events in `Sent`/`Received`, and its bytes in the buffer in `SentBytes`/`ReceivedBytes`:
+  its one-byte index, the two-byte sequence number of an `OrderedUnreliable` event, and its payload.
+  The Instances that ride beside the buffer and what Roblox adds around a remote call are not counted.
+  Functions are not listed; their calls and replies are counted in `Reliable`.
+- **`Reliable` and `Unreliable`** count packets in `Sent`/`Received` and whole buffers in the byte
+  fields. A reliable packet is counted when `StepReplication` sends the batch, and holds everything
+  batched that frame, functions included. An unreliable event is a packet of its own.
+- **A reliable event is counted as sent when it is fired**, as it joins the batch, so before the flush
+  its event counts can run ahead of `Reliable`.
+- **The server counts once per recipient**, since each one is sent the bytes. `Fire` counts one;
+  `FireList` one per entry of the list, a player listed twice counting twice; `FireExcept` one per
+  player but the one left out; `FireAll` one per player in `Players:GetPlayers()` when it is called,
+  also for an unreliable event, which goes out through `FireAllClients` once. A server with no players
+  counts nothing. The server's `Reliable` counts one packet per player flushed.
+- **A [stream](/BlinkBlox/language/streams/) is counted when the scheduler sends it**, as a
+  `FireList` to every player is: once per player, under the stream's name in `Events` and in
+  `Unreliable`. Its bytes include the two-byte stamp and, for a state, the optional's flag byte. A
+  step that sends nothing counts nothing.
+- **Received is counted once an event is decoded**, before its rate limit and before a stale ordered
+  event is discarded -- those did arrive. A packet refused before decoding (malformed, oversized,
+  over the inbound budget or its Instance limit) is not counted at all. A packet that fails part way
+  counts as a packet with its whole length, and its events up to the failure.
+- A fire that throws, or an unreliable one refused as too large, is not counted.
+
+The counts are Luau numbers, exact up to 2^53. In edit mode both members exist and report zeros.
 
 ## Events
 
@@ -84,6 +139,7 @@ Which members an event has depends on the side and on its [`From`](/BlinkBlox/la
 |---|---|---|
 | `From: Server` | `Fire`, `FireAll`, `FireList`, `FireExcept` | `On` and `Predict`, or `Iter` when polled |
 | `From: Client` | `On` and `Predict`, or `Iter` when polled | `Fire` |
+| [Stream](/BlinkBlox/language/streams/) | `Set`, `Clear`, `Urgent`, `SetFast` | `On`, never polled, with the state and the server time |
 
 `Predict` exists only with [`option Predict`](/BlinkBlox/language/options/#predict). An event is
 polled when it is declared `Call: Polling` or [`UsePolling`](/BlinkBlox/language/options/#usepolling)
@@ -214,10 +270,25 @@ your own declarations are never changed.
 | `Invoke` | `invoke` | `invoke` |
 | `Read` | `read` | `read` |
 | `Write` | `write` | `write` |
+| `Set` | `set` | `set` |
+| `Clear` | `clear` | `clear` |
+| `Urgent` | `urgent` | `urgent` |
+| `SetFast` | `setFast` | `set_fast` |
 | `StepReplication` | `stepReplication` | `step_replication` |
 | `SetRateLimitHandler` | `setRateLimitHandler` | `set_rate_limit_handler` |
 | `SetDecodeErrorHandler` | `setDecodeErrorHandler` | `set_decode_error_handler` |
 | `SetPacketDropHandler` | `setPacketDropHandler` | `set_packet_drop_handler` |
+| `SetListenerErrorHandler` | `setListenerErrorHandler` | `set_listener_error_handler` |
+| `Remotes` | `remotes` | `remotes` |
+| `Start` | `start` | `start` |
+| `Connected` | `connected` | `connected` |
+| `GetTrafficStats` | `getTrafficStats` | `get_traffic_stats` |
+| `ResetTrafficStats` | `resetTrafficStats` | `reset_traffic_stats` |
+
+The fields of `GetTrafficStats`'s result follow the casing too: `Events`, `Reliable`, `Unreliable`,
+`Sent`, `SentBytes`, `Received` and `ReceivedBytes` under `Pascal`; `events`, `sentBytes`,
+`receivedBytes` and the rest under `Camel`; `sent_bytes` and `received_bytes` under `Snake`. The keys
+of `Events` are your events' names, unchanged.
 
 ## Edit mode
 
@@ -230,9 +301,19 @@ Flipbook) -- no remotes exist, and both modules return stubs that keep the real 
 | `On` (events and functions) | does nothing and returns a disconnect function that does nothing |
 | `Iter`, `Next` | returns an iterator that ends at once, so a `for` loop runs zero times |
 | `Predict` | does nothing |
+| A stream's `Set`, `Clear`, `Urgent`, `SetFast` | do nothing |
 | `Invoke` | does nothing and returns `nil` |
-| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | do nothing |
+| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler`, `SetListenerErrorHandler` | do nothing |
+| `Remotes` | the real names |
+| `Start` | does nothing |
+| `Connected` | `false` |
+| `GetTrafficStats`, `ResetTrafficStats` | the real functions; nothing is sent in edit mode, so every count is zero |
 | exported `Read`, `Write` | work normally |
+
+A client under [`ClientConnectTimeout`](/BlinkBlox/language/options/#clientconnecttimeout) that did
+not find its remotes in time returns the same stubs, with one difference: `Invoke` fails at once with
+`The client is not connected to a server`, as a real call fails on its timeout, instead of returning
+`nil`.
 
 The stub is returned before the module checks which side it is on, so a story can require either
 module -- but not both. The `RemoteScope` guard above runs first, in edit mode too, and the server
@@ -247,8 +328,9 @@ its result (`:andThen(...)`) errors in a story. Guard it with `RunService:IsRunn
 
 | Name | Why |
 |---|---|
-| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | Module members. A top-level event, function, scope or type may not take these names, nor, under `Camel` or `Snake` casing, the spelling the module gives them there (`stepReplication`, `step_replication`, ...) (`E3005`). |
-| `BLINK_ENTRY`, `BLINK_QUEUE`, `BLINK_BUFFER_SAVE`, `BLINK_INVOCATIONS`, `BLINK_DROP_REASON`, `BLINK_EVENTS_SYMBOL` | Types the module declares for itself. A top-level type of that name would redefine one (`E3005`). |
+| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler`, `SetListenerErrorHandler`, `GetTrafficStats`, `ResetTrafficStats`, and `Limits` under `ExportLimits` | Module members; `GetTrafficStats` and `ResetTrafficStats` are reserved without `TrafficStats` too, so turning it on never starts refusing a schema. A top-level event, function, scope or type may not take these names, nor, under `Camel` or `Snake` casing, the spelling the module gives them there (`stepReplication`, `step_replication`, ...) (`E3005`). |
+| `Remotes`; `Start` under `AutoStart = false`; `Connected` under `ClientConnectTimeout` | Module members added after 0.37.0, refused in the spelling the casing gives them for a top-level event, function, scope or exported type (`E3005`). A plain type may keep the name: it is a Luau type, not a key of the module. |
+| `BLINK_ENTRY`, `BLINK_QUEUE`, `BLINK_BUFFER_SAVE`, `BLINK_INVOCATIONS`, `BLINK_DROP_REASON`, `BLINK_TRAFFIC_COUNTS`, `BLINK_TRAFFIC_STATS`, `BLINK_EVENTS_SYMBOL`, `BLINK_STREAM` | Types the module declares for itself. A top-level type of that name would redefine one (`E3005`). |
 | Built-in Luau types: `any`, `never`, `number`, `thread` | A declared type is exported under its own name, and Luau refuses `export type number = number` (`E3005`, since 0.32.0). |
 | Roblox types the module uses: `Player`, `RemoteEvent`, `UnreliableRemoteEvent`, `Vector3`, and any class the schema names in `Instance(...)` | A top-level type of that name would refer to itself and shadow every use of the Roblox type in the module (`E3005`, since 0.32.0). A type inside a `scope` is exported with the scope's name in front, so it may take these names. |
 | BlinkBlox's own types: `boolean`, `buffer`, `string`, `unknown`, `Instance`, `CFrame`, `Color3`, `DateTime`, `BrickColor` and the rest | The parser reads them as primitives, so a declaration cannot be named after one (`E2002`). |

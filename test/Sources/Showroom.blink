@@ -1,0 +1,45 @@
+-- A schema for a place that may have no server module at all: the client gives up on the remotes
+-- after a while, and the server creates them only when the game calls Start. The goldens show the
+-- deferred start and the bounded wait; test/Lifecycle.luau runs them.
+option RemoteScope = "Showroom"
+option ClientConnectTimeout = 2.5
+option AutoStart = false
+option Casing = Camel
+option ClientOutput = "../../Network/ShowroomClient.luau"
+option ServerOutput = "../../Network/ShowroomServer.luau"
+
+event Announce {
+    From: Server,
+    Type: Reliable,
+    Call: ManySync,
+    Data: string(..64)
+}
+
+event Position {
+    From: Server,
+    Type: Unreliable,
+    Call: SingleSync,
+    Data: u16
+}
+
+event Ready {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Rate: 10,
+    Data: u8
+}
+
+function Price {
+    Yield: Coroutine,
+    Rate: 10,
+    Data: u8,
+    Return: u16
+}
+
+function Confirm {
+    From: Server,
+    Yield: Coroutine,
+    Data: u8,
+    Return: boolean
+}

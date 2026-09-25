@@ -119,6 +119,7 @@
 						{ "include": "#numbers" },
 						{ "include": "#delimiters" },
 						{ "include": "#strIdentifiers" },
+						{ "match": "\\bsaturate\\b", "name": "keyword.other.modifier.blink" },
 						{
 							"match": "([a-zA-Z_]\\w*)\\s*,?",
 							"captures": { "1": { "name": "storage.type.blink" } }

@@ -34,6 +34,9 @@ export type EventOption = {
 	--- `Values` cannot express that: it is checked with `table.find`, so a rate of 5 would have to be
 	--- listed alongside every other rate anyone might want.
 	Numeric: true?,
+	--- Field whose value is a braced block of fields of its own, parsed against this list: an
+	--- event's `Stream: { Rate: 10 }`.
+	Fields: { EventOption }?,
 }
 
 export type Bucket = "Types" | "Scopes"
@@ -71,6 +74,10 @@ Grammar.OPTIONS = {
 	RequireRates = "Boolean",
 	Predict = "Boolean",
 	InvocationTimeout = "Number",
+	ClientConnectTimeout = "Number",
+	AutoStart = "Boolean",
+	TrafficStats = "Boolean",
+	ExportLimits = "Boolean",
 } :: { [string]: Lexer.Types }
 
 --> Defaults the option checks and the generator both need. Here because this module is data only,
@@ -92,6 +99,21 @@ Grammar.DEFAULTS = {
 	UnreliableInstanceBytes = 6,
 }
 
+--- The fields of an event's `Stream` block (docs/src/content/docs/language/streams.mdx): the rate
+--- the server sends at, the faster rate `SetFast(true)` switches to, how long a state that has not
+--- changed waits before it is sent again, and how far a number may move before it counts as changed.
+--- Nested in the event rather than a declaration of its own, so a stream keeps everything an event
+--- already has -- its channel index, its sequence number, `Call`, the size analysis, the signature.
+Grammar.STREAM = {
+	{ Key = "Rate", Type = "Number", Values = {}, Numeric = true },
+	{ Key = "Fast", Type = "Number", Values = {}, Optional = true, Numeric = true },
+	{ Key = "Keepalive", Type = "Number", Values = {}, Optional = true, Numeric = true },
+	{ Key = "Epsilon", Type = "Number", Values = {}, Optional = true, Numeric = true },
+} :: { EventOption }
+
+--- Seconds a stream waits before it sends an unchanged state again, when its block does not say.
+Grammar.STREAM_KEEPALIVE = 1
+
 Grammar.EVENT = {
 	{ Key = "From", Type = "Identifier", Values = { "Client", "Server" } },
 	{ Key = "Type", Type = "Identifier", Values = { "Reliable", "Unreliable", "OrderedUnreliable" } },
@@ -99,6 +121,7 @@ Grammar.EVENT = {
 	{ Key = "Poll", Type = "Boolean", Values = { true, false }, Optional = true },
 	{ Key = "Rate", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Burst", Type = "Number", Values = {}, Optional = true, Numeric = true },
+	{ Key = "Stream", Type = "OpenBraces", Values = {}, Optional = true, Fields = Grammar.STREAM },
 	{ Key = "Data", Type = "Identifier", Values = {}, Optional = true },
 } :: { EventOption }
 
@@ -188,6 +211,11 @@ Grammar.RESERVED = {
 	SetRateLimitHandler = true,
 	SetDecodeErrorHandler = true,
 	SetPacketDropHandler = true,
+	SetListenerErrorHandler = true,
+	--> Emitted only under `option TrafficStats`, reserved always: turning the option on must not
+	--> start refusing a schema that compiled without it.
+	GetTrafficStats = true,
+	ResetTrafficStats = true,
 }
 
 --- Luau's built-in type names. A declared type becomes an exported Luau type of the same name, and
@@ -284,6 +312,8 @@ Grammar.WRAPPER_NAMES = {
 	Listener = true,
 	ListenerRan = true,
 	ListenerFailure = true,
+	ListenerFailed = true,
+	RunListener = true,
 	SerdesEvent = true,
 	Spawn = true,
 	pcall = true,
@@ -342,6 +372,22 @@ export type Options = {
 
 	--> Seconds before an unanswered invocation fails its caller and gives its slot back.
 	InvocationTimeout: number?,
+
+	--> Seconds the client waits for the server's remotes before it returns a module that is not
+	--> connected. Absent, it waits for as long as it takes. See Generator/Lifecycle.
+	ClientConnectTimeout: number?,
+
+	--> False leaves the server's remotes uncreated until the game calls `Start`. See
+	--> Generator/Lifecycle.
+	AutoStart: boolean?,
+
+	--> Counts the bytes and events each declaration sends and receives, and the packets on each
+	--> channel, behind GetTrafficStats. Off by default, and when off nothing of it is emitted.
+	TrafficStats: boolean?,
+
+	--> Adds a frozen `Limits` table of the schema's bounds to every generated module. See
+	--> Generator/Limits.
+	ExportLimits: boolean?,
 }
 
 return Grammar

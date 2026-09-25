@@ -1,0 +1,11 @@
+-- expect E3005
+-- Every module exports its remote names as Remotes, so a declaration may not take the name.
+option ClientOutput = "../../Network/ReservedRemotesClient.luau"
+option ServerOutput = "../../Network/ReservedRemotesServer.luau"
+
+event Remotes {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

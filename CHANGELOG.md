@@ -7,6 +7,210 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.38.0 — 2026-09-26
+
+A check that committed output still matches its schema, a game can hear which player's event set off
+a listener that threw, a module can come up in a place where no server module runs, a game can see
+what its own networking costs, event by event, a schema's numbers say what the game had been saying
+by hand around them, and an event can be a stream the server sends on a schedule. **The wire format
+does not change, and `WIRE_VERSION` stays 2.** A schema that uses none of this compiles to the same
+modules as 0.37.0 apart from the new members, and a module built from it talks to a 0.37.0 one built
+from the same schema. The schema signature changes only where a number gains a scale or an event
+becomes a stream: **recompile both modules** of such a schema.
+
+### Added
+
+- **`--verify`** compiles in memory exactly as a real build would -- the same output paths, the same
+  `--profile` -- writes nothing, and compares every file it would write with the file on disk, byte
+  for byte. It exits with `0` when all match and `1` when any is stale or missing, printing each one
+  with the first line that differs, even under `--quiet`. A game that commits its generated modules
+  used to check them by regenerating into the working tree and asking git for a diff, which rewrote
+  files under the caller and needed a repository.
+  - Only the files the compiler would write are compared. The compiler never deletes in an output
+    folder, so another file there is not an error.
+  - It implies `--check`: no module, no output directory, never a prompt. With `--watch` it is
+    refused.
+  - Under `--json` the document gains a `verify` field, one `{ file, status, line }` per file, with
+    `status` `"current"`, `"stale"` or `"missing"`; `success` is `false` when any is not current. The
+    field is present only under `--verify`, and the format's `version` stays 1.
+- **`SetListenerErrorHandler(Handler?)`** on the server module. A server listener that threw was
+  caught -- a `Sync` one by the pcall that keeps the rest of the packet decoding -- and its error
+  raised with nobody named, so a game that wanted the player and the event wrapped every listener in
+  a pcall of its own. The handler is called as `(Player, Event, Failure, Count)`:
+  - It hears every server listener: an event's, `Sync` or `Async`, `Single` or `Many`, reliable or
+    unreliable, live, through `Predict`, or replayed from the queue when `.On` connects; and a
+    function's, including a return value its serialiser refuses. The function's caller is still
+    answered with a failure. A polled event has no listener, so nothing there is covered.
+  - `Failure` is the error, as a string. `Count` is how many errors the call stands for: a modified
+    client can make a listener throw on every packet, so it is called at most once a second per
+    player and event, on the schedule every other report keeps -- the first error at once, the rest
+    of that second counted into the next call. A player who has already left is reported at once
+    with `Count` 1.
+  - It runs on a thread of its own, so one that yields or throws does not disturb decoding.
+  - With a handler installed the server prints none of those errors. Without one, nothing changes: a
+    `Sync` listener's error is raised on a thread of its own, an `Async` one's on the thread it ran
+    on, and a function's is the same `"Name" encountered an error, ...` warning.
+  - The client module has it too, accepted and ignored, as it has `SetRateLimitHandler`: a client's
+    listeners run what the trusted server sent, so their errors stay in the output. It is stubbed in
+    edit mode, declared in the TypeScript output, follows `Casing` (`setListenerErrorHandler`,
+    `set_listener_error_handler`), and is a reserved top-level name (`E3005`).
+- **`option ClientConnectTimeout = <seconds>`**, any number above zero. The client module waits at
+  most that long for the remotes. When they do not come, requiring it still returns, with the
+  edit-mode stubs in place of the API -- `Fire` does nothing, listeners are never called, `Invoke`
+  fails at once with `The client is not connected to a server` -- and `Connected` false. When they
+  come, `Connected` is true. Remotes that appear after the timeout are not picked up: the module is
+  already cached, and the game reloads to try again. `Connected` exists only under the option;
+  without it the client waits for as long as it takes, as before.
+- **`option AutoStart = false`**: requiring the server module creates no remote and connects
+  neither the remotes nor `Heartbeat`. **`Start()`** does all three, and a second call does nothing.
+  Before it, `On` and the handler setters register as usual; a `Fire` is dropped, not queued, and
+  the first one warns once (`Something was sent before Start() was called, and was dropped.`); an
+  `Invoke` of a client fails at once instead of waiting out `InvocationTimeout`. The client module
+  ignores the option.
+- **`Remotes`** on both modules and their stubs: `{ Reliable = "<scope>_BLINK_RELIABLE_REMOTE",
+  Unreliable = "<scope>_BLINK_UNRELIABLE_REMOTE" }`, so no game spells the names out.
+- All three follow `Casing` (`remotes`, `start`, `connected`), are stubbed in edit mode, are declared
+  in the TypeScript output where they exist, and are offered by the Studio plugin's option
+  completion. Both options may sit under `@profile`.
+- **`option TrafficStats`** (default `false`). With it on, the server and client modules export
+  `GetTrafficStats()` and `ResetTrafficStats()`. Roblox reports only the game's total
+  (`Stats.DataSendKbps`), which cannot say how much of it is BlinkBlox's or which event costs most.
+  - `GetTrafficStats()` returns `{ Events, Reliable, Unreliable }`, each count
+    `{ Sent, SentBytes, Received, ReceivedBytes }`, totals since the module started or since the last
+    `ResetTrafficStats()`, in a fresh table on every call. `Events` is keyed by the event's path
+    (`"Inner.Poll"` inside a scope); functions are counted in `Reliable` only. The fields follow
+    `Casing`.
+  - An event's bytes are those in the buffer: its index, the sequence number of an ordered event,
+    and its payload. The channels count packets and whole buffers.
+  - The server counts a send once per recipient -- `FireAll` once per player in the game, also for an
+    unreliable event sent through `FireAllClients` -- since each of them is sent the bytes.
+  - An event is counted as received once it is decoded, before its rate limit. A packet refused
+    before decoding is not counted.
+  - The counting is integer additions into one table allocated when the module loads, at indices
+    fixed at compile time; nothing is allocated and no string is looked up per event. An event of a
+    single size counts only events and has its bytes multiplied out when read. Measured with
+    `lune run Runtime -- --traffic`, natively compiled, the best of several runs: fire within 2% of the
+    same build without it, decode within 5%.
+  - Declared in the TypeScript output, present in the edit-mode stub (reporting zeros), completed
+    by the Studio plugin, and `GetTrafficStats`, `ResetTrafficStats`, `BLINK_TRAFFIC_COUNTS` and
+    `BLINK_TRAFFIC_STATS` are reserved (`E3005`) whether the option is on or not, so turning it on
+    never starts refusing a schema.
+- `benchmark/Runtime.luau` takes `--traffic` to build BlinkBlox with the option, to price it.
+- **Fixed-point numbers**: an integer type takes a scale, `u16<0.1>`, and sends the nearest whole
+  number of steps, `round(v / 0.1)`, in that integer, read back as the count times the step. `12.34`
+  in a `u16<0.1>` sends 123 and reads `12.3` -- the exact double the literal is, since a step whose
+  reciprocal is whole is sent as `round(v * 10)` and read as `n / 10`. Every integer takes one (`u8`
+  to `u32`, `i8` to `i32`, the 24-bit ones included). The range is in real units,
+  `u16<0.1>(0..6553.5)`, and each bound must be a whole number of steps (`E3009`). Rounding is to
+  nearest, a tie away from zero. Past the range it is refused on send under `WriteValidations`, in
+  real units, and wraps as its integer would without it; the receiver checks it in whole steps. It
+  costs its integer's size, and is a `number` in Luau and TypeScript. **The scale is part of the
+  schema signature.**
+- **`saturate`**, `u8<saturate>(1..255)`, `u16<0.1, saturate>`: a number is clamped into its range on
+  send instead of refused or wrapped -- an integer rounded to nearest first, an `f16` stopping at
+  65504 instead of becoming infinity. `NaN` is sent as the value in range nearest zero (0 when the
+  range holds it), so it neither reaches the wire nor makes a ranged receiver refuse the event. It
+  changes nothing a receiver accepts, and is not part of the signature. `saturate` is not a keyword:
+  a field may still be called that.
+- **`option ExportLimits`** adds a frozen `Limits` table to the server, client and types modules,
+  and a `readonly` declaration to the TypeScript output: every numeric range, scale, string, buffer
+  and array length and vector magnitude the schema declares, keyed by the schema's own names --
+  `Limits.CrawlPacket.Heads.Length.Max` is 16. The structural words follow `Casing`. With the option
+  on, `Limits` is a reserved top-level name (`E3005`); off, nothing is emitted.
+- **`E3032`** refuses a scale on a float, a scale of zero or less, a repeated scale or `saturate`,
+  and anything else in a number's brackets.
+- The Studio plugin offers `saturate` inside a number's brackets, and the docs' grammar highlights it.
+- `test/Numbers.luau` and `test/NumberLimits.luau` check exact bytes and values; `test/Oracle.luau`
+  and `test/Generate.luau` learnt both modifiers, so the property draws cover them.
+- **`Stream: { Rate, Fast?, Keepalive?, Epsilon? }`** on an event (`language/streams`). The server
+  module gets `Set(Value)`, `Clear()`, `Urgent()` and `SetFast(Fast)` in place of the Fire family;
+  the client's listener gets `(Value?, ServerTime)`. The scheduler runs inside `StepReplication`, before
+  the reliable flush, and sends the latest state to every player at `Rate` a second (or `Fast` after
+  `SetFast(true)`), keeping the clock's overrun so ten a second is ten at sixty frames:
+  - the first state after the stream was idle goes at the next step, and `Urgent()` sends at the next
+    step and restarts the interval;
+  - a state the same as the last one sent is skipped -- numbers within `Epsilon`, a vector, Color3 or
+    CFrame per component, tables key by key all the way down, buffers byte by byte -- except the
+    first unchanged state after a change, which goes once so the clients learn the thing stopped;
+  - an unchanged state is sent again every `Keepalive` seconds, 1 by default;
+  - `Clear()` sends nil once, if the clients saw a state, and the stream is silent until the next
+    `Set`; `Set(nil)` throws;
+  - each packet carries the server's clock in milliseconds modulo 65536, two bytes, and the client
+    unwraps it to seconds nearest its own `GetServerTimeNow()`;
+  - a state that fails to send is reported once and stops the stream until the next `Set`;
+  - interpolation is left to the game: the stream hands each state its server time, and what to
+    buffer and how far behind to draw depends on what is drawn.
+- The size analysis counts a stream's state in full, though it travels as optional: one that can never
+  fit beside the 6-byte header is `E3018`.
+- **`E3033`**: a stream that is not `From: Server` and `OrderedUnreliable`, is polled, streams an
+  optional, a type pack or a type that cannot be optional, or has a `Fast` no faster than `Rate`.
+- TypeScript declarations, edit-mode stubs and `Casing` (`set_fast` under `Snake`) for the four
+  members; `BLINK_STREAM` is a reserved type name. The Studio plugin completes the `Stream` block's
+  fields, on its own lines or on one. `Stream` is a field like `Rate`, so highlighting needs nothing.
+- A guide, `guides/streaming-state`, replacing a hand-rolled send loop with a stream.
+- Where the features meet: under `TrafficStats` a stream's scheduled sends are counted as a
+  `FireList` to every player is, once per recipient, under the stream's name in `Events` and on the
+  unreliable channel; under `ExportLimits` a stream's `Limits` entry holds the bounds of the type it
+  streams, not of its wire pack; a scaled number in a stream's state is compared against the last one
+  sent in real units, so `Epsilon` is in the schema's units too; and under `AutoStart = false` the
+  scheduler, which runs inside `StepReplication`, does not run before `Start()` connects the
+  Heartbeat -- a game that steps replication itself before then has its stream sends dropped, as a
+  `Fire` would be. `test/Crossings.luau` checks each of these, and `test/Sources/Crossing.blink`
+  puts them all in one schema in front of the goldens and the type gate.
+
+### Changed
+
+- An `Async` listener on the server, live or replayed from the queue, is called through
+  `RunListener`, which calls it bare when no handler is installed. A replayed `Sync` one is guarded
+  as on receipt, which 0.37.1 made true on both sides. An event, function, scope
+  or type may not be named `SetListenerErrorHandler`, and a type-pack element may not be named
+  `ListenerFailed` or `RunListener`.
+- A top-level event, function, scope or exported type named `Remotes` -- in the spelling the casing
+  gives it -- is refused (`E3005`), as are `Start` under `AutoStart = false` and `Connected` under
+  `ClientConnectTimeout`. A plain type may keep the name. A schema that used one of these names has
+  to rename it.
+
+### Downstream
+
+Grabby Pit can drop several things it built for itself, once it is on this release:
+
+- `scripts/check-net-drift.sh` -- regenerate, then `git diff` and a check for untracked files: run
+  `blinkblox net/Game.blink --verify` instead, with the same `--profile` its build uses.
+- The pcall its `Security/Guard` wraps around every listener, to log the player and event and write a
+  telemetry row: install one `SetListenerErrorHandler` that does both; the report arrives already
+  bounded to once a second per player and event, with the count.
+- `client/Link.luau`'s hard-coded `<RemoteScope>_BLINK_RELIABLE_REMOTE` and its own 60-second wait:
+  set `option ClientConnectTimeout = 60` (or less) and require the client module directly, checking
+  `Connected` where the showroom needs to know. The eight client scripts can require it directly.
+  Anything that still needs a remote's name reads `Remotes`.
+- The three lazy requires of the server module: set `option AutoStart = false`, require it at the
+  top like any module, and call `Start()` in the real game's bootstrap only.
+- Guessing which event costs what out of `DataSendKbps`: set `option TrafficStats = true` in
+  `net/Game.blink` and read `GetTrafficStats()` on the server to split it by event. Nothing it uses
+  today changes: no handler, reason or refusal moves, and a schema that compiled under 0.37.0
+  compiles the same.
+- **PerfProbe's `whole()` and its `* 10`**: declare the tenths fields `u16<0.1, saturate>`
+  (`FrameP50`, `FrameP95`, `ReceiveKbps`, `ReceivePeakKbps`, `SendKbps`, `WorldTenths`) and the rest
+  `u16<saturate>` / `u8<saturate>`, send the raw numbers, and drop the `/ 10` in `World/Net.luau`.
+- **`Tally`'s `math.min(n, 255)`**: `Count: u8<saturate>(1..255)`.
+- **`HuntCrawl`'s `if #heads == 16`**: set `option ExportLimits = true` and compare with
+  `Wire.Limits.CrawlPacket.Heads.Length.Max` -- or, once `Crawls` is a stream (below), with
+  `Wire.Limits.Crawls.Length.Max`.
+- A scale changes `PerfReport`'s signature and `saturate` changes none, so both modules are rebuilt
+  together, as after any schema change. Since `saturate` sends NaN as the nearest value to zero, a
+  PerfProbe reading that came out NaN now arrives as 0, where `whole()` handed the writer NaN
+  (`math.clamp` passes it through).
+- **`Crawls`**, the model for streams: the game can drop `World/CrawlSend.luau` whole, the stamp
+  code in `World/HuntCrawl.stream` (`SnapshotBuffer.stamp`, `FireAll`, the `At` field), and
+  `SnapshotBuffer.unwrap` with the client's call to it; `SnapshotBuffer.push`/`sample` stay, since
+  interpolation is the game's. `CrawlPacket` goes, and `Crawls` becomes
+  `Stream: { Rate: 10, Fast: 20, Keepalive: 1, Epsilon: 0.05 }, Data: CrawlHead[..16]`. Two
+  behaviours differ: "still" is per axis rather than by distance, and any change -- a head turning
+  for home, not only one moving -- is followed by one unchanged send. The last arm leaving is
+  `Clear()`, received as nil rather than an empty list. With `TrafficStats` on, its sends are counted
+  under `Events.Crawls` and on the unreliable channel.
+
+No handler signature, `Reason` or refusal route changes in any of this.
 ## 0.37.1 — 2026-09-25
 
 Two listener fixes, found by setting this fork's dispatch beside the Luau signal libraries

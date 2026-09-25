@@ -22,7 +22,9 @@ event MyEvent {
 }
 ```
 
-`From`, `Type` and `Call` are required; `Data`, `Rate` and `Burst` are optional.
+`From`, `Type` and `Call` are required; `Data`, `Rate`, `Burst` and `Stream` are optional. `Stream`
+makes the event a [stream](/BlinkBlox/language/streams/), which the server sends on a schedule rather
+than on `Fire`.
 
 ### `From`
 The side that fires the event: `Server` or `Client`. The other side listens to it.
@@ -328,6 +330,26 @@ runs on a thread of its own.
 
 An error thrown by a `Sync` listener is not a decode failure. It is raised as an error of its own, the
 way an `Async` listener's is, and the rest of the packet is still delivered.
+
+### Listeners that throw
+
+A listener is game code, but on the server the arguments that make it throw are a client's, and a
+modified client can make one throw on every packet it sends. Raised on its own, the error names
+neither the player nor the event. To hear both, install a handler on the server:
+
+```luau title="Server.luau"
+Net.SetListenerErrorHandler(function(Player: Player, Event: string, Failure: string, Count: number)
+    Analytics:Record(Player, Event, Failure, Count)
+end)
+```
+
+It hears every server listener: `Sync` and `Async`, `Single` and `Many`, an event replayed from the
+queue when `.On` connects, and a function's -- whose caller is still answered with a failure. It is
+called at most once a second per player and event, on a thread of its own: `Failure` is the error
+the call is about, and `Count` the errors since the last call, that one included. With a handler
+installed the server prints none of these errors; without one they surface exactly as before. The
+client module has the member too, accepted and ignored: a client's listeners run what the trusted
+server sent, so their errors stay in the output.
 
 ### Iterating an Event (Polling)
 An event declared `Call: Polling` -- or any event, under

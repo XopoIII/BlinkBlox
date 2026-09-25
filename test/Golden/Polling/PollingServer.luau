@@ -20,6 +20,7 @@ local RunService = game:GetService("RunService")
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
 local SCHEMA_SIGNATURE = "c1d504529b66b0ae"
+local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -408,6 +409,8 @@ if not RunService:IsRunning() then
 		set_rate_limit_handler = NOOP,
 		set_decode_error_handler = NOOP,
 		set_packet_drop_handler = NOOP,
+		set_listener_error_handler = NOOP,
+		remotes = REMOTE_NAMES,
 	PollingEvent = {
 		iter = NOOP_RETURNING,
 		next = NOOP_RETURNING
@@ -597,6 +600,67 @@ local function ReportDecodeFailure(Player: Player, Channel: string, Event: strin
         --> Spawned for the same reason RateAccept spawns its handler: one that throws or yields must
         --> not reach back into the receive loop that called it.
         Spawn(Handler, Player, Event, tostring(Failure))
+    end
+end
+
+--> LISTENER ERRORS. A listener that throws on the server -- an event's, Sync or Async, or a function's
+--> -- is the game's bug, but the arguments that set it off are a client's: a modified client can make
+--> one throw on every packet it sends. With no handler installed the error surfaces as it always did,
+--> in the output with nobody named. With one, the handler owns it and the output stays silent: it is
+--> told the player, the event, the error and `Count`, the errors that report stands for, at most once
+--> a second per player and event on the schedule every other report keeps. A player who has already
+--> left is reported at once with a count of 1, since there is no schedule left to hold it on.
+local ListenerHandler: ((Player: Player, Event: string, Failure: string, Count: number) -> ())? = nil
+local ListenerErrors: {[Player]: {[string]: number}} = {}
+
+local function SetListenerErrorHandler(Handler: ((Player: Player, Event: string, Failure: string, Count: number) -> ())?)
+    ListenerHandler = Handler
+end
+
+--> Reports a listener's error, or returns false when no handler is installed and the caller should
+--> surface it the way it did before the handler existed. Never throws or yields: it runs inside the
+--> decode loop's per-event pcall.
+local function ListenerFailed(Player: Player, Event: string, Failure: unknown): boolean
+    local Handler = ListenerHandler
+    if not Handler then
+        return false
+    end
+
+    local Counts = ListenerErrors[Player]
+    if not Counts then
+        if Player.Parent == nil then
+            Spawn(Handler, Player, Event, tostring(Failure), 1)
+            return true
+        end
+
+        Counts = {}
+        ListenerErrors[Player] = Counts
+    end
+
+    local Count = (Counts[Event] or 0) + 1
+    if not ShouldReport(Player, `Listener {Event}`) then
+        Counts[Event] = Count
+        return true
+    end
+
+    Counts[Event] = 0
+    --> Spawned for RateAccept's reason: a handler that throws or yields must not reach the decoder.
+    Spawn(Handler, Player, Event, tostring(Failure), Count)
+    return true
+end
+
+--> Runs an Async listener, or replays a queued event to one of either kind. Without a handler the
+--> listener is called bare, so its error surfaces on its own thread exactly as before; with one it is
+--> protected and reported.
+local function RunListener<T...>(Event: string, Listener: (Player, T...) -> (), Player: Player, ...: T...)
+    if ListenerHandler == nil then
+        Listener(Player, ...)
+        return
+    end
+
+    local Ran: boolean, Failure: any = pcall(Listener, Player, ...)
+    if not Ran then
+        ListenerFailed(Player, Event, Failure)
     end
 end
 
@@ -831,6 +895,7 @@ Players.PlayerRemoving:Connect(function(Player)
     InboundBudgets[Player] = nil
     Reports[Player] = nil
     Drops[Player] = nil
+    ListenerErrors[Player] = nil
     InFlight[Player] = nil
     InFlightRefused[Player] = nil
 
@@ -1033,6 +1098,10 @@ local Returns = table.freeze({
 	set_decode_error_handler = SetDecodeErrorHandler,
 
 	set_packet_drop_handler = SetPacketDropHandler,
+
+	set_listener_error_handler = SetListenerErrorHandler,
+
+	remotes = REMOTE_NAMES,
 
 	PollingEvent = {
 		iter = function(): () -> (number, Player, nil)

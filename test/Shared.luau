@@ -113,6 +113,16 @@ local function GetEnvironment()
 			end,
 		},
 
+		--> The synchronised clock streams stamp their packets with. It follows the mock clock, so
+		--> AdvanceClock moves it too, until a spec pins it with `Fixed` -- to put either side's clock
+		--> exactly where it likes, across the 65536 ms the stamp wraps at, say.
+		Workspace = {
+			Fixed = nil :: number?,
+			GetServerTimeNow = function(self): number
+				return self.Fixed or Clock
+			end,
+		},
+
 		RunService = {
 			Heartbeat = Signal.new(),
 			IsClient = function(_self)
