@@ -5,6 +5,7 @@
 ---     lune run Runtime -- Entities       only the benches whose name contains "Entities"
 ---     lune run Runtime -- --frames 50    fewer frames, for a quick look
 ---     lune run Runtime -- --tools blink,zap  only these tools
+---     lune run Runtime -- --traffic      BlinkBlox built with option TrafficStats, to price it
 ---
 --- Studio's own benchmark (run.luau, generate.luau) reports frame rate and bandwidth, and neither
 --- isolates a tool's own work: Studio caps the frame rate at 60, and Roblox compresses each packet
@@ -39,6 +40,7 @@ local LOCAL_BENCHES = { Tiny = true }
 local Frames = 200
 local Filter: string? = nil
 local Only: { string }? = nil
+local Traffic = false
 do
 	local Index = 1
 	while Index <= #process.args do
@@ -48,6 +50,8 @@ do
 		elseif Argument == "--frames" then
 			Frames = assert(tonumber(process.args[Index + 1]), "--frames takes a number")
 			Index += 1
+		elseif Argument == "--traffic" then
+			Traffic = true
 		elseif Argument == "--tools" then
 			Only = string.split(assert(process.args[Index + 1], "--tools takes a list"), ",")
 			Index += 1
@@ -64,6 +68,7 @@ local function Generate(): (string, string)
 	local Source = fs.readFile("./definitions/Definition.blink")
 	local Tree = Parser.new("./definitions/", "Definition.blink", nil, Attributes.new(nil)):Parse(Source)
 	Tree.Value.Options.ManualReplication = true
+	Tree.Value.Options.TrafficStats = Traffic
 
 	return Generator.Generate("Server", Tree), Generator.Generate("Client", Tree)
 end
@@ -193,7 +198,9 @@ for _, Name in Tools.ORDER do
 	end
 end
 
-print(`BlinkBlox {_G.VERSION or "(unbundled)"}, {Frames} frames of {EVENTS_PER_FRAME} events, times in ms per frame`)
+print(
+	`BlinkBlox {_G.VERSION or "(unbundled)"}{if Traffic then " with TrafficStats" else ""}, {Frames} frames of {EVENTS_PER_FRAME} events, times in ms per frame`
+)
 
 for _, Bench in BENCHES do
 	if Filter and not string.find(Bench, Filter, 1, true) then

@@ -71,6 +71,7 @@ Grammar.OPTIONS = {
 	RequireRates = "Boolean",
 	Predict = "Boolean",
 	InvocationTimeout = "Number",
+	TrafficStats = "Boolean",
 } :: { [string]: Lexer.Types }
 
 --> Defaults the option checks and the generator both need. Here because this module is data only,
@@ -188,6 +189,10 @@ Grammar.RESERVED = {
 	SetRateLimitHandler = true,
 	SetDecodeErrorHandler = true,
 	SetPacketDropHandler = true,
+	--> Emitted only under `option TrafficStats`, reserved always: turning the option on must not
+	--> start refusing a schema that compiled without it.
+	GetTrafficStats = true,
+	ResetTrafficStats = true,
 }
 
 --- Luau's built-in type names. A declared type becomes an exported Luau type of the same name, and
@@ -342,6 +347,10 @@ export type Options = {
 
 	--> Seconds before an unanswered invocation fails its caller and gives its slot back.
 	InvocationTimeout: number?,
+
+	--> Counts the bytes and events each declaration sends and receives, and the packets on each
+	--> channel, behind GetTrafficStats. Off by default, and when off nothing of it is emitted.
+	TrafficStats: boolean?,
 }
 
 return Grammar

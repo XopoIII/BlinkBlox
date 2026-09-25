@@ -14,72 +14,19 @@ local Generators = require("./Generators")
 local Parser = require("../Parser")
 local Prefabs = require("./Prefabs")
 local Queues = require("./Queue")
+local Send = require("./Send")
 local Serde = require("./Serde")
 local State = require("./State")
+local Traffic = require("./Traffic")
 local Util = require("./Util")
 
 type Type = Parser.TypeNode
 
-local RELIABLE_BODY = Fragments.RELIABLE_BODY
 local UNRELIABLE_BODY = Fragments.UNRELIABLE_BODY
 local Types = Prefabs.Types
 local RateGuardExpression = Decode.RateGuardExpression
 local OrderGuardExpression = Decode.OrderGuardExpression
 local Declarations = Serde
-
---- What a server send needs to know about the event it sends. `Ordered` is the event's index when it
---- is an ordered unreliable one, whose sequence number each send stamps per recipient.
-type Send = { IsReliable: boolean, WriteEvent: string, Name: string, Ordered: number? }
-
---- Stamps the recipient's own sequence number into an ordered packet. An unreliable server send always
---- starts from a fresh buffer, so the event sits at offset 0 and its sequence at offset 1.
-local function StampOrder(Target: Blocks.Block, Send: Send)
-	if Send.Ordered then
-		Target:Line(`buffer.writeu16(Buffer, 1, NextOrder(Player, {Send.Ordered}))`)
-	end
-end
-
---- The loop over the players a send reaches, leaving out `Except` when asked to.
-local function EachRecipient(Target: Blocks.Block, Recipients: string, SkipExcept: boolean?): Blocks.Block
-	local Loop = Target:Iterator("_", "Player", Recipients)
-	if SkipExcept then
-		Loop = Loop:Compare("Player", "Except", "Equals"):Line("continue"):End()
-	end
-
-	return Loop
-end
-
---- A server send to more than one player: FireAll, FireList and FireExcept. Each writes the event
---- once into a fresh buffer and hands it to every recipient; they differ only in who that is. An
---- unreliable FireAll hands it to `FireAllClients` instead of looping.
-local function Broadcast(
-	Fire: Blocks.Block,
-	Send: Send,
-	Recipients: string,
-	Options: { AllClients: boolean?, SkipExcept: boolean? }
-): Blocks.Block
-	Fire:Line("Load()")
-	Fire:Line(Send.WriteEvent)
-
-	if Send.IsReliable then
-		Fire:Line(RELIABLE_BODY.Header)
-		EachRecipient(Fire, Recipients, Options.SkipExcept):Lines(RELIABLE_BODY.Body, 2):End()
-	else
-		Fire:Line(`if not CheckUnreliableSize("{Send.Name}") then return end`)
-		Fire:Lines(UNRELIABLE_BODY, 1)
-
-		--> An ordered packet carries a different number to each player, so it is sent one by one.
-		if Options.AllClients and not Send.Ordered then
-			Fire:Line("Unreliable:FireAllClients(Buffer, SendInstances)")
-		else
-			local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept)
-			StampOrder(Loop, Send)
-			Loop:Line("Unreliable:FireClient(Player, Buffer, SendInstances)"):End()
-		end
-	end
-
-	return Fire:End()
-end
 
 function Declarations.Event(Declaration: Parser.Event)
 	local Value = Declaration.Value
@@ -99,6 +46,7 @@ function Declarations.Event(Declaration: Parser.Event)
 	local IsSameContext = Value.From == State.Context
 
 	local Channel = IsUnreliable and State.Channels.Unreliable or State.Channels.Reliable
+	local Counters = Traffic.Register(Declaration.Name, Value.Data, IsOrdered)
 
 	local Index = Channel.Count
 	--> Ordered events ride the unreliable channel, so they share its queue and listener tables --
@@ -220,7 +168,9 @@ function Declarations.Event(Declaration: Parser.Event)
 			Types.u16.Read("OrderIdentifier", Block)
 		end
 
+		Traffic.Start(Block, Counters, IsOrdered)
 		Block:Line(`local {InnerValues} = {Util.GetPath(Identifier, false, State.Scope)}()`)
+		Traffic.Received(Block, Counters)
 
 		--> The decode above has to happen either way: payloads are variable length, so skipping an
 		--> event without reading it would leave the cursor mid-event and turn the rest of the packet
@@ -362,6 +312,7 @@ function Declarations.Event(Declaration: Parser.Event)
 
 		PollRateGuard = if #Checks > 0 then table.concat(Checks, " and ") else nil
 
+		Traffic.Start(Block, Counters, IsOrdered)
 		if PollRateGuard then
 			--> Split because the one-liner decodes and enqueues at once, and only the enqueue may be
 			--> skipped.
@@ -372,6 +323,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		else
 			Block:Line(`Push({Queue}, {PollArguments})`)
 		end
+		Traffic.Received(Block, Counters)
 
 		local IterTypes = `number, {State.Context == "Server" and "Player, " or ""}{DataTypes}`
 
@@ -410,6 +362,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			--> is queued in. Half an event in there is not one bad send: the receiver reads the
 			--> truncated event and then decodes the REST of the batch from the wrong offset.
 			WriteKept(Fire)
+			Traffic.Sent(Fire, Counters, "SendCursor - Cursor", false)
 		else
 			Fire:Line(`local Previous = Save()`)
 			Fire:Line(`Load()`)
@@ -424,6 +377,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Fire:Line("\tlocal Buffer = buffer.create(SendCursor)")
 			Fire:Line("\tbuffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)")
 			Fire:Line("\tUnreliable:FireServer(Buffer, SendInstances)")
+			Traffic.Sent(Fire, Counters, "SendCursor", true, nil, "\t")
 			Fire:Line("end")
 			Fire:Line("Load(Previous)")
 			Fire:Compare("Sent", "true", "Not"):Line("error(Failure, 0)"):End()
@@ -433,42 +387,45 @@ function Declarations.Event(Declaration: Parser.Event)
 		State.Noop.Push(`{State.Casing.Fire} = NOOP`, 0, Indent + 1)
 		Body.PushLines(Fire.Content, 0, Indent + 1)
 	else
-		local Send: Send = {
+		local Outgoing: Send.Send = {
 			IsReliable = IsReliable,
 			WriteEvent = WriteEvent,
 			Name = Declaration.Name,
 			Ordered = if IsOrdered then Index else nil,
+			Traffic = Counters,
 		}
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 		if IsReliable then
 			Fire:Line("Load(PlayersMap[Player])")
 			WriteKept(Fire)
+			Traffic.Sent(Fire, Counters, "SendCursor - Cursor", false)
 			Fire:Line("SavePlayerBuffer(Player)")
 		else
 			Fire:Line("Load()")
 			Fire:Line(WriteEvent)
 			Fire:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
 			Fire:Lines(UNRELIABLE_BODY, 1)
-			StampOrder(Fire, Send)
+			Send.StampOrder(Fire, Outgoing)
 			Fire:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
+			Traffic.Sent(Fire, Counters, "SendCursor", true)
 		end
 		Fire:End()
 
-		local FireAll = Broadcast(
+		local FireAll = Send.Broadcast(
 			Blocks.Function(State.Casing.FireAll, Values, "()", true),
-			Send,
+			Outgoing,
 			"Players:GetPlayers()",
 			{ AllClients = true }
 		)
-		local FireList = Broadcast(
+		local FireList = Send.Broadcast(
 			Blocks.Function(State.Casing.FireList, `List: \{Player\}, {Values}`, "()", true),
-			Send,
+			Outgoing,
 			"List",
 			{}
 		)
-		local FireExcept = Broadcast(
+		local FireExcept = Send.Broadcast(
 			Blocks.Function(State.Casing.FireExcept, `Except: Player, {Values}`, "()", true),
-			Send,
+			Outgoing,
 			"Players:GetPlayers()",
 			{ SkipExcept = true }
 		)

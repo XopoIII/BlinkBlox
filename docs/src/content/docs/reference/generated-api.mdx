@@ -76,6 +76,42 @@ in the same Luau environment errors: `An instance of BlinkBlox is already runnin
 - Every handler runs on a thread of its own, so one that yields or throws does not disturb
   decoding. Pass `nil` to remove one.
 
+### Traffic counters
+
+With [`option TrafficStats`](/BlinkBlox/language/options/#trafficstats), and only with it, both
+modules have two more members:
+
+| Member | Server and client |
+|---|---|
+| `GetTrafficStats()` | Returns `{ Events: { [string]: Counts }, Reliable: Counts, Unreliable: Counts }`, where `Counts` is `{ Sent: number, SentBytes: number, Received: number, ReceivedBytes: number }`. |
+| `ResetTrafficStats()` | Sets every count back to zero. |
+
+- **The totals run from the module's start or the last `ResetTrafficStats()`.** Each call returns a
+  fresh table, so keep one and subtract it from the next to get a rate.
+- **`Events`** has one entry per event this module sends or receives, keyed by its path as the module
+  exposes it -- `"Chat"`, or `"Inner.Poll"` inside a scope -- present from the start with zeros. An
+  event counts events in `Sent`/`Received`, and its bytes in the buffer in `SentBytes`/`ReceivedBytes`:
+  its one-byte index, the two-byte sequence number of an `OrderedUnreliable` event, and its payload.
+  The Instances that ride beside the buffer and what Roblox adds around a remote call are not counted.
+  Functions are not listed; their calls and replies are counted in `Reliable`.
+- **`Reliable` and `Unreliable`** count packets in `Sent`/`Received` and whole buffers in the byte
+  fields. A reliable packet is counted when `StepReplication` sends the batch, and holds everything
+  batched that frame, functions included. An unreliable event is a packet of its own.
+- **A reliable event is counted as sent when it is fired**, as it joins the batch, so before the flush
+  its event counts can run ahead of `Reliable`.
+- **The server counts once per recipient**, since each one is sent the bytes. `Fire` counts one;
+  `FireList` one per entry of the list, a player listed twice counting twice; `FireExcept` one per
+  player but the one left out; `FireAll` one per player in `Players:GetPlayers()` when it is called,
+  also for an unreliable event, which goes out through `FireAllClients` once. A server with no players
+  counts nothing. The server's `Reliable` counts one packet per player flushed.
+- **Received is counted once an event is decoded**, before its rate limit and before a stale ordered
+  event is discarded -- those did arrive. A packet refused before decoding (malformed, oversized,
+  over the inbound budget or its Instance limit) is not counted at all. A packet that fails part way
+  counts as a packet with its whole length, and its events up to the failure.
+- A fire that throws, or an unreliable one refused as too large, is not counted.
+
+The counts are Luau numbers, exact up to 2^53. In edit mode both members exist and report zeros.
+
 ## Events
 
 Which members an event has depends on the side and on its [`From`](/BlinkBlox/language/events/#from):
@@ -218,6 +254,13 @@ your own declarations are never changed.
 | `SetRateLimitHandler` | `setRateLimitHandler` | `set_rate_limit_handler` |
 | `SetDecodeErrorHandler` | `setDecodeErrorHandler` | `set_decode_error_handler` |
 | `SetPacketDropHandler` | `setPacketDropHandler` | `set_packet_drop_handler` |
+| `GetTrafficStats` | `getTrafficStats` | `get_traffic_stats` |
+| `ResetTrafficStats` | `resetTrafficStats` | `reset_traffic_stats` |
+
+The fields of `GetTrafficStats`'s result follow the casing too: `Events`, `Reliable`, `Unreliable`,
+`Sent`, `SentBytes`, `Received` and `ReceivedBytes` under `Pascal`; `events`, `sentBytes`,
+`receivedBytes` and the rest under `Camel`; `sent_bytes` and `received_bytes` under `Snake`. The keys
+of `Events` are your events' names, unchanged.
 
 ## Edit mode
 
@@ -232,6 +275,7 @@ Flipbook) -- no remotes exist, and both modules return stubs that keep the real 
 | `Predict` | does nothing |
 | `Invoke` | does nothing and returns `nil` |
 | `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | do nothing |
+| `GetTrafficStats`, `ResetTrafficStats` | the real functions; nothing is sent in edit mode, so every count is zero |
 | exported `Read`, `Write` | work normally |
 
 The stub is returned before the module checks which side it is on, so a story can require either
@@ -247,8 +291,8 @@ its result (`:andThen(...)`) errors in a story. Guard it with `RunService:IsRunn
 
 | Name | Why |
 |---|---|
-| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler` | Module members. A top-level event, function, scope or type may not take these names, nor, under `Camel` or `Snake` casing, the spelling the module gives them there (`stepReplication`, `step_replication`, ...) (`E3005`). |
-| `BLINK_ENTRY`, `BLINK_QUEUE`, `BLINK_BUFFER_SAVE`, `BLINK_INVOCATIONS`, `BLINK_DROP_REASON`, `BLINK_EVENTS_SYMBOL` | Types the module declares for itself. A top-level type of that name would redefine one (`E3005`). |
+| `StepReplication`, `SetRateLimitHandler`, `SetDecodeErrorHandler`, `SetPacketDropHandler`, `GetTrafficStats`, `ResetTrafficStats` | Module members; the last two are reserved without `TrafficStats` too, so turning it on never starts refusing a schema. A top-level event, function, scope or type may not take these names, nor, under `Camel` or `Snake` casing, the spelling the module gives them there (`stepReplication`, `step_replication`, ...) (`E3005`). |
+| `BLINK_ENTRY`, `BLINK_QUEUE`, `BLINK_BUFFER_SAVE`, `BLINK_INVOCATIONS`, `BLINK_DROP_REASON`, `BLINK_TRAFFIC_COUNTS`, `BLINK_TRAFFIC_STATS`, `BLINK_EVENTS_SYMBOL` | Types the module declares for itself. A top-level type of that name would redefine one (`E3005`). |
 | Built-in Luau types: `any`, `never`, `number`, `thread` | A declared type is exported under its own name, and Luau refuses `export type number = number` (`E3005`, since 0.32.0). |
 | Roblox types the module uses: `Player`, `RemoteEvent`, `UnreliableRemoteEvent`, `Vector3`, and any class the schema names in `Instance(...)` | A top-level type of that name would refer to itself and shadow every use of the Roblox type in the module (`E3005`, since 0.32.0). A type inside a `scope` is exported with the scope's name in front, so it may take these names. |
 | BlinkBlox's own types: `boolean`, `buffer`, `string`, `unknown`, `Instance`, `CFrame`, `Color3`, `DateTime`, `BrickColor` and the rest | The parser reads them as primitives, so a declaration cannot be named after one (`E2002`). |

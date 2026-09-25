@@ -118,6 +118,9 @@ import { SetPacketDropHandler } from "./network";
 SetPacketDropHandler((player, reason, refused, detail) => warn(player.Name, reason, refused, detail));
 ```
 
+With [`option TrafficStats`](/BlinkBlox/language/options/#trafficstats), `GetTrafficStats` and
+`ResetTrafficStats` are declared on both sides as well, with the result's fields in the same casing.
+
 ## Current gaps
 
 The declarations lag the Luau API in a few places. Until they are closed, work around them:

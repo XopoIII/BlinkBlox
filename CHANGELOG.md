@@ -7,6 +7,45 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+A game can see what its own networking costs, event by event. **The wire format does not change,
+and neither does the schema signature**, and with the new option off the generated modules are byte
+for byte what 0.37.0 generates.
+
+### Added
+
+- **`option TrafficStats`** (default `false`). With it on, the server and client modules export
+  `GetTrafficStats()` and `ResetTrafficStats()`. Roblox reports only the game's total
+  (`Stats.DataSendKbps`), which cannot say how much of it is BlinkBlox's or which event costs most.
+  - `GetTrafficStats()` returns `{ Events, Reliable, Unreliable }`, each count
+    `{ Sent, SentBytes, Received, ReceivedBytes }`, totals since the module started or since the last
+    `ResetTrafficStats()`, in a fresh table on every call. `Events` is keyed by the event's path
+    (`"Inner.Poll"` inside a scope); functions are counted in `Reliable` only. The fields follow
+    `Casing`.
+  - An event's bytes are those in the buffer: its index, the sequence number of an ordered event,
+    and its payload. The channels count packets and whole buffers.
+  - The server counts a send once per recipient -- `FireAll` once per player in the game, also for an
+    unreliable event sent through `FireAllClients` -- since each of them is sent the bytes.
+  - An event is counted as received once it is decoded, before its rate limit. A packet refused
+    before decoding is not counted.
+  - The counting is integer additions into one table allocated when the module loads, at indices
+    fixed at compile time; nothing is allocated and no string is looked up per event. An event of a
+    single size counts only events and has its bytes multiplied out when read. Measured with
+    `lune run Runtime -- --traffic`, natively compiled, the best of several runs: fire within 2% of the
+    same build without it, decode within 5%.
+  - Declared in the TypeScript output, present in the edit-mode stub (reporting zeros), completed
+    by the Studio plugin, and `GetTrafficStats`, `ResetTrafficStats`, `BLINK_TRAFFIC_COUNTS` and
+    `BLINK_TRAFFIC_STATS` are reserved (`E3005`) whether the option is on or not, so turning it on
+    never starts refusing a schema.
+- `benchmark/Runtime.luau` takes `--traffic` to build BlinkBlox with the option, to price it.
+
+### Downstream
+
+Grabby Pit can turn it on in `net/Game.blink` and read `GetTrafficStats()` on the server to split
+its `DataSendKbps` by event. Nothing it uses today changes: no handler, reason or refusal moves, and
+a schema that compiled under 0.37.0 compiles the same.
+
 ## 0.37.0 — 2026-09-25
 
 A game can act on every packet the server refuses. **The wire format does not change, and neither

@@ -50,6 +50,7 @@ A few rules hold for all of them:
 | `DefaultRate` | events a second | none | [Rate limits](#defaultrate-requirerates) |
 | `RequireRates` | boolean | `false` | [Rate limits](#defaultrate-requirerates) |
 | `InvocationTimeout` | seconds | `10` | [Invocations](#invocationtimeout) |
+| `TrafficStats` | boolean | `false` | [Diagnostics](#trafficstats) |
 | `UseColon` | boolean | -- | [Deprecated](#usecolon) |
 
 ## Output
@@ -479,6 +480,38 @@ Ten seconds sits above anything a legitimate handler is likely to do -- a datast
 marketplace prompt -- and below the point where the caller has given up anyway. Raise it if your
 handlers genuinely take longer.
 </Aside>
+
+## Diagnostics
+
+### `TrafficStats`
+Default: `false`
+
+Counts what each module sends and receives, per event and per channel, and adds two members to the
+server and client modules: `GetTrafficStats()` and `ResetTrafficStats()`. Roblox reports only the
+game's total (`Stats.DataSendKbps`); this says how much of it is BlinkBlox's and which event costs
+the most.
+
+```blink
+option TrafficStats = true
+
+event Chat { From: Client, Type: Reliable, Call: ManySync, Data: string(0..200) }
+```
+
+```luau title="Server.luau"
+local Stats = Net.GetTrafficStats()
+print(Stats.Events.Chat.Received, Stats.Events.Chat.ReceivedBytes, Stats.Reliable.ReceivedBytes)
+```
+
+The counters are integer additions into one table the module allocates when it loads, at indices
+fixed at compile time: sending or receiving an event allocates nothing and looks no string up. An
+event whose every value has the same size counts only how many were sent, and the bytes are worked
+out when you ask. With the option off -- the default -- the module is exactly what it would be
+without this option, not one line longer.
+
+The returned shape, what counts as a byte and how a broadcast is counted are on the
+[Generated API](/BlinkBlox/reference/generated-api/#traffic-counters) page; how to use it to find
+what is expensive is in [Bandwidth](/BlinkBlox/guides/bandwidth/#measuring-your-traffic). The option
+does not change the wire, so a module built with it talks to one built without.
 
 ## Deprecated
 

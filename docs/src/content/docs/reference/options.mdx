@@ -31,6 +31,7 @@ page explains each one in full.
 | [`RequireRates`](/BlinkBlox/language/options/#defaultrate-requirerates) | boolean | `false` | Make an inbound event or function with no effective rate a compile error (`E3020`). |
 | [`Predict`](/BlinkBlox/language/options/#predict) | boolean | `false` | Add `Predict` to every event this side listens to (not polled ones): it delivers to local listeners without a remote. |
 | [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) | whole number | `10` | Seconds before an unanswered `Invoke` fails. |
+| [`TrafficStats`](/BlinkBlox/language/options/#trafficstats) | boolean | `false` | Count bytes, events and packets sent and received, per event and per channel, behind `GetTrafficStats()` and `ResetTrafficStats()`. Emits nothing when off. |
 | `UseColon` | boolean | none | Deprecated and ignored; warns `W3017`. Delete it. |
 
 ## Value syntax

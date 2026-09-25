@@ -4,6 +4,7 @@ local Parser = require("../Parser")
 local Settings = require("../Settings")
 
 local Prefabs = require("./Prefabs")
+local Traffic = require("./Traffic")
 local Util = require("./Util")
 
 local Builder = require("../Modules/Builder")
@@ -288,6 +289,11 @@ return function(FileContext: Context, AbstractSyntaxTree: AbstractSyntaxTree): s
 	StringBuilder.Push(`export declare const {Casing.StepReplication}: () => void`)
 	for _, Line in HandlerDeclarations(FileContext, Casing) do
 		StringBuilder.Push(Line)
+	end
+	if FileContext ~= "Shared" then
+		for _, Line in Traffic.Typescript(Options, Casing) do
+			StringBuilder.Push(Line)
+		end
 	end
 
 	if _G.VERSION == nil then
