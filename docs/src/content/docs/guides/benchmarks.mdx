@@ -25,24 +25,25 @@ thousand different payloads a frame instead of one payload a thousand times, and
 
 Natively compiled, as a Roblox server runs the module:
 
-| Bench | Fire 0.33.0 | Fire 0.34.0 | Decode 0.33.0 | Decode 0.34.0 | Bytes |
+| Bench | Fire 0.34.0 | Fire 0.35.0 | Decode 0.34.0 | Decode 0.35.0 | Bytes |
 |---|---|---|---|---|---|
-| Booleans | 11.8 | **5.6** | 21.6 | **7.4** | 128 |
-| Entities | 4.7 | **3.9** | 75.0 | **15.7** | 603 |
-| BooleansRandom | 21.1 | **14.4** | 23.5 | **10.4** | 128 |
-| EntitiesRandom | 9.7 | **8.4** | 90.2 | **31.4** | 603 |
-| Tiny | 0.15 | 0.13 | 0.44 | **0.28** | 2 |
+| Booleans | 11.9 | **5.5** | 21.7 | **6.5** | 128 |
+| Entities | 4.6 | **3.9** | 73.3 | **17.0** | 603 |
+| BooleansRandom | 21.2 | **14.1** | 23.9 | **9.4** | 128 |
+| EntitiesRandom | 9.3 | **6.9** | 91.1 | **30.0** | 603 |
+| Tiny | 0.13 | 0.15 | 0.43 | **0.28** | 2 |
 
 Interpreted, as most Roblox clients run it:
 
-| Bench | Fire 0.33.0 | Fire 0.34.0 | Decode 0.33.0 | Decode 0.34.0 |
+| Bench | Fire 0.34.0 | Fire 0.35.0 | Decode 0.34.0 | Decode 0.35.0 |
 |---|---|---|---|---|
-| Booleans | 65.0 | **24.9** | 80.9 | **32.0** |
-| Entities | 23.4 | 22.1 | 95.8 | **43.6** |
-| BooleansRandom | 64.6 | **33.6** | 80.2 | **34.0** |
-| EntitiesRandom | 30.2 | 28.8 | 108.8 | **57.3** |
-| Tiny | 0.28 | 0.28 | 0.70 | **0.48** |
+| Booleans | 64.3 | **24.9** | 79.7 | **32.5** |
+| Entities | 23.3 | 23.1 | 93.7 | **46.7** |
+| BooleansRandom | 64.6 | **33.4** | 80.5 | **33.4** |
+| EntitiesRandom | 29.9 | 28.9 | 102.2 | **57.5** |
+| Tiny | 0.26 | 0.25 | 0.69 | **0.49** |
 
+A difference of a few hundredths of a millisecond, like Tiny's fire, is noise on this machine.
 The run was made on 2026-09-25 with Lune 0.10.5 on an Intel Xeon at 2.8 GHz. The flush, which
 copies the batch into an exact-size buffer, took under 0.25 ms in every case. The
 [changelog](/BlinkBlox/changelog/) says what changed in 0.35.0.

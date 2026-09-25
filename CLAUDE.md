@@ -264,7 +264,7 @@ chunk given a custom one. Studio's harness gained random payloads, a fire-time c
 support. What the numbers found: a send buffer past 4 KB was let go at every flush, so the heaviest
 senders regrew theirs from 64 bytes every frame; `boolean[]` went a bit at a time; a decoded struct
 was built as `{}` and rehashed four times on the way to six fields; and every decoded event
-allocated a closure. Decoding structs is five times faster natively and `boolean[]` three times. On
+allocated a closure. Decoding structs is four times faster natively and `boolean[]` three times. On
 the compiler side, 90% of parse time was generic substitution deep-copying the declaring scope's
 whole symbol table, and parsing went from 166 ms to 12 ms. A reused parser also kept every tree it
 had parsed, which is how the plugin's editor had leaked 16 MB a parse on a schema using

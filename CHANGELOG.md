@@ -19,12 +19,12 @@ showed it was faster. Medians for 1000 events a frame, natively compiled, 0.34.0
 
 | Bench | Fire (ms) | Decode (ms) |
 |---|---|---|
-| `boolean[0..1000]` | 11.8 → 5.6 | 21.6 → 7.4 |
-| 100 structs of six `u8` | 4.7 → 3.9 | 75.0 → 15.7 |
-| one `u8` | 0.15 → 0.13 | 0.44 → 0.28 |
+| `boolean[0..1000]` | 11.9 → 5.5 | 21.7 → 6.5 |
+| 100 structs of six `u8` | 4.6 → 3.9 | 73.3 → 17.0 |
+| one `u8` | unchanged | 0.43 → 0.28 |
 
 Interpreted code, which is what most clients run, fires and decodes `boolean[]` between 1.9 and 2.6
-times faster, and decodes structs about twice as fast.
+times faster, and decodes structs between 1.8 and 2 times faster.
 
 - A send buffer that grew past 4 KB was let go at every flush. The senders that most needed their
   buffer kept, the heavy ones, regrew it from 64 bytes every frame instead: 23 allocations and copies
