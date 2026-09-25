@@ -284,13 +284,17 @@ Disconnect()
 ```
 
 A listener of a `Many` event may disconnect itself, or another listener, from inside a dispatch
-without the others missing that event.
+without the others missing that event. A listener disconnected during a dispatch is not called for
+the rest of it, as with `RBXScriptSignal`, and one connected during a dispatch waits for the next event.
 
 ### Events that arrive before a listener
 
 A reliable event that arrives while nothing is listening is queued, and the queue is handed to the
 listener the moment one connects -- so a listener connected a frame late still sees what was sent
-before it. An unreliable event with no listener is dropped.
+before it. The listener is called for each queued event the way it is for one arriving later: a
+`Sync` listener that throws on one of them reports its error on a thread of its own, and `On` still
+connects it, returns its disconnect, and hands the rest of the queue over. An unreliable event with no
+listener is dropped.
 
 The queue holds 256 events. On the server it is filled by clients, so once it is full further events
 are dropped without a word: an event the game declares but never listens to cannot be used to grow

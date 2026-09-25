@@ -21,7 +21,7 @@
     {
       "identifier": "VERSION",
       "rule": "inject_global_value",
-      "value": "0.37.0"
+      "value": "0.37.1"
     }
   ]
 }
