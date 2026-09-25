@@ -276,6 +276,8 @@ needs, which is the actual objection.
 | Compile a schema | `lune run init <path-to-.blink> -- --yes` (from `src/CLI`) |
 | Check a schema, diagnostics as JSON | `lune run init <path-to-.blink> -- --check --json` (from `src/CLI`) |
 | Build release binaries | `lune run build` |
+| Time the generated modules | `lune run Runtime` (from `benchmark`) |
+| Time the compiler | `lune run Performance` (from `benchmark`) |
 | Docs, locally | `cd docs && npm install && npm run dev` |
 | Build the docs (dead links fail it) | `cd docs && npm run build` |
 

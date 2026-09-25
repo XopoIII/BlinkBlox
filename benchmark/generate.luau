@@ -35,58 +35,54 @@ for Tool, Version in Versions do
 	Contents ..= `\n\`{Tool}\`: {Version}  `
 end
 
-local function QueryWMIC(Component: string, Properties: string): { string }
-	local SpawnResult = process.exec("wmic", { Component, "get", Properties })
-	assert(SpawnResult.ok, SpawnResult.stderr)
-
-	local Lines = string.split(SpawnResult.stdout, "\n")
-
-	--> Remove header and padding
-	table.remove(Lines, 1)
-	table.remove(Lines, #Lines)
-	table.remove(Lines, #Lines)
-
-	--> Parse text
-	local QueryResult = {}
-	for Index, Line in Lines do
-		--> Remove padding
-		Line = string.gsub(Line, "\r", "")
-		Line = string.sub(Line, 1, #Line - 1)
-
-		if Component == "cpu" then
-			table.insert(QueryResult, Line)
-			continue
-		end
-
-		local SubResult = {}
-		local LineResults = string.split(Line, " ")
-		for Index, Result in LineResults do
-			--> Ignore empty lines
-			if string.gsub(Result, "%c", "") == "" then
-				continue
-			end
-
-			table.insert(SubResult, Result)
-		end
-
-		table.insert(QueryResult, SubResult)
+--> The machine's processor and memory, from whatever the running system offers. The harness used to
+--> ask `wmic` alone, which is Windows-only, deprecated and no longer installed by default on Windows
+--> 11, while the published numbers came from a Mac.
+local function Run(Program: string, Arguments: { string }): string?
+	local Success, Result = pcall(process.exec, Program, Arguments)
+	if not Success or not Result.ok then
+		return nil
 	end
 
-	return QueryResult
+	local Output = string.gsub(Result.stdout, "^%s+", "")
+	Output = string.gsub(Output, "%s+$", "")
+	return if Output == "" then nil else Output
+end
+
+local function Gigabytes(Bytes: string?): string?
+	local Number = tonumber(Bytes)
+	return if Number then `{math.floor(Number / 2 ^ 30 + 0.5)}GB` else nil
+end
+
+local function QuerySpecs(): (string, string)
+	if process.os == "macos" then
+		return Run("sysctl", { "-n", "machdep.cpu.brand_string" }) or "unknown",
+			Gigabytes(Run("sysctl", { "-n", "hw.memsize" })) or "unknown"
+	elseif process.os == "windows" then
+		local Query = "Get-CimInstance -ClassName %s | Select-Object -ExpandProperty %s"
+		local Processor =
+			Run("powershell", { "-NoProfile", "-Command", string.format(Query, "Win32_Processor", "Name") })
+		local Memory = Run("powershell", {
+			"-NoProfile",
+			"-Command",
+			string.format(Query, "Win32_ComputerSystem", "TotalPhysicalMemory"),
+		})
+		return Processor or "unknown", Gigabytes(Memory) or "unknown"
+	end
+
+	local CpuInfo = if fs.isFile("/proc/cpuinfo") then fs.readFile("/proc/cpuinfo") else ""
+	local MemInfo = if fs.isFile("/proc/meminfo") then fs.readFile("/proc/meminfo") else ""
+	local Kilobytes = tonumber(string.match(MemInfo, "MemTotal:%s*(%d+)"))
+	return string.match(CpuInfo, "model name%s*:%s*([^\n]+)") or "unknown",
+		Gigabytes(if Kilobytes then tostring(Kilobytes * 1024) else nil) or "unknown"
 end
 
 local function WriteComputerSpecs()
-	local Processor = QueryWMIC("cpu", "name")
-	local MemorySticks = QueryWMIC("memorychip", "Capacity,Speed") :: { { string } }
+	local Processor, Memory = QuerySpecs()
 
 	Contents ..= `\n## Computer Specs`
-	Contents ..= `\nProcessor: \`{Processor[1]}\`  `
-
-	for Slot, Stick in MemorySticks do
-		local Capacity = tonumber(Stick[1]) or 0
-		Capacity //= 1e+9
-		Contents ..= `\nMemory #{Slot}: \`{Capacity}GB {Stick[2]}\`  `
-	end
+	Contents ..= `\nProcessor: \`{Processor}\`  `
+	Contents ..= `\nMemory: \`{Memory}\`  `
 end
 
 type Benchmark = {
@@ -94,6 +90,7 @@ type Benchmark = {
 	Recieve: number,
 	Bandwidth: { number },
 	Framerate: { number },
+	FireTime: { number }?,
 }
 
 local Metrics = {
@@ -105,10 +102,15 @@ local Metrics = {
 		Label = "Kbps",
 		Samples = "Bandwidth",
 	},
+	{
+		Label = "Fire ms",
+		Samples = "FireTime",
+	},
 }
 
 local function WriteBenchResults(Name: string, Results: { [string]: Benchmark })
-	local Output = `\n## [{Name}](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches/{Name}.luau)\n`
+	local Output =
+		`\n## [{Name}](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches/{Name}.luau)\n`
 
 	for Index, Metric in Metrics do
 		if Index > 1 then
@@ -125,6 +127,11 @@ local function WriteBenchResults(Name: string, Results: { [string]: Benchmark })
 			end
 
 			local Numbers = Result[Metric.Samples]
+			if Numbers == nil then
+				Output ..= `\n|{Tool}|-|-|-|-|-|-|{Loss}%|`
+				continue
+			end
+
 			local Formatted = table.create(#Numbers)
 			for Index, Value in Numbers do
 				Formatted[Index] = string.format("%.2f", Value)
@@ -147,7 +154,11 @@ for Name, Benchmarks in Result do
 end
 
 table.sort(Array, function(a, b)
-	return #a < #b
+	if #a ~= #b then
+		return #a < #b
+	end
+
+	return a < b
 end)
 
 for _, Name in Array do

@@ -1,14 +1,26 @@
 local fs = require("@lune/fs")
 local stdio = require("@lune/stdio")
 
+local Attributes = require("../src/Modules/Attributes")
+local Error = require("../src/Modules/Error")
 local Generator = require("../src/Generator")
 local Lexer = require("../src/Lexer")
 local Parser = require("../src/Parser")
 
+--> Test.blink draws a dozen warnings on purpose. Rendered, they would be printed on every one of the
+--> thousand parses, and the benchmark would time the renderer and the terminal instead of the parser.
+Error.OnEmit = function(Diagnostic)
+	return Diagnostic.Severity == "Warning"
+end
+
 local Source = fs.readFile("../test/Sources/Test.blink")
 local SourceLexer = Lexer.new()
-local SourceParser = Parser.new("../test/Sources/")
-local AbstractSyntaxTree = SourceParser:Parse(Source)
+--> A parser per parse, as the CLI makes one per compile.
+local function NewParser()
+	return Parser.new("../test/Sources/", "Test.blink", nil, Attributes.new(nil))
+end
+
+local AbstractSyntaxTree = NewParser():Parse(Source)
 
 local function Format(Time: number): string
 	local Suffix = "seconds"
@@ -32,9 +44,16 @@ local function Percentile(Samples: { number }, Percent: number): number
 	return Samples[Index]
 end
 
+local WARMUP = 20
+
 local function BenchmarkClosure(Title: string, Closure: () -> ())
 	print(`Benchmarking: {Title}`)
 	stdio.write("Running")
+
+	--> Untimed: the first runs pay for filling caches and growing tables the later ones reuse.
+	for _ = 1, WARMUP do
+		Closure()
+	end
 
 	local Times = {}
 	for Index = 1, 1_000 do
@@ -56,10 +75,11 @@ local function BenchmarkClosure(Title: string, Closure: () -> ())
 	print(`0th Percentile: {Format(Times[1])}`)
 	print(`90th Percentile: {Format(Percentile(Times, 0.9))}`)
 	print(`95th Percentile: {Format(Percentile(Times, 0.95))}`)
+	print(`99th Percentile: {Format(Percentile(Times, 0.99))}`)
 end
 
 _G.RELEASE = true
-_G.VERSION = "PERFROMANCE"
+_G.VERSION = "PERFORMANCE"
 
 BenchmarkClosure("Lex", function()
 	SourceLexer:Initialize(Source)
@@ -73,9 +93,13 @@ BenchmarkClosure("Lex", function()
 end)
 
 BenchmarkClosure("Parse", function()
-	SourceParser:Parse(Source)
+	NewParser():Parse(Source)
 end)
 
-BenchmarkClosure("Generate", function()
+BenchmarkClosure("Generate server", function()
 	Generator.Generate("Server", AbstractSyntaxTree)
+end)
+
+BenchmarkClosure("Generate client", function()
+	Generator.Generate("Client", AbstractSyntaxTree)
 end)

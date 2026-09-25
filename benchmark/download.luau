@@ -4,13 +4,22 @@ local process = require("@lune/process")
 local serde = require("@lune/serde")
 
 local AUTH_TOKEN
-local PATH_TO_7ZIP = "C:\\Program Files\\7-Zip\\7z.exe"
 local PATH_TO_TOOLS = "./tools/"
 local PATH_TO_PACKAGES = "./packages/"
 
-local Tools = {
-	zap = "https://api.github.com/repos/red-blox/zap/releases/latest",
-	blink = "https://api.github.com/repos/XopoIII/BlinkBlox/releases/latest",
+--> The release asset for the machine this runs on: `macos-aarch64` on an Apple silicon Mac.
+local PLATFORM = `{process.os}-{process.arch}`
+local EXECUTABLE = if process.os == "windows" then ".exe" else ""
+
+local Tools: { [string]: { Url: string, Binary: string } } = {
+	zap = {
+		Url = "https://api.github.com/repos/red-blox/zap/releases/latest",
+		Binary = "zap",
+	},
+	blink = {
+		Url = "https://api.github.com/repos/XopoIII/BlinkBlox/releases/latest",
+		Binary = "blinkblox",
+	},
 }
 
 local Packages: { [string]: { GitHub: string, Wally: string } } = {
@@ -58,6 +67,40 @@ local function Curl(URL: string, Output: string, Headers: { string }?): process.
 	return process.exec("curl", Arguments)
 end
 
+--> Unpacks an archive with `tar`, which is bsdtar on macOS and on Windows 10 and later and reads zip
+--> as well as tar. GNU tar, on Linux, does not read zip, so there it is `unzip`. This used to be 7-Zip
+--> at a fixed Windows path.
+local function Extract(Archive: string, Directory: string)
+	if not fs.isDir(Directory) then
+		fs.writeDir(Directory)
+	end
+
+	local IsZip = string.sub(Archive, -4) == ".zip"
+	local Result = if IsZip and process.os == "linux"
+		then process.exec("unzip", { "-o", "-q", Archive, "-d", Directory })
+		else process.exec("tar", { "-xf", Archive, "-C", Directory })
+
+	assert(Result.ok, `Encountered an exception while unpacking {Archive}, {Result.stderr}`)
+end
+
+--> The path of the file called `Name` anywhere under `Directory`: an archive may or may not keep its
+--> binary in a folder of its own.
+local function Find(Directory: string, Name: string): string?
+	for _, Entry in fs.readDir(Directory) do
+		local Path = `{Directory}/{Entry}`
+		if Entry == Name and fs.isFile(Path) then
+			return Path
+		elseif fs.isDir(Path) then
+			local Found = Find(Path, Name)
+			if Found then
+				return Found
+			end
+		end
+	end
+
+	return nil
+end
+
 local function Request(Fetch: net.FetchParams): net.FetchResponse
 	if AUTH_TOKEN then
 		Fetch.headers = Fetch.headers or {}
@@ -73,38 +116,47 @@ local function Request(Fetch: net.FetchParams): net.FetchResponse
 		error(`API rate limit exceeded, retry again in {RetryTimestamp - os.time()} seconds.`)
 	end
 
-	if tonumber(Ratelimit) == 0 then
-		error(`API rate limit exceeded, retry again in {Response.headers["x-ratelimit-reset"] - os.time()} seconds.`)
-	end
-
 	assert(Response.ok, Response.statusMessage)
 	return Response
 end
 
-for Name, Url in Tools :: { [string]: string } do
+for Name, Tool in Tools do
 	local Response = Request({
-		url = Url,
+		url = Tool.Url,
 		method = "GET",
 	})
 
 	local Release = serde.decode("json", Response.body)
 	local DownloadUrl: string
+	local AssetName: string
 
 	for Index, Asset in Release.assets do
-		if not string.find(Asset.name, "windows-x86_64", 1, true) then
+		if not string.find(Asset.name, PLATFORM, 1, true) then
 			continue
 		end
 
 		DownloadUrl = Asset.browser_download_url
+		AssetName = Asset.name
 	end
 
-	assert(DownloadUrl, `Unable to find download URL for {Name}`)
+	assert(DownloadUrl, `Unable to find a {PLATFORM} download for {Name}`)
 
-	local CurlResult = Curl(DownloadUrl, `{PATH_TO_TOOLS}{Name}.zip`)
+	local Archive = `{PATH_TO_TOOLS}{AssetName}`
+	local CurlResult = Curl(DownloadUrl, Archive)
 	assert(CurlResult.ok, `Encountered an exception while downloading files for {Name}, {CurlResult.code}`)
 
-	local UnzipResult = process.exec(`{PATH_TO_7ZIP}`, { "e", `{PATH_TO_TOOLS}{Name}.zip`, "-y", `-o{PATH_TO_TOOLS}` })
-	assert(UnzipResult.ok, `Encountered an exception while unzipping downloads for {Name}, {UnzipResult.stderr}`)
+	local Unpacked = `{PATH_TO_TOOLS}{Name}_unpacked`
+	Extract(Archive, Unpacked)
+
+	local Binary = Find(Unpacked, `{Tool.Binary}{EXECUTABLE}`)
+	assert(Binary, `The {Name} download holds no {Tool.Binary}{EXECUTABLE}`)
+	fs.move(Binary, `{PATH_TO_TOOLS}{Tool.Binary}{EXECUTABLE}`, true)
+	fs.removeDir(Unpacked)
+	fs.removeFile(Archive)
+
+	if process.os ~= "windows" then
+		process.exec("chmod", { "+x", `{PATH_TO_TOOLS}{Tool.Binary}` })
+	end
 
 	Versions[Name] = Release.tag_name
 	print("Downloaded", Name, Release.tag_name)
@@ -136,15 +188,11 @@ for Name, Urls in Packages do
 	local CurlResult = Curl(DownloadUrl, `{ZipPath}.zip`, { "Wally-Version: 0.3.2" })
 	assert(CurlResult.ok, `Encountered an exception while downloading files for {Name}, {CurlResult.stderr}`)
 
-	if not fs.isDir(ZipPath) then
-		fs.writeDir(ZipPath)
-	end
+	Extract(`{ZipPath}.zip`, ZipPath)
 
-	local UnzipResult = process.exec(`{PATH_TO_7ZIP}`, { "x", `{ZipPath}.zip`, "-y", `-o{ZipPath}` })
-	assert(UnzipResult.ok, `Encountered an exception while unzipping downloads for {Name}, {UnzipResult.stderr}`)
-
-	fs.move(`{ZipPath}/src`, FinalPath)
+	fs.move(`{ZipPath}/src`, FinalPath, true)
 	fs.removeDir(ZipPath)
+	fs.removeFile(`{ZipPath}.zip`)
 
 	Versions[Name] = Version
 	print("Downloaded", Name, Version)

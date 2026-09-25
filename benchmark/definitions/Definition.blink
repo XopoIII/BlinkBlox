@@ -31,3 +31,18 @@ event Entities {
     Call: SingleSync,
     Data: Entity[0..1000]
 }
+
+-- The same two payloads, different in every event: see src/shared/benches/BooleansRandom.luau.
+event BooleansRandom {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: boolean[0..1000]
+}
+
+event EntitiesRandom {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: Entity[0..1000]
+}

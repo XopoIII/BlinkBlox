@@ -23,3 +23,17 @@ event Entities = {
     call: SingleSync,
     data: Entity[0..1000]
 }
+
+event BooleansRandom = {
+    from: Client,
+    type: Reliable,
+    call: SingleSync,
+    data: boolean[0..1000]
+}
+
+event EntitiesRandom = {
+    from: Client,
+    type: Reliable,
+    call: SingleSync,
+    data: Entity[0..1000]
+}
