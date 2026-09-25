@@ -1,0 +1,7 @@
+-- expect E3005
+-- The module declares BLINK_TRAFFIC_STATS under option TrafficStats; a top-level type of that name
+-- would redefine it.
+option ClientOutput = "../../Network/TrafficTypeNameClient.luau"
+option ServerOutput = "../../Network/TrafficTypeNameServer.luau"
+
+type BLINK_TRAFFIC_STATS = u8

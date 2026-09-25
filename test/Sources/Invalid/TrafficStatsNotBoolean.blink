@@ -1,0 +1,5 @@
+-- expect E2002
+-- TrafficStats is a boolean option.
+option TrafficStats = 1
+option ClientOutput = "../../Network/TrafficStatsNotBooleanClient.luau"
+option ServerOutput = "../../Network/TrafficStatsNotBooleanServer.luau"

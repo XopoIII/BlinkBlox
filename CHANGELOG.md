@@ -10,9 +10,10 @@ startup instead of misreading packets.
 ## Unreleased
 
 A check that committed output still matches its schema, a game can hear which player's event set off
-a listener that threw, and a module can come up in a place where no server module runs. **The wire
-format does not change, and neither does the schema signature**: a module built from this release
-talks to a 0.37.0 one built from the same schema.
+a listener that threw, a module can come up in a place where no server module runs, and a game can
+see what its own networking costs, event by event. **The wire format does not change, and neither
+does the schema signature**: a module built from this release talks to a 0.37.0 one built from the
+same schema, and with the new options off the generated modules are what they were.
 
 ### Added
 
@@ -69,6 +70,30 @@ talks to a 0.37.0 one built from the same schema.
 - All three follow `Casing` (`remotes`, `start`, `connected`), are stubbed in edit mode, are declared
   in the TypeScript output where they exist, and are offered by the Studio plugin's option
   completion. Both options may sit under `@profile`.
+- **`option TrafficStats`** (default `false`). With it on, the server and client modules export
+  `GetTrafficStats()` and `ResetTrafficStats()`. Roblox reports only the game's total
+  (`Stats.DataSendKbps`), which cannot say how much of it is BlinkBlox's or which event costs most.
+  - `GetTrafficStats()` returns `{ Events, Reliable, Unreliable }`, each count
+    `{ Sent, SentBytes, Received, ReceivedBytes }`, totals since the module started or since the last
+    `ResetTrafficStats()`, in a fresh table on every call. `Events` is keyed by the event's path
+    (`"Inner.Poll"` inside a scope); functions are counted in `Reliable` only. The fields follow
+    `Casing`.
+  - An event's bytes are those in the buffer: its index, the sequence number of an ordered event,
+    and its payload. The channels count packets and whole buffers.
+  - The server counts a send once per recipient -- `FireAll` once per player in the game, also for an
+    unreliable event sent through `FireAllClients` -- since each of them is sent the bytes.
+  - An event is counted as received once it is decoded, before its rate limit. A packet refused
+    before decoding is not counted.
+  - The counting is integer additions into one table allocated when the module loads, at indices
+    fixed at compile time; nothing is allocated and no string is looked up per event. An event of a
+    single size counts only events and has its bytes multiplied out when read. Measured with
+    `lune run Runtime -- --traffic`, natively compiled, the best of several runs: fire within 2% of the
+    same build without it, decode within 5%.
+  - Declared in the TypeScript output, present in the edit-mode stub (reporting zeros), completed
+    by the Studio plugin, and `GetTrafficStats`, `ResetTrafficStats`, `BLINK_TRAFFIC_COUNTS` and
+    `BLINK_TRAFFIC_STATS` are reserved (`E3005`) whether the option is on or not, so turning it on
+    never starts refusing a schema.
+- `benchmark/Runtime.luau` takes `--traffic` to build BlinkBlox with the option, to price it.
 
 ### Changed
 
@@ -96,6 +121,9 @@ Grabby Pit can drop several things it built for itself, once it is on this relea
   Anything that still needs a remote's name reads `Remotes`.
 - The three lazy requires of the server module: set `option AutoStart = false`, require it at the
   top like any module, and call `Start()` in the real game's bootstrap only.
+- `option TrafficStats`: turn it on in `net/Game.blink` and read `GetTrafficStats()` on the server to split
+  its `DataSendKbps` by event. Nothing it uses today changes: no handler, reason or refusal moves, and
+  a schema that compiled under 0.37.0 compiles the same.
 
 ## 0.37.0 — 2026-09-25
 

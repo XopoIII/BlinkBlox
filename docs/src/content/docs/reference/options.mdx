@@ -33,6 +33,7 @@ page explains each one in full.
 | [`InvocationTimeout`](/BlinkBlox/language/options/#invocationtimeout) | whole number | `10` | Seconds before an unanswered `Invoke` fails. |
 | [`ClientConnectTimeout`](/BlinkBlox/language/options/#clientconnecttimeout) | number above zero | none; wait for ever | Seconds the client waits for the remotes before it returns a module with `Connected` false and every entry point stubbed. |
 | [`AutoStart`](/BlinkBlox/language/options/#autostart) | boolean | `true` | `false`: the server module creates and connects nothing until the game calls `Start()`. |
+| [`TrafficStats`](/BlinkBlox/language/options/#trafficstats) | boolean | `false` | Count bytes, events and packets sent and received, per event and per channel, behind `GetTrafficStats()` and `ResetTrafficStats()`. Emits nothing when off. |
 | `UseColon` | boolean | none | Deprecated and ignored; warns `W3017`. Delete it. |
 
 ## Value syntax

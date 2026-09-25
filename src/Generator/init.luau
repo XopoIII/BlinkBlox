@@ -14,6 +14,8 @@ local GenerateTypescript = require("@self/Typescript")
 local Lifecycle = require("@self/Lifecycle")
 local Prefabs = require("@self/Prefabs")
 local Serde = require("@self/Serde")
+--> `option TrafficStats`; every call below emits nothing when it is off.
+local Traffic = require("@self/Traffic")
 --> Everything one generation run builds up, shared with the generator's other files. See State.luau.
 local State = require("@self/State")
 local Util = require("@self/Util")
@@ -52,6 +54,7 @@ local Generator = {}
 
 function Generator.Reset()
 	State.Reset()
+	Traffic.Reset()
 end
 
 function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Body): string
@@ -103,6 +106,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 
 	State.Reliables:Lines(EVENT_BODY, 1)
 	State.Unreliables:Lines(EVENT_BODY, 1)
+	Traffic.Packet(State.Reliables, false)
+	Traffic.Packet(State.Unreliables, true)
 
 	if State.Options.SyncValidation then
 		State.Reliables:Lines(EVENT_SYNC_VALIDATION, 1)
@@ -175,6 +180,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		State.Return.Push(Line, 1, 1)
 		State.Noop.Push(Stubbed[Index], 0, 2)
 	end
+	Traffic.Members()
 
 	if not State.Options.ManualReplication then
 		Replication.Push("RunService.Heartbeat:Connect(StepReplication)")
@@ -404,6 +410,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		{ "local SerdesFunctions = {}\n" },
 		Util.Constants(State.Options.RemoteScope, AbstractSyntaxTree),
 		string.split(Sources.Base, "\r"),
+		Traffic.Body(),
 		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
 		RateTemplateBody,
 		OrderingBody,
@@ -414,7 +421,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		State.UserTypes.DumpLines(),
 		Preamble,
 		State.Noop.DumpLines(),
-		string.split(Source[2], "\r"),
+		string.split(Traffic.Template(Source[2]), "\r"),
 		Lifecycle.Connections(
 			State.Context,
 			State.Options,

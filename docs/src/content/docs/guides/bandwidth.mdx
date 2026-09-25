@@ -237,6 +237,41 @@ lets the receiver discard a packet older than one it has already seen. Use it fo
 position, an aim direction -- where a stale packet would make something visibly snap back, and plain
 `Unreliable` for independent signals.
 
+## Measuring your traffic
+
+Everything above predicts a cost; [`option TrafficStats`](/BlinkBlox/language/options/#trafficstats)
+measures it. Roblox's `Stats.DataSendKbps` is the whole game's traffic, so it cannot say how much of it
+is BlinkBlox's or which event costs the most. With the option on, `GetTrafficStats()` can:
+
+```luau title="TrafficReport.server.luau"
+local Net = require(ServerScriptService.Network.Server)
+
+local Last = Net.GetTrafficStats()
+while true do
+    task.wait(60)
+    local Now = Net.GetTrafficStats()
+    for Name, Counts in Now.Events do
+        local Bytes = Counts.SentBytes - Last.Events[Name].SentBytes
+        if Bytes > 0 then
+            print(`{Name}: {Bytes // 60} bytes a second, {(Counts.Sent - Last.Events[Name].Sent) / 60} a second`)
+        end
+    end
+    print(`reliable packets: {(Now.Reliable.Sent - Last.Reliable.Sent) / 60} a second`)
+    Last = Now
+end
+```
+
+Sort by bytes, and the top of the list is where a narrower type, a range or a lower send rate pays
+most. The counts are the buffer's bytes before Roblox compresses a packet and adds its own headers,
+so they will not add up to `DataSendKbps`: they say where BlinkBlox's share goes, not what the
+network card sees. A server event's bytes are counted once per player it reaches -- a `FireAll` to
+twenty players is twenty sends -- because that is what each of them costs. The full rules are on the
+[Generated API](/BlinkBlox/reference/generated-api/#traffic-counters) page.
+
+The counting is a few integer additions per event, measured at a few percent of the time spent
+encoding and decoding, so it can stay on in a live game. Turning the option off removes every line of
+it.
+
 ## Checklist
 
 - Bound every string, buffer and array. It is a smaller prefix and a check the server gets for free.

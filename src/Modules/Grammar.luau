@@ -73,6 +73,7 @@ Grammar.OPTIONS = {
 	InvocationTimeout = "Number",
 	ClientConnectTimeout = "Number",
 	AutoStart = "Boolean",
+	TrafficStats = "Boolean",
 } :: { [string]: Lexer.Types }
 
 --> Defaults the option checks and the generator both need. Here because this module is data only,
@@ -191,6 +192,10 @@ Grammar.RESERVED = {
 	SetDecodeErrorHandler = true,
 	SetPacketDropHandler = true,
 	SetListenerErrorHandler = true,
+	--> Emitted only under `option TrafficStats`, reserved always: turning the option on must not
+	--> start refusing a schema that compiled without it.
+	GetTrafficStats = true,
+	ResetTrafficStats = true,
 }
 
 --- Luau's built-in type names. A declared type becomes an exported Luau type of the same name, and
@@ -355,6 +360,9 @@ export type Options = {
 	--> False leaves the server's remotes uncreated until the game calls `Start`. See
 	--> Generator/Lifecycle.
 	AutoStart: boolean?,
+	--> Counts the bytes and events each declaration sends and receives, and the packets on each
+	--> channel, behind GetTrafficStats. Off by default, and when off nothing of it is emitted.
+	TrafficStats: boolean?,
 }
 
 return Grammar

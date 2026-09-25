@@ -1,0 +1,26 @@
+-- option TrafficStats: every kind of send and receive counted, reviewed here as a golden. An event
+-- of one size counts events alone; one whose size varies counts its bytes too.
+option TrafficStats = true
+option Typescript = true
+option RemoteScope = "Traffic"
+option ClientOutput = "../../Network/TrafficClient.luau"
+option ServerOutput = "../../Network/TrafficServer.luau"
+
+event Byte { From: Client, Type: Reliable, Call: ManySync, Data: u8 }
+event Push { From: Server, Type: Reliable, Call: SingleAsync, Data: u8 }
+event Blip { From: Server, Type: Unreliable, Call: ManySync, Data: u16 }
+event Ping { From: Client, Type: Unreliable, Call: ManySync, Data: u8 }
+event Seq { From: Server, Type: OrderedUnreliable, Call: ManySync, Data: u8 }
+-- Sizes that vary count their bytes as well as their events.
+event Note { From: Client, Type: Reliable, Call: ManySync, Data: string(0..32) }
+event Trail { From: Server, Type: OrderedUnreliable, Call: ManySync, Data: u8[..4] }
+
+function Ask {
+    Yield: Coroutine,
+    Data: u8,
+    Return: u8,
+}
+
+scope Inner {
+    event Poll { From: Client, Type: Reliable, Call: Polling, Data: u8 }
+}
