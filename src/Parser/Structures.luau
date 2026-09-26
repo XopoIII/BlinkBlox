@@ -152,9 +152,14 @@ function Parser.Event(self: Parser, Name: Token): Event
 		Call = "Polling"
 	end
 
-	local Data, Stream = Structure.Data, nil
+	local Data, Stream, Stamp = Structure.Data, nil, nil
 	if Structure.Stream then
 		Data, Stream = self:StreamData(Name, Structure)
+	end
+
+	--> A stream is From: Server, so the From check there refuses a Stamp beside it.
+	if Structure.Stamp ~= nil then
+		Data, Stamp = self:StampData(Name, Structure)
 	end
 
 	return {
@@ -168,6 +173,7 @@ function Parser.Event(self: Parser, Name: Token): Event
 			Rate = Structure.Rate,
 			Burst = Structure.Burst,
 			Stream = Stream,
+			Stamp = Stamp,
 		},
 		Tokens = {
 			Identifier = Name,

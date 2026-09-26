@@ -39,6 +39,7 @@ export type Tuple = AST.Tuple
 export type EventCall = AST.EventCall
 export type Event = AST.Event
 export type StreamSettings = AST.StreamSettings
+export type StampSettings = AST.StampSettings
 export type Function = AST.Function
 export type ScopeNode = AST.ScopeNode
 
@@ -116,6 +117,7 @@ export type Methods = {
 
 	--> Streams.luau
 	StreamData: (self: Parser, Name: Token, Structure: { [string]: any }) -> (Tuple, StreamSettings),
+	StampData: (self: Parser, Name: Token, Structure: { [string]: any }) -> (Tuple, StampSettings),
 
 	--> Types.luau
 	Type: (self: Parser, Name: Token, Keyword: Token?, IsDataField: boolean?) -> TypeNode,

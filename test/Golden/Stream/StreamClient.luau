@@ -688,13 +688,12 @@ local function StepReplication()
         SendBuffer = buffer.create(64)
     end
 end
-
---> STREAMS. A stream's stamp is the server's clock in milliseconds modulo 65536; this puts it back in
---> seconds, the one nearest the client's own estimate of that clock, which is within a ping of it.
-local Workspace = game:GetService("Workspace")
+--> STAMPS. A stamp is a server time in milliseconds modulo 65536; this puts it back in seconds, the
+--> one nearest this side's own server clock.
+local StampClock = game:GetService("Workspace")
 
 local function UnwrapStamp(Stamp: number): number
-    local Now = Workspace:GetServerTimeNow() * 1000
+    local Now = StampClock:GetServerTimeNow() * 1000
     local Time = Now - Now % 65536 + Stamp
     if Time > Now + 32768 then
         Time -= 65536
@@ -703,6 +702,7 @@ local function UnwrapStamp(Stamp: number): number
     end
     return Time / 1000
 end
+
 RunService.Heartbeat:Connect(StepReplication)
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0

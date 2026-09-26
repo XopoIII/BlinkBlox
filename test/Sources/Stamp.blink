@@ -1,0 +1,31 @@
+-- Stamps and per-player streams: a client event that carries when it was sent, with and without
+-- values, and a stream that holds each player's own state. UsePolling is here to show that a
+-- stamped event is never polled, as a stream is not.
+option UsePolling = true
+option ClientOutput = "../../Network/StampClient.luau"
+option ServerOutput = "../../Network/StampServer.luau"
+
+event Swing {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Rate: 2,
+	Stamp: 250
+}
+
+event Aim {
+	From: Client,
+	Type: OrderedUnreliable,
+	Call: ManyAsync,
+	Rate: 30,
+	Stamp: 100,
+	Data: (Target: u8, At: vector<f24>)
+}
+
+event Trust {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Stream: { Rate: 10, Fast: 20, Keepalive: 2, Epsilon: 0.01, Per: Player },
+	Data: struct { Gap: f32, Bucket: f32 }
+}

@@ -9,7 +9,6 @@
 local Blocks = require("./Blocks")
 local Builder = require("../Modules/Builder")
 local Decode = require("./Decode")
-local Fragments = require("./Fragments")
 local Generators = require("./Generators")
 local Listeners = require("./Listeners")
 local Parser = require("../Parser")
@@ -17,6 +16,7 @@ local Prefabs = require("./Prefabs")
 local Queues = require("./Queue")
 local Send = require("./Send")
 local Serde = require("./Serde")
+local Stamps = require("./Stamp")
 local State = require("./State")
 local Streams = require("./Stream")
 local Traffic = require("./Traffic")
@@ -24,7 +24,6 @@ local Util = require("./Util")
 
 type Type = Parser.TypeNode
 
-local UNRELIABLE_BODY = Fragments.UNRELIABLE_BODY
 local Types = Prefabs.Types
 local RateGuardExpression = Decode.RateGuardExpression
 local OrderGuardExpression = Decode.OrderGuardExpression
@@ -44,8 +43,9 @@ function Declarations.Event(Declaration: Parser.Event)
 	if IsOrdered then
 		State.UsesOrdering = true
 	end
-	--> A stream always has a listener: it hands the game the stamp unwrapped, which a poll would not.
-	local IsPolling = not Value.Stream and (Value.Call == "Polling" or State.Options.UsePolling)
+	--> A stream or a stamped event always has a listener: it hands the game the stamp unwrapped, which
+	--> a poll would not.
+	local IsPolling = not Value.Stream and not Value.Stamp and (Value.Call == "Polling" or State.Options.UsePolling)
 	local IsSameContext = Value.From == State.Context
 
 	local Channel = IsUnreliable and State.Channels.Unreliable or State.Channels.Reliable
@@ -76,16 +76,22 @@ function Declarations.Event(Declaration: Parser.Event)
 		State.UserTypes.PushLines(Read, 1, 0)
 	end
 
+	--> A stamped event's Fire takes the declared values, and the module writes the stamp after them.
+	local FireValues, WriteArguments = Values, Arguments
+	if Value.Stamp and IsSameContext then
+		FireValues, WriteArguments = Stamps.Outgoing(Value.Stamp)
+	end
+
 	--> Return body
 	local Body = Builder.new()
 	local Indent = Util.GetScopeIndent(State.Scope)
-	local WriteEvent = `{Util.GetPath(Identifier, true, State.Scope)}({Arguments})`
+	local WriteEvent = `{Util.GetPath(Identifier, true, State.Scope)}({WriteArguments})`
 	--> The same call, protected, for every write into a batch that outlives it: the client's own, and
 	--> the one the server keeps per player. `Load(PlayersMap[Player])` installs that player's saved
 	--> instance list itself rather than a copy, so an Instance appended before a later field threw
 	--> stayed in it even though the cursor was never saved -- and every instance after it in that
 	--> flush reached the client one place out. A broadcast writes into a fresh buffer and needs none.
-	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, State.Scope)}, {Arguments})`
+	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, State.Scope)}, {WriteArguments})`
 
 	--> Writes into a batch that is kept, undoing whatever a write that throws had already added.
 	local function WriteKept(Target: Blocks.Block)
@@ -161,6 +167,8 @@ function Declarations.Event(Declaration: Parser.Event)
 		Traffic.Received(Block, Counters)
 		if Value.Stream then
 			Streams.Unwrap(Block, InnerArguments)
+		elseif Value.Stamp then
+			Stamps.Unwrap(Block, InnerArguments, Value.Stamp)
 		end
 
 		--> The decode above has to happen either way: payloads are variable length, so skipping an
@@ -342,7 +350,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		Body.Push("--- @deprecated v0.14.1 -- Use `Iter` instead.", 0, Indent + 1)
 		Body.PushLines(Deprecated.Content, 0, Indent + 1)
 	elseif State.Context == "Client" then
-		local Fire = Blocks.Function(State.Casing.Fire, Values, "()", true)
+		local Fire = Blocks.Function(State.Casing.Fire, FireValues, "()", true)
 		if IsReliable then
 			--> Rolled back rather than left, because this write lands in the batch every other event
 			--> is queued in. Half an event in there is not one bad send: the receiver reads the
@@ -391,13 +399,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Traffic.Sent(Fire, Counters, "SendCursor - Cursor", false)
 			Fire:Line("SavePlayerBuffer(Player)")
 		else
-			Fire:Line("Load()")
-			Fire:Line(WriteEvent)
-			Fire:Line(`if not CheckUnreliableSize("{Declaration.Name}") then return end`)
-			Fire:Lines(UNRELIABLE_BODY, 1)
-			Send.StampOrder(Fire, Outgoing)
-			Fire:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
-			Traffic.Sent(Fire, Counters, "SendCursor", true)
+			Send.One(Fire, Outgoing)
 		end
 		Fire:End()
 

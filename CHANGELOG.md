@@ -7,6 +7,43 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.39.0 — 2026-09-27
+
+A client's event can say when it was sent, and a stream can hold a state for each player. Both came
+out of reading Roblox's Server Authority work for what a game without it can still take: a server
+that judges a hit where the player saw it needs the moment the player acted, and a server that
+corrects one player needs a channel to that player alone. **The wire format does not change for a
+schema that uses neither**: every other golden is byte-identical, and so is its signature. A schema
+that adds a `Stamp` changes that event's data and so its signature -- **Recompile both modules** --
+and one that adds `Per: Player` to a stream does not change what a client receives.
+
+### Added
+
+- `Stamp: <milliseconds>` on a `From: Client` event. The client's `Fire` writes its estimate of the
+  server's clock (`GetServerTimeNow`, milliseconds modulo 65536) after the values, and the server's
+  listener receives `SentAt` in seconds after them, held between the moment the event arrived and
+  the window before it -- a stamp from further back is the window's start, one from the future is
+  the present. Two bytes an event. A stamp on a server's event, a polled one, a window outside 1 to
+  30000 ms, or beside an element already named `SentAt` is `E3034`; `UsePolling` leaves a stamped
+  event out, as it does a stream. See the new Stamps page.
+- `Per: Player` in a stream's block. `Set`, `Clear`, `Urgent` and `SetFast` take the player first,
+  and each player's state runs the scheduler on its own -- its clock, change check, keepalive and
+  `Fast` -- and is sent to that player alone. A player's state is made on their first `Set` or
+  `SetFast` and dropped when they leave; a `Set` for a player who has already left does nothing.
+
+### Changed
+
+- The stamp unwrap a stream's client used lives in the new `src/Templates/Stamp.luau` and is shared
+  with the server's clamp, so a module with a stream carries `StampClock`, where the server's half
+  read `Workspace`. The emitted stream runtime also gains the per-player scheduler; a module whose
+  streams are all broadcast never enters it.
+- An unreliable `Fire` to one player and a per-player stream's send are one generator, `Send.One`.
+
+### Downstream
+
+- Grabby Pit: nothing changes until the schema opts in. `Kick` and `HandOff` taking `Stamp: 250` is a
+  schema change both modules are rebuilt for, and each listener gains a last argument.
+
 ## 0.38.2 — 2026-09-26
 
 The benchmark figures in the README, the Benchmarks page and `benchmark/Benchmarks.md` are 0.38.1's,

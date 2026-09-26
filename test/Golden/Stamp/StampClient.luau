@@ -9,16 +9,16 @@
 -- This file is not meant to be edited
 
 _G._BLINK = _G._BLINK or {}
-if _G._BLINK["Crossing"] then
-	error("[BlinkBlox]: An instance of BlinkBlox is already running with the remote scope \"Crossing\". Change the remote scope of either instance to avoid conflicts.")
+if _G._BLINK["BLINK"] then
+	error("[BlinkBlox]: An instance of BlinkBlox is already running with the remote scope \"BLINK\". Change the remote scope of either instance to avoid conflicts.")
 end
-_G._BLINK["Crossing"] = true
+_G._BLINK["BLINK"] = true
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
-local BASE_EVENT_NAME = "Crossing_BLINK"
-local SCHEMA_SIGNATURE = "867c969c8917f8cc"
+local BASE_EVENT_NAME = "BLINK"
+local SCHEMA_SIGNATURE = "f1ad4a4c945941f2"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -381,46 +381,6 @@ local EventNames: any = {
 }
 
 
---> Traffic counters (option TrafficStats), in blocks of four: bytes and count sent, bytes and
---> count received. The reliable channel is the block at 1, the unreliable at 5, each event the
---> next from 9 on, in the order of TRAFFIC_NAMES. A channel counts packets, an event events.
---> An event of one size only counts events; TRAFFIC_SIZES has its size, and 0 for the rest.
-local TRAFFIC_NAMES: { string } = table.freeze({ "Crawls", "Tick", "Ready" })
-local TRAFFIC_SIZES: { number } = table.freeze({ 0, 0, 2 })
-local TrafficCounters: { number } = table.create(8 + #TRAFFIC_NAMES * 4, 0)
-
-type BLINK_TRAFFIC_COUNTS = { sent: number, sent_bytes: number, received: number, received_bytes: number }
-type BLINK_TRAFFIC_STATS = { events: { [string]: BLINK_TRAFFIC_COUNTS }, reliable: BLINK_TRAFFIC_COUNTS, unreliable: BLINK_TRAFFIC_COUNTS }
-
-local function TrafficCounts(Base: number, Bytes: number): BLINK_TRAFFIC_COUNTS
-	return {
-		sent = TrafficCounters[Base + 1],
-		sent_bytes = if Bytes > 0 then TrafficCounters[Base + 1] * Bytes else TrafficCounters[Base],
-		received = TrafficCounters[Base + 3],
-		received_bytes = if Bytes > 0 then TrafficCounters[Base + 3] * Bytes else TrafficCounters[Base + 2],
-	}
-end
-
---> A fresh table on every call, so the game may keep one and compare it with the next.
-local function GetTrafficStats(): BLINK_TRAFFIC_STATS
-	local Events: { [string]: BLINK_TRAFFIC_COUNTS } = {}
-	for Index, Name in TRAFFIC_NAMES do
-		Events[Name] = TrafficCounts(5 + Index * 4, TRAFFIC_SIZES[Index])
-	end
-
-	return {
-		events = Events,
-		reliable = TrafficCounts(1, 0),
-		unreliable = TrafficCounts(5, 0),
-	}
-end
-
-local function ResetTrafficStats()
-	for Index = 1, #TrafficCounters do
-		TrafficCounters[Index] = 0
-	end
-end
-
 --> Sequence numbers for ordered unreliable events, one counter per event each way.
 local OrderOut: { number } = {}
 local OrderIn: { number } = {}
@@ -457,193 +417,130 @@ local function CheckUnreliableSize(Name: string): boolean
 end
 local SerdesEvent = "?"
 local SerdesThread: thread?
-Queue.Unreliable[0] = table.create(256)
-EventNames.Unreliable[0] = "Crawls"
-Events.Unreliable[1] = {}
 Queue.Unreliable[1] = table.create(256)
-EventNames.Unreliable[1] = "Tick"
-export type Crawl = { Id: number, Speed: number, Heat: number }
-function SerdesFunctions.ReadEVENT_Crawls(): ({ { Id: number, Speed: number, Heat: number } }?, number)
-	-- Read BLOCK: 3 bytes
-	local BLOCK_START = Read(3)
-	local BITFIELD_0
-	-- Value: Crawls
-	-- Value1: Crawls
-	local Value1
-	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		-- Value1: Crawls
-		-- START ARRAY
-		local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
-		if not (Length <= 16) then error(`Expected "Length" to be smaller than or equal to 16, got {Length} instead.`) end
-		if Length * 4 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value1 = table.create(Length)
-			-- Read BLOCK: 4 bytes
-		local ARRAY_START_2 = Read(4 * Length)
-		for Slot_2 = 1, Length do
-			-- Item_2: Crawls
-			local Item_2 = {Id = false, Speed = false, Heat = false} :: any
-			do
-				-- Item_2.Id: Id
-				-- Read 1
-				local OPERATION_OFFSET_0 = ARRAY_START_2
-				ARRAY_START_2 += 1
-				Item_2.Id = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			end
-			do
-				-- Item_2.Speed: Speed
-				-- Read 2
-				local OPERATION_OFFSET_1 = ARRAY_START_2
-				ARRAY_START_2 += 2
-				Item_2.Speed = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_1)
-				if not (Item_2.Speed >= 0) then error(`Expected "Item_2.Speed" to be larger than or equal to 0, got {Item_2.Speed} instead.`) end
-				if not (Item_2.Speed <= 1000) then error(`Expected "Item_2.Speed" to be smaller than or equal to 1000, got {Item_2.Speed} instead.`) end
-				Item_2.Speed = Item_2.Speed / 10
-			end
-			do
-				-- Item_2.Heat: Heat
-				-- Read 1
-				local OPERATION_OFFSET_2 = ARRAY_START_2
-				ARRAY_START_2 += 1
-				Item_2.Heat = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2)
-				if not (Item_2.Heat >= 1) then error(`Expected "Item_2.Heat" to be larger than or equal to 1, got {Item_2.Heat} instead.`) end
-				if not (Item_2.Heat <= 200) then error(`Expected "Item_2.Heat" to be smaller than or equal to 200, got {Item_2.Heat} instead.`) end
-			end
-			Value1[Slot_2] = Item_2
-		end
-		-- END ARRAY
-	end
-	-- Value2: Crawls
-	local Value2 = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
-	return Value1, Value2
-end
-
-function SerdesFunctions.ReadEVENT_Tick(): (number?, number)
-	-- Read BLOCK: 3 bytes
-	local BLOCK_START = Read(3)
-	local BITFIELD_0
-	-- Value: Tick
-	-- Value1: Tick
-	local Value1
-	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
-		-- Read BLOCK: 2 bytes
-		local BLOCK_START = Read(2)
-		-- Value1: Tick
-		Value1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-		Value1 = Value1 / 100
-	end
-	-- Value2: Tick
-	local Value2 = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
-	return Value1, Value2
-end
-
-function SerdesFunctions.WriteEVENT_Ready(Value: number): ()
-	-- Allocate BLOCK: 2 bytes
-	local BLOCK_START = Allocate(2)
-	-- EVENT_Ready (0)
+EventNames.Unreliable[1] = "Trust"
+function SerdesFunctions.WriteEVENT_Swing(Value1: number): ()
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
+	-- EVENT_Swing (0)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
-	-- Value: Ready
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+	-- Value: Swing
+	-- Value1: Swing
+	buffer.writeu16(SendBuffer, BLOCK_START + 1, Value1)
 end
 
-
---> The schema's bounds, for the game to read instead of repeating them (option ExportLimits).
-local BLINK_LIMITS = table.freeze({
-	Crawl = table.freeze({
-		Speed = table.freeze({
-			min = 0,
-			max = 100,
-			step = 0.1,
-		}),
-		Heat = table.freeze({
-			min = 1,
-			max = 200,
-		}),
-	}),
-	Crawls = table.freeze({
-		length = table.freeze({
-			min = 0,
-			max = 16,
-		}),
-		element = table.freeze({
-			Speed = table.freeze({
-				min = 0,
-				max = 100,
-				step = 0.1,
-			}),
-			Heat = table.freeze({
-				min = 1,
-				max = 200,
-			}),
-		}),
-	}),
-	Tick = table.freeze({
-		min = 0,
-		max = 655.35,
-		step = 0.01,
-	}),
-})
-local CONNECT_TIMEOUT = 2.5
-local ConnectedReliable: Instance? = nil
-local ConnectedUnreliable: Instance? = nil
-
---> Waits for both remotes, CONNECT_TIMEOUT seconds in all, and says whether they came.
--->
---> Without the option this is a WaitForChild with no timeout, and a place where no server module is
---> ever required -- a showroom build, a test place -- blocked every script requiring this one forever.
---> When they do not come, the module returns the same stubs edit mode gets, with Connected false:
---> Fire does nothing, Invoke fails at once, and no listener is ever called.
--->
---> Remotes that appear after the timeout are not picked up. The module has already been returned,
---> `require` has cached it, and a client that connected half way through would have missed whatever
---> the server sent before it. A game that wants to connect later reloads.
-local function ConnectRemotes(): boolean
-    --> Required from the server: the context check below raises the error that belongs to it.
-    if not RunService:IsClient() then
-        return true
-    end
-
-    local Deadline = os.clock() + CONNECT_TIMEOUT
-    ConnectedReliable = ReplicatedStorage:WaitForChild(REMOTE_NAMES.Reliable, CONNECT_TIMEOUT)
-    if ConnectedReliable == nil then
-        return false
-    end
-
-    --> The server creates both in the same frame, so what is left of the budget is plenty.
-    local Remaining = Deadline - os.clock()
-    ConnectedUnreliable = if Remaining > 0
-        then ReplicatedStorage:WaitForChild(REMOTE_NAMES.Unreliable, Remaining)
-        else ReplicatedStorage:FindFirstChild(REMOTE_NAMES.Unreliable)
-    return ConnectedUnreliable ~= nil
+function SerdesFunctions.WriteEVENT_Aim(Value1: number, Value2: Vector3, Value3: number): ()
+	-- Allocate BLOCK: 15 bytes
+	local BLOCK_START = Allocate(15)
+	-- EVENT_Aim (0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+	local OrderIdentifier = ((OrderOut[0] or 0) + 1) % 65536
+	OrderOut[0] = OrderIdentifier
+	buffer.writeu16(SendBuffer, BLOCK_START + 1, OrderIdentifier)
+	-- Value: Aim
+	-- Value1: Aim
+	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value1)
+	-- Value2: Aim
+	local Vector = Value2
+	if Vector.X ~= Vector.X then
+		buffer.writeu16(SendBuffer, BLOCK_START + 4, 0x0001)
+		buffer.writeu8(SendBuffer, BLOCK_START + 4 + 2, 0xFE)
+	elseif Vector.X == 0 then
+		buffer.writeu16(SendBuffer, BLOCK_START + 4, 0)
+		buffer.writeu8(SendBuffer, BLOCK_START + 4 + 2, if 1 / Vector.X < 0 then 0x80 else 0)
+	else
+		local float = Vector.X
+		local Fraction, Exponent = math.frexp(math.abs(float))
+		Exponent += 30
+		local Scaled = math.round(if Exponent <= 0
+			then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+			else Fraction * 0x40000)
+		local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+			+ if float < 0 then 0x800000 else 0
+		buffer.writeu16(SendBuffer, BLOCK_START + 4, Result)
+		buffer.writeu8(SendBuffer, BLOCK_START + 4 + 2, bit32.rshift(Result, 16))
+	end
+	if Vector.Y ~= Vector.Y then
+		buffer.writeu16(SendBuffer, BLOCK_START + 7, 0x0001)
+		buffer.writeu8(SendBuffer, BLOCK_START + 7 + 2, 0xFE)
+	elseif Vector.Y == 0 then
+		buffer.writeu16(SendBuffer, BLOCK_START + 7, 0)
+		buffer.writeu8(SendBuffer, BLOCK_START + 7 + 2, if 1 / Vector.Y < 0 then 0x80 else 0)
+	else
+		local float = Vector.Y
+		local Fraction, Exponent = math.frexp(math.abs(float))
+		Exponent += 30
+		local Scaled = math.round(if Exponent <= 0
+			then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+			else Fraction * 0x40000)
+		local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+			+ if float < 0 then 0x800000 else 0
+		buffer.writeu16(SendBuffer, BLOCK_START + 7, Result)
+		buffer.writeu8(SendBuffer, BLOCK_START + 7 + 2, bit32.rshift(Result, 16))
+	end
+	if Vector.Z ~= Vector.Z then
+		buffer.writeu16(SendBuffer, BLOCK_START + 10, 0x0001)
+		buffer.writeu8(SendBuffer, BLOCK_START + 10 + 2, 0xFE)
+	elseif Vector.Z == 0 then
+		buffer.writeu16(SendBuffer, BLOCK_START + 10, 0)
+		buffer.writeu8(SendBuffer, BLOCK_START + 10 + 2, if 1 / Vector.Z < 0 then 0x80 else 0)
+	else
+		local float = Vector.Z
+		local Fraction, Exponent = math.frexp(math.abs(float))
+		Exponent += 30
+		local Scaled = math.round(if Exponent <= 0
+			then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+			else Fraction * 0x40000)
+		local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+			+ if float < 0 then 0x800000 else 0
+		buffer.writeu16(SendBuffer, BLOCK_START + 10, Result)
+		buffer.writeu8(SendBuffer, BLOCK_START + 10 + 2, bit32.rshift(Result, 16))
+	end
+	-- Value3: Aim
+	buffer.writeu16(SendBuffer, BLOCK_START + 13, Value3)
 end
 
-if not RunService:IsRunning() or not ConnectRemotes() then
+function SerdesFunctions.ReadEVENT_Trust(): ({ Gap: number, Bucket: number }?, number)
+	-- Read BLOCK: 3 bytes
+	local BLOCK_START = Read(3)
+	local BITFIELD_0
+	-- Value: Trust
+	-- Value1: Trust
+	local Value1
+	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if bit32.btest(BITFIELD_0, 0x01) == true then
+		-- Read BLOCK: 8 bytes
+		local BLOCK_START = Read(8)
+		-- Value1: Trust
+		Value1 = {Gap = false, Bucket = false} :: any
+		-- Value1.Gap: Gap
+		Value1.Gap = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+		-- Value1.Bucket: Bucket
+		Value1.Bucket = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+	end
+	-- Value2: Trust
+	local Value2 = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+	return Value1, Value2
+end
+
+if not RunService:IsRunning() then
 	local NOOP = function() end
 	local NOOP_RETURNING = function() return NOOP end
-	local NOOP_INVOKE = if RunService:IsRunning() then function() error("[BlinkBlox]: The client is not connected to a server, so there is nobody to invoke.") end else NOOP
 	local Returns = table.freeze({
-		step_replication = NOOP,
-		set_rate_limit_handler = NOOP,
-		set_decode_error_handler = NOOP,
-		set_packet_drop_handler = NOOP,
-		set_listener_error_handler = NOOP,
-		remotes = REMOTE_NAMES,
-		connected = false,
-		get_traffic_stats = GetTrafficStats,
-		reset_traffic_stats = ResetTrafficStats,
-		limits = BLINK_LIMITS,
-	Crawls = {
-		on = NOOP_RETURNING
+		StepReplication = NOOP,
+		SetRateLimitHandler = NOOP,
+		SetDecodeErrorHandler = NOOP,
+		SetPacketDropHandler = NOOP,
+		SetListenerErrorHandler = NOOP,
+		Remotes = REMOTE_NAMES,
+	Swing = {
+		Fire = NOOP
 	},
-	Tick = {
-		on = NOOP_RETURNING
+	Aim = {
+		Fire = NOOP
 	},
-	Ready = {
-		fire = NOOP
+	Trust = {
+		On = NOOP_RETURNING
 	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
@@ -653,8 +550,8 @@ if not RunService:IsClient() then
     error("Client network module can only be required from the client.")
 end
 
-local Reliable: RemoteEvent = ConnectedReliable :: RemoteEvent
-local Unreliable: UnreliableRemoteEvent = ConnectedUnreliable :: UnreliableRemoteEvent
+local Reliable: RemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
+local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
 
 --> WaitForChild returns whatever carries that name. A client can create an instance of any class in
 --> ReplicatedStorage, so without this the first thing to answer to the name wins -- and every
@@ -732,8 +629,6 @@ local function StepReplication()
         local Buffer = buffer.create(Used)
         buffer.copy(Buffer, 0, SendBuffer, 0, Used)
         Reliable:FireServer(Buffer, SendInstances)
-        TrafficCounters[1] += Used
-        TrafficCounters[2] += 1
 
         SendCursor = 0
         SendOffset = 0
@@ -764,6 +659,11 @@ local function UnwrapStamp(Stamp: number): number
     return Time / 1000
 end
 
+--> STAMPS. The moment a stamped event is sent, in the server's clock as this client estimates it.
+local function StampNow(): number
+    return math.floor(StampClock:GetServerTimeNow() * 1000) % 65536
+end
+
 RunService.Heartbeat:Connect(StepReplication)
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
@@ -771,8 +671,6 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveInstances = Instances
 	RecieveInstanceCursor = 0
 	local Size = buffer.len(RecieveBuffer)
-	TrafficCounters[3] += Size
-	TrafficCounters[4] += 1
 	if SerdesThread and coroutine.status(SerdesThread) == "suspended" then
 		warn(`[BlinkBlox]: Event "{SerdesEvent}" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.`)
 		coroutine.close(SerdesThread)
@@ -801,8 +699,6 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveInstances = Instances
 	RecieveInstanceCursor = 0
 	local Size = buffer.len(RecieveBuffer)
-	TrafficCounters[7] += Size
-	TrafficCounters[8] += 1
 	if SerdesThread and coroutine.status(SerdesThread) == "suspended" then
 		warn(`[BlinkBlox]: Event "{SerdesEvent}" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.`)
 		coroutine.close(SerdesThread)
@@ -814,37 +710,16 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		local BLOCK_START = Read(1)
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
-		if Index == 0 then
+		if Index == 1 then
 			-- Read BLOCK: 2 bytes
 			local BLOCK_START = Read(2)
 			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-			local TrafficStart = RecieveCursor - 3
-			local Value1: { { Id: number, Speed: number, Heat: number } }?, Value2: number = SerdesFunctions.ReadEVENT_Crawls()
-			TrafficCounters[11] += RecieveCursor - TrafficStart
-			TrafficCounters[12] += 1
-			Value2 = UnwrapStamp(Value2)
-			if OrderAccept(0, OrderIdentifier) == true then
-				if Events.Unreliable[0] ~= nil then
-					SerdesEvent = "Crawls"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[0], Value1, Value2)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			end
-		elseif Index == 1 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-			local TrafficStart = RecieveCursor - 3
-			local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Tick()
-			TrafficCounters[15] += RecieveCursor - TrafficStart
-			TrafficCounters[16] += 1
+			local Value1: { Gap: number, Bucket: number }?, Value2: number = SerdesFunctions.ReadEVENT_Trust()
 			Value2 = UnwrapStamp(Value2)
 			if OrderAccept(1, OrderIdentifier) == true then
-				local Epoch = ListenerEpoch
-				for _, Listener in Events.Unreliable[1] do
-					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[1], Listener) == nil then continue end
-					SerdesEvent = "Tick"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value1, Value2)
+				if Events.Unreliable[1] ~= nil then
+					SerdesEvent = "Trust"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[1], Value1, Value2)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
@@ -864,64 +739,55 @@ end)
 
 
 local Returns = table.freeze({
-	step_replication = StepReplication,
+	StepReplication = StepReplication,
 
-	set_rate_limit_handler = SetRateLimitHandler,
+	SetRateLimitHandler = SetRateLimitHandler,
 
-	set_decode_error_handler = SetDecodeErrorHandler,
+	SetDecodeErrorHandler = SetDecodeErrorHandler,
 
-	set_packet_drop_handler = SetPacketDropHandler,
+	SetPacketDropHandler = SetPacketDropHandler,
 
-	set_listener_error_handler = SetListenerErrorHandler,
+	SetListenerErrorHandler = SetListenerErrorHandler,
 
-	remotes = REMOTE_NAMES,
+	Remotes = REMOTE_NAMES,
 
-	connected = true,
-
-	get_traffic_stats = GetTrafficStats,
-
-	reset_traffic_stats = ResetTrafficStats,
-
-	limits = BLINK_LIMITS,
-
-	Crawls = {
-		on = function(Listener: (Value: { { Id: number, Speed: number, Heat: number } }?, ServerTime: number) -> ()): () -> ()
-			if Events.Unreliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Crawls\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[0] = Listener
-			return function (): ()
-				if Events.Unreliable[0] == Listener then
-					Events.Unreliable[0] = nil
-				end
-			end
-		end
-	},
-	Tick = {
-		on = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[1])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[1] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[1], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[1])
-					table.remove(Listeners, Index)
-					Events.Unreliable[1] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	Ready = {
-		fire = function(Value: number): ()
+	Swing = {
+		Fire = function(): ()
 			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Ready, Value)
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Swing, StampNow())
 			if Sent ~= true then
 				Rollback(Cursor, Instances)
 				error(Failure, 0)
 			end
-			TrafficCounters[18] += 1
+		end
+	},
+	Aim = {
+		Fire = function(Target: number, At: Vector3): ()
+			local Previous = Save()
+			Load()
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Aim, Target, At, StampNow())
+			if Sent and CheckUnreliableSize("Aim") then
+				local Buffer = buffer.create(SendCursor)
+				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+				Unreliable:FireServer(Buffer, SendInstances)
+			end
+			Load(Previous)
+			if Sent ~= true then
+				error(Failure, 0)
+			end
+		end
+	},
+	Trust = {
+		On = function(Listener: (Value: { Gap: number, Bucket: number }?, ServerTime: number) -> ()): () -> ()
+			if Events.Unreliable[1] ~= nil then
+				warn("[BlinkBlox]: \"Trust\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Unreliable[1] = Listener
+			return function (): ()
+				if Events.Unreliable[1] == Listener then
+					Events.Unreliable[1] = nil
+				end
+			end
 		end
 	},
 })

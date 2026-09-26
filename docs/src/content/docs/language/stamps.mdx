@@ -1,0 +1,115 @@
+---
+title: Stamps
+description: A client event that carries when it was sent, clamped by the server to a window the schema sets -- the time lag compensation rewinds to.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A stamped event carries the moment the client sent it. The server's listener receives that moment as
+`SentAt`, in seconds on the server's clock, after the event's values -- held between the moment the
+event arrived and `Stamp` milliseconds before it. A client can say when it acted, but only inside the
+window the schema allows.
+
+It is what lag compensation needs. A player with a 150 ms ping swings at an opponent they see where
+the opponent was about 150 ms ago; judged against where the opponent is when the swing arrives, an
+honest hit misses. With `SentAt` the game rewinds its own record of positions to the moment the player
+acted and judges the hit there.
+
+## Declaring a stamp
+
+A stamp is an event field, the widest rewind in milliseconds:
+
+```blink
+event Swing {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Rate: 2,
+    Stamp: 250
+}
+
+event Aim {
+    From: Client,
+    Type: OrderedUnreliable,
+    Call: ManySync,
+    Rate: 30,
+    Stamp: 100,
+    Data: (Target: u8, At: vector<f24>)
+}
+```
+
+`Stamp` is from 1 to 30000, under half of the 65536 ms the stamp wraps at. It is `From: Client` only
+-- the server knows when it sends its own events -- and never polled: the listener is what turns the
+two bytes into `SentAt`, so a `Call: Polling` stamped event is refused and
+[`UsePolling`](/BlinkBlox/language/options/#usepolling) leaves it out, as it leaves out a
+[stream](/BlinkBlox/language/streams/). A declared element may not be named `SentAt`. Each of these is
+`E3034`.
+
+## Client
+
+`Fire` takes the declared values and nothing more; the module writes the stamp:
+
+```luau
+Net.Swing.Fire()
+Net.Aim.Fire(Target, At)
+```
+
+The stamp is `Workspace:GetServerTimeNow()` in milliseconds, rounded down, modulo 65536: the client's
+estimate of the server's clock, which Roblox keeps within about a ping of it.
+
+## Server
+
+```luau
+Net.Swing.On(function(Player: Player, SentAt: number)
+    local Target = Rewind.Nearest(Player, SentAt)
+end)
+
+Net.Aim.On(function(Player: Player, Target: number, At: Vector3, SentAt: number)
+end)
+```
+
+`SentAt` comes last, after the declared values. The server puts the two bytes back as the time nearest
+its own `GetServerTimeNow()` and then holds it inside the window:
+
+| The client's stamp | `SentAt` |
+|---|---|
+| inside the window | the stamp, to the millisecond |
+| older than `Stamp` ms | the window's start, `now - Stamp / 1000` |
+| after the server's clock | `now` |
+
+So a client that lies about when it acted -- to claim a hit from a second ago, say -- gets the edge of
+the window, and one that claims a time ahead of the server gets the present. A late packet, a lag
+switch, and a lie look the same, and are treated the same.
+
+<Aside>
+`SentAt` is a claim, like every value a client sends: it is bounded, not verified. Choose the window
+as the largest rewind the game is willing to grant -- roughly the worst ping it wants to play fairly --
+and judge anything else, such as whether the player could reach the target at all, against the
+server's own state.
+</Aside>
+
+## Rewinding
+
+BlinkBlox hands over the time and keeps no history: what to record and how far back is the game's.
+The usual shape is a short ring of positions per player, pushed from the server's own simulation, and
+a lookup that interpolates between the two samples around `SentAt`:
+
+```luau
+local Target = nil
+for _, Other in Players:GetPlayers() do
+    local At = History.At(Other, SentAt) -- where Other was at SentAt
+    if At and (At - Swinger).Magnitude <= RANGE then
+        Target = Other
+    end
+end
+```
+
+Keep the ring at least as long as the window, so the edge of it is always recorded.
+
+## On the wire
+
+A stamped event's data is its declared values with a `u16` appended: two bytes per event, counted by
+the [size analysis](/BlinkBlox/language/options/#maxunreliablesize) and part of the
+[schema signature](/BlinkBlox/language/options/#schema-signatures), so adding or removing a stamp is a
+schema change both modules must be rebuilt for. The window itself is the server's alone and not part
+of the signature: widening it needs no new client.

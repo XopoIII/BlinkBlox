@@ -116,6 +116,7 @@ local Error = {
 	AnalyzeInstanceWithoutSlots = 3031,
 	AnalyzeInvalidModifier = 3032,
 	AnalyzeInvalidStream = 3033,
+	AnalyzeInvalidStamp = 3034,
 }
 
 Error.__index = Error

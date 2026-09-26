@@ -1,8 +1,10 @@
 --!strict
 --- The stream runtime (docs/src/content/docs/language/streams.mdx), spliced into a module only when
---- its schema declares a stream: the server's half before `-- SPLIT --`, the client's after. The
+--- its schema declares a stream: the server's half before `-- SPLIT --`, the client's after -- empty,
+--- since the client only unwraps the stamp, and UnwrapStamp is in Templates/Stamp.luau. The
 --- server's half goes after the server template, because it wraps StepReplication, and before the
---- streams' own entries (Generator/Stream.luau), which call CreateStream.
+--- streams' own entries (Generator/Stream.luau), which call CreateStream or CreatePlayerStream.
+--- A `Per: Player` stream is the same scheduler run once for each player the game set a state for.
 ---
 --- A stream holds the latest state the game `Set`. Every StepReplication -- each Heartbeat, unless
 --- ManualReplication hands that to the game -- advances each stream's clock by the time since the
@@ -14,8 +16,6 @@
 --- server's clock in milliseconds modulo 65536.
 return [[
 --> STREAMS. The scheduler behind each `Stream` event; see the stream runtime in the compiler.
-local Workspace = game:GetService("Workspace")
-
 type BLINK_STREAM = {
     Name: string,
     Interval: number,
@@ -39,11 +39,24 @@ type BLINK_STREAM = {
 --> A step lands on an interval within this much of it: 6 frames of 1/60 add to a hair under 0.1.
 local STREAM_SLACK = 1e-6
 
+--> A stream with `Per: Player`: one BLINK_STREAM for each player the game set a state for, made on
+--> the first Set or SetFast and dropped when the player leaves.
+type BLINK_PLAYER_STREAM = {
+    Name: string,
+    Interval: number,
+    FastInterval: number,
+    Keepalive: number,
+    Epsilon: number,
+    Send: (Player: Player, Value: any, ServerTime: number) -> (),
+    Players: { [Player]: BLINK_STREAM },
+}
+
 local Streams: { BLINK_STREAM } = {}
+local PlayerStreams: { BLINK_PLAYER_STREAM } = {}
 local StreamStepped = os.clock()
 
-local function CreateStream(Name: string, Interval: number, FastInterval: number, Keepalive: number, Epsilon: number, Send: (any, number) -> ()): BLINK_STREAM
-    local Stream: BLINK_STREAM = {
+local function NewStream(Name: string, Interval: number, FastInterval: number, Keepalive: number, Epsilon: number, Send: (any, number) -> ()): BLINK_STREAM
+    return {
         Name = Name,
         Interval = Interval,
         FastInterval = FastInterval,
@@ -61,9 +74,50 @@ local function CreateStream(Name: string, Interval: number, FastInterval: number
         Clock = 0,
         Since = 0,
     }
+end
+
+local function CreateStream(Name: string, Interval: number, FastInterval: number, Keepalive: number, Epsilon: number, Send: (any, number) -> ()): BLINK_STREAM
+    local Stream = NewStream(Name, Interval, FastInterval, Keepalive, Epsilon, Send)
     table.insert(Streams, Stream)
     return Stream
 end
+
+local function CreatePlayerStream(Name: string, Interval: number, FastInterval: number, Keepalive: number, Epsilon: number, Send: (Player, any, number) -> ()): BLINK_PLAYER_STREAM
+    local Family: BLINK_PLAYER_STREAM = {
+        Name = Name,
+        Interval = Interval,
+        FastInterval = FastInterval,
+        Keepalive = Keepalive,
+        Epsilon = Epsilon,
+        Send = Send,
+        Players = {},
+    }
+    table.insert(PlayerStreams, Family)
+    return Family
+end
+
+--> The player's own stream, made if `Create` asks and the player is still in the game. One who has
+--> left gets none: PlayerRemoving has dropped theirs, and a new one would be held for nobody.
+local function PlayerStream(Family: BLINK_PLAYER_STREAM, Player: Player, Create: boolean): BLINK_STREAM?
+    local Stream = Family.Players[Player]
+    if Stream or not Create or Player.Parent == nil then
+        return Stream
+    end
+
+    local function Send(Value: any, ServerTime: number)
+        Family.Send(Player, Value, ServerTime)
+    end
+
+    local Made = NewStream(Family.Name, Family.Interval, Family.FastInterval, Family.Keepalive, Family.Epsilon, Send)
+    Family.Players[Player] = Made
+    return Made
+end
+
+Players.PlayerRemoving:Connect(function(Player)
+    for _, Family in PlayerStreams do
+        Family.Players[Player] = nil
+    end
+end)
 
 --> Whether two states are the same, a number within Epsilon of the other counting as equal -- and
 --> each component of a vector, CFrame or Color3 the same way. Tables are equal when they hold the same
@@ -153,8 +207,42 @@ local function StreamClear(Stream: BLINK_STREAM)
     Stream.Urgent = false
 end
 
+--> A per-player stream's members. Set and SetFast make the player's stream; Clear and Urgent have
+--> nothing to act on without one. Set checks for nil itself, so the error names the game's call.
+local function PlayerStreamSet(Family: BLINK_PLAYER_STREAM, Player: Player, Value: any)
+    if Value == nil then
+        error(`[BlinkBlox]: Stream "{Family.Name}" cannot be set to nil. Call Clear to clear it.`, 3)
+    end
+
+    local Stream = PlayerStream(Family, Player, true)
+    if Stream then
+        StreamSet(Stream, Value)
+    end
+end
+
+local function PlayerStreamClear(Family: BLINK_PLAYER_STREAM, Player: Player)
+    local Stream = PlayerStream(Family, Player, false)
+    if Stream then
+        StreamClear(Stream)
+    end
+end
+
+local function PlayerStreamUrgent(Family: BLINK_PLAYER_STREAM, Player: Player)
+    local Stream = PlayerStream(Family, Player, false)
+    if Stream then
+        Stream.Urgent = true
+    end
+end
+
+local function PlayerStreamSetFast(Family: BLINK_PLAYER_STREAM, Player: Player, Fast: boolean)
+    local Stream = PlayerStream(Family, Player, true)
+    if Stream then
+        Stream.Fast = Fast
+    end
+end
+
 local function SendStream(Stream: BLINK_STREAM, Value: any)
-    local ServerTime = math.floor(Workspace:GetServerTimeNow() * 1000) % 65536
+    local ServerTime = math.floor(StampClock:GetServerTimeNow() * 1000) % 65536
     local Sent: boolean, Failure: any = pcall(Stream.Send, Value, ServerTime)
     if not Sent then
         --> It would fail the same way at every step. The stream stops until the game sets another.
@@ -220,6 +308,12 @@ local function StepStreams()
     for _, Stream in Streams do
         StepStream(Stream, Delta)
     end
+
+    for _, Family in PlayerStreams do
+        for _, Stream in Family.Players do
+            StepStream(Stream, Delta)
+        end
+    end
 end
 
 --> Streams step first, so a state sent this frame goes out ahead of the frame's reliable batch.
@@ -229,18 +323,4 @@ StepReplication = function()
     StepReliable()
 end
 -- SPLIT --
---> STREAMS. A stream's stamp is the server's clock in milliseconds modulo 65536; this puts it back in
---> seconds, the one nearest the client's own estimate of that clock, which is within a ping of it.
-local Workspace = game:GetService("Workspace")
-
-local function UnwrapStamp(Stamp: number): number
-    local Now = Workspace:GetServerTimeNow() * 1000
-    local Time = Now - Now % 65536 + Stamp
-    if Time > Now + 32768 then
-        Time -= 65536
-    elseif Time < Now - 32768 then
-        Time += 65536
-    end
-    return Time / 1000
-end
 ]]

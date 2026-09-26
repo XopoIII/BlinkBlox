@@ -142,6 +142,16 @@ export type StreamSettings = {
 	Keepalive: number,
 	Epsilon: number,
 	Value: TypeNode,
+	--> `Per: Player`: the server holds a state for each player rather than one for all of them.
+	PerPlayer: boolean,
+}
+
+--- An event's `Stamp`. `Window` is in seconds; `Value` is the Data the game declared, while the
+--- event's `Data` is what goes on the wire, the same with a `SentAt: u16` appended -- the client's
+--- estimate of the server's clock in milliseconds modulo 65536. See Parser/Stamps.luau.
+export type StampSettings = {
+	Window: number,
+	Value: (TypeNode | Tuple)?,
 }
 
 export type Event = Node<
@@ -159,6 +169,8 @@ export type Event = Node<
 		Burst: number?,
 		--> Set on a stream: the server sends the latest state on a schedule rather than on Fire.
 		Stream: StreamSettings?,
+		--> Set on a stamped event: the listener also receives when the client sent it.
+		Stamp: StampSettings?,
 	},
 	{
 		Identifier: Token,

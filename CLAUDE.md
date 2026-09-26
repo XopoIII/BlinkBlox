@@ -300,6 +300,16 @@ and the runtime's own type aliases -- `Entry`, `Queue` -- were redefined by a sc
 name. `src/Modules/ModuleNames.luau` checks the spelling in force, and the aliases are `BLINK_*`.
 Neither the wire nor the schema signature changed.
 
+0.39.0 came out of reading Roblox's Server Authority work for what a game without it can take, and
+both halves serve the thesis from the other side: the server deciding what is true. `Stamp` puts the
+client's send time on an event, and the server clamps it to a window the schema sets before any
+listener sees it -- a client may say when it acted, never earlier than the window nor later than
+arrival -- which is what a game rewinds to when it judges a hit where the player saw it. The stamp is
+appended to the event's data in the parser, as a stream's is, so the size analysis, the signature and
+the types follow; the unwrap moved to `src/Templates/Stamp.luau`, shared by a stream's client and a
+stamped event's server. `Per: Player` holds a stream's state for each player -- the server's own
+per-player state, one scheduler entry per player per declared stream, dropped at PlayerRemoving.
+
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of
@@ -310,7 +320,9 @@ DELUGE (arXiv 2609.19750), read in full, is not a precedent for that: it chains 
 over TCP and never evaluated loss. What it does show is that a delta saves bits only when it is
 entropy-coded -- a delta written at a fixed width saves nothing -- and that a broadcast needs one
 baseline per stream rather than per player. Neither removes the per-player state a per-player event
-needs, which is the actual objection.
+needs, which is the actual objection. `Per: Player` streams (0.39.0) are not that: each holds one current state,
+which a lost packet does not corrupt -- the next send replaces it -- and nothing on the client mirrors
+it.
 
 
 ## Commands
@@ -378,7 +390,8 @@ src/Generator/init.luau    the Luau emitter: assembles one module from the parts
 src/Generator/State.luau   everything one generation run builds up, shared by the files here
 src/Generator/Generators   Luau types and serialisers for declarations, and the declaration walk
 src/Generator/Event.luau   one `event`; Function.luau one `function`; Decode.luau their guards
-src/Generator/Stream.luau  what a `Stream` event adds; Send.luau the server's broadcast sends
+src/Generator/Stream.luau  what a `Stream` event adds; Send.luau the server's sends to one and to many
+src/Generator/Stamp.luau   what a `Stamp` adds: the client's stamped Fire, the server's clamp
 src/Generator/Blocks.luau  code-emitting DSL (Block / Function / Connection)
 src/Generator/Prefabs/     read/write prefabs per primitive, plus range and type asserts
 src/Templates/*.luau       runtime fragments spliced into generated output

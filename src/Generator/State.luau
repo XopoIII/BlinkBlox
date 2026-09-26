@@ -45,6 +45,10 @@ export type State = {
 	--- emitted only where something uses it.
 	UsesStreams: boolean,
 
+	--- Set when this side sends or receives a stamped event, so the stamp runtime
+	--- (Templates/Stamp.luau) is emitted only where something uses it.
+	UsesStamps: boolean,
+
 	--- Set when this side's module invokes a function whose Yield is Future or Promise -- only the
 	--- invoking side does -- so the library is required only by a module that calls into it. A
 	--- require nothing used was a lint warning in every listening module.
@@ -80,6 +84,7 @@ local State: State = {
 
 	UsesOrdering = false,
 	UsesStreams = false,
+	UsesStamps = false,
 	UsesFuture = false,
 	UsesPromise = false,
 	RateSlots = {},
@@ -103,6 +108,7 @@ function State.Reset()
 	table.clear(Prefabs.Required)
 	State.UsesOrdering = false
 	State.UsesStreams = false
+	State.UsesStamps = false
 	State.UsesFuture = false
 	State.UsesPromise = false
 
