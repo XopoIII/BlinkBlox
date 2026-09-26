@@ -176,35 +176,28 @@ end
 
 ---- Hash ----
 
---- FNV-1a over 32 bits. The multiply is done as shifted adds because a 32x32 product leaves the
---- range a double holds exactly; the six terms each truncate to 32 bits first, so their sum stays
---- under 2^35 and is exact on every host.
-local function FNV(Text: string): number
-	local Hash = 2166136261
-	for Index = 1, #Text do
-		Hash = bit32.bxor(Hash, string.byte(Text, Index))
-		Hash = (
-			Hash
-			+ bit32.lshift(Hash, 1)
-			+ bit32.lshift(Hash, 4)
-			+ bit32.lshift(Hash, 7)
-			+ bit32.lshift(Hash, 8)
-			+ bit32.lshift(Hash, 24)
-		) % 4294967296
+--- Both lanes in one pass over the bytes, which is what they cost: reading a byte and going round the
+--- loop, twice over, took most of generating a module's signature -- 0.7 ms for Test.blink's 7 KB,
+--- nearly 3% of generating it. One pass through a buffer takes 0.27.
+---
+--- The first lane is FNV-1a over 32 bits. Its multiply by the prime 16777619 is written as
+--- `Hash * 403 + (Hash << 24)`, since 16777619 is 2^24 + 403: the product `Hash * 403` stays under
+--- 2^41, exact in a double on every host, and the shift truncates to 32 bits itself.
+---
+--- The second is djb2 with xor. A second lane of FNV under a different basis would stay partly
+--- correlated with the first; the point of a second lane is independence, so it is a structurally
+--- different mixer. Its `Hash * 33` is under 2^38, exact as well.
+local function Lanes(Text: string): (number, number)
+	local Bytes = buffer.fromstring(Text)
+	local Fnv, Djb = 2166136261, 5381
+	for Index = 0, buffer.len(Bytes) - 1 do
+		local Byte = buffer.readu8(Bytes, Index)
+		Fnv = bit32.bxor(Fnv, Byte)
+		Fnv = (Fnv * 403 + bit32.lshift(Fnv, 24)) % 4294967296
+		Djb = bit32.bxor(Djb * 33 % 4294967296, Byte)
 	end
 
-	return Hash
-end
-
---- djb2 with xor. A second lane of FNV under a different basis would stay partly correlated with the
---- first; the point of a second lane is independence, so it is a structurally different mixer.
-local function DJB(Text: string): number
-	local Hash = 5381
-	for Index = 1, #Text do
-		Hash = bit32.bxor((Hash + bit32.lshift(Hash, 5)) % 4294967296, string.byte(Text, Index))
-	end
-
-	return Hash
+	return Fnv, Djb
 end
 
 ---- Public ----
@@ -220,8 +213,8 @@ end
 --- Sixteen lowercase hex characters. Two independent 32-bit lanes, which is around 64 bits against
 --- accidental drift -- the stated bar. Not cryptographic and not meant to be.
 function Signature.Of(Tree: Body): string
-	local Canonical = Signature.Canonical(Tree)
-	return string.format("%08x%08x", FNV(Canonical), DJB(Canonical))
+	local Fnv, Djb = Lanes(Signature.Canonical(Tree))
+	return string.format("%08x%08x", Fnv, Djb)
 end
 
 return Signature

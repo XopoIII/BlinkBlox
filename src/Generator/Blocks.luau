@@ -41,6 +41,18 @@ local Operators = {
 }
 
 local Block = {}
+
+--> Indentation by depth, built once per depth: every emitted line is prefixed by one, and building it
+--> with string.rep on each of the tens of thousands of lines a module has was a measurable share of
+--> generation.
+local INDENTS: { [number]: string } = setmetatable({}, {
+	__index = function(Cache: { [number]: string }, Depth: number): string
+		local Indentation = string.rep("\t", Depth)
+		Cache[Depth] = Indentation
+		return Indentation
+	end,
+}) :: any
+
 Block.__index = Block
 
 export type Block = typeof(setmetatable(
@@ -144,7 +156,7 @@ function Block.Allocate(self: Block, Bytes: number): string
 end
 
 function Block._lineFront(self: Block, Text: string, Indent: number?): Block
-	table.insert(self.Content, self.Cursor, `{string.rep("\t", Indent or self.Indent)}{Text}\n`)
+	table.insert(self.Content, self.Cursor, `{INDENTS[Indent or self.Indent]}{Text}\n`)
 	self.FrontInserted += 1
 	return self
 end
@@ -296,7 +308,7 @@ function Block.Advance(self: Block, Offset: number): Block
 end
 
 function Block.Line(self: Block, Text: string, Indent: number?): Block
-	table.insert(self.Content, `{string.rep("\t", Indent or self.Indent)}{Text}\n`)
+	table.insert(self.Content, `{INDENTS[Indent or self.Indent]}{Text}\n`)
 	return self
 end
 
@@ -319,7 +331,7 @@ function Block.Lines(self: Block, Lines: { string }, Indent: number?): Block
 		return self
 	end
 
-	local Indentation = string.rep("\t", IndentLevel)
+	local Indentation = INDENTS[IndentLevel]
 
 	for _, Line in Lines do
 		table.insert(self.Content, `{Indentation}{Line}`)
@@ -331,7 +343,7 @@ end
 function Block.Multiline(self: Block, Content: string, Indent: number?): Block
 	local Lines = string.split(Content, "\n")
 	for _, Line in Lines do
-		table.insert(self.Content, `{string.rep("\t", Indent or 0)}{Line}\n`)
+		table.insert(self.Content, `{INDENTS[Indent or 0]}{Line}\n`)
 	end
 
 	return self

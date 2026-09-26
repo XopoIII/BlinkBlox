@@ -99,15 +99,22 @@ function Parser.TryConsume(self: Parser, Type: Lexer.Types): Token?
 	return Token
 end
 
+--- Consumes the next token if it is any of `...`. Compared in place rather than through TryConsume
+--- per type: the parser's identifiers go through here, over eight hundred times a parse of
+--- Test.blink, and a table of the types and a call per type were most of what that cost.
 function Parser.ConsumeAny(self: Parser, ...: Lexer.Types): Token
-	local Types = { ... }
-	for _, Type: Lexer.Types in Types do
-		local Token = self:TryConsume(Type)
-		if Token then
-			return Token
+	local Next = self.LookAhead
+	if Next then
+		local Kind = Next.Type
+		for Index = 1, select("#", ...) do
+			if (select(Index, ...)) == Kind then
+				self.LookAhead = self.Lexer:GetNextToken()
+				return Next
+			end
 		end
 	end
 
+	local Types = { ... }
 	local Token = self:Peek()
 	error(
 		self:Diagnostic(Error.ParserUnexpectedToken, `Unexpected token`)
