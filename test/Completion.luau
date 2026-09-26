@@ -74,7 +74,9 @@ RunClosure("Completion offers keywords, primitives and declared names where each
 		{ Text = "scope S {\n  event X {\n    Ty", Cursor = 29, Expect = "Type" },
 		--> An event's `Stream` block takes its own fields, each once, on its own lines or on one, and
 		--> `Stream:` itself takes the block rather than a type.
-		{ Text = "event X {\n  St", Cursor = 15, Expect = "Stream" },
+		{ Text = "event X {\n  St", Cursor = 15, Expect = "Stream,Stamp" },
+		{ Text = "event X {\n  Sta", Cursor = 16, Expect = "Stamp" },
+		{ Text = "event X {\n  Stream: { P", Cursor = 24, Expect = "Per" },
 		{ Text = "event X {\n  Stream: {\n    K", Cursor = 28, Expect = "Keepalive" },
 		{ Text = "event X {\n  Stream: {\n    Rate: 10,\n    R", Cursor = 42, Expect = "" },
 		{ Text = "event X {\n  Stream: { Rate: 10, E", Cursor = 34, Expect = "Epsilon" },

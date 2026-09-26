@@ -44,6 +44,7 @@ const sidebar = [
 			'language/types',
 			'language/events',
 			'language/streams',
+			'language/stamps',
 			'language/functions',
 			'language/profiles',
 		],

@@ -109,6 +109,8 @@ Grammar.STREAM = {
 	{ Key = "Fast", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Keepalive", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Epsilon", Type = "Number", Values = {}, Optional = true, Numeric = true },
+	--- `Per: Player` holds a state for each player instead of one for everyone.
+	{ Key = "Per", Type = "Identifier", Values = { "Player" }, Optional = true },
 } :: { EventOption }
 
 --- Seconds a stream waits before it sends an unchanged state again, when its block does not say.
@@ -122,8 +124,15 @@ Grammar.EVENT = {
 	{ Key = "Rate", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Burst", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Stream", Type = "OpenBraces", Values = {}, Optional = true, Fields = Grammar.STREAM },
+	--- Milliseconds a client's send time may reach back: the server hands the listener the time the
+	--- client sent the event, no earlier than this before the server received it.
+	{ Key = "Stamp", Type = "Number", Values = {}, Optional = true, Numeric = true },
 	{ Key = "Data", Type = "Identifier", Values = {}, Optional = true },
 } :: { EventOption }
+
+--- The widest `Stamp` window, in milliseconds: under half the u16 the stamp wraps at, so a stamp
+--- inside it always unwraps to the right side of the server's clock.
+Grammar.STAMP_MAX = 30000
 
 Grammar.FUNCTION = {
 	--- Optional, and defaulting to Client, because every schema written before this existed means

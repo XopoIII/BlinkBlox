@@ -9,6 +9,7 @@
 ---   Document     a whole file: options, imports, top-level declarations, then analysis
 ---   Structures   events, functions and scope blocks
 ---   Streams      an event's `Stream` block, and the wire type it gives the event
+---   Stamps       an event's `Stamp`, and the wire type it gives the event
 ---   Types        the type grammar's keyword dispatch, and primitives
 ---   Collections  sets, maps, enums, tagged enums, type packs and structs
 ---   Ranges       ranges, array brackets, components and the optional mark
@@ -22,6 +23,7 @@ local _ = {
 	require("@self/Document"),
 	require("@self/Structures"),
 	require("@self/Streams"),
+	require("@self/Stamps"),
 	require("@self/Types"),
 	require("@self/Collections"),
 	require("@self/Ranges"),
@@ -50,6 +52,7 @@ export type Tuple = Class.Tuple
 export type EventCall = Class.EventCall
 export type Event = Class.Event
 export type StreamSettings = Class.StreamSettings
+export type StampSettings = Class.StampSettings
 export type Function = Class.Function
 export type ScopeNode = Class.ScopeNode
 

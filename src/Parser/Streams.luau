@@ -125,6 +125,7 @@ function Parser.StreamData(self: Parser, Name: Token, Structure: { [string]: any
 			Keepalive = Block.Keepalive or Grammar.STREAM_KEEPALIVE,
 			Epsilon = Block.Epsilon or 0,
 			Value = Data,
+			PerPlayer = Block.Per == "Player",
 		}
 end
 

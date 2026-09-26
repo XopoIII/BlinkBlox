@@ -1,0 +1,11 @@
+-- expect E3034
+-- The server knows when it sends its own events; only a client's send has a time to stamp.
+option ClientOutput = "../../Network/StampFromServerClient.luau"
+option ServerOutput = "../../Network/StampFromServerServer.luau"
+
+event Tick {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Stamp: 250
+}

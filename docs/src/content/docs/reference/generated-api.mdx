@@ -139,7 +139,8 @@ Which members an event has depends on the side and on its [`From`](/BlinkBlox/la
 |---|---|---|
 | `From: Server` | `Fire`, `FireAll`, `FireList`, `FireExcept` | `On` and `Predict`, or `Iter` when polled |
 | `From: Client` | `On` and `Predict`, or `Iter` when polled | `Fire` |
-| [Stream](/BlinkBlox/language/streams/) | `Set`, `Clear`, `Urgent`, `SetFast` | `On`, never polled, with the state and the server time |
+| [Stream](/BlinkBlox/language/streams/) | `Set`, `Clear`, `Urgent`, `SetFast`, each taking the player first under `Per: Player` | `On`, never polled, with the state and the server time |
+| [Stamped](/BlinkBlox/language/stamps/) `From: Client` | `On`, never polled, with `SentAt` after the values | `Fire`, taking the values only |
 
 `Predict` exists only with [`option Predict`](/BlinkBlox/language/options/#predict). An event is
 polled when it is declared `Call: Polling` or [`UsePolling`](/BlinkBlox/language/options/#usepolling)

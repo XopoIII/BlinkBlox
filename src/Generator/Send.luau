@@ -28,6 +28,19 @@ function Send.StampOrder(Target: Blocks.Block, Event: Send)
 	end
 end
 
+--- An unreliable server send to one player, `Player`: the unreliable `Fire`, and a `Per: Player`
+--- stream's send. Leaves the function open for the caller to end.
+function Send.One(Fire: Blocks.Block, Event: Send): Blocks.Block
+	Fire:Line("Load()")
+	Fire:Line(Event.WriteEvent)
+	Fire:Line(`if not CheckUnreliableSize("{Event.Name}") then return end`)
+	Fire:Lines(UNRELIABLE_BODY, 1)
+	Send.StampOrder(Fire, Event)
+	Fire:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
+	Traffic.Sent(Fire, Event.Traffic, "SendCursor", true)
+	return Fire
+end
+
 --- The loop over the players a send reaches, leaving out `Except` when asked to.
 local function EachRecipient(Target: Blocks.Block, Recipients: string, SkipExcept: boolean?): Blocks.Block
 	local Loop = Target:Iterator("_", "Player", Recipients)

@@ -51,32 +51,48 @@ function Streams.Server(
 
 	State.UsesStreams = true
 
-	--> Every player, each with their own sequence number: a stream is always OrderedUnreliable.
-	local Send = Sends.Broadcast(
-		Blocks.Function(`Send{Stream}`, Values, "()", false, true),
-		{ IsReliable = false, WriteEvent = WriteEvent, Name = Name, Ordered = Index, Traffic = Counters },
-		"Players:GetPlayers()",
-		{}
-	)
+	--> Every player, each with their own sequence number: a stream is always OrderedUnreliable. A
+	--> `Per: Player` stream sends each player's own state to that player alone.
+	local Outgoing: Sends.Send =
+		{ IsReliable = false, WriteEvent = WriteEvent, Name = Name, Ordered = Index, Traffic = Counters }
+	local PerPlayer = Settings.PerPlayer
+	local Send = if PerPlayer
+		then Sends.One(Blocks.Function(`Send{Stream}`, `Player: Player, {Values}`, "()", false, true), Outgoing):End()
+		else Sends.Broadcast(
+			Blocks.Function(`Send{Stream}`, Values, "()", false, true),
+			Outgoing,
+			"Players:GetPlayers()",
+			{}
+		)
 
 	--> The intervals stay written as the rates they come from, `1 / 10` rather than 0.1.
 	local Interval = `1 / {Literal(Settings.Rate)}`
 	local Fast = if Settings.Fast then `1 / {Literal(Settings.Fast)}` else Interval
-	State.Streams.Push(`\n-- {Name}: {Settings.Rate} a second{if Settings.Fast then `, {Settings.Fast} fast` else ""}`)
+	local Each = if PerPlayer then ", each player" else ""
+	State.Streams.Push(
+		`\n-- {Name}: {Settings.Rate} a second{if Settings.Fast then `, {Settings.Fast} fast` else ""}{Each}`
+	)
 	State.Streams.PushLines(Send.Content, 0)
 	State.Streams.Push(
-		`local {Stream} = CreateStream("{Name}", {Interval}, {Fast}, {Literal(Settings.Keepalive)}, {Literal(
-			Settings.Epsilon
-		)}, Send{Stream})`
+		`local {Stream} = {if PerPlayer then "CreatePlayerStream" else "CreateStream"}("{Name}", {Interval}, {Fast}, {Literal(
+			Settings.Keepalive
+		)}, {Literal(Settings.Epsilon)}, Send{Stream})`
 	)
 
 	local Type = Generators.LuauType(Settings.Value, true)
-	local Members = {
-		`{Casing.Set} = function(Value: {Type}): () StreamSet({Stream}, Value) end,`,
-		`{Casing.Clear} = function(): () StreamClear({Stream}) end,`,
-		`{Casing.Urgent} = function(): () {Stream}.Urgent = true end,`,
-		`{Casing.SetFast} = function(Fast: boolean): () {Stream}.Fast = Fast end,`,
-	}
+	local Members: { string } = if PerPlayer
+		then {
+			`{Casing.Set} = function(Player: Player, Value: {Type}): () PlayerStreamSet({Stream}, Player, Value) end,`,
+			`{Casing.Clear} = function(Player: Player): () PlayerStreamClear({Stream}, Player) end,`,
+			`{Casing.Urgent} = function(Player: Player): () PlayerStreamUrgent({Stream}, Player) end,`,
+			`{Casing.SetFast} = function(Player: Player, Fast: boolean): () PlayerStreamSetFast({Stream}, Player, Fast) end,`,
+		}
+		else {
+			`{Casing.Set} = function(Value: {Type}): () StreamSet({Stream}, Value) end,`,
+			`{Casing.Clear} = function(): () StreamClear({Stream}) end,`,
+			`{Casing.Urgent} = function(): () {Stream}.Urgent = true end,`,
+			`{Casing.SetFast} = function(Fast: boolean): () {Stream}.Fast = Fast end,`,
+		}
 
 	for _, Member in Members do
 		Body.Push(Member, 0, Indent + 1)

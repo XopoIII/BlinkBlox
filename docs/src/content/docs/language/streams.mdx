@@ -53,6 +53,7 @@ leaves it out, because the listener is what turns the stamp back into seconds. E
 | `Fast` | no | The rate `SetFast(true)` switches to. Must be higher than `Rate`. |
 | `Keepalive` | no | Seconds before an unchanged state is sent again. Defaults to 1. |
 | `Epsilon` | no | How far a number may move and still count as unchanged. Absent means exact. |
+| `Per` | no | `Player` holds a state for each player instead of one for all. See [below](#one-state-per-player). |
 
 The settings are the server's alone: they are not part of the wire or the
 [schema signature](/BlinkBlox/language/options/#schema-signatures), so changing a rate does not break a
@@ -108,12 +109,43 @@ went out.
 | `SetFast` | `(Fast: boolean) -> ()` | Switches between `Rate` and `Fast`. |
 
 A stream has no `Fire`, `FireAll`, `FireList` or `FireExcept`: every player is sent every state, each
-with their own sequence number. Between two steps the last call wins: a `Set` then a `Clear` clears
+with their own sequence number -- unless it is [held per player](#one-state-per-player). Between two steps the last call wins: a `Set` then a `Clear` clears
 (and sends nothing if the clients never saw a state), a `Clear` then a `Set` sends the new state.
 
 A state that fails to send -- an array past its bound, say -- is reported on a thread of its own, as
 `Stream "Heads" could not send its state: ...`, and the stream stops until the game calls `Set` again,
 since it would fail the same way at every step.
+
+## One state per player
+
+`Per: Player` gives each player a state of their own, sent to that player alone:
+
+```blink
+event Trust {
+    From: Server,
+    Type: OrderedUnreliable,
+    Call: SingleSync,
+    Stream: { Rate: 10, Keepalive: 2, Per: Player },
+    Data: struct { Gap: f32, Bucket: f32 }
+}
+```
+
+Every member takes the player first:
+
+| Member | Signature |
+|---|---|
+| `Set` | `(Player: Player, Value: Data) -> ()` |
+| `Clear` | `(Player: Player) -> ()` |
+| `Urgent` | `(Player: Player) -> ()` |
+| `SetFast` | `(Player: Player, Fast: boolean) -> ()` |
+
+Each player's state runs the whole scheduler above on its own: its clock, its change check, its
+keepalive, its `Fast`. A player the game never called `Set` or `SetFast` for costs nothing and is sent
+nothing; `Clear` and `Urgent` on them do nothing. The server holds one state per player per stream,
+and drops a player's when they leave: a `Set` for a player who has already left does nothing, so a
+late call from a system still winding down cannot hold a state for nobody.
+
+The client is unchanged: it hears its own state, with the server time, through `On`.
 
 ## Client
 

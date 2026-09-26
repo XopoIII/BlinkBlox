@@ -186,11 +186,20 @@ function Generators.Event(State: State, Event: Parser.Event)
 	local Casing = State.Casing
 	local StringBuilder = State.Builder
 
-	local IsPolling = not Value.Stream and (Value.Call == "Polling" or State.Options.UsePolling)
+	local IsPolling = not Value.Stream and not Value.Stamp and (Value.Call == "Polling" or State.Options.UsePolling)
 
 	local _, Values = "", "Value: void"
 	if Value.Data then
 		_, Values = GetTypescriptType(State, Value.Data)
+	end
+
+	--> A stamped event's Fire takes the values the schema declared; the module appends the stamp.
+	local FireValues = Values
+	if Value.Stamp then
+		FireValues = ""
+		if Value.Stamp.Value then
+			_, FireValues = GetTypescriptType(State, Value.Stamp.Value)
+		end
 	end
 
 	local ListenerValues = Values
@@ -209,18 +218,21 @@ function Generators.Event(State: State, Event: Parser.Event)
 		if Value.Stream then
 			--> A stream's server sends on a schedule; the game hands it the state. The client listens to
 			--> the wire type, `(Value: T | undefined, ServerTime: number)`, like any event.
+			--> A `Per: Player` stream takes the player first in every member.
 			local StreamType = GetTypescriptType(State, Value.Stream.Value)
-			StringBuilder.Push(`{Casing.Set}: (Value: {StreamType}) => void`, 0, Indent + 1)
-			StringBuilder.Push(`{Casing.Clear}: () => void`, 0, Indent + 1)
-			StringBuilder.Push(`{Casing.Urgent}: () => void`, 0, Indent + 1)
-			StringBuilder.Push(`{Casing.SetFast}: (Fast: boolean) => void`, 0, Indent + 1)
+			local Player = if Value.Stream.PerPlayer then "Player: Player" else ""
+			local Before = if Value.Stream.PerPlayer then "Player: Player, " else ""
+			StringBuilder.Push(`{Casing.Set}: ({Before}Value: {StreamType}) => void`, 0, Indent + 1)
+			StringBuilder.Push(`{Casing.Clear}: ({Player}) => void`, 0, Indent + 1)
+			StringBuilder.Push(`{Casing.Urgent}: ({Player}) => void`, 0, Indent + 1)
+			StringBuilder.Push(`{Casing.SetFast}: ({Before}Fast: boolean) => void`, 0, Indent + 1)
 		elseif Value.From == "Server" then
 			StringBuilder.Push(`{Casing.Fire}: (Player: Player, {Values}) => void`, 0, Indent + 1)
 			StringBuilder.Push(`{Casing.FireAll}: ({Values}) => void`, 0, Indent + 1)
 			StringBuilder.Push(`{Casing.FireExcept}: (Except: Player, {Values}) => void`, 0, Indent + 1)
 			StringBuilder.Push(`{Casing.FireList}: (List: Player[], {Values}) => void`, 0, Indent + 1)
 		else
-			StringBuilder.Push(`{Casing.Fire}: ({Values}) => void`, 0, Indent + 1)
+			StringBuilder.Push(`{Casing.Fire}: ({FireValues}) => void`, 0, Indent + 1)
 		end
 	elseif IsPolling then
 		StringBuilder.Push(`{Casing.Iter}: () => IterableFunction<{ListenerValues}>`, 0, Indent + 1)

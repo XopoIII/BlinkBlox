@@ -22,9 +22,10 @@ event MyEvent {
 }
 ```
 
-`From`, `Type` and `Call` are required; `Data`, `Rate`, `Burst` and `Stream` are optional. `Stream`
-makes the event a [stream](/BlinkBlox/language/streams/), which the server sends on a schedule rather
-than on `Fire`.
+`From`, `Type` and `Call` are required; `Data`, `Rate`, `Burst`, `Stream` and `Stamp` are optional.
+`Stream` makes the event a [stream](/BlinkBlox/language/streams/), which the server sends on a schedule
+rather than on `Fire`. `Stamp` makes a client's event carry when it was sent, as the listener's
+[`SentAt`](/BlinkBlox/language/stamps/).
 
 ### `From`
 The side that fires the event: `Server` or `Client`. The other side listens to it.
