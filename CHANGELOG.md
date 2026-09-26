@@ -7,6 +7,30 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.38.1 — 2026-09-26
+
+The compiler is faster than 0.37.0 again. Measured against 0.37.0 on the same schema (0.37.0's
+Test.blink, a thousand parses and five hundred generations of each side, medians of three runs
+interleaved), 0.38.0 had come out 0.7% slower to parse and 1.0 to 1.4% slower to generate -- no one
+feature, each of the six added a little per call. 0.38.1 parses 2% and generates 3.3 to 3.7% faster than
+0.37.0. **Nothing it emits changes**: every golden is byte-identical, schema signatures included, so
+a module built by 0.38.1 is the one 0.38.0 built.
+
+The generated modules were measured too, and had not slowed: the code a packet runs through is the
+same as 0.37.0's, and loaded side by side into one process the two decode at the same speed. An
+apparent 3% on Entities came from the benchmark generating each version's modules in the process it
+then timed, where a larger compiler leaves a different heap behind.
+
+### Changed
+
+- Each emitted line's indentation is taken from a table built once per depth, where it was built with
+  `string.rep` on every one of the twenty thousand lines a pair of modules has.
+- The schema signature hashes its two lanes in one pass over a buffer, with FNV's multiply written as
+  `Hash * 403 + (Hash << 24)`. It was two passes of per-byte `string.byte` and five shifts, 0.7 ms of
+  each module; it is 0.27. The result is the same bit for bit, checked on 100,000 random strings.
+- `ConsumeAny`, which reads every identifier, compares the next token's type in place rather than
+  building a table of the types and calling `TryConsume` for each.
+
 ## 0.38.0 — 2026-09-26
 
 A check that committed output still matches its schema, a game can hear which player's event set off
