@@ -102,6 +102,12 @@ hashes `WIRE_VERSION`, a number the compiler bumps by hand whenever a type's byt
 | 0.36.0 | No change to the format. `MaxUnreliableSize` defaults to 980 and counts 6 bytes per Instance, which decides what a sender refuses to send, not how anything is encoded. | 0.27.0 onward. |
 | 0.36.1 | No change to the format. | 0.27.0 onward. |
 | 0.36.2 | No change to the format. `boolean[]` is written faster, into the same bytes. | 0.27.0 onward. |
+| 0.37.0 | No change to the format. `SetPacketDropHandler` decides who hears about a refused packet, not how anything is encoded. | 0.27.0 onward. |
+| 0.37.1 | No change to the format. | 0.27.0 onward. |
+| 0.38.0 | Fixed-point numbers (`u16<0.1>`) and [streams](/BlinkBlox/language/streams/) added. Both are opt-in and part of the schema signature, so only schemas that use them are affected. | 0.27.0 onward. |
+| 0.38.1 | No change to the format. | 0.27.0 onward. |
+| 0.38.2 | No change to the format. | 0.27.0 onward. |
+| 0.39.0 | [Stamps](/BlinkBlox/language/stamps/) added: a stamped event carries two bytes after its values, and the stamp is part of the schema signature. `Per: Player` changes which player a stream is sent to, not what a client receives. Schemas that use neither compile to the same bytes. | 0.27.0 onward. |
 
 Modules from different releases with the same `WIRE_VERSION` interoperate, but a fix to how a value is
 read or handled applies only on the side built by the release that has it. Ship both sides from one
