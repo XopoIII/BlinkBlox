@@ -28,30 +28,38 @@ thousand different payloads a frame instead of one payload a thousand times, and
 
 Natively compiled, as a Roblox server runs the module:
 
-| Bench | Fire 0.34.0 | Fire 0.35.0 | Fire 0.36.2 | Decode 0.34.0 | Decode 0.35.0 | Decode 0.36.2 | Bytes |
+| Bench | Fire 0.34.0 | Fire 0.35.0 | Fire 0.38.1 | Decode 0.34.0 | Decode 0.35.0 | Decode 0.38.1 | Bytes |
 |---|---|---|---|---|---|---|---|
-| Booleans | 8.97 | 6.10 | **3.73** | 15.16 | **4.37** | 4.43 | 128 |
-| Entities | 3.57 | **3.19** | **3.19** | 72.95 | **11.31** | 12.65 | 603 |
-| BooleansRandom | 20.14 | 17.39 | **8.60** | 15.40 | 5.40 | **4.86** | 128 |
-| EntitiesRandom | 4.07 | **3.66** | 3.71 | 75.96 | 15.81 | **10.81** | 603 |
-| Tiny | 0.13 | 0.13 | 0.14 | 0.54 | **0.36** | 0.38 | 2 |
+| Booleans | 8.97 | 6.10 | **3.84** | 15.16 | **4.37** | 4.54 | 128 |
+| Entities | 3.57 | **3.19** | 3.20 | 72.95 | **11.31** | 13.33 | 603 |
+| BooleansRandom | 20.14 | 17.39 | **8.62** | 15.40 | 5.40 | **4.83** | 128 |
+| EntitiesRandom | 4.07 | **3.66** | 3.72 | 75.96 | 15.81 | **12.83** | 603 |
+| Tiny | 0.13 | 0.13 | 0.14 | 0.54 | **0.36** | 0.39 | 2 |
 
 Interpreted, as most Roblox clients run it:
 
-| Bench | Fire 0.34.0 | Fire 0.35.0 | Fire 0.36.2 | Decode 0.34.0 | Decode 0.35.0 | Decode 0.36.2 |
+| Bench | Fire 0.34.0 | Fire 0.35.0 | Fire 0.38.1 | Decode 0.34.0 | Decode 0.35.0 | Decode 0.38.1 |
 |---|---|---|---|---|---|---|
-| Booleans | 92.12 | **36.98** | 38.22 | 107.64 | **45.13** | 45.22 |
-| Entities | 34.13 | 33.52 | **33.46** | 103.77 | **54.04** | 54.64 |
-| BooleansRandom | 82.66 | 41.83 | **40.40** | 108.28 | 46.19 | **45.70** |
-| EntitiesRandom | 33.89 | 33.60 | **33.58** | 107.44 | 57.65 | **52.83** |
+| Booleans | 92.12 | **36.98** | 38.24 | 107.64 | 45.13 | **45.11** |
+| Entities | 34.13 | 33.52 | **33.46** | 103.77 | **54.04** | 54.97 |
+| BooleansRandom | 82.66 | 41.83 | **40.44** | 108.28 | **46.19** | 46.28 |
+| EntitiesRandom | 33.89 | **33.60** | 33.67 | 107.44 | 57.65 | **55.69** |
 | Tiny | 0.35 | 0.35 | 0.35 | 0.78 | **0.62** | 0.64 |
 
 0.34.0 and 0.35.0 were run back to back on 2026-09-25, with Lune 0.10.5 on an Apple M1 with 16 GB
-of memory, by the same harness: 0.34.0's compiler with 0.35.0's `benchmark/Runtime.luau`. The 0.36.2
-columns are BlinkBlox's rows of the later run in
+of memory, by the same harness: 0.34.0's compiler with 0.35.0's `benchmark/Runtime.luau`. The 0.38.1
+columns are BlinkBlox's rows of the run in
 [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md),
-on the same machine; 0.36.2 writes a `boolean[]` faster, which is what moved its fire times. A
-difference of a few hundredths of a millisecond is noise. The flush, which copies the batch into an
+made on 2026-09-26 on the same machine, each the median of three runs. 0.36.2 writes a `boolean[]`
+faster, which is what moved the fire times after 0.35.0. The code a packet runs through has not
+changed since 0.36.2: loaded side by side into one process, 0.36.2's and 0.38.1's modules decode at
+the same speed.
+
+Columns taken on different days differ by more than the code does. Between single runs this machine
+moves a decode figure by up to a fifth -- the earlier single run of 0.36.2 read 10.81 on
+EntitiesRandom, the same modules read 12.8 to 17.9 today -- so compare within a column, or run both
+versions yourself, before reading a gap under a fifth as a change. A difference of a few hundredths
+of a millisecond is noise. The flush, which copies the batch into an
 exact-size buffer, took under 0.035 ms in every case. The [changelog](/BlinkBlox/changelog/) says
 what changed in each release.
 
@@ -60,8 +68,9 @@ each element is six `buffer.writeu8` calls into a block allocated once for the w
 
 ## Against other tools, on Lune
 
-The same harness runs every tool on the same payloads. The run was made on 2026-09-25 on an Apple M1
-with 16 GB of memory, with Lune 0.10.5; the versions are the ones listed for Studio below. "Fire" is
+The same harness runs every tool on the same payloads. The run was made on 2026-09-26 on an Apple M1
+with 16 GB of memory, with Lune 0.10.5, and every figure is the median of three runs. The versions
+were BlinkBlox 0.38.1, Blink 0.18.9, zap 0.6.29, ByteNet 0.4.3 and Packet 1.7.0. "Fire" is
 a frame's thousand fires interpreted, as most players' clients run them. "Decode" is the server
 decoding those events and calling its listener, natively compiled, as a Roblox server runs it.
 "Bytes" is one event as the encoder wrote it, before compression. Packet declares `--!native`
@@ -70,30 +79,30 @@ in [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/be
 
 | Bench | Tool | Fire | Decode | Bytes |
 |---|---|---|---|---|
-| Booleans | **BlinkBlox** | **38.22** | **4.43** | **128** |
-| | Blink | 68.84 | 12.07 | 1003 |
-| | zap | 173.99 | 13.38 | 1003 |
-| | ByteNet | 126.57 | 122.22 | 1003 |
-| | Packet | 124.76 | 116.05 | 1003 |
-| Entities | **BlinkBlox** | 33.46 | **12.65** | 603 |
-| | Blink | **33.43** | 73.32 | 603 |
-| | zap | 83.80 | 73.78 | 603 |
-| | ByteNet | 109.15 | 111.37 | 603 |
-| | Packet | 100.55 | 163.20 | 603 |
-| BooleansRandom | **BlinkBlox** | **40.40** | **4.86** | **128** |
-| | Blink | 73.66 | 11.78 | 1003 |
-| | zap | 173.20 | 13.07 | 1003 |
-| | ByteNet | 134.53 | 129.69 | 1003 |
-| | Packet | 132.15 | 125.31 | 1003 |
-| EntitiesRandom | **BlinkBlox** | **33.58** | **10.81** | 603 |
-| | Blink | 33.61 | 73.81 | 603 |
-| | zap | 84.13 | 73.77 | 603 |
-| | ByteNet | 109.45 | 109.40 | 603 |
-| | Packet | 100.89 | 163.57 | 603 |
+| Booleans | **BlinkBlox** | **38.24** | **4.54** | **128** |
+| | Blink | 68.76 | 12.12 | 1003 |
+| | zap | 173.87 | 13.38 | 1003 |
+| | ByteNet | 126.53 | 122.22 | 1003 |
+| | Packet | 125.14 | 116.66 | 1003 |
+| Entities | **BlinkBlox** | **33.46** | **13.33** | 603 |
+| | Blink | **33.46** | 73.31 | 603 |
+| | zap | 84.14 | 73.88 | 603 |
+| | ByteNet | 109.17 | 112.40 | 603 |
+| | Packet | 100.62 | 164.01 | 603 |
+| BooleansRandom | **BlinkBlox** | **40.44** | **4.83** | **128** |
+| | Blink | 73.63 | 12.28 | 1003 |
+| | zap | 171.32 | 13.38 | 1003 |
+| | ByteNet | 134.38 | 128.93 | 1003 |
+| | Packet | 132.44 | 125.37 | 1003 |
+| EntitiesRandom | **BlinkBlox** | 33.67 | **12.83** | 603 |
+| | Blink | **33.61** | 73.68 | 603 |
+| | zap | 84.14 | 73.92 | 603 |
+| | ByteNet | 109.60 | 111.61 | 603 |
+| | Packet | 100.93 | 164.89 | 603 |
 
 Firing Entities costs BlinkBlox what it cost Blink: both write six `u8` fields into a block
-allocated once for the array. Decoding them is where 0.35.0's work shows, a sixth of Blink's time on
-the server. A `boolean[]` is packed eight to a byte, which makes its event an eighth the size and
+allocated once for the array. Decoding them is where 0.35.0's work shows, under a fifth of Blink's
+time on the server. A `boolean[]` is packed eight to a byte, which makes its event an eighth the size and
 its fires and decodes cheaper with it.
 
 ## Against other tools, in Studio

@@ -7,6 +7,27 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.38.2 — 2026-09-26
+
+The benchmark figures in the README, the Benchmarks page and `benchmark/Benchmarks.md` are 0.38.1's,
+where they had been a single run of 0.36.2. **Nothing the compiler emits changes**, and neither does
+the compiler: this release is the documentation.
+
+Each figure is now the median of three runs, every tool measured in the same session. The single run
+they replace had read lower on some rows -- EntitiesRandom decode 10.81 ms, against 12.83 now -- and
+that is not a regression: the code a packet runs through is the same in 0.36.2 and 0.38.1, and loaded
+side by side into one process the two versions' modules decode at the same speed. It is how far this
+machine moves between single runs, which is why a figure now takes three, and why the page says so.
+The Studio figures are still 0.36.2's, and are labelled as such: that benchmark needs Studio in front
+of it.
+
+### Fixed
+
+- The property test's bound on reading corrupted bytes failed now and then late in the suite: a read
+  whose slowest honest case takes 22 ms was clocked at 330, a garbage collection landing inside it. A
+  read over the bound is now timed twice more on the same bytes and the fastest counts, so a loop the
+  bytes do not bound still fails and a pause does not.
+
 ## 0.38.1 — 2026-09-26
 
 The compiler is faster than 0.37.0 again. Measured against 0.37.0 on the same schema (0.37.0's
