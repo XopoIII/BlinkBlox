@@ -183,6 +183,20 @@ local function Check(Node: Node, Serde: any, Bounds: Size.Measurement, Validated
 		local Accepted, Decoded = pcall(Serde.Read, Damaged)
 		local Took = os.clock() - Started
 
+		--> A read over the limit is timed twice more on the same bytes, and only the fastest counts. A
+		--> loop the bytes do not bound is slow every time; a garbage collection that lands inside one
+		--> read is not, and late in the suite, with the heap at its largest, one did: a read whose
+		--> slowest honest case takes 22 ms was clocked at 330.
+		for _ = 1, 2 do
+			if Took <= SLOW_READ then
+				break
+			end
+
+			local Retried = os.clock()
+			pcall(Serde.Read, Damaged)
+			Took = math.min(Took, os.clock() - Retried)
+		end
+
 		if Took > SLOW_READ then
 			return `reading {buffer.len(Damaged)} corrupted bytes took {Took}s\n  bytes: {Hex(Damaged)}`
 		elseif Accepted then

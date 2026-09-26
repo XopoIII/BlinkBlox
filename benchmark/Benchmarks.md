@@ -32,77 +32,81 @@ generated modules, ByteNet and Packet from the same files Studio runs (after `lu
 enough of Roblox mocked around them, and times a frame's thousand fires, the flush into packets, and the server decoding those packets
 and calling its listener. `Bytes/event` is the encoder's output; `zstd` is that output compressed as Roblox would.
 
-The run below was made on 2026-09-25 on an Apple M1 with 16 GB of memory, Lune 0.10.5, with this repository's
-compiler (0.36.2). Times are milliseconds per frame of 1000 events, medians
-and 99th percentiles over 200 frames. `native` is what a Roblox server runs; `interpreted` is what most clients run.
+The run below was made on 2026-09-26 on an Apple M1 with 16 GB of memory, Lune 0.10.5, with this repository's
+compiler (0.38.1). Each figure is the median of three runs, and each run's figure is itself a median or 99th percentile over
+200 frames, in milliseconds per frame of 1000 events. `native` is what a Roblox server runs; `interpreted` is what most clients run.
 Packet declares `--!native` nowhere, so both its rows are interpreted. `Tiny` is BlinkBlox's alone.
+
+The code these modules run for a packet has not changed since 0.36.2: loaded side by side into one process, 0.36.2's and
+0.38.1's modules decode at the same speed. The previous table, a single run of 0.36.2, read lower on some rows (EntitiesRandom
+decode 10.81); that is this machine's spread between single runs, which is why this one takes three.
 
 #### Booleans
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|3.730|3.822|0.007|4.433|4.657|128.00|0.02|
-|Blink|native|6.639|7.533|0.051|12.067|13.866|1003.00|0.10|
-|zap|native|35.133|36.167|0.057|13.380|14.103|1003.00|0.10|
-|ByteNet|native|53.247|63.351|0.056|122.215|135.946|1003.00|0.10|
-|Packet|native|124.100|140.106|0.076|116.053|131.249|1003.00|0.10|
-|BlinkBlox|interpreted|38.224|43.624|0.013|45.221|50.281|128.00|0.02|
-|Blink|interpreted|68.844|78.352|0.057|83.002|94.046|1003.00|0.10|
-|zap|interpreted|173.990|194.819|0.064|106.448|118.360|1003.00|0.10|
-|ByteNet|interpreted|126.572|141.999|0.057|122.554|135.134|1003.00|0.10|
-|Packet|interpreted|124.761|141.614|0.073|116.014|131.993|1003.00|0.10|
+|BlinkBlox|native|3.840|4.289|0.011|4.539|5.080|128.00|0.02|
+|Blink|native|6.673|7.288|0.051|12.116|12.767|1003.00|0.10|
+|zap|native|34.990|72.794|0.056|13.375|25.022|1003.00|0.10|
+|ByteNet|native|53.060|115.938|0.055|122.218|220.249|1003.00|0.10|
+|Packet|native|124.344|245.250|0.080|116.657|224.886|1003.00|0.10|
+|BlinkBlox|interpreted|38.244|78.837|0.013|45.105|80.002|128.00|0.02|
+|Blink|interpreted|68.758|121.615|0.056|82.838|147.142|1003.00|0.10|
+|zap|interpreted|173.871|333.277|0.064|105.967|188.211|1003.00|0.10|
+|ByteNet|interpreted|126.532|219.912|0.058|121.730|235.561|1003.00|0.10|
+|Packet|interpreted|125.137|252.592|0.081|116.287|323.154|1003.00|0.10|
 
 #### Entities
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|3.190|3.621|0.024|12.646|15.369|603.00|0.67|
-|Blink|native|3.184|3.657|0.033|73.317|85.431|603.00|0.67|
-|zap|native|21.101|27.808|0.036|73.783|103.226|603.00|0.67|
-|ByteNet|native|65.744|78.125|0.045|111.369|126.105|603.00|0.67|
-|Packet|native|100.632|114.709|0.062|163.198|189.757|603.00|0.67|
-|BlinkBlox|interpreted|33.462|38.419|0.030|54.643|63.705|603.00|0.67|
-|Blink|interpreted|33.428|43.821|0.037|105.073|124.361|603.00|0.67|
-|zap|interpreted|83.796|95.099|0.040|116.428|133.022|603.00|0.67|
-|ByteNet|interpreted|109.145|123.715|0.045|109.455|132.305|603.00|0.67|
-|Packet|interpreted|100.545|114.499|0.052|161.560|185.752|603.00|0.67|
+|BlinkBlox|native|3.200|10.213|0.026|13.334|34.081|603.00|0.67|
+|Blink|native|3.175|5.877|0.033|73.307|147.730|603.00|0.67|
+|zap|native|21.042|40.367|0.036|73.879|133.658|603.00|0.67|
+|ByteNet|native|66.149|135.870|0.045|112.403|200.982|603.00|0.67|
+|Packet|native|100.662|185.885|0.064|164.005|296.540|603.00|0.67|
+|BlinkBlox|interpreted|33.463|61.670|0.031|54.971|97.933|603.00|0.67|
+|Blink|interpreted|33.460|62.036|0.041|105.689|199.101|603.00|0.67|
+|zap|interpreted|84.141|167.023|0.042|116.991|241.090|603.00|0.67|
+|ByteNet|interpreted|109.171|207.828|0.044|110.594|198.959|603.00|0.67|
+|Packet|interpreted|100.624|191.662|0.057|164.209|303.354|603.00|0.67|
 
 #### BooleansRandom
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|8.603|10.100|0.011|4.858|6.320|128.00|125.82|
-|Blink|native|17.665|18.267|0.051|11.783|13.773|1003.00|135.63|
-|zap|native|43.722|47.076|0.056|13.066|15.188|1003.00|135.63|
-|ByteNet|native|56.588|64.394|0.054|129.687|144.415|1003.00|135.63|
-|Packet|native|132.209|147.543|0.077|125.308|140.097|1003.00|135.63|
-|BlinkBlox|interpreted|40.404|46.300|0.013|45.703|50.233|128.00|125.82|
-|Blink|interpreted|73.655|82.209|0.058|90.165|99.858|1003.00|135.63|
-|zap|interpreted|173.195|225.333|0.062|105.908|128.760|1003.00|135.63|
-|ByteNet|interpreted|134.530|152.486|0.058|129.566|143.746|1003.00|135.63|
-|Packet|interpreted|132.146|154.951|0.077|124.877|148.931|1003.00|135.63|
+|BlinkBlox|native|8.615|10.452|0.012|4.832|6.412|128.00|125.82|
+|Blink|native|17.609|32.376|0.058|12.284|27.555|1003.00|135.63|
+|zap|native|45.475|75.268|0.057|13.380|25.480|1003.00|135.63|
+|ByteNet|native|56.489|121.296|0.056|128.925|230.152|1003.00|135.63|
+|Packet|native|132.202|245.129|0.082|125.370|281.905|1003.00|135.63|
+|BlinkBlox|interpreted|40.436|84.849|0.015|46.280|89.162|128.00|125.82|
+|Blink|interpreted|73.626|107.104|0.061|90.009|119.339|1003.00|135.63|
+|zap|interpreted|171.321|324.150|0.064|105.940|199.698|1003.00|135.63|
+|ByteNet|interpreted|134.375|223.618|0.062|128.666|222.122|1003.00|135.63|
+|Packet|interpreted|132.443|211.694|0.080|124.625|233.307|1003.00|135.63|
 
 #### EntitiesRandom
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|3.714|4.220|0.026|10.807|31.836|603.00|603.02|
-|Blink|native|3.694|4.177|0.034|73.808|95.024|603.00|603.02|
-|zap|native|21.079|23.874|0.033|73.772|90.191|603.00|603.02|
-|ByteNet|native|66.553|76.176|0.043|109.404|129.746|603.00|603.02|
-|Packet|native|100.905|114.676|0.060|163.567|191.919|603.00|603.02|
-|BlinkBlox|interpreted|33.582|39.490|0.030|52.834|77.052|603.00|603.02|
-|Blink|interpreted|33.608|38.094|0.037|105.068|125.047|603.00|603.02|
-|zap|interpreted|84.126|99.354|0.038|117.083|136.647|603.00|603.02|
-|ByteNet|interpreted|109.450|123.829|0.044|109.389|122.792|603.00|603.02|
-|Packet|interpreted|100.892|114.602|0.060|162.335|208.556|603.00|603.02|
+|BlinkBlox|native|3.721|4.524|0.028|12.827|33.613|603.00|603.02|
+|Blink|native|3.716|4.772|0.035|73.678|99.006|603.00|603.02|
+|zap|native|21.981|44.740|0.037|73.918|150.363|603.00|603.02|
+|ByteNet|native|66.675|138.657|0.054|111.605|225.458|603.00|603.02|
+|Packet|native|101.054|179.028|0.065|164.893|298.385|603.00|603.02|
+|BlinkBlox|interpreted|33.666|64.730|0.034|55.687|107.297|603.00|603.02|
+|Blink|interpreted|33.609|55.034|0.039|107.329|160.484|603.00|603.02|
+|zap|interpreted|84.138|178.186|0.041|119.161|239.545|603.00|603.02|
+|ByteNet|interpreted|109.596|217.641|0.073|110.356|221.320|603.00|603.02|
+|Packet|interpreted|100.934|197.721|0.059|162.204|301.232|603.00|603.02|
 
 #### Tiny
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|0.135|0.143|0.001|0.382|0.397|2.00|0.02|
-|BlinkBlox|interpreted|0.345|0.362|0.001|0.636|0.659|2.00|0.02|
+|BlinkBlox|native|0.135|0.157|0.001|0.385|0.437|2.00|0.02|
+|BlinkBlox|interpreted|0.346|0.370|0.001|0.636|0.682|2.00|0.02|
 
 Source code can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src).  
 Data used for benchmarks can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches).   
