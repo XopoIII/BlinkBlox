@@ -40,10 +40,6 @@ end)
 Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 ```
 
-<div align="center">
-  <img src="./docs/src/assets/bb_logo.jpg" alt="A Roblox builder feeding bricks into a machine that turns them into streams of data" width="640">
-</div>
-
 ## Why BlinkBlox
 
 - **Bounded inbound traffic.** Packet size, the number of events in a packet and the number of
@@ -136,10 +132,6 @@ cd docs && npm install && npm run dev   # documentation site
 ```
 
 `CLAUDE.md` describes the architecture and the gates that CI and the git hooks run.
-
-<div align="center">
-  <img src="./docs/src/assets/bb_end.jpg" alt="A Roblox character holding up a pile of bricks against a flood of data" width="640">
-</div>
 
 ## Credits
 

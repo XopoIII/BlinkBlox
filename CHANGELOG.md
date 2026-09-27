@@ -93,11 +93,11 @@ userdata now, as in a game.
   reported once and stops the stream until the next `Set`.
 - `Builder.PushLines` dropped the line before a trailing empty one instead of the empty one.
 
-### Downstream
+### Upgrading
 
-- Grabby Pit: rebuild both modules. Honest players no longer reach `SetPacketDropHandler` with
-  `Events` or `Oversized` for a frame of many events, so strikes on those reasons now mean a client
-  that wrote its own packets. Nothing else a handler receives changes.
+- Rebuild both modules. Honest players no longer reach `SetPacketDropHandler` with `Events` or
+  `Oversized` for a frame of many events, so a game that strikes on those reasons now strikes only a
+  client that wrote its own packets. Nothing else a handler receives changes.
 
 ## 0.39.0 — 2026-09-27
 
@@ -131,10 +131,10 @@ and one that adds `Per: Player` to a stream does not change what a client receiv
   streams are all broadcast never enters it.
 - An unreliable `Fire` to one player and a per-player stream's send are one generator, `Send.One`.
 
-### Downstream
+### Upgrading
 
-- Grabby Pit: nothing changes until the schema opts in. `Kick` and `HandOff` taking `Stamp: 250` is a
-  schema change both modules are rebuilt for, and each listener gains a last argument.
+- Nothing changes until a schema opts in. Adding a `Stamp` is a schema change both modules are rebuilt
+  for, and each stamped event's listener gains a last argument.
 
 ## 0.38.2 — 2026-09-26
 
@@ -289,7 +289,7 @@ becomes a stream: **recompile both modules** of such a schema.
 - **`option ExportLimits`** adds a frozen `Limits` table to the server, client and types modules,
   and a `readonly` declaration to the TypeScript output: every numeric range, scale, string, buffer
   and array length and vector magnitude the schema declares, keyed by the schema's own names --
-  `Limits.CrawlPacket.Heads.Length.Max` is 16. The structural words follow `Casing`. With the option
+  `Limits.Snapshot.Units.Length.Max` is 16. The structural words follow `Casing`. With the option
   on, `Limits` is a reserved top-level name (`E3005`); off, nothing is emitted.
 - **`E3032`** refuses a scale on a float, a scale of zero or less, a repeated scale or `saturate`,
   and anything else in a number's brackets.
@@ -344,45 +344,32 @@ becomes a stream: **recompile both modules** of such a schema.
   `ClientConnectTimeout`. A plain type may keep the name. A schema that used one of these names has
   to rename it.
 
-### Downstream
+### Upgrading
 
-Grabby Pit can drop several things it built for itself, once it is on this release:
+A game that built these for itself can drop them once it is on this release:
 
-- `scripts/check-net-drift.sh` -- regenerate, then `git diff` and a check for untracked files: run
-  `blinkblox net/Game.blink --verify` instead, with the same `--profile` its build uses.
-- The pcall its `Security/Guard` wraps around every listener, to log the player and event and write a
-  telemetry row: install one `SetListenerErrorHandler` that does both; the report arrives already
-  bounded to once a second per player and event, with the count.
-- `client/Link.luau`'s hard-coded `<RemoteScope>_BLINK_RELIABLE_REMOTE` and its own 60-second wait:
-  set `option ClientConnectTimeout = 60` (or less) and require the client module directly, checking
-  `Connected` where the showroom needs to know. The eight client scripts can require it directly.
-  Anything that still needs a remote's name reads `Remotes`.
-- The three lazy requires of the server module: set `option AutoStart = false`, require it at the
-  top like any module, and call `Start()` in the real game's bootstrap only.
-- Guessing which event costs what out of `DataSendKbps`: set `option TrafficStats = true` in
-  `net/Game.blink` and read `GetTrafficStats()` on the server to split it by event. Nothing it uses
-  today changes: no handler, reason or refusal moves, and a schema that compiled under 0.37.0
-  compiles the same.
-- **PerfProbe's `whole()` and its `* 10`**: declare the tenths fields `u16<0.1, saturate>`
-  (`FrameP50`, `FrameP95`, `ReceiveKbps`, `ReceivePeakKbps`, `SendKbps`, `WorldTenths`) and the rest
-  `u16<saturate>` / `u8<saturate>`, send the raw numbers, and drop the `/ 10` in `World/Net.luau`.
-- **`Tally`'s `math.min(n, 255)`**: `Count: u8<saturate>(1..255)`.
-- **`HuntCrawl`'s `if #heads == 16`**: set `option ExportLimits = true` and compare with
-  `Wire.Limits.CrawlPacket.Heads.Length.Max` -- or, once `Crawls` is a stream (below), with
-  `Wire.Limits.Crawls.Length.Max`.
-- A scale changes `PerfReport`'s signature and `saturate` changes none, so both modules are rebuilt
-  together, as after any schema change. Since `saturate` sends NaN as the nearest value to zero, a
-  PerfProbe reading that came out NaN now arrives as 0, where `whole()` handed the writer NaN
-  (`math.clamp` passes it through).
-- **`Crawls`**, the model for streams: the game can drop `World/CrawlSend.luau` whole, the stamp
-  code in `World/HuntCrawl.stream` (`SnapshotBuffer.stamp`, `FireAll`, the `At` field), and
-  `SnapshotBuffer.unwrap` with the client's call to it; `SnapshotBuffer.push`/`sample` stay, since
-  interpolation is the game's. `CrawlPacket` goes, and `Crawls` becomes
-  `Stream: { Rate: 10, Fast: 20, Keepalive: 1, Epsilon: 0.05 }, Data: CrawlHead[..16]`. Two
-  behaviours differ: "still" is per axis rather than by distance, and any change -- a head turning
-  for home, not only one moving -- is followed by one unchanged send. The last arm leaving is
-  `Clear()`, received as nil rather than an empty list. With `TrafficStats` on, its sends are counted
-  under `Events.Crawls` and on the unreliable channel.
+- A drift check that regenerates the modules and diffs them: run `blinkblox <schema> --verify`
+  instead, with the same `--profile` the build uses.
+- A pcall around every listener to log the player and event: install one `SetListenerErrorHandler`;
+  the report arrives already bounded to once a second per player and event, with the count.
+- A hard-coded `<RemoteScope>_BLINK_RELIABLE_REMOTE` and a wait of its own for the server: set
+  `option ClientConnectTimeout` and require the client module directly, checking `Connected` where it
+  matters. Anything that still needs a remote's name reads `Remotes`.
+- Lazy requires of the server module: set `option AutoStart = false`, require it at the top like any
+  module, and call `Start()` in the real game's bootstrap only.
+- Guessing which event costs what out of `DataSendKbps`: set `option TrafficStats = true` and read
+  `GetTrafficStats()` on the server to split it by event.
+- Numbers scaled by hand -- tenths sent as `x * 10`, counts clamped with `math.min(n, 255)`: declare
+  them `u16<0.1, saturate>` or `u8<saturate>(1..255)` and send the raw values. A scale changes the
+  schema signature and `saturate` does not, so both modules are rebuilt together, as after any schema
+  change. `saturate` sends NaN as the value in range nearest zero, where `math.clamp` passed it
+  through.
+- A comparison against a length cap copied out of the schema: set `option ExportLimits = true` and
+  compare with the module's `Limits`.
+- A snapshot sent by hand on a timer, with a stamp of its own: declare the event a `Stream`. Two
+  behaviours may differ from a hand-written one: "still" is per axis rather than by distance, and any
+  change is followed by one unchanged send. Clearing the stream arrives as nil rather than an empty
+  list. With `TrafficStats` on, its sends are counted under the event and on the unreliable channel.
 
 No handler signature, `Reason` or refusal route changes in any of this.
 ## 0.37.1 — 2026-09-25
@@ -405,8 +392,8 @@ regenerate to pick the fixes up.
   list it started with, which is what makes a self-disconnecting listener safe; it also reached a
   listener that an earlier one had just disconnected. It is now passed over, as `RBXScriptSignal`
   does. The check costs one comparison per listener until something disconnects mid-dispatch.
-  Grabby Pit: a listener that disconnects a later one of the same event now stops that one receiving
-  the event in flight, where it used to receive it once more.
+  A listener that disconnects a later one of the same event now stops that one receiving the event in
+  flight, where it used to receive it once more.
 
 ## 0.37.0 — 2026-09-25
 

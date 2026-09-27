@@ -483,11 +483,11 @@ the config.
 
 ## Downstream
 
-`dibby-roblox` was the first consumer, and it is archived. The consumer now is **Grabby Pit**, the
-owner's Roblox game (the `gg` repository on github.com/XopoIII): it compiles its `net/Game.blink` with
-BlinkBlox and uses `SetPacketDropHandler` to strike and ban on packet-level refusals, beside the
-rate-limit and decode-error handlers. A change to a handler's signature, a `Reason`, or which
-refusals reach which handler is a change that game feels; say so in the CHANGELOG.
+BlinkBlox is a standalone project for any Roblox game, and nothing in this repository names a
+particular one: the CHANGELOG, the docs and the code speak of "a game". Games strike and ban on what
+reaches `SetPacketDropHandler`, the rate-limit and the decode-error handlers, so a change to a
+handler's signature, a `Reason`, or which refusals reach which handler is a change every such game
+feels; say so in the CHANGELOG, under the release's "Upgrading" heading.
 
 Nothing outside this repository post-processes the generated text, so **the emitted output shape is
 not frozen** — the old warning about an anchor-matching patch script no longer applies.
