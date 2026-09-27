@@ -184,7 +184,7 @@ function Declarations.Function(Declaration: Parser.Function)
 			:Lines(Serialize.Content, 1)
 
 		if OnServer then
-			TrueListener:Line("Load(PlayersMap[Player])")
+			TrueListener:Line("LoadPlayer(Player)")
 		else
 			--> The failure reply below writes without Mark, and has to land after a Fire that threw
 			--> has been undone rather than behind it.
@@ -291,7 +291,7 @@ function Declarations.Function(Declaration: Parser.Function)
 		local function SendCall(Target: Blocks.Block): Blocks.Block
 			Target:Line(`local InvocationIdentifier = {ClaimSlot}`)
 			if ServerCalls then
-				Target:Line("Load(PlayersMap[Player])")
+				Target:Line("LoadPlayer(Player)")
 			end
 
 			--> Releasing the slot when the ARGUMENTS fail to serialise.

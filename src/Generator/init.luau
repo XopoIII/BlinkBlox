@@ -123,17 +123,32 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> event per byte, so an 8 KB packet still means thousands of listener dispatches. Counting the
 	--> decoded events bounds that directly.
 	local MaxEvents = State.Options.MaxEventsPerPacket or DEFAULT_MAX_EVENTS_PER_PACKET
-	if State.Context == "Server" then
-		State.Reliables:Line("local DecodedEvents = 0", 1)
-		State.Unreliables:Line("local DecodedEvents = 0", 1)
-	end
 
-	--> A player who leaves mid-packet is not worth decoding the rest for: every listener that runs
-	--> from here on receives a Player already detached from the DataModel, and anything they do with
-	--> it -- a leaderstats write, a save -- is work aimed at nobody.
-	local Condition = if State.Context == "Server"
-		then "RecieveCursor < Size and Player.Parent ~= nil"
-		else "RecieveCursor < Size"
+	--> The loop over one packet's events, made once for the module and handed each packet's
+	--> DecodeEvent; see CloseDecode below. A player who leaves mid-packet is not worth decoding the
+	--> rest for: every listener that runs from there on receives a Player already detached from the
+	--> DataModel, and anything they do with it -- a leaderstats write, a save -- is work aimed at nobody.
+	local DecodeLoop = if State.Context == "Server"
+		then {
+			"local function DecodeLoop(DecodeEvent: () -> (), Player: Player, Size: number)\n",
+			"\tlocal DecodedEvents = 0\n",
+			"\twhile RecieveCursor < Size and Player.Parent ~= nil do\n",
+			"\t\tDecodedEvents += 1\n",
+			`\t\tif DecodedEvents > {MaxEvents} then\n`,
+			`\t\t\tReportDrop(Player, "Events", {MaxEvents})\n`,
+			"\t\t\tbreak\n",
+			"\t\tend\n",
+			"\t\tDecodeEvent()\n",
+			"\tend\n",
+			"end\n",
+		}
+		else {
+			"local function DecodeLoop(DecodeEvent: () -> (), Size: number)\n",
+			"\twhile RecieveCursor < Size do\n",
+			"\t\tDecodeEvent()\n",
+			"\tend\n",
+			"end\n",
+		}
 
 	--> A TRUNCATED packet defeats every limit above, because it is SMALLER than a legitimate one: two
 	--> bytes tagged as a five-byte event make `buffer.readu16` throw from inside the remote's
@@ -153,10 +168,11 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> used to be a closure written inside the loop, so every event allocated a fresh closure and the
 	--> upvalues it captured before a byte of it was read -- a quarter of what a one-byte event cost
 	--> the server to decode. `Decoding` carries the index out of the pcall, so a failure can name the
-	--> event it happened in.
+	--> event it happened in; it is reset first, so a failure to read the index names none.
 	local function OpenDecode(Channel: Blocks.Block): Blocks.Block
 		Channel:Line("local Decoding = -1")
 		local Decoder = Channel:Scope("local function DecodeEvent()")
+		Decoder:Line("Decoding = -1")
 		Types.u8.Read("Index", Decoder)
 		Decoder:Line("Decoding = Index")
 		return Decoder
@@ -248,23 +264,9 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> an event's branch still leaves only that event, because it returns from `DecodeEvent`.
 	local function CloseDecode(Channel: Blocks.Block, Name: string): Blocks.Block
 		local Connection = Channel:End()
-		local Packet = Connection:Scope("local function DecodePacket()")
-		local Loop = Packet:While(Condition)
-
-		--> The event cap; see MaxEvents above.
-		if State.Context == "Server" then
-			Loop:Line("DecodedEvents += 1")
-			Loop:Line(`if DecodedEvents > {MaxEvents} then`)
-			Loop:Line(`\tReportDrop(Player, "Events", {MaxEvents})`)
-			Loop:Line("\tbreak")
-			Loop:Line("end")
-		end
-
 		local Sender = if State.Context == "Server" then `Player, "{Name}", ` else ""
-		Loop:Line("Decoding = -1")
-		Loop:Line("DecodeEvent()")
-		Connection = Loop:End():End()
-		Connection:Line("local Parsed: boolean, Failure: any = pcall(DecodePacket)")
+		local LoopArguments = if State.Context == "Server" then "DecodeEvent, Player, Size" else "DecodeEvent, Size"
+		Connection:Line(`local Parsed: boolean, Failure: any = pcall(DecodeLoop, {LoopArguments})`)
 		Connection:Line("if not Parsed then")
 		Connection:Line(`\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], Failure)`)
 		Connection:Line("end")
@@ -323,7 +325,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Lifecycle.Connections(
 			State.Context,
 			State.Options,
-			Table.Merge(Replication.DumpLines(), State.Reliables.Content, State.Unreliables.Content)
+			Table.Merge(DecodeLoop, Replication.DumpLines(), State.Reliables.Content, State.Unreliables.Content)
 		),
 		State.Return.DumpLines(),
 		{ `type {EVENTS_TYPE} = typeof(Returns)\n`, `return Returns :: {EVENTS_TYPE}` }

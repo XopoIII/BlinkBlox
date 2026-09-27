@@ -10203,6 +10203,23 @@ assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable rem
 
 local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
 
+--> THE BROADCAST BATCH. A reliable FireAll is written once, here, and sent at the flush in one
+--> FireAllClients, where it used to be copied into every player's batch: fifty players made a FireAll
+--> fifty copies and the flush fifty remote calls.
+-->
+--> A player's own writes still go to their own batch, and the order they and the broadcasts were
+--> made in has to survive. A player's first write of their own since a broadcast DIVERGES them: their
+--> batch takes a copy of the broadcast batch so far, then their write, and every later broadcast is
+--> appended to it as well. At the flush a diverged player is sent their batch alone; everyone else is
+--> sent the broadcast batch, after anything of their own that came before the first broadcast. With
+--> nobody diverged, that is one FireAllClients.
+local SharedSize = 64
+local SharedCursor = 0
+local SharedBuffer = buffer.create(64)
+local SharedInstances: {Instance} = {}
+local SharedUnderused = 0
+local Diverged: {[Player]: true} = {}
+
 --> How many rows a polled event's queue holds on the server before it stops taking more. Clients fill
 --> it, and a game that polls an event rarely, or has not got round to polling it at all, would let
 --> them grow it without end -- each row pinning its Player. A game that drains its queues every
@@ -10413,6 +10430,10 @@ end
 --> lookup rather than a decode. The burst is a whole second of budget because the clock here is the
 --> server's: after a hitch Roblox delivers the queued packets together, and a refused reliable packet
 --> takes every event in it along. Reported on the same once-a-second schedule as RateAccept.
+--> When the packet being decoded arrived. Every event in a packet arrived at the same moment, so the
+--> rate buckets refill once a packet, at this, rather than asking the clock once an event.
+local PacketClock = 0
+
 local function InboundAccept(Player: Player, Length: number, Floor: number, Rate: number, Burst: number): boolean
     local Cost = math.max(Length, Floor)
     if Player.Parent == nil then
@@ -10421,6 +10442,7 @@ local function InboundAccept(Player: Player, Length: number, Floor: number, Rate
     end
 
     local Now = os.clock()
+    PacketClock = Now
     local Budget = InboundBudgets[Player]
     if not Budget then
         --> The report clock starts at minus infinity so the first refusal is always reported.
@@ -10472,21 +10494,17 @@ end
 --> the packet would decode as garbage. So this bounds listener dispatch and the game logic behind
 --> it, while MaxEventsPerPacket bounds the decoding of one packet and InboundAccept how many packets
 --> a second get decoded at all. The three limits are different axes.
+--> Called only from the decode loop, which stops before any event once the player has left, and
+--> no game code runs between that check and this call: a player still here when the loop checked
+--> is still here now, so a bucket made below is one PlayerRemoving will clear.
 local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: number, Name: string): boolean
-    --> Same PlayerRemoving race the buffer save guards against, handled the same way: the entry is
-    --> dropped here rather than left for a sweep that does not exist.
-    if Player.Parent == nil then
-        RateBuckets[Player] = nil
-        return false
-    end
-
     local Bucket = RateBuckets[Player]
     if not Bucket then
         Bucket = table.clone(RATE_TEMPLATE)
         RateBuckets[Player] = Bucket
     end
 
-    local Now = os.clock()
+    local Now = PacketClock
     local Tokens = math.min(Burst, Bucket[Slot] + ((Now - Bucket[Slot + 1]) * Rate))
     Bucket[Slot + 1] = Now
 
@@ -10634,6 +10652,7 @@ end
 
 Players.PlayerRemoving:Connect(function(Player)
     PlayersMap[Player] = nil
+    Diverged[Player] = nil
     RateBuckets[Player] = nil
     InboundBudgets[Player] = nil
     Reports[Player] = nil
@@ -10679,8 +10698,15 @@ local function SavePlayerBuffer(Player: Player)
     if Entry == nil then
         if Player:IsDescendantOf(Players) then
             PlayersMap[Player] = Save()
+            if SharedCursor > 0 then
+                Diverged[Player] = true
+            end
         end
         return
+    end
+
+    if SharedCursor > 0 then
+        Diverged[Player] = true
     end
 
     Entry.Size = SendSize
@@ -10689,15 +10715,27 @@ local function SavePlayerBuffer(Player: Player)
     Entry.Instances = SendInstances
 end
 
---> Appends a broadcast's bytes and Instances to one player's batch. A player with a batch gets them
---> straight into it; one without goes the long way, through SavePlayerBuffer and its checks.
+--> Loads `Player`'s batch for a write of their own, diverging them first when a broadcast is pending;
+--> see the broadcast batch above. The SavePlayerBuffer that follows marks them diverged.
+local function LoadPlayer(Player: Player)
+    Load(PlayersMap[Player])
+    if SharedCursor > 0 and not Diverged[Player] then
+        local Position = Allocate(SharedCursor)
+        buffer.copy(SendBuffer, Position, SharedBuffer, 0, SharedCursor)
+        table.move(SharedInstances, 1, #SharedInstances, #SendInstances + 1, SendInstances)
+    end
+end
+
+--> Appends an event written elsewhere to one player's batch: a FireList or FireExcept, and a
+--> broadcast to a player who has diverged. A player with a batch of their own and nothing to catch up
+--> on gets it straight into it; any other goes the long way, through LoadPlayer and SavePlayerBuffer.
 local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instances: {Instance})
     local Entry = PlayersMap[Player]
-    if Entry == nil then
-        Load()
+    if Entry == nil or (SharedCursor > 0 and not Diverged[Player]) then
+        LoadPlayer(Player)
         local Position = Allocate(Size)
         buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-        table.move(Instances, 1, #Instances, 1, SendInstances)
+        table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
         SavePlayerBuffer(Player)
         return
     end
@@ -10728,7 +10766,32 @@ local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instan
     end
 end
 
+--> Appends a broadcast to the broadcast batch, and to the batch of every player who has diverged.
+local function AppendShared(Buffer: buffer, Size: number, Instances: {Instance})
+    local InUse = SharedCursor + Size
+    if InUse > SharedSize then
+        while InUse > SharedSize do
+            SharedSize *= 1.5
+        end
+
+        local Resized = buffer.create(SharedSize)
+        buffer.copy(Resized, 0, SharedBuffer, 0, SharedCursor)
+        SharedBuffer = Resized
+    end
+
+    buffer.copy(SharedBuffer, SharedCursor, Buffer, 0, Size)
+    SharedCursor = InUse
+    if #Instances > 0 then
+        table.move(Instances, 1, #Instances, #SharedInstances + 1, SharedInstances)
+    end
+
+    for Player in Diverged do
+        AppendPlayer(Player, Buffer, Size, Instances)
+    end
+end
+
 local function StepReplication()
+    local Shared = SharedCursor
     for Player, Send in PlayersMap do
         --> Second line of defence. An entry can still be stale if it was written inside the narrow
         --> window of PlayerRemoving itself, before the player was detached; dropping it here makes
@@ -10736,6 +10799,19 @@ local function StepReplication()
         if not Player:IsDescendantOf(Players) then
             PlayersMap[Player] = nil
             continue
+        end
+
+        --> Everything of this player's own came before the first broadcast, so the broadcast batch
+        --> follows it in their packet rather than going in one of its own.
+        if Shared > 0 and Send.Cursor > 0 and not Diverged[Player] then
+            Load(Send)
+            local Position = Allocate(Shared)
+            buffer.copy(SendBuffer, Position, SharedBuffer, 0, Shared)
+            table.move(SharedInstances, 1, #SharedInstances, #SendInstances + 1, SendInstances)
+            Send.Size = SendSize
+            Send.Cursor = SendCursor
+            Send.Buffer = SendBuffer
+            Diverged[Player] = true
         end
 
         local Used = Send.Cursor
@@ -10760,6 +10836,42 @@ local function StepReplication()
             Send.Buffer = buffer.create(64)
         end
     end
+
+    if Shared > 0 then
+        local Buffer = buffer.create(Shared)
+        buffer.copy(Buffer, 0, SharedBuffer, 0, Shared)
+        if next(Diverged) == nil then
+            Reliable:FireAllClients(Buffer, SharedInstances)
+        else
+            for _, Player in Players:GetPlayers() do
+                if not Diverged[Player] then
+                    Reliable:FireClient(Player, Buffer, SharedInstances)
+                end
+            end
+        end
+
+        SharedCursor = 0
+        table.clear(SharedInstances)
+        table.clear(Diverged)
+    end
+
+    local Shrink
+    Shrink, SharedUnderused = ShouldShrink(SharedSize, Shared, SharedUnderused)
+    if Shrink then
+        SharedSize = 64
+        SharedBuffer = buffer.create(64)
+    end
+end
+local function DecodeLoop(DecodeEvent: () -> (), Player: Player, Size: number)
+	local DecodedEvents = 0
+	while RecieveCursor < Size and Player.Parent ~= nil do
+		DecodedEvents += 1
+		if DecodedEvents > 64 then
+			ReportDrop(Player, "Events", 64)
+			break
+		end
+		DecodeEvent()
+	end
 end
 RunService.Heartbeat:Connect(StepReplication)
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -10788,11 +10900,11 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local DecodedEvents = 0
 	local Decoding = -1
 	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -10820,7 +10932,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 			local Value: number = SerdesFunctions.ReadFUNCTION_DATA_RateLimitedCall()
 			if not RateAccept(Player, 9, 2, 2, "RateLimitedCall") then
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				local Position = Allocate(3)
 				buffer.writeu8(SendBuffer, Position, 2)
 				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -10832,7 +10944,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[2], Player, Value, InvocationIdentifier)
 			else
 				if #Queue.Reliable[2] >= 256 then
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 2)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -10848,7 +10960,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 			local Value: number = SerdesFunctions.ReadFUNCTION_DATA_ConcurrentCall()
 			if not ConcurrencyAccept(Player, 3, 2, "ConcurrentCall") then
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				local Position = Allocate(3)
 				buffer.writeu8(SendBuffer, Position, 3)
 				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -10861,7 +10973,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			else
 				if #Queue.Reliable[3] >= 256 then
 					ConcurrencyRelease(Player, 3)
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 3)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -10902,7 +11014,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[11], Player, Value, InvocationIdentifier)
 			else
 				if #Queue.Reliable[11] >= 256 then
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 11)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -10921,7 +11033,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[12], Player, Value, InvocationIdentifier)
 			else
 				if #Queue.Reliable[12] >= 256 then
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 12)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -10962,7 +11074,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[40], Player, Value, InvocationIdentifier)
 			else
 				if #Queue.Reliable[40] >= 256 then
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 40)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -10981,7 +11093,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[42], Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
 			else
 				if #Queue.Reliable[42] >= 256 then
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 42)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -11012,7 +11124,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[49], Player, Value1, Value2, InvocationIdentifier)
 			else
 				if #Queue.Reliable[49] >= 256 then
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 49)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -11031,7 +11143,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[51], Player, Value, InvocationIdentifier)
 			else
 				if #Queue.Reliable[51] >= 256 then
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 51)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -11092,7 +11204,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[55], Player, Value, InvocationIdentifier)
 			else
 				if #Queue.Reliable[55] >= 256 then
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 55)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -11133,7 +11245,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[58], Player, Value, InvocationIdentifier)
 			else
 				if #Queue.Reliable[58] >= 256 then
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 58)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -11183,18 +11295,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	local function DecodePacket()
-		while (RecieveCursor < Size and Player.Parent ~= nil) do
-			DecodedEvents += 1
-			if DecodedEvents > 64 then
-				ReportDrop(Player, "Events", 64)
-				break
-			end
-			Decoding = -1
-			DecodeEvent()
-		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
 	if not Parsed then
 		ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
 	end
@@ -11225,11 +11326,11 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local DecodedEvents = 0
 	local Decoding = -1
 	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 1 then
@@ -11299,18 +11400,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	local function DecodePacket()
-		while (RecieveCursor < Size and Player.Parent ~= nil) do
-			DecodedEvents += 1
-			if DecodedEvents > 64 then
-				ReportDrop(Player, "Events", 64)
-				break
-			end
-			Decoding = -1
-			DecodeEvent()
-		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
 	if not Parsed then
 		ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
 	end
@@ -15551,7 +15641,7 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					ReturnValue = Listener(Player, Value)
 				end)
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_RateLimitedCall, ReturnValue, InvocationIdentifier)
@@ -15584,7 +15674,7 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					ReturnValue = Listener(Player, Value)
 				end)
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_ConcurrentCall, ReturnValue, InvocationIdentifier)
@@ -15917,7 +16007,7 @@ local Returns = table.freeze({
 	},
 	SendOccupiedCell = {
 		Fire = function(Player: Player, Value: Vector3): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -15926,9 +16016,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: Vector3): ()
 			LoadScratch()
@@ -16062,7 +16150,7 @@ local Returns = table.freeze({
 	},
 	ServerPollEvent = {
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16071,9 +16159,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 			LoadScratch()
@@ -16144,7 +16230,7 @@ local Returns = table.freeze({
 	},
 	ServerEmptyPollEvent = {
 		Fire = function(Player: Player, Value: nil): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16153,9 +16239,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: nil): ()
 			LoadScratch()
@@ -16278,7 +16362,7 @@ local Returns = table.freeze({
 	},
 	EmptyEvent = {
 		Fire = function(Player: Player, Value: nil): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_EmptyEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16287,9 +16371,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_EmptyEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: nil): ()
 			LoadScratch()
@@ -16365,7 +16447,7 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					ReturnValue = Listener(Player, Value)
 				end)
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_EmptyFunction, ReturnValue, InvocationIdentifier)
@@ -16398,7 +16480,7 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					Value = Listener(Player, Value)
 				end)
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_UnitFunction, Value, InvocationIdentifier)
@@ -16426,7 +16508,7 @@ local Returns = table.freeze({
 	},
 	Flags8 = {
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_Flags8(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16435,9 +16517,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_Flags8(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
 			LoadScratch()
@@ -16463,7 +16543,7 @@ local Returns = table.freeze({
 	},
 	Flags16 = {
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_Flags16(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16472,9 +16552,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_Flags16(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
 			LoadScratch()
@@ -16500,7 +16578,7 @@ local Returns = table.freeze({
 	},
 	Flags32 = {
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_Flags32(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16509,9 +16587,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_Flags32(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
 			LoadScratch()
@@ -16537,7 +16613,7 @@ local Returns = table.freeze({
 	},
 	Flags33 = {
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_Flags33(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16546,9 +16622,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_Flags33(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
 			LoadScratch()
@@ -16574,7 +16648,7 @@ local Returns = table.freeze({
 	},
 	DynamicMap = {
 		Fire = function(Player: Player, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_DynamicMap(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16583,9 +16657,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_DynamicMap(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
 			LoadScratch()
@@ -16611,7 +16683,7 @@ local Returns = table.freeze({
 	},
 	DynamicArray = {
 		Fire = function(Player: Player, Value: { { Static: number, Dynamic: buffer } }): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_DynamicArray(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16620,9 +16692,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_DynamicArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: { { Static: number, Dynamic: buffer } }): ()
 			LoadScratch()
@@ -16648,7 +16718,7 @@ local Returns = table.freeze({
 	},
 	PlayerEvent = {
 		Fire = function(Player: Player, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_PlayerEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16657,9 +16727,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_PlayerEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
 			LoadScratch()
@@ -16713,7 +16781,7 @@ local Returns = table.freeze({
 	},
 	Generic = {
 		Fire = function(Player: Player, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_Generic(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16722,9 +16790,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_Generic(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
 			LoadScratch()
@@ -16750,7 +16816,7 @@ local Returns = table.freeze({
 	},
 	GenericArray = {
 		Fire = function(Player: Player, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_GenericArray(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16759,9 +16825,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_GenericArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
 			LoadScratch()
@@ -16787,7 +16851,7 @@ local Returns = table.freeze({
 	},
 	Unknown = {
 		Fire = function(Player: Player, Value: any): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			local Cursor, Instances = Mark()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Unknown, Value)
 			if Sent ~= true then
@@ -16801,9 +16865,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_Unknown(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: any): ()
 			LoadScratch()
@@ -16829,7 +16891,7 @@ local Returns = table.freeze({
 	},
 	MapEvent = {
 		Fire = function(Player: Player, Value: {[string]: number}): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_MapEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16838,9 +16900,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_MapEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: {[string]: number}): ()
 			LoadScratch()
@@ -16866,7 +16926,7 @@ local Returns = table.freeze({
 	},
 	MapStructEvent = {
 		Fire = function(Player: Player, Value: { Map: {[string]: number} }): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_MapStructEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16875,9 +16935,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_MapStructEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: { Map: {[string]: number} }): ()
 			LoadScratch()
@@ -16903,7 +16961,7 @@ local Returns = table.freeze({
 	},
 	MapComplexEvent = {
 		Fire = function(Player: Player, Value: {[string]: { number }}): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16912,9 +16970,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: {[string]: { number }}): ()
 			LoadScratch()
@@ -16940,7 +16996,7 @@ local Returns = table.freeze({
 	},
 	MapReferenceEvent = {
 		Fire = function(Player: Player, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -16949,9 +17005,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
 			LoadScratch()
@@ -17067,7 +17121,7 @@ local Returns = table.freeze({
 	},
 	ManyReliableSync = {
 		Fire = function(Player: Player, Value: number): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -17076,9 +17130,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: number): ()
 			LoadScratch()
@@ -17104,7 +17156,7 @@ local Returns = table.freeze({
 	},
 	ManyReliableAsync = {
 		Fire = function(Player: Player, Value: number): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -17113,9 +17165,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: number): ()
 			LoadScratch()
@@ -17231,7 +17281,7 @@ local Returns = table.freeze({
 	},
 	ReliableServer = {
 		Fire = function(Player: Player, Value: number): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_ReliableServer(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -17240,9 +17290,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_ReliableServer(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: number): ()
 			LoadScratch()
@@ -17268,7 +17316,7 @@ local Returns = table.freeze({
 	},
 	ReliableServerAsync = {
 		Fire = function(Player: Player, Value: number): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -17277,9 +17325,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: number): ()
 			LoadScratch()
@@ -17447,7 +17493,7 @@ local Returns = table.freeze({
 	},
 	InstanceAny = {
 		Fire = function(Player: Player, Value: Instance): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			local Cursor, Instances = Mark()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceAny, Value)
 			if Sent ~= true then
@@ -17461,9 +17507,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_InstanceAny(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: Instance): ()
 			LoadScratch()
@@ -17489,7 +17533,7 @@ local Returns = table.freeze({
 	},
 	InstanceOfType = {
 		Fire = function(Player: Player, Value: Sound): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			local Cursor, Instances = Mark()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOfType, Value)
 			if Sent ~= true then
@@ -17503,9 +17547,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_InstanceOfType(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: Sound): ()
 			LoadScratch()
@@ -17531,7 +17573,7 @@ local Returns = table.freeze({
 	},
 	InstanceOptional = {
 		Fire = function(Player: Player, Value: Instance?): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			local Cursor, Instances = Mark()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOptional, Value)
 			if Sent ~= true then
@@ -17545,9 +17587,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_InstanceOptional(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: Instance?): ()
 			LoadScratch()
@@ -17573,7 +17613,7 @@ local Returns = table.freeze({
 	},
 	InstanceOfClassWithDigit = {
 		Fire = function(Player: Player, Value: Motor6D): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			local Cursor, Instances = Mark()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit, Value)
 			if Sent ~= true then
@@ -17587,9 +17627,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: Motor6D): ()
 			LoadScratch()
@@ -17615,7 +17653,7 @@ local Returns = table.freeze({
 	},
 	Reference = {
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_Reference(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -17624,9 +17662,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_Reference(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 			LoadScratch()
@@ -17652,7 +17688,7 @@ local Returns = table.freeze({
 	},
 	ReferenceArray = {
 		Fire = function(Player: Player, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_ReferenceArray(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -17661,9 +17697,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_ReferenceArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
 			LoadScratch()
@@ -17689,7 +17723,7 @@ local Returns = table.freeze({
 	},
 	ReferenceOptional = {
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -17698,9 +17732,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 			LoadScratch()
@@ -17731,7 +17763,7 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					ReturnValue = Listener(Player, Value)
 				end)
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_RemoteFunction, ReturnValue, InvocationIdentifier)
@@ -17759,7 +17791,7 @@ local Returns = table.freeze({
 	},
 	Tuple = {
 		Fire = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			local Cursor, Instances = Mark()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Tuple, Value1, Value2, Value3, Value4, Value5, Value6)
 			if Sent ~= true then
@@ -17773,9 +17805,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
 			LoadScratch()
@@ -17851,7 +17881,7 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5 = Listener(Player, Value1, Value2, Value3, Value4, Value5)
 				end)
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_TupleFunction, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5, InvocationIdentifier)
@@ -17880,7 +17910,7 @@ local Returns = table.freeze({
 	AnotherScope = {
 		InScopeEvent = {
 			Fire = function(Player: Player, Value: number): ()
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
 				SavePlayerBuffer(Player)
 			end,
@@ -17889,9 +17919,7 @@ local Returns = table.freeze({
 				SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 				KeepScratch()
-				for _, Player in Players:GetPlayers() do
-					AppendPlayer(Player, Buffer, Size, Instances)
-				end
+				AppendShared(Buffer, Size, Instances)
 			end,
 			FireList = function(List: {Player}, Value: number): ()
 				LoadScratch()
@@ -17918,7 +17946,7 @@ local Returns = table.freeze({
 		ScopeWithinAnotherScope = {
 			InAnotherScopeEvent = {
 				Fire = function(Player: Player, Value: number): ()
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
 					SavePlayerBuffer(Player)
 				end,
@@ -17927,9 +17955,7 @@ local Returns = table.freeze({
 					SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
 					local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 					KeepScratch()
-					for _, Player in Players:GetPlayers() do
-						AppendPlayer(Player, Buffer, Size, Instances)
-					end
+					AppendShared(Buffer, Size, Instances)
 				end,
 				FireList = function(List: {Player}, Value: number): ()
 					LoadScratch()
@@ -17958,7 +17984,7 @@ local Returns = table.freeze({
 	ExampleScope = {
 		InScopeEvent = {
 			Fire = function(Player: Player, Value: number): ()
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
 				SavePlayerBuffer(Player)
 			end,
@@ -17967,9 +17993,7 @@ local Returns = table.freeze({
 				SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 				KeepScratch()
-				for _, Player in Players:GetPlayers() do
-					AppendPlayer(Player, Buffer, Size, Instances)
-				end
+				AppendShared(Buffer, Size, Instances)
 			end,
 			FireList = function(List: {Player}, Value: number): ()
 				LoadScratch()
@@ -17997,7 +18021,7 @@ local Returns = table.freeze({
 	Issue33 = {
 		Event = {
 			Fire = function(Player: Player, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
 				SavePlayerBuffer(Player)
 			end,
@@ -18006,9 +18030,7 @@ local Returns = table.freeze({
 				SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 				KeepScratch()
-				for _, Player in Players:GetPlayers() do
-					AppendPlayer(Player, Buffer, Size, Instances)
-				end
+				AppendShared(Buffer, Size, Instances)
 			end,
 			FireList = function(List: {Player}, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
 				LoadScratch()
@@ -18066,7 +18088,7 @@ local Returns = table.freeze({
 	},
 	NamedTuple = {
 		Fire = function(Player: Player, chefId: number, dish: string, portions: number?): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
 			SavePlayerBuffer(Player)
 		end,
@@ -18075,9 +18097,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, chefId: number, dish: string, portions: number?): ()
 			LoadScratch()
@@ -18108,7 +18128,7 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					ReturnValue1, ReturnValue2 = Listener(Player, Value1, Value2)
 				end)
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_NamedTupleFunction, ReturnValue1, ReturnValue2, InvocationIdentifier)
@@ -18136,7 +18156,7 @@ local Returns = table.freeze({
 	},
 	PartiallyNamedTuple = {
 		Fire = function(Player: Player, Value1: number, named: string, Value3: number): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
 			SavePlayerBuffer(Player)
 		end,
@@ -18145,9 +18165,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value1: number, named: string, Value3: number): ()
 			LoadScratch()
@@ -18178,7 +18196,7 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					ReturnValue = Listener(Player, Value)
 				end)
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_NeverAnswered, ReturnValue, InvocationIdentifier)
@@ -18207,7 +18225,7 @@ local Returns = table.freeze({
 	AskClient = {
 		Invoke = function(Player: Player, Value: number): (number)
 			local InvocationIdentifier = InvokePlayer(Player, 52)
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			local Cursor, Instances = Mark()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_AskClient, Value, InvocationIdentifier)
 			if Sent ~= true then
@@ -18315,7 +18333,7 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					ReturnValue = Listener(Player, Value)
 				end)
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_BadlyAnswered, ReturnValue, InvocationIdentifier)
@@ -18407,7 +18425,7 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					ReturnValue = Listener(Player, Value)
 				end)
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Unanswered, ReturnValue, InvocationIdentifier)
@@ -18435,7 +18453,7 @@ local Returns = table.freeze({
 	},
 	QueuedHoles = {
 		Fire = function(Player: Player, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
 			SavePlayerBuffer(Player)
 		end,
@@ -18444,9 +18462,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
 			LoadScratch()
@@ -19232,7 +19248,7 @@ local Returns = table.freeze({
 	},
 	NamedLength = {
 		Fire = function(Player: Player, s: string, Length: number): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
 			SavePlayerBuffer(Player)
 		end,
@@ -19241,9 +19257,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, s: string, Length: number): ()
 			LoadScratch()
@@ -19269,7 +19283,7 @@ local Returns = table.freeze({
 	},
 	LengthFirst = {
 		Fire = function(Player: Player, Length: number, s: string): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
 			SavePlayerBuffer(Player)
 		end,
@@ -19278,9 +19292,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Length: number, s: string): ()
 			LoadScratch()

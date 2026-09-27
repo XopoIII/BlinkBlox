@@ -26,7 +26,7 @@ local CAPACITY = 256
 local function Refuse(Target: Block, Index: number, Indent: number): Block
 	for _, Line in
 		{
-			"Load(PlayersMap[Player])",
+			"LoadPlayer(Player)",
 			"local Position = Allocate(3)",
 			`buffer.writeu8(SendBuffer, Position, {Index})`,
 			"buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)",

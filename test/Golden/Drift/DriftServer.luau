@@ -545,6 +545,23 @@ assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable rem
 
 local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
 
+--> THE BROADCAST BATCH. A reliable FireAll is written once, here, and sent at the flush in one
+--> FireAllClients, where it used to be copied into every player's batch: fifty players made a FireAll
+--> fifty copies and the flush fifty remote calls.
+-->
+--> A player's own writes still go to their own batch, and the order they and the broadcasts were
+--> made in has to survive. A player's first write of their own since a broadcast DIVERGES them: their
+--> batch takes a copy of the broadcast batch so far, then their write, and every later broadcast is
+--> appended to it as well. At the flush a diverged player is sent their batch alone; everyone else is
+--> sent the broadcast batch, after anything of their own that came before the first broadcast. With
+--> nobody diverged, that is one FireAllClients.
+local SharedSize = 64
+local SharedCursor = 0
+local SharedBuffer = buffer.create(64)
+local SharedInstances: {Instance} = {}
+local SharedUnderused = 0
+local Diverged: {[Player]: true} = {}
+
 --> How many rows a polled event's queue holds on the server before it stops taking more. Clients fill
 --> it, and a game that polls an event rarely, or has not got round to polling it at all, would let
 --> them grow it without end -- each row pinning its Player. A game that drains its queues every
@@ -755,6 +772,10 @@ end
 --> lookup rather than a decode. The burst is a whole second of budget because the clock here is the
 --> server's: after a hitch Roblox delivers the queued packets together, and a refused reliable packet
 --> takes every event in it along. Reported on the same once-a-second schedule as RateAccept.
+--> When the packet being decoded arrived. Every event in a packet arrived at the same moment, so the
+--> rate buckets refill once a packet, at this, rather than asking the clock once an event.
+local PacketClock = 0
+
 local function InboundAccept(Player: Player, Length: number, Floor: number, Rate: number, Burst: number): boolean
     local Cost = math.max(Length, Floor)
     if Player.Parent == nil then
@@ -763,6 +784,7 @@ local function InboundAccept(Player: Player, Length: number, Floor: number, Rate
     end
 
     local Now = os.clock()
+    PacketClock = Now
     local Budget = InboundBudgets[Player]
     if not Budget then
         --> The report clock starts at minus infinity so the first refusal is always reported.
@@ -814,21 +836,17 @@ end
 --> the packet would decode as garbage. So this bounds listener dispatch and the game logic behind
 --> it, while MaxEventsPerPacket bounds the decoding of one packet and InboundAccept how many packets
 --> a second get decoded at all. The three limits are different axes.
+--> Called only from the decode loop, which stops before any event once the player has left, and
+--> no game code runs between that check and this call: a player still here when the loop checked
+--> is still here now, so a bucket made below is one PlayerRemoving will clear.
 local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: number, Name: string): boolean
-    --> Same PlayerRemoving race the buffer save guards against, handled the same way: the entry is
-    --> dropped here rather than left for a sweep that does not exist.
-    if Player.Parent == nil then
-        RateBuckets[Player] = nil
-        return false
-    end
-
     local Bucket = RateBuckets[Player]
     if not Bucket then
         Bucket = table.clone(RATE_TEMPLATE)
         RateBuckets[Player] = Bucket
     end
 
-    local Now = os.clock()
+    local Now = PacketClock
     local Tokens = math.min(Burst, Bucket[Slot] + ((Now - Bucket[Slot + 1]) * Rate))
     Bucket[Slot + 1] = Now
 
@@ -976,6 +994,7 @@ end
 
 Players.PlayerRemoving:Connect(function(Player)
     PlayersMap[Player] = nil
+    Diverged[Player] = nil
     RateBuckets[Player] = nil
     InboundBudgets[Player] = nil
     Reports[Player] = nil
@@ -1021,8 +1040,15 @@ local function SavePlayerBuffer(Player: Player)
     if Entry == nil then
         if Player:IsDescendantOf(Players) then
             PlayersMap[Player] = Save()
+            if SharedCursor > 0 then
+                Diverged[Player] = true
+            end
         end
         return
+    end
+
+    if SharedCursor > 0 then
+        Diverged[Player] = true
     end
 
     Entry.Size = SendSize
@@ -1031,15 +1057,27 @@ local function SavePlayerBuffer(Player: Player)
     Entry.Instances = SendInstances
 end
 
---> Appends a broadcast's bytes and Instances to one player's batch. A player with a batch gets them
---> straight into it; one without goes the long way, through SavePlayerBuffer and its checks.
+--> Loads `Player`'s batch for a write of their own, diverging them first when a broadcast is pending;
+--> see the broadcast batch above. The SavePlayerBuffer that follows marks them diverged.
+local function LoadPlayer(Player: Player)
+    Load(PlayersMap[Player])
+    if SharedCursor > 0 and not Diverged[Player] then
+        local Position = Allocate(SharedCursor)
+        buffer.copy(SendBuffer, Position, SharedBuffer, 0, SharedCursor)
+        table.move(SharedInstances, 1, #SharedInstances, #SendInstances + 1, SendInstances)
+    end
+end
+
+--> Appends an event written elsewhere to one player's batch: a FireList or FireExcept, and a
+--> broadcast to a player who has diverged. A player with a batch of their own and nothing to catch up
+--> on gets it straight into it; any other goes the long way, through LoadPlayer and SavePlayerBuffer.
 local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instances: {Instance})
     local Entry = PlayersMap[Player]
-    if Entry == nil then
-        Load()
+    if Entry == nil or (SharedCursor > 0 and not Diverged[Player]) then
+        LoadPlayer(Player)
         local Position = Allocate(Size)
         buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-        table.move(Instances, 1, #Instances, 1, SendInstances)
+        table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
         SavePlayerBuffer(Player)
         return
     end
@@ -1070,7 +1108,32 @@ local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instan
     end
 end
 
+--> Appends a broadcast to the broadcast batch, and to the batch of every player who has diverged.
+local function AppendShared(Buffer: buffer, Size: number, Instances: {Instance})
+    local InUse = SharedCursor + Size
+    if InUse > SharedSize then
+        while InUse > SharedSize do
+            SharedSize *= 1.5
+        end
+
+        local Resized = buffer.create(SharedSize)
+        buffer.copy(Resized, 0, SharedBuffer, 0, SharedCursor)
+        SharedBuffer = Resized
+    end
+
+    buffer.copy(SharedBuffer, SharedCursor, Buffer, 0, Size)
+    SharedCursor = InUse
+    if #Instances > 0 then
+        table.move(Instances, 1, #Instances, #SharedInstances + 1, SharedInstances)
+    end
+
+    for Player in Diverged do
+        AppendPlayer(Player, Buffer, Size, Instances)
+    end
+end
+
 local function StepReplication()
+    local Shared = SharedCursor
     for Player, Send in PlayersMap do
         --> Second line of defence. An entry can still be stale if it was written inside the narrow
         --> window of PlayerRemoving itself, before the player was detached; dropping it here makes
@@ -1078,6 +1141,19 @@ local function StepReplication()
         if not Player:IsDescendantOf(Players) then
             PlayersMap[Player] = nil
             continue
+        end
+
+        --> Everything of this player's own came before the first broadcast, so the broadcast batch
+        --> follows it in their packet rather than going in one of its own.
+        if Shared > 0 and Send.Cursor > 0 and not Diverged[Player] then
+            Load(Send)
+            local Position = Allocate(Shared)
+            buffer.copy(SendBuffer, Position, SharedBuffer, 0, Shared)
+            table.move(SharedInstances, 1, #SharedInstances, #SendInstances + 1, SendInstances)
+            Send.Size = SendSize
+            Send.Cursor = SendCursor
+            Send.Buffer = SendBuffer
+            Diverged[Player] = true
         end
 
         local Used = Send.Cursor
@@ -1102,6 +1178,42 @@ local function StepReplication()
             Send.Buffer = buffer.create(64)
         end
     end
+
+    if Shared > 0 then
+        local Buffer = buffer.create(Shared)
+        buffer.copy(Buffer, 0, SharedBuffer, 0, Shared)
+        if next(Diverged) == nil then
+            Reliable:FireAllClients(Buffer, SharedInstances)
+        else
+            for _, Player in Players:GetPlayers() do
+                if not Diverged[Player] then
+                    Reliable:FireClient(Player, Buffer, SharedInstances)
+                end
+            end
+        end
+
+        SharedCursor = 0
+        table.clear(SharedInstances)
+        table.clear(Diverged)
+    end
+
+    local Shrink
+    Shrink, SharedUnderused = ShouldShrink(SharedSize, Shared, SharedUnderused)
+    if Shrink then
+        SharedSize = 64
+        SharedBuffer = buffer.create(64)
+    end
+end
+local function DecodeLoop(DecodeEvent: () -> (), Player: Player, Size: number)
+	local DecodedEvents = 0
+	while RecieveCursor < Size and Player.Parent ~= nil do
+		DecodedEvents += 1
+		if DecodedEvents > 64 then
+			ReportDrop(Player, "Events", 64)
+			break
+		end
+		DecodeEvent()
+	end
 end
 RunService.Heartbeat:Connect(StepReplication)
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -1130,27 +1242,16 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local DecodedEvents = 0
 	local Decoding = -1
 	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
 	end
-	local function DecodePacket()
-		while (RecieveCursor < Size and Player.Parent ~= nil) do
-			DecodedEvents += 1
-			if DecodedEvents > 64 then
-				ReportDrop(Player, "Events", 64)
-				break
-			end
-			Decoding = -1
-			DecodeEvent()
-		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
 	if not Parsed then
 		ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
 	end
@@ -1181,27 +1282,16 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local DecodedEvents = 0
 	local Decoding = -1
 	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
 	end
-	local function DecodePacket()
-		while (RecieveCursor < Size and Player.Parent ~= nil) do
-			DecodedEvents += 1
-			if DecodedEvents > 64 then
-				ReportDrop(Player, "Events", 64)
-				break
-			end
-			Decoding = -1
-			DecodeEvent()
-		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
 	if not Parsed then
 		ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
 	end
@@ -1223,7 +1313,7 @@ local Returns = table.freeze({
 
 	Inserted = {
 		Fire = function(Player: Player, Value: number): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_Inserted(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -1232,9 +1322,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_Inserted(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: number): ()
 			LoadScratch()
@@ -1260,7 +1348,7 @@ local Returns = table.freeze({
 	},
 	Alpha = {
 		Fire = function(Player: Player, Value: number): ()
-			Load(PlayersMap[Player])
+			LoadPlayer(Player)
 			SerdesFunctions.WriteEVENT_Alpha(Value)
 			SavePlayerBuffer(Player)
 		end,
@@ -1269,9 +1357,7 @@ local Returns = table.freeze({
 			SerdesFunctions.WriteEVENT_Alpha(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
+			AppendShared(Buffer, Size, Instances)
 		end,
 		FireList = function(List: {Player}, Value: number): ()
 			LoadScratch()

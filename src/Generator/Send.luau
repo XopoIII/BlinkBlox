@@ -92,9 +92,17 @@ function Send.Broadcast(
 
 	if Event.IsReliable then
 		Fire:Lines(RELIABLE_BODY.Header, 1)
-		local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept):Lines(RELIABLE_BODY.Body, 2)
-		Traffic.Sent(Loop, Event.Traffic, "Size", false)
-		Loop:End()
+		if Options.AllClients then
+			Fire:Line(RELIABLE_BODY.Shared)
+			if Event.Traffic then
+				Fire:Line("local Reached = #Players:GetPlayers()")
+				Traffic.Sent(Fire, Event.Traffic, "Size", false, "Reached")
+			end
+		else
+			local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept):Lines(RELIABLE_BODY.Body, 2)
+			Traffic.Sent(Loop, Event.Traffic, "Size", false)
+			Loop:End()
+		end
 	else
 		CheckSize(Fire, Event)
 		Fire:Lines(UNRELIABLE_BODY, 1)

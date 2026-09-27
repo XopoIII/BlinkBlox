@@ -9,7 +9,6 @@ option MaxEventsPerPacket = 2048
 option MaxInstancesPerPacket = 2048
 option InboundBytesPerSecond = 1073741824
 option InboundBurst = 1073741824
-option DefaultRate = 1000000
 
 -- Numbers rather than a vector: Lune has no Vector3.
 struct Unit {
@@ -61,5 +60,21 @@ event Self {
 	Type: OrderedUnreliable,
 	Call: SingleSync,
 	Stream: { Rate: 20, Per: Player },
+	Data: Unit
+}
+
+-- The world and each player's own state as plain unreliable events rather than streams, for
+-- Rivals.luau: the other tools have no streams, and this is how a game sends state with them.
+event WorldState {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: Unit[..16]
+}
+
+event SelfState {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
 	Data: Unit
 }

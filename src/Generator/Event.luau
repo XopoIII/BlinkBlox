@@ -434,7 +434,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		}
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 		if IsReliable then
-			Fire:Line("Load(PlayersMap[Player])")
+			Fire:Line("LoadPlayer(Player)")
 			WritePlayer(Fire)
 			Traffic.Sent(Fire, Counters, "SendCursor - Cursor", false)
 			Fire:Line("SavePlayerBuffer(Player)")

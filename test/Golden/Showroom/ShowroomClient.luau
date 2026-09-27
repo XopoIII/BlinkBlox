@@ -783,6 +783,11 @@ local function StepReplication()
         SendBuffer = buffer.create(64)
     end
 end
+local function DecodeLoop(DecodeEvent: () -> (), Size: number)
+	while RecieveCursor < Size do
+		DecodeEvent()
+	end
+end
 RunService.Heartbeat:Connect(StepReplication)
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
@@ -799,6 +804,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -852,13 +858,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	local function DecodePacket()
-		while (RecieveCursor < Size) do
-			Decoding = -1
-			DecodeEvent()
-		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
 	if not Parsed then
 		ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
 	end
@@ -878,6 +878,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -892,13 +893,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	local function DecodePacket()
-		while (RecieveCursor < Size) do
-			Decoding = -1
-			DecodeEvent()
-		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
 	if not Parsed then
 		ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
 	end

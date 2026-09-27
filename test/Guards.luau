@@ -152,7 +152,7 @@ RunClosure("Inbound packets are bounded", function()
 			["oversized packet check"] = "if buffer.len(Buffer) >",
 			["instance count check"] = "if #Instances >",
 			["decoded event counter"] = "DecodedEvents += 1",
-			["decode pcall"] = "local Parsed: boolean, Failure: any = pcall(DecodePacket)",
+			["decode pcall"] = "local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)",
 			["decode failure is reported"] = `ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)`,
 			["unknown event id stops the packet"] = `error("[BlinkBlox]: Unknown event index.")`,
 		}
