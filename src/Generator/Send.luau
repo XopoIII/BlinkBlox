@@ -6,8 +6,10 @@
 --- they share with a send to one: the loop over recipients and the per-recipient sequence stamp.
 ---
 --- Moved out of Event.luau when that file reached its size cap.
+local Batches = require("./Batches")
 local Blocks = require("./Blocks")
 local Fragments = require("./Fragments")
+local State = require("./State")
 local Traffic = require("./Traffic")
 
 local RELIABLE_BODY = Fragments.RELIABLE_BODY
@@ -52,12 +54,38 @@ local function CheckSize(Fire: Blocks.Block, Event: Send)
 	Fire:Line(`if not CheckUnreliableSize("{Event.Name}") then return end`)
 end
 
+--- Whether this send goes to a batch rather than straight out: a stream's always, an event's under
+--- `option BatchUnreliable`. See Batches.luau.
+local function Batched(Event: Send): boolean
+	local Batch = Event.Stream == true or Batches.Events()
+	if Batch then
+		State.UsesBatches = true
+	end
+	return Batch
+end
+
+--- Appends the event in the scratch buffer to `Player`'s batch, stamping an ordered event's sequence.
+local function AppendTo(Target: Blocks.Block, Event: Send)
+	if Event.Ordered then
+		Target:Line(`AppendOrdered(Player, {Event.Ordered})`)
+	else
+		Target:Line("AppendUnreliable(Player)")
+	end
+end
+
 --- An unreliable server send to one player, `Player`: the unreliable `Fire`, and a `Per: Player`
 --- stream's send. Leaves the function open for the caller to end.
 function Send.One(Fire: Blocks.Block, Event: Send): Blocks.Block
 	Fire:Line("LoadScratch()")
 	Fire:Line(Event.WriteEvent)
 	CheckSize(Fire, Event)
+	if Batched(Event) then
+		AppendTo(Fire, Event)
+		Fire:Line("KeepScratch()")
+		Traffic.Sent(Fire, Event.Traffic, "SendCursor", true)
+		return Fire
+	end
+
 	Fire:Lines(UNRELIABLE_BODY, 1)
 	Send.StampOrder(Fire, Event)
 	Fire:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
@@ -103,6 +131,24 @@ function Send.Broadcast(
 			Traffic.Sent(Loop, Event.Traffic, "Size", false)
 			Loop:End()
 		end
+	elseif Batched(Event) then
+		CheckSize(Fire, Event)
+
+		--> An ordered event's sequence is each player's own, so only an unordered one to everyone
+		--> goes to the batch everyone shares.
+		if Options.AllClients and not Event.Ordered then
+			Fire:Line("AppendUnreliable(nil)")
+			if Event.Traffic then
+				Fire:Line("local Reached = #Players:GetPlayers()")
+				Traffic.Sent(Fire, Event.Traffic, "SendCursor", true, "Reached")
+			end
+		else
+			local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept)
+			AppendTo(Loop, Event)
+			Traffic.Sent(Loop, Event.Traffic, "SendCursor", true)
+			Loop:End()
+		end
+		Fire:Line("KeepScratch()")
 	else
 		CheckSize(Fire, Event)
 		Fire:Lines(UNRELIABLE_BODY, 1)

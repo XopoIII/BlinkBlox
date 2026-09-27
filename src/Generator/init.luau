@@ -8,6 +8,7 @@ local Settings = require("./Settings")
 local Builder = require("./Modules/Builder")
 local Table = require("./Modules/Table")
 
+local Batches = require("@self/Batches")
 local Blocks = require("@self/Blocks")
 local Bodies = require("@self/Bodies")
 local Fragments = require("@self/Fragments")
@@ -319,6 +320,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Preamble,
 		State.Noop.DumpLines(),
 		string.split(Traffic.Template(Source[2]), "\r"),
+		Batches.Body(),
 		Stamps.Runtime(),
 		(if State.UsesStreams then { StreamParts[if State.Context == "Server" then 1 else 2] } else {}),
 		State.Streams.DumpLines(),

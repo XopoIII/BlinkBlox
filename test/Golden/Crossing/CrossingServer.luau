@@ -1476,6 +1476,120 @@ local function StepReplication()
         SharedBuffer = buffer.create(64)
     end
 end
+
+--> UNRELIABLE BATCHES; see Generator/Batches.luau.
+type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Events: number }
+
+local function NewUnreliable(): BLINK_UNRELIABLE
+    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Events = 0 }
+end
+
+--> Appends what the scratch buffer holds -- one event, written there by the send -- to `Batch`.
+local function CopyUnreliable(Batch: BLINK_UNRELIABLE): number
+    local Size = SendCursor
+    local Cursor = Batch.Cursor
+    local InUse = Cursor + Size
+    if InUse > Batch.Size then
+        local Grown = Batch.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Batch.Buffer, 0, Cursor)
+        Batch.Buffer = Resized
+        Batch.Size = Grown
+    end
+
+    buffer.copy(Batch.Buffer, Cursor, SendBuffer, 0, Size)
+    Batch.Cursor = InUse
+    Batch.Events += 1
+
+    local Count = #SendInstances
+    if Count > 0 then
+        table.move(SendInstances, 1, Count, #Batch.Instances + 1, Batch.Instances)
+    end
+
+    return Cursor
+end
+
+--> Whether the event in the scratch buffer would take `Batch` past the unreliable limit.
+local function Overflows(Batch: BLINK_UNRELIABLE): boolean
+    return Batch.Cursor + SendCursor + (#Batch.Instances + #SendInstances) * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE
+end
+
+local SharedUnreliable = NewUnreliable()
+local PlayerUnreliable: {[Player]: BLINK_UNRELIABLE} = {}
+
+Players.PlayerRemoving:Connect(function(Player)
+    PlayerUnreliable[Player] = nil
+end)
+
+local function SendUnreliable(Batch: BLINK_UNRELIABLE, Player: Player?)
+    local Used = Batch.Cursor
+    if Used == 0 then
+        return
+    end
+
+    local Packet = buffer.create(Used)
+    buffer.copy(Packet, 0, Batch.Buffer, 0, Used)
+    if Player then
+        Unreliable:FireClient(Player, Packet, Batch.Instances)
+    else
+        Unreliable:FireAllClients(Packet, Batch.Instances)
+    end
+
+    Batch.Cursor = 0
+    Batch.Events = 0
+    table.clear(Batch.Instances)
+end
+
+--> A player's batch, made on their first unreliable event of the session. None for a player who has
+--> already left: PlayerRemoving has run, and nothing would clear a batch made now.
+local function PlayerBatch(Player: Player): BLINK_UNRELIABLE?
+    local Batch = PlayerUnreliable[Player]
+    if Batch == nil then
+        if Player.Parent == nil then
+            return nil
+        end
+
+        Batch = NewUnreliable()
+        PlayerUnreliable[Player] = Batch
+    end
+
+    return Batch
+end
+
+--> Appends the event in the scratch buffer to everyone's batch, or to `Player`'s.
+local function AppendUnreliable(Player: Player?)
+    if not Started then
+        DropBeforeStart()
+        return
+    end
+    local Batch = if Player then PlayerBatch(Player) else SharedUnreliable
+    if Batch == nil then
+        return
+    end
+
+    if Overflows(Batch) then
+        SendUnreliable(Batch, Player)
+    end
+    CopyUnreliable(Batch)
+end
+
+local StepBeforeUnreliable = StepReplication
+StepReplication = function()
+    StepBeforeUnreliable()
+    SendUnreliable(SharedUnreliable, nil)
+    for Player, Batch in PlayerUnreliable do
+        if Player.Parent == nil then
+            PlayerUnreliable[Player] = nil
+            continue
+        end
+
+        SendUnreliable(Batch, Player)
+    end
+end
 --> STAMPS. A stamp is a server time in milliseconds modulo 65536; this puts it back in seconds, the
 --> one nearest this side's own server clock.
 local StampClock = game:GetService("Workspace")
@@ -1804,15 +1918,13 @@ local function SendSTREAM_0(Value: { { Id: number, Speed: number, Heat: number }
 	SerdesFunctions.WriteEVENT_Crawls(Value, ServerTime)
 	local Bytes = SendCursor + #SendInstances * UNRELIABLE_INSTANCE_BYTES
 	if Bytes > MAX_UNRELIABLE_SIZE then error(`{Bytes} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`) end
-	local Buffer = buffer.create(SendCursor)
-	buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-	KeepScratch()
-	Unreliable:FireAllClients(Buffer, SendInstances)
+	AppendUnreliable(nil)
 	local Reached = #Players:GetPlayers()
 	TrafficCounters[9] += SendCursor * Reached
 	TrafficCounters[10] += Reached
 	TrafficCounters[5] += SendCursor * Reached
 	TrafficCounters[6] += Reached
+	KeepScratch()
 end
 local STREAM_0 = CreateStream("Crawls", 1 / 10, 1 / 20, 1, 0.5, SendSTREAM_0)
 
@@ -1822,15 +1934,13 @@ local function SendSTREAM_1(Value: number?, ServerTime: number): ()
 	SerdesFunctions.WriteEVENT_Tick(Value, ServerTime)
 	local Bytes = SendCursor + #SendInstances * UNRELIABLE_INSTANCE_BYTES
 	if Bytes > MAX_UNRELIABLE_SIZE then error(`{Bytes} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`) end
-	local Buffer = buffer.create(SendCursor)
-	buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-	KeepScratch()
-	Unreliable:FireAllClients(Buffer, SendInstances)
+	AppendUnreliable(nil)
 	local Reached = #Players:GetPlayers()
 	TrafficCounters[13] += SendCursor * Reached
 	TrafficCounters[14] += Reached
 	TrafficCounters[5] += SendCursor * Reached
 	TrafficCounters[6] += Reached
+	KeepScratch()
 end
 local STREAM_1 = CreateStream("Tick", 1 / 5, 1 / 5, 1, 0, SendSTREAM_1)
 local function Listen()

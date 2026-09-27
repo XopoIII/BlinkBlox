@@ -63,6 +63,7 @@ Grammar.OPTIONS = {
 	SyncValidation = "Boolean",
 	WriteValidations = "Boolean",
 	ManualReplication = "Boolean",
+	BatchUnreliable = "Boolean",
 	RemoteScope = "String",
 	MaxPacketSize = "Number",
 	MaxEventsPerPacket = "Number",
@@ -349,6 +350,7 @@ export type Options = {
 	SyncValidation: boolean?,
 	WriteValidations: boolean?,
 	ManualReplication: boolean?,
+	BatchUnreliable: boolean?,
 	RemoteScope: string?,
 
 	--> Inbound limits. These bound what a hostile client can make the server do inside a single

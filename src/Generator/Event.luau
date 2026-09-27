@@ -6,6 +6,7 @@
 --- `On`, `Iter` or `Fire` and its variants, depending on which side this is and which side sends.
 ---
 --- Adds `Event` to the Serde table, which the declaration walk in Generators.luau dispatches through.
+local Batches = require("./Batches")
 local Blocks = require("./Blocks")
 local Builder = require("../Modules/Builder")
 local Decode = require("./Decode")
@@ -372,9 +373,15 @@ function Declarations.Event(Declaration: Parser.Event)
 			--> entirely, leaving this temporary buffer installed as the outgoing one -- so the next
 			--> RELIABLE flush sent the scratch buffer and dropped everything already batched.
 			Fire:Line(`if Sent and CheckUnreliableSize("{Declaration.Name}") then`)
-			Fire:Line("\tlocal Buffer = buffer.create(SendCursor)")
-			Fire:Line("\tbuffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)")
-			Fire:Line("\tUnreliable:FireServer(Buffer, SendInstances)")
+			if Batches.Events() then
+				--> Gathered with the frame's other unreliable events; see Batches.luau.
+				State.UsesBatches = true
+				Fire:Line("\tAppendUnreliable()")
+			else
+				Fire:Line("\tlocal Buffer = buffer.create(SendCursor)")
+				Fire:Line("\tbuffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)")
+				Fire:Line("\tUnreliable:FireServer(Buffer, SendInstances)")
+			end
 			Traffic.Sent(Fire, Counters, "SendCursor", true, nil, "\t")
 			Fire:Line("end")
 			Fire:Line("Release()")

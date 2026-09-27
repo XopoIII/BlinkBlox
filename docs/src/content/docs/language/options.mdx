@@ -39,6 +39,7 @@ A few rules hold for all of them:
 | `ExportLimits` | boolean | `false` | [Output](#exportlimits) |
 | `FutureLibrary`, `PromiseLibrary` | Luau path | none | [Output](#futurelibrary-and-promiselibrary) |
 | `ManualReplication` | boolean | `false` | [Runtime behaviour](#manualreplication) |
+| `BatchUnreliable` | boolean | `false` | [Runtime behaviour](#batchunreliable) |
 | `UsePolling` | boolean | `false` | [Runtime behaviour](#usepolling) |
 | `Predict` | boolean | `false` | [Runtime behaviour](#predict) |
 | `ClientConnectTimeout` | seconds | wait for ever | [Starting up](#clientconnecttimeout) |
@@ -208,7 +209,7 @@ Default: `false`
 Reliable events and function calls are not sent the moment you fire them. Each side batches them into
 one buffer (the server keeps one per player) and sends the batch once a frame, from
 `RunService.Heartbeat`. Unreliable events are the exception: each one is sent at once, in a packet of
-its own.
+its own, unless [`BatchUnreliable`](#batchunreliable) gathers them too.
 
 `ManualReplication = true` removes that Heartbeat connection, and nothing is sent until you call
 `StepReplication` yourself. The function is exported either way; with this option it is the only thing
@@ -226,6 +227,27 @@ RunService.PostSimulation:Connect(function()
     -- ... fire this frame's events ...
     Net.StepReplication()
 end)
+```
+
+### `BatchUnreliable`
+Default: `false`
+
+Gathers every unreliable event a side sends in a frame into as few packets as
+[`MaxUnreliableSize`](#maxunreliablesize) allows, sent at the same flush as the reliable batch, rather
+than sending each at once in a remote call of its own. On the server, an event fired to everyone goes
+into one packet that every player is sent in a single `FireAllClients`, and an event to one player
+into that player's; an `OrderedUnreliable` event carries each player's own sequence number, so it is
+always gathered player by player. A client's packet is also cut at the server's
+[`MaxEventsPerPacket`](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket).
+
+A frame's worth of small events then costs one remote call and one packet header instead of one each,
+and a client stays further inside the server's inbound budget, which charges every packet at least 128
+bytes. The price is time: an event waits for the flush, up to a frame, as a reliable one always has.
+[Streams](/BlinkBlox/language/streams/) are gathered this way whatever the option says, since they are
+sent from the flush already.
+
+```blink
+option BatchUnreliable = true
 ```
 
 ### `UsePolling`

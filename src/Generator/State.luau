@@ -44,6 +44,8 @@ export type State = {
 	--- Set when the schema declares a stream, so the stream runtime (Templates/Stream.luau) is
 	--- emitted only where something uses it.
 	UsesStreams: boolean,
+	--- Whether this side batches any unreliable event it sends; see Batches.luau.
+	UsesBatches: boolean,
 
 	--- Set when this side sends or receives a stamped event, so the stamp runtime
 	--- (Templates/Stamp.luau) is emitted only where something uses it.
@@ -84,6 +86,7 @@ local State: State = {
 
 	UsesOrdering = false,
 	UsesStreams = false,
+	UsesBatches = false,
 	UsesStamps = false,
 	UsesFuture = false,
 	UsesPromise = false,
@@ -108,6 +111,7 @@ function State.Reset()
 	table.clear(Prefabs.Required)
 	State.UsesOrdering = false
 	State.UsesStreams = false
+	State.UsesBatches = false
 	State.UsesStamps = false
 	State.UsesFuture = false
 	State.UsesPromise = false
