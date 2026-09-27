@@ -207,7 +207,11 @@ local function Settle()
 end
 
 local function Begin()
-    Settle()
+    --> Checked here rather than left to Settle, so a Fire pays for no call when there is nothing to
+    --> undo, which is always but after a throw.
+    if PendingCursor >= 0 then
+        Settle()
+    end
     PendingCursor = SendCursor
     PendingInstances = CommittedInstances
 end
@@ -10016,28 +10020,14 @@ local function Close(Start: number, Instances: number)
 end
 
 --> The end of a Fire that Begin started, for an event that carries no Instance: the instance count is
---> what it was, and so is the instance cap.
+--> what it was, and so is the instance cap. A Fire that can carry one writes its own end out; see
+--> WriteBegun in Generator/Event.luau.
 local function Commit()
     local Start = PendingCursor
     PendingCursor = -1
     PacketEvents += 1
     if PacketEvents > MAX_EVENTS_PER_PACKET or SendCursor - PacketStart > MAX_PACKET_SIZE then
         Cut(Start, CommittedInstances)
-    end
-end
-
---> The same for an event that can carry Instances.
-local function CommitInstances()
-    local Start, Before = PendingCursor, CommittedInstances
-    local Count = #SendInstances
-    PendingCursor = -1
-    CommittedInstances = Count
-    PacketEvents += 1
-    if PacketEvents > MAX_EVENTS_PER_PACKET
-        or SendCursor - PacketStart > MAX_PACKET_SIZE
-        or Count - PacketInstances > MAX_INSTANCES_PER_PACKET
-    then
-        Cut(Start, Before)
     end
 end
 
@@ -16894,9 +16884,16 @@ local Returns = table.freeze({
 	},
 	UnknownInbound = {
 		Fire = function(Value: any): ()
-			Begin()
+			if PendingCursor >= 0 then Settle() end
+			local Start, Before = SendCursor, CommittedInstances
+			PendingCursor = Start
+			PendingInstances = Before
 			SerdesFunctions.WriteEVENT_UnknownInbound(Value)
-			CommitInstances()
+			local Count = #SendInstances
+			PendingCursor = -1
+			CommittedInstances = Count
+			PacketEvents += 1
+			if PacketEvents > MAX_EVENTS_PER_PACKET or SendCursor - PacketStart > MAX_PACKET_SIZE or Count - PacketInstances > MAX_INSTANCES_PER_PACKET then Cut(Start, Before) end
 		end
 	},
 	NamedTuple = {

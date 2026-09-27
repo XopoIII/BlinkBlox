@@ -16,12 +16,12 @@ local Prefabs = require("./Prefabs")
 local Queues = require("./Queue")
 local Send = require("./Send")
 local Serde = require("./Serde")
-local Size = require("../Modules/Size")
 local Stamps = require("./Stamp")
 local State = require("./State")
 local Streams = require("./Stream")
 local Traffic = require("./Traffic")
 local Util = require("./Util")
+local Writes = require("./Writes")
 
 type Type = Parser.TypeNode
 
@@ -87,53 +87,11 @@ function Declarations.Event(Declaration: Parser.Event)
 	local Body = Builder.new()
 	local Indent = Util.GetScopeIndent(State.Scope)
 	local WriteEvent = `{Util.GetPath(Identifier, true, State.Scope)}({WriteArguments})`
-	--> The same call, protected, for every write into a batch that outlives it: the client's own, and
-	--> the one the server keeps per player. `Load(PlayersMap[Player])` installs that player's saved
-	--> instance list itself rather than a copy, so an Instance appended before a later field threw
-	--> stayed in it even though the cursor was never saved -- and every instance after it in that
-	--> flush reached the client one place out. A broadcast writes into a fresh buffer and needs none.
+	--> The same call, protected: an unreliable Fire writes into the scratch buffer under it, so the
+	--> batch is put back whatever happens. How a Fire writes into a batch that outlives it is
+	--> Writes.luau's.
 	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, State.Scope)}, {WriteArguments})`
-
-	--> Whether a write can put anything in the instance list. Measured as the size analysis measures
-	--> it; a payload it cannot measure is taken to carry one.
-	local CarriesInstances = false
-	if Value.Data then
-		local Measured, Measurement = pcall(Size.Sealed, Value.Data :: any)
-		CarriesInstances = not Measured or Measurement.Refs > 0
-	end
-
-	--> Writes into a batch that is kept, undoing whatever a write that throws had already added.
-	local function WriteKept(Target: Blocks.Block)
-		Target:Line("local Cursor, Instances = Mark()")
-		Target:Line(`local Sent: boolean, Failure: any = {TryWriteEvent}`)
-		Target:Compare("Sent", "true", "Not"):Line("Rollback(Cursor, Instances)"):Line("error(Failure, 0)"):End()
-	end
-
-	--> The client's batch, undone lazily rather than under a pcall; see Begin in the base template.
-	local function WriteBegun(Target: Blocks.Block)
-		Target:Line("Begin()")
-		if Counters then
-			Target:Line("local Cursor = SendCursor")
-		end
-		Target:Line(WriteEvent)
-		Target:Line(if CarriesInstances then "CommitInstances()" else "Commit()")
-	end
-
-	--> A player's batch on the server. A write that throws never reaches SavePlayerBuffer, so the
-	--> player's saved cursor is where it was and the bytes past it are never sent. The instance list
-	--> is the exception: `Load` installs the player's own rather than a copy, so a payload that can
-	--> append to it is still written under Mark and Rollback.
-	local function WritePlayer(Target: Blocks.Block)
-		if CarriesInstances then
-			WriteKept(Target)
-			return
-		end
-
-		if Counters then
-			Target:Line("local Cursor = SendCursor")
-		end
-		Target:Line(WriteEvent)
-	end
+	local Writer = Writes.new(Identifier, WriteArguments, WriteEvent, Value.Data, Counters)
 
 	Body.Push(`{Declaration.Name} = \{`, 0, Indent)
 	State.Noop.Push(`{Declaration.Name} = \{`, 0, Indent)
@@ -396,7 +354,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			--> Rolled back rather than left, because this write lands in the batch every other event
 			--> is queued in. Half an event in there is not one bad send: the receiver reads the
 			--> truncated event and then decodes the REST of the batch from the wrong offset.
-			WriteBegun(Fire)
+			Writer.Begun(Fire)
 			Traffic.Sent(Fire, Counters, "SendCursor - Cursor", false)
 		else
 			Fire:Line("Hold()")
@@ -435,7 +393,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 		if IsReliable then
 			Fire:Line("LoadPlayer(Player)")
-			WritePlayer(Fire)
+			Writer.Player(Fire)
 			Traffic.Sent(Fire, Counters, "SendCursor - Cursor", false)
 			Fire:Line("SavePlayerBuffer(Player)")
 		else

@@ -186,7 +186,11 @@ local function Settle()
 end
 
 local function Begin()
-    Settle()
+    --> Checked here rather than left to Settle, so a Fire pays for no call when there is nothing to
+    --> undo, which is always but after a throw.
+    if PendingCursor >= 0 then
+        Settle()
+    end
     PendingCursor = SendCursor
     PendingInstances = CommittedInstances
 end
