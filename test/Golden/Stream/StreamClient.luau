@@ -565,13 +565,13 @@ export type Head = { Id: number, Head: Vector3, Back: boolean }
 function SerdesFunctions.ReadEVENT_Heads(): ({ { Id: number, Head: Vector3, Back: boolean } }?, number)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: Heads
 	-- Value1: Heads
 	local Value1
-	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) then
+	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if bit32.btest(BITFIELD_1_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value1: Heads
@@ -583,7 +583,7 @@ function SerdesFunctions.ReadEVENT_Heads(): ({ { Id: number, Head: Vector3, Back
 		Value1 = table.create(Length)
 			-- Read BLOCK: 11 bytes
 		local ARRAY_START_2 = Read(11 * Length)
-		local BITFIELD_0
+		local BITFIELD_3_0
 		for Slot_2 = 1, Length do
 			-- Item_2: Heads
 			local Item_2 = {Id = false, Head = false, Back = false} :: any
@@ -660,8 +660,8 @@ function SerdesFunctions.ReadEVENT_Heads(): ({ { Id: number, Head: Vector3, Back
 				-- Read 1
 				local OPERATION_OFFSET_4 = ARRAY_START_2
 				ARRAY_START_2 += 1
-				BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_4)
-				Item_2.Back = bit32.btest(BITFIELD_0, 0x01)
+				BITFIELD_3_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_4)
+				Item_2.Back = bit32.btest(BITFIELD_3_0, 0x01)
 			end
 			Value1[Slot_2] = Item_2
 		end
@@ -687,13 +687,13 @@ end
 function SerdesFunctions.World_ReadEVENT_Clock(): (number?, number)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: Clock
 	-- Value1: Clock
 	local Value1
-	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) then
+	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if bit32.btest(BITFIELD_1_0, 0x01) then
 		-- Read BLOCK: 8 bytes
 		local BLOCK_START = Read(8)
 		-- Value1: Clock

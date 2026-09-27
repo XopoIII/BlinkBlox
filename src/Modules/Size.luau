@@ -99,6 +99,16 @@ local function PartitionBytes(Flags: number): number
 	return 4
 end
 
+--- Bits an enum's index or a tag takes: as few as tell `Count` values apart, and at least one.
+--- Mirrors `Bits.Width` in the generator.
+local function IndexBits(Count: number): number
+	local Width = 1
+	while 2 ^ Width < Count do
+		Width += 1
+	end
+	return Width
+end
+
 local function ComponentBytes(Component: string?): number
 	if not Component then
 		return PRIMITIVES.f32.Bytes
@@ -390,9 +400,11 @@ local function MeasureTagEnum(Node: Node): Measurement
 		end
 	end
 
+	--> The tag is bits in the enclosing bitfield, like an enum's index.
 	local Result = Empty()
-	Result.Min = 1 + (Smallest or 0)
-	Result.Max = 1 + Largest
+	Result.Bits = IndexBits(#Variants)
+	Result.Min = Smallest or 0
+	Result.Max = Largest
 	Result.Refs = Refs
 	Result.Unbounded = Unbounded
 	Result.Culprit = Culprit
@@ -438,9 +450,10 @@ function Measure(Node: Node): Measurement
 	elseif Kind == "Set" then
 		return MeasureSet(Node)
 	elseif Kind == "Enum" then
+		--> Its index is bits in the enclosing bitfield, as few as tell its values apart and at least
+		--> one; mirrors `Bits.Width` in the generator.
 		local Result = Empty()
-		Result.Min = 1
-		Result.Max = 1
+		Result.Bits = IndexBits(#Node.Value.Values)
 		return Result
 	elseif Kind == "TagEnum" then
 		return MeasureTagEnum(Node)

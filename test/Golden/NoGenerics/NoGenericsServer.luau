@@ -606,22 +606,22 @@ export type MergeStruct = { Field: number?, Float16Field: number?, Enum: ("A" | 
 export type MapStruct = { Map: {[string]: number} }
 export type AnotherScope_ScopeWithinAnotherScope_ExampleType = number
 function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
-	-- Read BLOCK: 3 bytes
-	local BLOCK_START = Read(3)
-	local BITFIELD_0
+	-- Read BLOCK: 2 bytes
+	local BLOCK_START = Read(2)
+	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: ClientPollEvent
 	local Value = {Enum = false, Nested = false} :: any
 	-- Value.Field: Field
-	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) then
+	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if bit32.btest(BITFIELD_1_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value.Field: Field
 		Value.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	end
 	-- Value.Float16Field: Float16Field
-	if bit32.btest(BITFIELD_0, 0x02) then
+	if bit32.btest(BITFIELD_1_0, 0x02) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Float16Field: Float16Field
@@ -653,7 +653,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 	do
 		-- Value.Enum: Enum
 		Value.Enum = true :: any
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+		local Index = bit32.extract(BITFIELD_1_0, 2, 2)
 		if Index == 0 then
 			Value.Enum = "A"
 		elseif Index == 1 then
@@ -669,7 +669,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 	-- Value.Nested: Nested
 	Value.Nested = {Guh = false, Array = false} :: any
 	-- Value.Nested.Guh: Guh
-	Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+	Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 	do
 		-- Value.Nested.Array: Array
 		-- START ARRAY
@@ -688,7 +688,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		-- END ARRAY
 	end
 	-- Value.Nested.OptionalArray: OptionalArray
-	if bit32.btest(BITFIELD_0, 0x04) then
+	if bit32.btest(BITFIELD_1_0, 0x10) then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
 		local Length = 2
@@ -709,22 +709,22 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 end
 
 function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
-	-- Read BLOCK: 3 bytes
-	local BLOCK_START = Read(3)
-	local BITFIELD_0
+	-- Read BLOCK: 2 bytes
+	local BLOCK_START = Read(2)
+	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: ClientUnreliablePollEvent
 	local Value = {Enum = false, Nested = false} :: any
 	-- Value.Field: Field
-	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) then
+	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if bit32.btest(BITFIELD_1_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value.Field: Field
 		Value.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	end
 	-- Value.Float16Field: Float16Field
-	if bit32.btest(BITFIELD_0, 0x02) then
+	if bit32.btest(BITFIELD_1_0, 0x02) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Float16Field: Float16Field
@@ -756,7 +756,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 	do
 		-- Value.Enum: Enum
 		Value.Enum = true :: any
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+		local Index = bit32.extract(BITFIELD_1_0, 2, 2)
 		if Index == 0 then
 			Value.Enum = "A"
 		elseif Index == 1 then
@@ -772,7 +772,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 	-- Value.Nested: Nested
 	Value.Nested = {Guh = false, Array = false} :: any
 	-- Value.Nested.Guh: Guh
-	Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+	Value.Nested.Guh = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 	do
 		-- Value.Nested.Array: Array
 		-- START ARRAY
@@ -791,7 +791,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		-- END ARRAY
 	end
 	-- Value.Nested.OptionalArray: OptionalArray
-	if bit32.btest(BITFIELD_0, 0x04) then
+	if bit32.btest(BITFIELD_1_0, 0x10) then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
 		local Length = 2
@@ -822,15 +822,15 @@ function SerdesFunctions.ReadEVENT_ClientEmptyUnreliablePollEvent(): (nil)
 end
 
 function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
-	-- Allocate BLOCK: 4 bytes
-	local BLOCK_START = Allocate(4)
-	local BITFIELD_0
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
+	local BITFIELD_1_0
 	-- EVENT_ServerPollEvent (2)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
 	-- Value: ServerPollEvent
 	-- Value.Field: Field
-	BITFIELD_0 = 0
-	if Value.Field ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value.Field ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value.Field ~= nil then
 		-- Allocate BLOCK: 1 bytes
 		local BLOCK_START = Allocate(1)
@@ -841,7 +841,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
 	end
 	-- Value.Float16Field: Float16Field
-	if Value.Float16Field ~= nil then BITFIELD_0 += 0x02 end
+	if Value.Float16Field ~= nil then BITFIELD_1_0 += 0x02 end
 	if Value.Float16Field ~= nil then
 		-- Allocate BLOCK: 2 bytes
 		local BLOCK_START = Allocate(2)
@@ -874,13 +874,12 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 	end
 	-- Value.Enum: Enum
 	if Value.Enum == "A" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 0)
 	elseif Value.Enum == "B" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
+		BITFIELD_1_0 += 4
 	elseif Value.Enum == "C" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 2)
+		BITFIELD_1_0 += 8
 	elseif Value.Enum == "D" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 3)
+		BITFIELD_1_0 += 12
 	else
 		error(`Unexpected enum: {Value.Enum}, expected one of "A" or "B" or "C" or "D".`)
 	end
@@ -889,7 +888,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 	if typeof(Value.Nested.Guh) ~= "number" then
 		error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value.Nested.Guh)
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Nested.Guh)
 	do
 		-- Value.Nested.Array: Array
 		-- START ARRAY
@@ -910,7 +909,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 		-- END ARRAY
 	end
 	-- Value.Nested.OptionalArray: OptionalArray
-	if Value.Nested.OptionalArray ~= nil then BITFIELD_0 += 0x04 end
+	if Value.Nested.OptionalArray ~= nil then BITFIELD_1_0 += 0x10 end
 	if Value.Nested.OptionalArray ~= nil then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
@@ -930,19 +929,19 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 		end
 		-- END ARRAY
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
-	-- Allocate BLOCK: 4 bytes
-	local BLOCK_START = Allocate(4)
-	local BITFIELD_0
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
+	local BITFIELD_1_0
 	-- EVENT_ServerUnreliablePollEvent (2)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
 	-- Value: ServerUnreliablePollEvent
 	-- Value.Field: Field
-	BITFIELD_0 = 0
-	if Value.Field ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value.Field ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value.Field ~= nil then
 		-- Allocate BLOCK: 1 bytes
 		local BLOCK_START = Allocate(1)
@@ -953,7 +952,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
 	end
 	-- Value.Float16Field: Float16Field
-	if Value.Float16Field ~= nil then BITFIELD_0 += 0x02 end
+	if Value.Float16Field ~= nil then BITFIELD_1_0 += 0x02 end
 	if Value.Float16Field ~= nil then
 		-- Allocate BLOCK: 2 bytes
 		local BLOCK_START = Allocate(2)
@@ -986,13 +985,12 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 	end
 	-- Value.Enum: Enum
 	if Value.Enum == "A" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 0)
 	elseif Value.Enum == "B" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
+		BITFIELD_1_0 += 4
 	elseif Value.Enum == "C" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 2)
+		BITFIELD_1_0 += 8
 	elseif Value.Enum == "D" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 3)
+		BITFIELD_1_0 += 12
 	else
 		error(`Unexpected enum: {Value.Enum}, expected one of "A" or "B" or "C" or "D".`)
 	end
@@ -1001,7 +999,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 	if typeof(Value.Nested.Guh) ~= "number" then
 		error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value.Nested.Guh)
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Nested.Guh)
 	do
 		-- Value.Nested.Array: Array
 		-- START ARRAY
@@ -1022,7 +1020,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 		-- END ARRAY
 	end
 	-- Value.Nested.OptionalArray: OptionalArray
-	if Value.Nested.OptionalArray ~= nil then BITFIELD_0 += 0x04 end
+	if Value.Nested.OptionalArray ~= nil then BITFIELD_1_0 += 0x10 end
 	if Value.Nested.OptionalArray ~= nil then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
@@ -1042,7 +1040,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 		end
 		-- END ARRAY
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 function SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value: nil): ()
@@ -1309,11 +1307,12 @@ end
 function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
+	local BITFIELD_1_0
 	-- EVENT_PlayerEvent (13)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 13)
 	-- Value: PlayerEvent
+	BITFIELD_1_0 = 0
 	if Value.Type == "Join" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 1, 0)
 		-- Allocate BLOCK: 8 bytes
 		local BLOCK_START = Allocate(8)
 		-- Value: Join
@@ -1334,9 +1333,9 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 		end
 		buffer.writef64(SendBuffer, BLOCK_START + 0, Value.UserId)
 	elseif Value.Type == "Chat" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 1, 1)
 		-- Allocate BLOCK: 8 bytes
 		local BLOCK_START = Allocate(8)
+		BITFIELD_1_0 += 1
 		-- Value: Chat
 		-- Value.UserId: UserId
 		if typeof(Value.UserId) ~= "number" then
@@ -1355,9 +1354,9 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 			buffer.writestring(SendBuffer, SendOffset, Value.Message, Length)
 		end
 	elseif Value.Type == "Leave" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 1, 2)
 		-- Allocate BLOCK: 8 bytes
 		local BLOCK_START = Allocate(8)
+		BITFIELD_1_0 += 2
 		-- Value: Leave
 		-- Value.UserId: UserId
 		if typeof(Value.UserId) ~= "number" then
@@ -1367,6 +1366,7 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 	else
 		error(`Unexpected variant: {Value.Type}`)
 	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
@@ -1523,50 +1523,52 @@ end
 function SerdesFunctions.WriteEVENT_MapReferenceEvent(Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	-- EVENT_MapReferenceEvent (19)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 19)
 	-- Value: MapReferenceEvent
-	BITFIELD_0 = 0
-	if Value ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value ~= nil then
 		-- Allocate BLOCK: 2 bytes
 		local BLOCK_START = Allocate(2)
 		-- Value: MapReference
 		local Elements_2 = 0
 		for Key_2, Element_2 in Value do
+			local BITFIELD_3_0_OFFSET
+			local BITFIELD_3_0
 			Elements_2 += 1
 			-- Key_2: MapReference
 			local OFFSET_0 = Allocate(1)
+			BITFIELD_3_0 = 0
+			BITFIELD_3_0_OFFSET = OFFSET_0
 			if Key_2 == "A" then
-				buffer.writeu8(SendBuffer, OFFSET_0, 0)
 			elseif Key_2 == "B" then
-				buffer.writeu8(SendBuffer, OFFSET_0, 1)
+				BITFIELD_3_0 += 1
 			elseif Key_2 == "C" then
-				buffer.writeu8(SendBuffer, OFFSET_0, 2)
+				BITFIELD_3_0 += 2
 			elseif Key_2 == "D" then
-				buffer.writeu8(SendBuffer, OFFSET_0, 3)
+				BITFIELD_3_0 += 3
 			else
 				error(`Unexpected enum: {Key_2}, expected one of "A" or "B" or "C" or "D".`)
 			end
 			-- Element_2: MapReference
-			local OFFSET_1 = Allocate(1)
 			if Element_2 == "A" then
-				buffer.writeu8(SendBuffer, OFFSET_1, 0)
 			elseif Element_2 == "B" then
-				buffer.writeu8(SendBuffer, OFFSET_1, 1)
+				BITFIELD_3_0 += 4
 			elseif Element_2 == "C" then
-				buffer.writeu8(SendBuffer, OFFSET_1, 2)
+				BITFIELD_3_0 += 8
 			elseif Element_2 == "D" then
-				buffer.writeu8(SendBuffer, OFFSET_1, 3)
+				BITFIELD_3_0 += 12
 			else
 				error(`Unexpected enum: {Element_2}, expected one of "A" or "B" or "C" or "D".`)
 			end
+			buffer.writeu8(SendBuffer, BITFIELD_3_0_OFFSET, BITFIELD_3_0)
 		end
 		if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
 		buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_2)
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 function SerdesFunctions.WriteEVENT_ArrayPrimitive(Value: { number }): ()
@@ -1596,12 +1598,12 @@ end
 function SerdesFunctions.WriteEVENT_OptionalPrimitive(Value: number?): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	-- EVENT_OptionalPrimitive (7)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 7)
 	-- Value: OptionalPrimitive
-	BITFIELD_0 = 0
-	if Value ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value ~= nil then
 		-- Allocate BLOCK: 1 bytes
 		local BLOCK_START = Allocate(1)
@@ -1611,7 +1613,7 @@ function SerdesFunctions.WriteEVENT_OptionalPrimitive(Value: number?): ()
 		end
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 function SerdesFunctions.WriteEVENT_ManyReliableSync(Value: number): ()
@@ -1769,20 +1771,20 @@ end
 function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	-- EVENT_Reference (28)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 28)
 	-- Value: Reference
-	BITFIELD_0 = 0
-	if Value ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value ~= nil then
-		-- Allocate BLOCK: 3 bytes
-		local BLOCK_START = Allocate(3)
-		local BITFIELD_0
+		-- Allocate BLOCK: 2 bytes
+		local BLOCK_START = Allocate(2)
+		local BITFIELD_2_0
 		-- Value: Reference
 		-- Value.Field: Field
-		BITFIELD_0 = 0
-		if Value.Field ~= nil then BITFIELD_0 += 0x01 end
+		BITFIELD_2_0 = 0
+		if Value.Field ~= nil then BITFIELD_2_0 += 0x01 end
 		if Value.Field ~= nil then
 			-- Allocate BLOCK: 1 bytes
 			local BLOCK_START = Allocate(1)
@@ -1793,7 +1795,7 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
 		end
 		-- Value.Float16Field: Float16Field
-		if Value.Float16Field ~= nil then BITFIELD_0 += 0x02 end
+		if Value.Float16Field ~= nil then BITFIELD_2_0 += 0x02 end
 		if Value.Float16Field ~= nil then
 			-- Allocate BLOCK: 2 bytes
 			local BLOCK_START = Allocate(2)
@@ -1826,13 +1828,12 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 		end
 		-- Value.Enum: Enum
 		if Value.Enum == "A" then
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, 0)
 		elseif Value.Enum == "B" then
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, 1)
+			BITFIELD_2_0 += 4
 		elseif Value.Enum == "C" then
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, 2)
+			BITFIELD_2_0 += 8
 		elseif Value.Enum == "D" then
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, 3)
+			BITFIELD_2_0 += 12
 		else
 			error(`Unexpected enum: {Value.Enum}, expected one of "A" or "B" or "C" or "D".`)
 		end
@@ -1841,7 +1842,7 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 		if typeof(Value.Nested.Guh) ~= "number" then
 			error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
 		end
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Nested.Guh)
+		buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Nested.Guh)
 		do
 			-- Value.Nested.Array: Array
 			-- START ARRAY
@@ -1862,7 +1863,7 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 			-- END ARRAY
 		end
 		-- Value.Nested.OptionalArray: OptionalArray
-		if Value.Nested.OptionalArray ~= nil then BITFIELD_0 += 0x04 end
+		if Value.Nested.OptionalArray ~= nil then BITFIELD_2_0 += 0x10 end
 		if Value.Nested.OptionalArray ~= nil then
 			-- Value.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
@@ -1882,9 +1883,9 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 			end
 			-- END ARRAY
 		end
-		buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+		buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_2_0)
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
@@ -1895,10 +1896,10 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 	-- Value: ReferenceArray
 	-- START ARRAY
 	if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
-		-- Allocate BLOCK: 3 bytes
-	local ARRAY_START_1 = Allocate(3 * 8)
-	local BITFIELD_0_OFFSET
-	local BITFIELD_0
+		-- Allocate BLOCK: 2 bytes
+	local ARRAY_START_1 = Allocate(2 * 8)
+	local BITFIELD_2_0_OFFSET
+	local BITFIELD_2_0
 	for Index = 1, 8 do
 		local Item_1 = Value[Index]
 		-- Item_1: ReferenceArray
@@ -1907,9 +1908,9 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 			-- Allocate 1
 			local OPERATION_OFFSET_0 = ARRAY_START_1
 			ARRAY_START_1 += 1
-			BITFIELD_0 = 0
-			BITFIELD_0_OFFSET = OPERATION_OFFSET_0
-			if Item_1.Field ~= nil then BITFIELD_0 += 0x01 end
+			BITFIELD_2_0 = 0
+			BITFIELD_2_0_OFFSET = OPERATION_OFFSET_0
+			if Item_1.Field ~= nil then BITFIELD_2_0 += 0x01 end
 			if Item_1.Field ~= nil then
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
@@ -1921,7 +1922,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 			end
 		end
 		-- Item_1.Float16Field: Float16Field
-		if Item_1.Float16Field ~= nil then BITFIELD_0 += 0x02 end
+		if Item_1.Float16Field ~= nil then BITFIELD_2_0 += 0x02 end
 		if Item_1.Float16Field ~= nil then
 			-- Allocate BLOCK: 2 bytes
 			local BLOCK_START = Allocate(2)
@@ -1952,22 +1953,16 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
 			end
 		end
-		do
-			-- Item_1.Enum: Enum
-			-- Allocate 1
-			local OPERATION_OFFSET_1 = ARRAY_START_1
-			ARRAY_START_1 += 1
-			if Item_1.Enum == "A" then
-				buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, 0)
-			elseif Item_1.Enum == "B" then
-				buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, 1)
-			elseif Item_1.Enum == "C" then
-				buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, 2)
-			elseif Item_1.Enum == "D" then
-				buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, 3)
-			else
-				error(`Unexpected enum: {Item_1.Enum}, expected one of "A" or "B" or "C" or "D".`)
-			end
+		-- Item_1.Enum: Enum
+		if Item_1.Enum == "A" then
+		elseif Item_1.Enum == "B" then
+			BITFIELD_2_0 += 4
+		elseif Item_1.Enum == "C" then
+			BITFIELD_2_0 += 8
+		elseif Item_1.Enum == "D" then
+			BITFIELD_2_0 += 12
+		else
+			error(`Unexpected enum: {Item_1.Enum}, expected one of "A" or "B" or "C" or "D".`)
 		end
 		-- Item_1.Nested: Nested
 		do
@@ -1976,9 +1971,9 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 				error(`Expected Item_1.Nested.Guh to be of type number, got {type(Item_1.Nested.Guh)} instead.`)
 			end
 			-- Allocate 1
-			local OPERATION_OFFSET_2 = ARRAY_START_1
+			local OPERATION_OFFSET_1 = ARRAY_START_1
 			ARRAY_START_1 += 1
-			buffer.writeu8(SendBuffer, OPERATION_OFFSET_2, Item_1.Nested.Guh)
+			buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, Item_1.Nested.Guh)
 		end
 		do
 			-- Item_1.Nested.Array: Array
@@ -2000,7 +1995,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 			-- END ARRAY
 		end
 		-- Item_1.Nested.OptionalArray: OptionalArray
-		if Item_1.Nested.OptionalArray ~= nil then BITFIELD_0 += 0x04 end
+		if Item_1.Nested.OptionalArray ~= nil then BITFIELD_2_0 += 0x10 end
 		if Item_1.Nested.OptionalArray ~= nil then
 			-- Item_1.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
@@ -2020,7 +2015,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 			end
 			-- END ARRAY
 		end
-		buffer.writeu8(SendBuffer, BITFIELD_0_OFFSET, BITFIELD_0)
+		buffer.writeu8(SendBuffer, BITFIELD_2_0_OFFSET, BITFIELD_2_0)
 	end
 	-- END ARRAY
 end
@@ -2028,20 +2023,20 @@ end
 function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	-- EVENT_ReferenceOptional (30)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 30)
 	-- Value: ReferenceOptional
-	BITFIELD_0 = 0
-	if Value ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value ~= nil then
-		-- Allocate BLOCK: 3 bytes
-		local BLOCK_START = Allocate(3)
-		local BITFIELD_0
+		-- Allocate BLOCK: 2 bytes
+		local BLOCK_START = Allocate(2)
+		local BITFIELD_2_0
 		-- Value: ReferenceOptional
 		-- Value.Field: Field
-		BITFIELD_0 = 0
-		if Value.Field ~= nil then BITFIELD_0 += 0x01 end
+		BITFIELD_2_0 = 0
+		if Value.Field ~= nil then BITFIELD_2_0 += 0x01 end
 		if Value.Field ~= nil then
 			-- Allocate BLOCK: 1 bytes
 			local BLOCK_START = Allocate(1)
@@ -2052,7 +2047,7 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
 		end
 		-- Value.Float16Field: Float16Field
-		if Value.Float16Field ~= nil then BITFIELD_0 += 0x02 end
+		if Value.Float16Field ~= nil then BITFIELD_2_0 += 0x02 end
 		if Value.Float16Field ~= nil then
 			-- Allocate BLOCK: 2 bytes
 			local BLOCK_START = Allocate(2)
@@ -2085,13 +2080,12 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 		end
 		-- Value.Enum: Enum
 		if Value.Enum == "A" then
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, 0)
 		elseif Value.Enum == "B" then
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, 1)
+			BITFIELD_2_0 += 4
 		elseif Value.Enum == "C" then
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, 2)
+			BITFIELD_2_0 += 8
 		elseif Value.Enum == "D" then
-			buffer.writeu8(SendBuffer, BLOCK_START + 1, 3)
+			BITFIELD_2_0 += 12
 		else
 			error(`Unexpected enum: {Value.Enum}, expected one of "A" or "B" or "C" or "D".`)
 		end
@@ -2100,7 +2094,7 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 		if typeof(Value.Nested.Guh) ~= "number" then
 			error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
 		end
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Nested.Guh)
+		buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Nested.Guh)
 		do
 			-- Value.Nested.Array: Array
 			-- START ARRAY
@@ -2121,7 +2115,7 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 			-- END ARRAY
 		end
 		-- Value.Nested.OptionalArray: OptionalArray
-		if Value.Nested.OptionalArray ~= nil then BITFIELD_0 += 0x04 end
+		if Value.Nested.OptionalArray ~= nil then BITFIELD_2_0 += 0x10 end
 		if Value.Nested.OptionalArray ~= nil then
 			-- Value.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
@@ -2141,9 +2135,9 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 			end
 			-- END ARRAY
 		end
-		buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+		buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_2_0)
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 function SerdesFunctions.ReadFUNCTION_DATA_RemoteFunction(): (number)
@@ -2170,9 +2164,9 @@ function SerdesFunctions.WriteFUNCTION_RETURN_RemoteFunction(Value: number, Invo
 end
 
 function SerdesFunctions.WriteEVENT_Tuple(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-	-- Allocate BLOCK: 4 bytes
-	local BLOCK_START = Allocate(4)
-	local BITFIELD_0
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
+	local BITFIELD_1_0
 	-- EVENT_Tuple (32)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 32)
 	-- Value: Tuple
@@ -2182,20 +2176,19 @@ function SerdesFunctions.WriteEVENT_Tuple(Value1: number, Value2: ("A" | "B" | "
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value1)
 	-- Value2: Tuple
+	BITFIELD_1_0 = 0
 	if Value2 == "A" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 0)
 	elseif Value2 == "B" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
+		BITFIELD_1_0 += 1
 	elseif Value2 == "C" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 2)
+		BITFIELD_1_0 += 2
 	elseif Value2 == "D" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 3)
+		BITFIELD_1_0 += 3
 	else
 		error(`Unexpected enum: {Value2}, expected one of "A" or "B" or "C" or "D".`)
 	end
 	-- Value3: Tuple
-	BITFIELD_0 = 0
-	if Value3 ~= nil then BITFIELD_0 += 0x01 end
+	if Value3 ~= nil then BITFIELD_1_0 += 0x04 end
 	if Value3 ~= nil then
 		-- Allocate BLOCK: 2 bytes
 		local BLOCK_START = Allocate(2)
@@ -2233,13 +2226,13 @@ function SerdesFunctions.WriteEVENT_Tuple(Value1: number, Value2: ("A" | "B" | "
 		buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
 	end
 	-- END ARRAY
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_1_0)
 end
 
 function SerdesFunctions.WriteEVENT_TupleUnreliable(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-	-- Allocate BLOCK: 4 bytes
-	local BLOCK_START = Allocate(4)
-	local BITFIELD_0
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
+	local BITFIELD_1_0
 	-- EVENT_TupleUnreliable (13)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 13)
 	-- Value: TupleUnreliable
@@ -2249,20 +2242,19 @@ function SerdesFunctions.WriteEVENT_TupleUnreliable(Value1: number, Value2: ("A"
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value1)
 	-- Value2: TupleUnreliable
+	BITFIELD_1_0 = 0
 	if Value2 == "A" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 0)
 	elseif Value2 == "B" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
+		BITFIELD_1_0 += 1
 	elseif Value2 == "C" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 2)
+		BITFIELD_1_0 += 2
 	elseif Value2 == "D" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 2, 3)
+		BITFIELD_1_0 += 3
 	else
 		error(`Unexpected enum: {Value2}, expected one of "A" or "B" or "C" or "D".`)
 	end
 	-- Value3: TupleUnreliable
-	BITFIELD_0 = 0
-	if Value3 ~= nil then BITFIELD_0 += 0x01 end
+	if Value3 ~= nil then BITFIELD_1_0 += 0x04 end
 	if Value3 ~= nil then
 		-- Allocate BLOCK: 2 bytes
 		local BLOCK_START = Allocate(2)
@@ -2283,20 +2275,21 @@ function SerdesFunctions.WriteEVENT_TupleUnreliable(Value1: number, Value2: ("A"
 		if typeof(Value5) ~= "Instance" then error(`Expected an Instance, got {typeof(Value5)} instead.`) end
 	end
 	table.insert(SendInstances, Value5 or Null)
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_1_0)
 end
 
 function SerdesFunctions.ReadFUNCTION_DATA_TupleFunction(): (number, ("A" | "B" | "C" | "D"), number?, Instance, Instance?)
-	-- Read BLOCK: 3 bytes
-	local BLOCK_START = Read(3)
-	local BITFIELD_0
+	-- Read BLOCK: 2 bytes
+	local BLOCK_START = Read(2)
+	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: TupleFunction
 	-- Value1: TupleFunction
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	-- Value2: TupleFunction
 	local Value2 = true :: any
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	local Index = bit32.extract(BITFIELD_1_0, 0, 2)
 	if Index == 0 then
 		Value2 = "A"
 	elseif Index == 1 then
@@ -2310,8 +2303,7 @@ function SerdesFunctions.ReadFUNCTION_DATA_TupleFunction(): (number, ("A" | "B" 
 	end
 	-- Value3: TupleFunction
 	local Value3
-	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-	if bit32.btest(BITFIELD_0, 0x01) then
+	if bit32.btest(BITFIELD_1_0, 0x04) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value3: TupleFunction
@@ -2335,9 +2327,9 @@ function SerdesFunctions.ReadFUNCTION_DATA_TupleFunction(): (number, ("A" | "B" 
 end
 
 function SerdesFunctions.WriteFUNCTION_RETURN_TupleFunction(Value1: Instance?, Value2: Instance, Value3: number?, Value4: ("A" | "B" | "C" | "D"), Value5: number, InvocationIdentifier: number): ()
-	-- Allocate BLOCK: 6 bytes
-	local BLOCK_START = Allocate(6)
-	local BITFIELD_0
+	-- Allocate BLOCK: 5 bytes
+	local BLOCK_START = Allocate(5)
+	local BITFIELD_1_0
 	-- FUNCTION_RETURN_TupleFunction (33)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 33)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
@@ -2355,8 +2347,8 @@ function SerdesFunctions.WriteFUNCTION_RETURN_TupleFunction(Value1: Instance?, V
 	end
 	table.insert(SendInstances, Value2 or Null)
 	-- Value3: TupleFunction
-	BITFIELD_0 = 0
-	if Value3 ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value3 ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value3 ~= nil then
 		-- Allocate BLOCK: 2 bytes
 		local BLOCK_START = Allocate(2)
@@ -2368,13 +2360,12 @@ function SerdesFunctions.WriteFUNCTION_RETURN_TupleFunction(Value1: Instance?, V
 	end
 	-- Value4: TupleFunction
 	if Value4 == "A" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 4, 0)
 	elseif Value4 == "B" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 4, 1)
+		BITFIELD_1_0 += 2
 	elseif Value4 == "C" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 4, 2)
+		BITFIELD_1_0 += 4
 	elseif Value4 == "D" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 4, 3)
+		BITFIELD_1_0 += 6
 	else
 		error(`Unexpected enum: {Value4}, expected one of "A" or "B" or "C" or "D".`)
 	end
@@ -2382,8 +2373,8 @@ function SerdesFunctions.WriteFUNCTION_RETURN_TupleFunction(Value1: Instance?, V
 	if typeof(Value5) ~= "number" then
 		error(`Expected Value5 to be of type number, got {type(Value5)} instead.`)
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 5, Value5)
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 4, Value5)
+	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
 end
 
 function SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value: number): ()
@@ -2838,6 +2829,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Standalone)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local BITFIELD_1_0
 				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
@@ -2849,7 +2841,8 @@ if not RunService:IsRunning() then
 				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 				do
 					-- Value.Event: Event
-					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					local Tag = bit32.extract(BITFIELD_1_0, 0, 2)
 					Value.Event = true :: any
 					if Tag == 0 then
 						-- Read BLOCK: 8 bytes
@@ -2921,6 +2914,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
+				local BITFIELD_1_0
 				-- Value: Standalone
 				-- Value.One: One
 				if typeof(Value.One) ~= "number" then
@@ -2938,8 +2932,8 @@ if not RunService:IsRunning() then
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
 				-- Value.Event: Event
+				BITFIELD_1_0 = 0
 				if Value.Event.Type == "Join" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
 					-- Allocate BLOCK: 8 bytes
 					local BLOCK_START = Allocate(8)
 					-- Value.Event: Join
@@ -2960,9 +2954,9 @@ if not RunService:IsRunning() then
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				elseif Value.Event.Type == "Chat" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
 					-- Allocate BLOCK: 8 bytes
 					local BLOCK_START = Allocate(8)
+					BITFIELD_1_0 += 1
 					-- Value.Event: Chat
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -2981,9 +2975,9 @@ if not RunService:IsRunning() then
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
 				elseif Value.Event.Type == "Leave" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
 					-- Allocate BLOCK: 8 bytes
 					local BLOCK_START = Allocate(8)
+					BITFIELD_1_0 += 2
 					-- Value.Event: Leave
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -3016,6 +3010,7 @@ if not RunService:IsRunning() then
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -4651,6 +4646,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Standalone)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local BITFIELD_1_0
 				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
@@ -4662,7 +4658,8 @@ local Returns = table.freeze({
 				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 				do
 					-- Value.Event: Event
-					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					local Tag = bit32.extract(BITFIELD_1_0, 0, 2)
 					Value.Event = true :: any
 					if Tag == 0 then
 						-- Read BLOCK: 8 bytes
@@ -4734,6 +4731,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
+				local BITFIELD_1_0
 				-- Value: Standalone
 				-- Value.One: One
 				if typeof(Value.One) ~= "number" then
@@ -4751,8 +4749,8 @@ local Returns = table.freeze({
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
 				-- Value.Event: Event
+				BITFIELD_1_0 = 0
 				if Value.Event.Type == "Join" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
 					-- Allocate BLOCK: 8 bytes
 					local BLOCK_START = Allocate(8)
 					-- Value.Event: Join
@@ -4773,9 +4771,9 @@ local Returns = table.freeze({
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				elseif Value.Event.Type == "Chat" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
 					-- Allocate BLOCK: 8 bytes
 					local BLOCK_START = Allocate(8)
+					BITFIELD_1_0 += 1
 					-- Value.Event: Chat
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -4794,9 +4792,9 @@ local Returns = table.freeze({
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
 				elseif Value.Event.Type == "Leave" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
 					-- Allocate BLOCK: 8 bytes
 					local BLOCK_START = Allocate(8)
+					BITFIELD_1_0 += 2
 					-- Value.Event: Leave
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -4829,6 +4827,7 @@ local Returns = table.freeze({
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result

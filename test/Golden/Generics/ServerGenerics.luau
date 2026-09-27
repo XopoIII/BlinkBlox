@@ -546,6 +546,7 @@ export type Entity = { id: number, pos: Vector3, angle: number }
 function SerdesFunctions.ReadEVENT_Snapshot(): ({ Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } })
 	-- Read BLOCK: 5 bytes
 	local BLOCK_START = Read(5)
+	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: Snapshot
 	local Value = {Sequence = false, Ack = false, Data = false} :: any
@@ -555,7 +556,8 @@ function SerdesFunctions.ReadEVENT_Snapshot(): ({ Sequence: number, Ack: number,
 	Value.Ack = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
 	do
 		-- Value.Data: Data
-		local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
+		BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
+		local Tag = bit32.extract(BITFIELD_1_0, 0, 1)
 		Value.Data = true :: any
 		if Tag == 0 then
 			-- Read BLOCK: 15 bytes

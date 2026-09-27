@@ -640,13 +640,13 @@ end
 function SerdesFunctions.ReadEVENT_Trust(): ({ Gap: number, Bucket: number }?, number)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: Trust
 	-- Value1: Trust
 	local Value1
-	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) then
+	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if bit32.btest(BITFIELD_1_0, 0x01) then
 		-- Read BLOCK: 8 bytes
 		local BLOCK_START = Read(8)
 		-- Value1: Trust

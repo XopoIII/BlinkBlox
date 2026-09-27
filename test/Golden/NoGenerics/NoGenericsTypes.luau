@@ -959,6 +959,7 @@ return {
 			local Success, Result = pcall(function (): (Standalone)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local BITFIELD_1_0
 				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
@@ -970,7 +971,8 @@ return {
 				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 				do
 					-- Value.Event: Event
-					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					local Tag = bit32.extract(BITFIELD_1_0, 0, 2)
 					Value.Event = true :: any
 					if Tag == 0 then
 						-- Read BLOCK: 8 bytes
@@ -1042,6 +1044,7 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
+				local BITFIELD_1_0
 				-- Value: Standalone
 				-- Value.One: One
 				if typeof(Value.One) ~= "number" then
@@ -1059,8 +1062,8 @@ return {
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
 				-- Value.Event: Event
+				BITFIELD_1_0 = 0
 				if Value.Event.Type == "Join" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
 					-- Allocate BLOCK: 8 bytes
 					local BLOCK_START = Allocate(8)
 					-- Value.Event: Join
@@ -1081,9 +1084,9 @@ return {
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				elseif Value.Event.Type == "Chat" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
 					-- Allocate BLOCK: 8 bytes
 					local BLOCK_START = Allocate(8)
+					BITFIELD_1_0 += 1
 					-- Value.Event: Chat
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -1102,9 +1105,9 @@ return {
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
 				elseif Value.Event.Type == "Leave" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
 					-- Allocate BLOCK: 8 bytes
 					local BLOCK_START = Allocate(8)
+					BITFIELD_1_0 += 2
 					-- Value.Event: Leave
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -1137,6 +1140,7 @@ return {
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result

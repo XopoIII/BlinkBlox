@@ -606,15 +606,15 @@ end
 function SerdesFunctions.WriteFUNCTION_RETURN_Confirm(Value: boolean, InvocationIdentifier: number): ()
 	-- Allocate BLOCK: 4 bytes
 	local BLOCK_START = Allocate(4)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	-- FUNCTION_RETURN_Confirm (3)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
 	buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
 	-- Value: Confirm
-	BITFIELD_0 = 0
-	if Value then BITFIELD_0 += 0x01 end
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_0)
+	BITFIELD_1_0 = 0
+	if Value then BITFIELD_1_0 += 0x01 end
+	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
 end
 
 local CONNECT_TIMEOUT = 2.5

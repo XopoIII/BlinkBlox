@@ -10,6 +10,7 @@
 local Parser = require("../Parser")
 local Size = require("../Modules/Size")
 
+local Bits = require("./Bits")
 local Blocks = require("./Blocks")
 local Prefabs = require("./Prefabs")
 local Scope = require("./Scope")
@@ -105,9 +106,13 @@ function Serde.Enum(Declaration: Parser.Enum, Read: Blocks.Block, Write: Blocks.
 	local Literal = Util.GenerateEnumLiterals(Enums)
 	Literal = string.gsub(Literal, "|", "or")
 
+	--> The index takes the bits that tell the values apart, in the block's bitfield beside its
+	--> booleans and presence flags, where it took a byte of its own.
+	local Width = Bits.Width(#Enums)
+
 	--> Read body
 	Read:Line(`{Read:Declare(Variable)} = true :: any`)
-	Types.u8.Read(`Index`, Read)
+	Bits.Read(Read, "Index", Width)
 	Read = Read:Compare("Index", "0", "Equals")
 	for Index, EnumItem in Enums do
 		if Index > 1 then
@@ -118,8 +123,8 @@ function Serde.Enum(Declaration: Parser.Enum, Read: Blocks.Block, Write: Blocks.
 	end
 	Read:Branch("Default"):Line(`error(\`Unexpected enum: \{Index\}\`)`):End()
 
-	--> Write body
-	local Allocation = Write:Allocate(1)
+	--> Write body. Each branch adds its own index, worked out now, to the bytes it lands in.
+	local Segments = Bits.Claim(Write, "Allocate", Width)
 	for Index, EnumItem in Enums do
 		if Index == 1 then
 			Write = Write:Compare(Variable, `"{EnumItem}"`, "Equals")
@@ -127,7 +132,7 @@ function Serde.Enum(Declaration: Parser.Enum, Read: Blocks.Block, Write: Blocks.
 			Write = Write:Branch("Conditional", Variable, `"{EnumItem}"`, "Equals")
 		end
 
-		Write:Line(`buffer.writeu8(SendBuffer, {Allocation}, {Index - 1})`)
+		Bits.WriteConstant(Write, Segments, Index - 1)
 	end
 	Write:Branch("Default"):Line(`error(\`Unexpected enum: \{{Variable}\}, expected one of {Literal}.\`)`):End()
 end
@@ -216,10 +221,13 @@ function Serde.TagEnum(Declaration: Parser.TagEnum, Read: Blocks.Block, Write: B
 	local Header = `"{Values[1].Name}"`
 	local TagIndex = `{Variable}{FormatIndex(Tag)}`
 
-	Types.u8.Read(`Tag`, Read)
+	--> The tag takes the bits that tell the variants apart, in the enclosing block's bitfield. Each
+	--> variant's own fields are generated into its branch, a block of its own.
+	local Width = Bits.Width(#Values)
+	Bits.Read(Read, "Tag", Width)
 	Read:Line(`{Read:Declare(Variable)} = true :: any`)
 
-	local Allocation = Write:Allocate(1)
+	local Segments = Bits.Claim(Write, "Allocate", Width)
 
 	Read = Read:Compare("Tag", "0", "Equals")
 	Write = Write:Compare(TagIndex, Header, "Equals")
@@ -231,8 +239,7 @@ function Serde.TagEnum(Declaration: Parser.TagEnum, Read: Blocks.Block, Write: B
 			Write = Write:Branch("Conditional", TagIndex, Name, "Equals")
 		end
 
-		Write:_lineFront(`buffer.writeu8(SendBuffer, {Allocation}, {Index - 1})`)
-		Write:Advance(1)
+		Bits.WriteConstant(Write, Segments, Index - 1)
 
 		Serde.Emit(Variant, Read, Write, Variable)
 		Read:Line(`{TagIndex} = {Name}`)

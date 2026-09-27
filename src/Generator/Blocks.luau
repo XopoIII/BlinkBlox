@@ -215,7 +215,9 @@ function Block.Bit(self: Block, Method: Method): (string, string)
 		self:_flushBits()
 
 		local Offset = self:_operation(Method, 1)
-		local Accumulator = `BITFIELD_{self.BitCount}`
+		--> Named for the block's depth as well: a tagged enum's branch declares bitfields of its own and
+		--> writes the tag into its parent's, which a name the two shared would shadow.
+		local Accumulator = `BITFIELD_{self.Indent}_{self.BitCount}`
 
 		--> Declared at the top of the block: the fields that share this byte may each sit in a scope of
 		--> their own (see Scope.luau), and the byte is written out after the last of them.

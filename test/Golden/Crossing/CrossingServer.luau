@@ -580,13 +580,13 @@ export type Crawl = { Id: number, Speed: number, Heat: number }
 function SerdesFunctions.WriteEVENT_Crawls(Value1: { { Id: number, Speed: number, Heat: number } }?, Value2: number): ()
 	-- Allocate BLOCK: 4 bytes
 	local BLOCK_START = Allocate(4)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	-- EVENT_Crawls (0)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
 	-- Value: Crawls
 	-- Value1: Crawls
-	BITFIELD_0 = 0
-	if Value1 ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value1 ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value1 ~= nil then
 		-- Allocate BLOCK: 1 bytes
 		local BLOCK_START = Allocate(1)
@@ -628,19 +628,19 @@ function SerdesFunctions.WriteEVENT_Crawls(Value1: { { Id: number, Speed: number
 	end
 	-- Value2: Crawls
 	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 function SerdesFunctions.WriteEVENT_Tick(Value1: number?, Value2: number): ()
 	-- Allocate BLOCK: 4 bytes
 	local BLOCK_START = Allocate(4)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	-- EVENT_Tick (1)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
 	-- Value: Tick
 	-- Value1: Tick
-	BITFIELD_0 = 0
-	if Value1 ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value1 ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value1 ~= nil then
 		-- Allocate BLOCK: 2 bytes
 		local BLOCK_START = Allocate(2)
@@ -651,7 +651,7 @@ function SerdesFunctions.WriteEVENT_Tick(Value1: number?, Value2: number): ()
 	end
 	-- Value2: Tick
 	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 function SerdesFunctions.ReadEVENT_Ready(): (number)

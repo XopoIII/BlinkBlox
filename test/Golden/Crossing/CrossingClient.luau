@@ -584,13 +584,13 @@ export type Crawl = { Id: number, Speed: number, Heat: number }
 function SerdesFunctions.ReadEVENT_Crawls(): ({ { Id: number, Speed: number, Heat: number } }?, number)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: Crawls
 	-- Value1: Crawls
 	local Value1
-	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) then
+	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if bit32.btest(BITFIELD_1_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value1: Crawls
@@ -643,13 +643,13 @@ end
 function SerdesFunctions.ReadEVENT_Tick(): (number?, number)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: Tick
 	-- Value1: Tick
 	local Value1
-	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) then
+	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if bit32.btest(BITFIELD_1_0, 0x01) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value1: Tick

@@ -545,6 +545,7 @@ export type Entity = { id: number, pos: Vector3, angle: number }
 function SerdesFunctions.WriteEVENT_Snapshot(Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }): ()
 	-- Allocate BLOCK: 6 bytes
 	local BLOCK_START = Allocate(6)
+	local BITFIELD_1_0
 	-- EVENT_Snapshot (0)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
 	-- Value: Snapshot
@@ -553,8 +554,8 @@ function SerdesFunctions.WriteEVENT_Snapshot(Value: { Sequence: number, Ack: num
 	-- Value.Ack: Ack
 	buffer.writeu16(SendBuffer, BLOCK_START + 3, Value.Ack)
 	-- Value.Data: Data
+	BITFIELD_1_0 = 0
 	if Value.Data.Type == "Single" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 5, 0)
 		-- Allocate BLOCK: 15 bytes
 		local BLOCK_START = Allocate(15)
 		-- Value.Data: Single
@@ -571,9 +572,9 @@ function SerdesFunctions.WriteEVENT_Snapshot(Value: { Sequence: number, Ack: num
 		-- Value.Data.Data.angle: angle
 		buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.Data.Data.angle)
 	elseif Value.Data.Type == "Fragment" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 5, 1)
 		-- Allocate BLOCK: 17 bytes
 		local BLOCK_START = Allocate(17)
+		BITFIELD_1_0 += 1
 		-- Value.Data: Fragment
 		-- Value.Data.Fragment: Fragment
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Data.Fragment)
@@ -594,6 +595,7 @@ function SerdesFunctions.WriteEVENT_Snapshot(Value: { Sequence: number, Ack: num
 	else
 		error(`Unexpected variant: {Value.Data.Type}`)
 	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 5, BITFIELD_1_0)
 end
 
 if not RunService:IsRunning() then

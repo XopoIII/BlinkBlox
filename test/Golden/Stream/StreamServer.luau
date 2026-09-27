@@ -589,13 +589,13 @@ export type Head = { Id: number, Head: Vector3, Back: boolean }
 function SerdesFunctions.WriteEVENT_Heads(Value1: { { Id: number, Head: Vector3, Back: boolean } }?, Value2: number): ()
 	-- Allocate BLOCK: 4 bytes
 	local BLOCK_START = Allocate(4)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	-- EVENT_Heads (0)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
 	-- Value: Heads
 	-- Value1: Heads
-	BITFIELD_0 = 0
-	if Value1 ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value1 ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value1 ~= nil then
 		-- Allocate BLOCK: 1 bytes
 		local BLOCK_START = Allocate(1)
@@ -605,8 +605,8 @@ function SerdesFunctions.WriteEVENT_Heads(Value1: { { Id: number, Head: Vector3,
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, #Value1)
 			-- Allocate BLOCK: 11 bytes
 		local ARRAY_START_2 = Allocate(11 * #Value1)
-		local BITFIELD_0_OFFSET
-		local BITFIELD_0
+		local BITFIELD_3_0_OFFSET
+		local BITFIELD_3_0
 		for Index = 1, #Value1 do
 			local Item_2 = Value1[Index]
 			-- Item_2: Heads
@@ -689,17 +689,17 @@ function SerdesFunctions.WriteEVENT_Heads(Value1: { { Id: number, Head: Vector3,
 				-- Allocate 1
 				local OPERATION_OFFSET_4 = ARRAY_START_2
 				ARRAY_START_2 += 1
-				BITFIELD_0 = 0
-				BITFIELD_0_OFFSET = OPERATION_OFFSET_4
-				if Item_2.Back then BITFIELD_0 += 0x01 end
+				BITFIELD_3_0 = 0
+				BITFIELD_3_0_OFFSET = OPERATION_OFFSET_4
+				if Item_2.Back then BITFIELD_3_0 += 0x01 end
 			end
-			buffer.writeu8(SendBuffer, BITFIELD_0_OFFSET, BITFIELD_0)
+			buffer.writeu8(SendBuffer, BITFIELD_3_0_OFFSET, BITFIELD_3_0)
 		end
 		-- END ARRAY
 	end
 	-- Value2: Heads
 	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 function SerdesFunctions.WriteEVENT_Aim(Value: Vector3): ()
@@ -718,13 +718,13 @@ end
 function SerdesFunctions.World_WriteEVENT_Clock(Value1: number?, Value2: number): ()
 	-- Allocate BLOCK: 4 bytes
 	local BLOCK_START = Allocate(4)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	-- EVENT_Clock (2)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
 	-- Value: Clock
 	-- Value1: Clock
-	BITFIELD_0 = 0
-	if Value1 ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value1 ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value1 ~= nil then
 		-- Allocate BLOCK: 8 bytes
 		local BLOCK_START = Allocate(8)
@@ -733,7 +733,7 @@ function SerdesFunctions.World_WriteEVENT_Clock(Value1: number?, Value2: number)
 	end
 	-- Value2: Clock
 	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 if not RunService:IsRunning() then

@@ -542,8 +542,9 @@ export type TestFlags = {["a a"]: boolean,}
 export type TestEnums = ("b b")
 export type TestTaggedEnums = { Type: "c c", Test: number }
 function SerdesFunctions.ReadEVENT_TestEvent(): ({ ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, {["a a"]: boolean,}, ("b b"), { Type: "c c", Test: number })
-	-- Read BLOCK: 7 bytes
-	local BLOCK_START = Read(7)
+	-- Read BLOCK: 6 bytes
+	local BLOCK_START = Read(6)
+	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: TestEvent
 	-- Value1: TestEvent
@@ -562,14 +563,15 @@ function SerdesFunctions.ReadEVENT_TestEvent(): ({ ["z z"]: number, ["1 1"]: num
 	Value2["a a"] = bit32.btest(SET_BITS, 0x1);
 	-- Value3: TestEvent
 	local Value3 = true :: any
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 5)
+	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 5)
+	local Index = bit32.extract(BITFIELD_1_0, 0, 1)
 	if Index == 0 then
 		Value3 = "b b"
 	else
 		error(`Unexpected enum: {Index}`)
 	end
 	-- Value4: TestEvent
-	local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
+	local Tag = bit32.extract(BITFIELD_1_0, 1, 1)
 	local Value4 = true :: any
 	if Tag == 0 then
 		-- Read BLOCK: 1 bytes

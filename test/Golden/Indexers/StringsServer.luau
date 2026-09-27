@@ -539,8 +539,9 @@ export type TestFlags = {["a a"]: boolean,}
 export type TestEnums = ("b b")
 export type TestTaggedEnums = { Type: "c c", Test: number }
 function SerdesFunctions.WriteEVENT_TestEvent(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-	-- Allocate BLOCK: 8 bytes
-	local BLOCK_START = Allocate(8)
+	-- Allocate BLOCK: 7 bytes
+	local BLOCK_START = Allocate(7)
+	local BITFIELD_1_0
 	-- EVENT_TestEvent (0)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
 	-- Value: TestEvent
@@ -558,14 +559,13 @@ function SerdesFunctions.WriteEVENT_TestEvent(Value1: { ["z z"]: number, ["1 1"]
 	if Value2["a a"] == true then SET_BITS += 0x1 end
 	buffer.writeu8(SendBuffer, BLOCK_START + 5, SET_BITS)
 	-- Value3: TestEvent
+	BITFIELD_1_0 = 0
 	if Value3 == "b b" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 6, 0)
 	else
 		error(`Unexpected enum: {Value3}, expected one of "b b".`)
 	end
 	-- Value4: TestEvent
 	if Value4.Type == "c c" then
-		buffer.writeu8(SendBuffer, BLOCK_START + 7, 0)
 		-- Allocate BLOCK: 1 bytes
 		local BLOCK_START = Allocate(1)
 		-- Value4: c c
@@ -574,6 +574,7 @@ function SerdesFunctions.WriteEVENT_TestEvent(Value1: { ["z z"]: number, ["1 1"]
 	else
 		error(`Unexpected variant: {Value4.Type}`)
 	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 6, BITFIELD_1_0)
 end
 
 if not RunService:IsRunning() then

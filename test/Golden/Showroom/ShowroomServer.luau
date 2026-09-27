@@ -604,11 +604,11 @@ end
 function SerdesFunctions.ReadFUNCTION_RETURN_Confirm(): (boolean)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: Confirm
-	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	local Value = bit32.btest(BITFIELD_0, 0x01)
+	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	local Value = bit32.btest(BITFIELD_1_0, 0x01)
 	return Value
 end
 

@@ -665,13 +665,13 @@ end
 function SerdesFunctions.WriteEVENT_Trust(Value1: { Gap: number, Bucket: number }?, Value2: number): ()
 	-- Allocate BLOCK: 4 bytes
 	local BLOCK_START = Allocate(4)
-	local BITFIELD_0
+	local BITFIELD_1_0
 	-- EVENT_Trust (1)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
 	-- Value: Trust
 	-- Value1: Trust
-	BITFIELD_0 = 0
-	if Value1 ~= nil then BITFIELD_0 += 0x01 end
+	BITFIELD_1_0 = 0
+	if Value1 ~= nil then BITFIELD_1_0 += 0x01 end
 	if Value1 ~= nil then
 		-- Allocate BLOCK: 8 bytes
 		local BLOCK_START = Allocate(8)
@@ -683,7 +683,7 @@ function SerdesFunctions.WriteEVENT_Trust(Value1: { Gap: number, Bucket: number 
 	end
 	-- Value2: Trust
 	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 if not RunService:IsRunning() then
