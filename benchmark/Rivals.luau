@@ -6,6 +6,7 @@
 ---     lune run Rivals -- Broadcast         only the scenarios whose name contains "Broadcast"
 ---     lune run Rivals -- --frames 50       fewer frames
 ---     lune run Rivals -- --tools blink,zap only these tools
+---     lune run Rivals -- --batch           BlinkBlox with option BatchUnreliable
 ---
 --- Every tool loads through World.luau here, BlinkBlox included, so each pays for the same mocks: a
 --- remote call costs the same whoever makes it. Each flushes on its own Heartbeat, as it would in a
@@ -39,6 +40,8 @@ local REQUIRES: { [string]: { string } } = {
 }
 
 local Frames = 200
+--> `--batch`: BlinkBlox built with option BatchUnreliable, which gathers a frame's unreliable events.
+local Batch = false
 local Filter: string? = nil
 local Only: { string }? = nil
 do
@@ -47,6 +50,8 @@ do
 		local Argument = process.args[Index]
 		if Argument == "--" then
 			--> What `lune run Rivals -- ...` passes through ahead of the arguments.
+		elseif Argument == "--batch" then
+			Batch = true
 		elseif Argument == "--frames" then
 			Frames = assert(tonumber(process.args[Index + 1]), "--frames takes a number")
 			Index += 1
@@ -64,6 +69,7 @@ end
 do
 	local Source = fs.readFile("./definitions/Scenarios.blink")
 	local Tree = Parser.new("./definitions/", "Scenarios.blink", nil, Attributes.new(nil)):Parse(Source)
+	Tree.Value.Options.BatchUnreliable = Batch
 	fs.writeDir("./runtime/rivals/blink")
 	fs.writeFile("./runtime/rivals/blink/Server.luau", Generator.Generate("Server", Tree))
 	fs.writeFile("./runtime/rivals/blink/Client.luau", Generator.Generate("Client", Tree))

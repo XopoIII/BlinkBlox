@@ -123,9 +123,9 @@ Net.Heads.On(function(heads, serverTime)
 end)
 ```
 
-A packet is one byte larger: 6 bytes of header -- the index and sequence number, a byte of presence
-bits, the stamp -- where the hand-made version had 3 and the stamp inside the struct. The extra byte
-is the presence bit that tells a cleared stream from a state.
+A packet is one byte smaller: 4 bytes of header -- the index, a byte of presence bits, the stamp --
+where the hand-made version had 3 and the stamp inside the struct. A stream carries no sequence number:
+the stamp orders it. Its one extra byte is the presence bit that tells a cleared stream from a state.
 
 ## What changes, exactly
 

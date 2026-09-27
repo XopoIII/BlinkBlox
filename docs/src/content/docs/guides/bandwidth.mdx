@@ -17,8 +17,12 @@ buffer is sent once, on `Heartbeat`. With [`ManualReplication`](/BlinkBlox/langu
 you choose when that happens by calling `StepReplication` yourself. The flush keeps its buffer for the
 next frame rather than growing one again from 64 bytes.
 
-**Unreliable traffic is not.** Each unreliable `Fire` is written into a fresh buffer and sent at once,
-as a packet of its own.
+**Unreliable traffic is not, by default.** Each unreliable `Fire` is sent at once, as a packet of its
+own. [`BatchUnreliable`](/BlinkBlox/language/options/#batchunreliable) gathers a frame's unreliable
+events into as few packets as the unreliable limit allows, sent at the flush -- one remote call and one
+packet header for a frame of small events, at the price of waiting up to a frame. Streams are always
+gathered this way, since they are sent at the flush anyway. A reliable `FireAll` goes to every player
+in one `FireAllClients` at the flush, whatever the option.
 
 Inside a packet, each item carries a small header in front of its payload:
 
@@ -26,6 +30,7 @@ Inside a packet, each item carries a small header in front of its payload:
 |---|---|
 | Reliable or `Unreliable` event | 1 byte: the event's index |
 | `OrderedUnreliable` event | 3 bytes: the index and a 2-byte sequence number |
+| Stream | 1 byte: the index; the stamp every packet carries orders it |
 | Function call | 2 bytes: the index and the call's id |
 | Function reply | 3 bytes: the index, the call's id and a success flag; a failed call's reply is those 3 bytes alone |
 
@@ -113,7 +118,7 @@ send, then add the range you mean.
 | `f24` | 3 | about +-4.29e9, with 18 significant bits, rounded to nearest |
 | `f32` | 4 | Luau's `Vector3` precision |
 | `f64` | 8 | a Luau number, exactly |
-| `enum { ... }` | 1 | up to 256 values |
+| `enum { ... }` | 1 to 8 bits | up to 256 values, in the bits that tell them apart |
 | `set { ... }` | 1, 2 or 4 per 32 flags | 1 byte up to 8 flags, 2 up to 16, 4 up to 32 |
 | `boolean` | 1 bit | |
 
@@ -127,8 +132,9 @@ half-stud steps.
 integer up to 262144 is exact, and a value between 512 and 1024 arrives within 0.002 of itself,
 between 8192 and 16384 within 0.032. `vector<f24>` is 9 bytes where `vector` is 12.
 
-An `enum` costs one byte however long its names are. A state sent as `string` costs its length plus
-a prefix every time.
+An `enum` costs the bits that tell its values apart however long its names are -- two for four values
+-- and shares a byte with the booleans beside it. A state sent as `string` costs its length plus a
+prefix every time.
 
 ### Vectors and CFrames
 

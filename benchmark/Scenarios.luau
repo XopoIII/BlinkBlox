@@ -4,6 +4,7 @@
 ---     lune run Scenarios                  every scenario, natively compiled and interpreted
 ---     lune run Scenarios -- Stream        only the scenarios whose name contains "Stream"
 ---     lune run Scenarios -- --frames 50   fewer frames, for a quick look
+---     lune run Scenarios -- --batch       with option BatchUnreliable
 ---
 --- Runtime.luau times a client firing a thousand reliable events a frame at the server, which is one
 --- path of several, and the one the tools compare on. A game also has the server sending to a crowd,
@@ -27,6 +28,8 @@ local WARMUP_FRAMES = 10
 local CROWD = 50
 
 local Frames = 200
+--> `--batch`: BlinkBlox built with option BatchUnreliable, which gathers a frame's unreliable events.
+local Batch = false
 local Filter: string? = nil
 do
 	local Index = 1
@@ -34,6 +37,8 @@ do
 		local Argument = process.args[Index]
 		if Argument == "--" then
 			--> What `lune run Scenarios -- ...` passes through ahead of the arguments.
+		elseif Argument == "--batch" then
+			Batch = true
 		elseif Argument == "--frames" then
 			Frames = assert(tonumber(process.args[Index + 1]), "--frames takes a number")
 			Index += 1
@@ -48,6 +53,7 @@ local function Generate(): (string, string)
 	local Source = fs.readFile("./definitions/Scenarios.blink")
 	local Tree = Parser.new("./definitions/", "Scenarios.blink", nil, Attributes.new(nil)):Parse(Source)
 	Tree.Value.Options.ManualReplication = true
+	Tree.Value.Options.BatchUnreliable = Batch
 
 	return Generator.Generate("Server", Tree), Generator.Generate("Client", Tree)
 end
