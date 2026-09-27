@@ -367,14 +367,15 @@ function Serde.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Block
 		--> `u8[300..400]` needs one byte for a hundred possible lengths, not the two that 400 would
 		--> otherwise demand -- and a length below the minimum can no longer be written at all.
 		local Span = (Upper - Lower)
-		local LengthType = Prefabs.GetTypeToUse(Span)
+		local Varint = Size.LengthPrefix(Span, Size.RangeWritten(Declaration :: any))
+		local LengthType = if Varint then nil else Prefabs.GetTypeToUse(Span)
 		local Assert = Prefabs.Asserts.number("Length", Lower, Upper)
 
 		if Lower > 0 then
-			LengthType.Read("LengthOffset", Read)
+			Prefabs.ReadPrefix("LengthOffset", Read, LengthType)
 			Read:Line(`local Length = LengthOffset + {Lower}`)
 		else
-			LengthType.Read("Length", Read)
+			Prefabs.ReadPrefix("Length", Read, LengthType)
 		end
 
 		Read:Line(Assert.Lower)
@@ -385,9 +386,9 @@ function Serde.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Block
 
 		if Lower > 0 then
 			Write:Line(`local LengthOffset = #{Variable} - {Lower}`)
-			LengthType.Write("LengthOffset", Write)
+			Prefabs.WritePrefix("LengthOffset", Write, LengthType)
 		else
-			LengthType.Write(`#{Variable}`, Write)
+			Prefabs.WritePrefix(`#{Variable}`, Write, LengthType)
 		end
 	else
 		Read:Line(`local Length = {Upper}`)

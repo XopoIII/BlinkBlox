@@ -247,6 +247,51 @@ local function Allocate(Bytes: number)
     return Offset
 end
 
+--> A length as a varint, 0 to 65535 in one to three bytes: seven bits a byte, the lowest first, the top
+--> bit saying another byte follows. Size.LengthPrefix in the compiler decides which lengths travel
+--> this way.
+local function WriteVarLength(Length: number)
+    --> Allocate first, on a line of its own: it may replace SendBuffer, which an argument list would
+    --> already have read.
+    if Length < 0x80 then
+        local At = Allocate(1)
+        buffer.writeu8(SendBuffer, At, Length)
+    elseif Length < 0x4000 then
+        local At = Allocate(2)
+        buffer.writeu8(SendBuffer, At, Length % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 1, Length // 0x80)
+    else
+        local At = Allocate(3)
+        buffer.writeu8(SendBuffer, At, Length % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 1, Length // 0x80 % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 2, Length // 0x4000)
+    end
+end
+
+--> Refuses what WriteVarLength never writes, so each length has one encoding and none can claim more
+--> than 65535: a byte that ends the number but adds nothing to it, and a third byte past 3 -- which
+--> is also every third byte that asks for a fourth. Checked before anything is read for the length.
+local function ReadVarLength(): number
+    local First = buffer.readu8(RecieveBuffer, Read(1))
+    if First < 0x80 then
+        return First
+    end
+
+    local Second = buffer.readu8(RecieveBuffer, Read(1))
+    if Second < 0x80 then
+        if Second == 0 then
+            error("Expected a length in its shortest form.")
+        end
+        return First - 0x80 + Second * 0x80
+    end
+
+    local Third = buffer.readu8(RecieveBuffer, Read(1))
+    if Third == 0 or Third > 3 then
+        error(`Expected a length of at most 65535, in its shortest form, got a last byte of {Third}.`)
+    end
+    return First - 0x80 + (Second - 0x80) * 0x80 + Third * 0x4000
+end
+
 local function CreateQueue(): BLINK_QUEUE
     return {
         head = nil,
@@ -876,23 +921,21 @@ function SerdesFunctions.ReadEVENT_RateLimitedPoll(): (number)
 end
 
 function SerdesFunctions.ReadEVENT_UnreliableOversize(): (string)
-	-- Read BLOCK: 2 bytes
-	local BLOCK_START = Read(2)
 	local RecieveBuffer = RecieveBuffer
 	-- Value: UnreliableOversize
-	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	local Length = ReadVarLength()
 	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 	local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
 	return Value
 end
 
 function SerdesFunctions.ReadEVENT_UnreliableInstances(): (buffer, { Instance })
-	-- Read BLOCK: 3 bytes
-	local BLOCK_START = Read(3)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
 	local RecieveBuffer = RecieveBuffer
 	-- Value: UnreliableInstances
 	-- Value1: UnreliableInstances
-	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	local Length = ReadVarLength()
 	if Length < 0 then error(`Expected size of "Value1" to be larger than or equal to 0, got {Length} instead.`) end
 	if Length > 970 then error(`Expected size of "Value1" to be smaller than or equal to 970, got {Length} instead.`) end
 	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -900,7 +943,7 @@ function SerdesFunctions.ReadEVENT_UnreliableInstances(): (buffer, { Instance })
 	buffer.copy(Value1, 0, RecieveBuffer, Read(Length), Length)
 	-- Value2: UnreliableInstances
 	-- START ARRAY
-	Length = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 	if not (Length <= 4) then error(`Expected "Length" to be smaller than or equal to 4, got {Length} instead.`) end
 	if Length > #RecieveInstances - RecieveInstanceCursor then error(`Expected "Value2" to fit in the {#RecieveInstances - RecieveInstanceCursor} values left beside the packet, got a length of {Length} instead.`) end
@@ -978,8 +1021,8 @@ function SerdesFunctions.WriteEVENT_SendOccupiedCell(Value: Vector3): ()
 end
 
 function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
-	-- Read BLOCK: 19 bytes
-	local BLOCK_START = Read(19)
+	-- Read BLOCK: 15 bytes
+	local BLOCK_START = Read(15)
 	local BITFIELD_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: ClientPollEvent
@@ -1083,13 +1126,12 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
 		for _ = 1, Elements_1 do
 			-- Key_1: GenericMap
-			local OFFSET_0 = Read(2)
-			local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+			local Length = ReadVarLength()
 			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 			-- Element_1: GenericMap
-			local OFFSET_1 = Read(8)
-			local Element_1 = buffer.readf64(RecieveBuffer, OFFSET_1)
+			local OFFSET_0 = Read(8)
+			local Element_1 = buffer.readf64(RecieveBuffer, OFFSET_0)
 			Value.Map[Key_1] = Element_1
 		end
 	end
@@ -1102,7 +1144,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 	do
 		-- Value.Struct.Array: Array
 		-- START ARRAY
-		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 7)
+		local Length = ReadVarLength()
 		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -1121,23 +1163,16 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 	end
 	-- Value.Struct.Optional: Optional
 	if bit32.btest(BITFIELD_0, 0x08) then
-		-- Read BLOCK: 2 bytes
-		local BLOCK_START = Read(2)
 		-- Value.Struct.Optional: Optional
 		-- START ARRAY
-		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		local Length = ReadVarLength()
 		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-		if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Optional" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Optional" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		Value.Struct.Optional = table.create(Length)
-			-- Read BLOCK: 2 bytes
-		local ARRAY_START_2 = Read(2 * Length)
 		for Slot_2 = 1, Length do
 			-- Item_2: B
-			-- Read 2
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 2
-			Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+			local Length = ReadVarLength()
 			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Item_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 			Value.Struct.Optional[Slot_2] = Item_2
@@ -1148,20 +1183,20 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 	Value.Struct.Nested = {Value = false} :: any
 	do
 		-- Value.Struct.Nested.Value: Value
-		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 9)
+		local Length = ReadVarLength()
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Nested.Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		Value.Struct.Nested.Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
 	end
 	-- Value.AnotherNested: AnotherNested
 	Value.AnotherNested = {Value = false} :: any
 	-- Value.AnotherNested.Value: Value
-	Value.AnotherNested.Value = buffer.readf64(RecieveBuffer, BLOCK_START + 11)
+	Value.AnotherNested.Value = buffer.readf64(RecieveBuffer, BLOCK_START + 7)
 	return Value
 end
 
 function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
-	-- Read BLOCK: 19 bytes
-	local BLOCK_START = Read(19)
+	-- Read BLOCK: 15 bytes
+	local BLOCK_START = Read(15)
 	local BITFIELD_0
 	local RecieveBuffer = RecieveBuffer
 	-- Value: ClientUnreliablePollEvent
@@ -1265,13 +1300,12 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 3)
 		for _ = 1, Elements_1 do
 			-- Key_1: GenericMap
-			local OFFSET_0 = Read(2)
-			local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+			local Length = ReadVarLength()
 			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 			-- Element_1: GenericMap
-			local OFFSET_1 = Read(8)
-			local Element_1 = buffer.readf64(RecieveBuffer, OFFSET_1)
+			local OFFSET_0 = Read(8)
+			local Element_1 = buffer.readf64(RecieveBuffer, OFFSET_0)
 			Value.Map[Key_1] = Element_1
 		end
 	end
@@ -1284,7 +1318,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 	do
 		-- Value.Struct.Array: Array
 		-- START ARRAY
-		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 7)
+		local Length = ReadVarLength()
 		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -1303,23 +1337,16 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 	end
 	-- Value.Struct.Optional: Optional
 	if bit32.btest(BITFIELD_0, 0x08) then
-		-- Read BLOCK: 2 bytes
-		local BLOCK_START = Read(2)
 		-- Value.Struct.Optional: Optional
 		-- START ARRAY
-		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		local Length = ReadVarLength()
 		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-		if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Optional" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Optional" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		Value.Struct.Optional = table.create(Length)
-			-- Read BLOCK: 2 bytes
-		local ARRAY_START_2 = Read(2 * Length)
 		for Slot_2 = 1, Length do
 			-- Item_2: B
-			-- Read 2
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 2
-			Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+			local Length = ReadVarLength()
 			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 			local Item_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 			Value.Struct.Optional[Slot_2] = Item_2
@@ -1330,14 +1357,14 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 	Value.Struct.Nested = {Value = false} :: any
 	do
 		-- Value.Struct.Nested.Value: Value
-		local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 9)
+		local Length = ReadVarLength()
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Nested.Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		Value.Struct.Nested.Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
 	end
 	-- Value.AnotherNested: AnotherNested
 	Value.AnotherNested = {Value = false} :: any
 	-- Value.AnotherNested.Value: Value
-	Value.AnotherNested.Value = buffer.readf64(RecieveBuffer, BLOCK_START + 11)
+	Value.AnotherNested.Value = buffer.readf64(RecieveBuffer, BLOCK_START + 7)
 	return Value
 end
 
@@ -1352,8 +1379,8 @@ function SerdesFunctions.ReadEVENT_ClientEmptyUnreliablePollEvent(): (nil)
 end
 
 function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-	-- Allocate BLOCK: 20 bytes
-	local BLOCK_START = Allocate(20)
+	-- Allocate BLOCK: 16 bytes
+	local BLOCK_START = Allocate(16)
 	local BITFIELD_0
 	-- EVENT_ServerPollEvent (7)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 7)
@@ -1471,16 +1498,15 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 			end
 			local Length = #Key_1
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			local OFFSET_0 = Allocate(2)
-			buffer.writeu16(SendBuffer, OFFSET_0, Length)
+			WriteVarLength(Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 			-- Element_1: GenericMap
 			if typeof(Element_1) ~= "number" then
 				error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
 			end
-			local OFFSET_1 = Allocate(8)
-			buffer.writef64(SendBuffer, OFFSET_1, Element_1)
+			local OFFSET_0 = Allocate(8)
+			buffer.writef64(SendBuffer, OFFSET_0, Element_1)
 		end
 		if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
 		buffer.writeu16(SendBuffer, BLOCK_START + 4, Elements_1)
@@ -1500,7 +1526,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 		-- Value.Struct.Array: Array
 		-- START ARRAY
 		if not (#Value.Struct.Array <= 65535) then error(`Expected "#Value.Struct.Array" to be smaller than or equal to 65535, got {#Value.Struct.Array} instead.`) end
-		buffer.writeu16(SendBuffer, BLOCK_START + 8, #Value.Struct.Array)
+		WriteVarLength(#Value.Struct.Array)
 			-- Allocate BLOCK: 1 bytes
 		local ARRAY_START_1 = Allocate(1 * #Value.Struct.Array)
 		for Index = 1, #Value.Struct.Array do
@@ -1519,14 +1545,10 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 	-- Value.Struct.Optional: Optional
 	if Value.Struct.Optional ~= nil then BITFIELD_0 += 0x08 end
 	if Value.Struct.Optional ~= nil then
-		-- Allocate BLOCK: 2 bytes
-		local BLOCK_START = Allocate(2)
 		-- Value.Struct.Optional: Optional
 		-- START ARRAY
 		if not (#Value.Struct.Optional <= 65535) then error(`Expected "#Value.Struct.Optional" to be smaller than or equal to 65535, got {#Value.Struct.Optional} instead.`) end
-		buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value.Struct.Optional)
-			-- Allocate BLOCK: 2 bytes
-		local ARRAY_START_2 = Allocate(2 * #Value.Struct.Optional)
+		WriteVarLength(#Value.Struct.Optional)
 		for Index = 1, #Value.Struct.Optional do
 			local Item_2 = Value.Struct.Optional[Index]
 			-- Item_2: B
@@ -1535,10 +1557,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 			end
 			local Length = #Item_2
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			-- Allocate 2
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 2
-			buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, Length)
+			WriteVarLength(Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Item_2, Length)
 		end
@@ -1552,7 +1571,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 		end
 		local Length = #Value.Struct.Nested.Value
 		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-		buffer.writeu16(SendBuffer, BLOCK_START + 10, Length)
+		WriteVarLength(Length)
 		Allocate(Length)
 		buffer.writestring(SendBuffer, SendOffset, Value.Struct.Nested.Value, Length)
 	end
@@ -1561,13 +1580,13 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 	if typeof(Value.AnotherNested.Value) ~= "number" then
 		error(`Expected Value.AnotherNested.Value to be of type number, got {type(Value.AnotherNested.Value)} instead.`)
 	end
-	buffer.writef64(SendBuffer, BLOCK_START + 12, Value.AnotherNested.Value)
+	buffer.writef64(SendBuffer, BLOCK_START + 8, Value.AnotherNested.Value)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
 end
 
 function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-	-- Allocate BLOCK: 20 bytes
-	local BLOCK_START = Allocate(20)
+	-- Allocate BLOCK: 16 bytes
+	local BLOCK_START = Allocate(16)
 	local BITFIELD_0
 	-- EVENT_ServerUnreliablePollEvent (6)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 6)
@@ -1685,16 +1704,15 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 			end
 			local Length = #Key_1
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			local OFFSET_0 = Allocate(2)
-			buffer.writeu16(SendBuffer, OFFSET_0, Length)
+			WriteVarLength(Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 			-- Element_1: GenericMap
 			if typeof(Element_1) ~= "number" then
 				error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
 			end
-			local OFFSET_1 = Allocate(8)
-			buffer.writef64(SendBuffer, OFFSET_1, Element_1)
+			local OFFSET_0 = Allocate(8)
+			buffer.writef64(SendBuffer, OFFSET_0, Element_1)
 		end
 		if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
 		buffer.writeu16(SendBuffer, BLOCK_START + 4, Elements_1)
@@ -1714,7 +1732,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 		-- Value.Struct.Array: Array
 		-- START ARRAY
 		if not (#Value.Struct.Array <= 65535) then error(`Expected "#Value.Struct.Array" to be smaller than or equal to 65535, got {#Value.Struct.Array} instead.`) end
-		buffer.writeu16(SendBuffer, BLOCK_START + 8, #Value.Struct.Array)
+		WriteVarLength(#Value.Struct.Array)
 			-- Allocate BLOCK: 1 bytes
 		local ARRAY_START_1 = Allocate(1 * #Value.Struct.Array)
 		for Index = 1, #Value.Struct.Array do
@@ -1733,14 +1751,10 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 	-- Value.Struct.Optional: Optional
 	if Value.Struct.Optional ~= nil then BITFIELD_0 += 0x08 end
 	if Value.Struct.Optional ~= nil then
-		-- Allocate BLOCK: 2 bytes
-		local BLOCK_START = Allocate(2)
 		-- Value.Struct.Optional: Optional
 		-- START ARRAY
 		if not (#Value.Struct.Optional <= 65535) then error(`Expected "#Value.Struct.Optional" to be smaller than or equal to 65535, got {#Value.Struct.Optional} instead.`) end
-		buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value.Struct.Optional)
-			-- Allocate BLOCK: 2 bytes
-		local ARRAY_START_2 = Allocate(2 * #Value.Struct.Optional)
+		WriteVarLength(#Value.Struct.Optional)
 		for Index = 1, #Value.Struct.Optional do
 			local Item_2 = Value.Struct.Optional[Index]
 			-- Item_2: B
@@ -1749,10 +1763,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 			end
 			local Length = #Item_2
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			-- Allocate 2
-			local OPERATION_OFFSET_0 = ARRAY_START_2
-			ARRAY_START_2 += 2
-			buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, Length)
+			WriteVarLength(Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Item_2, Length)
 		end
@@ -1766,7 +1777,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 		end
 		local Length = #Value.Struct.Nested.Value
 		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-		buffer.writeu16(SendBuffer, BLOCK_START + 10, Length)
+		WriteVarLength(Length)
 		Allocate(Length)
 		buffer.writestring(SendBuffer, SendOffset, Value.Struct.Nested.Value, Length)
 	end
@@ -1775,7 +1786,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 	if typeof(Value.AnotherNested.Value) ~= "number" then
 		error(`Expected Value.AnotherNested.Value to be of type number, got {type(Value.AnotherNested.Value)} instead.`)
 	end
-	buffer.writef64(SendBuffer, BLOCK_START + 12, Value.AnotherNested.Value)
+	buffer.writef64(SendBuffer, BLOCK_START + 8, Value.AnotherNested.Value)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
 end
 
@@ -2009,8 +2020,7 @@ function SerdesFunctions.WriteEVENT_DynamicMap(Value: {[number]: { Static: numbe
 			end
 			local Length = buffer.len(Element_1.Dynamic)
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			local OFFSET_2 = Allocate(2)
-			buffer.writeu16(SendBuffer, OFFSET_2, Length)
+			WriteVarLength(Length)
 			Allocate(Length)
 			buffer.copy(SendBuffer, SendOffset, Element_1.Dynamic, 0, Length)
 		end
@@ -2027,8 +2037,8 @@ function SerdesFunctions.WriteEVENT_DynamicArray(Value: { { Static: number, Dyna
 	-- Value: DynamicArray
 	-- START ARRAY
 	if #Value ~= 12 then error(`Expected length of "Value" to be equal to 12, got {#Value} instead.`) end
-		-- Allocate BLOCK: 3 bytes
-	local ARRAY_START_1 = Allocate(3 * 12)
+		-- Allocate BLOCK: 1 bytes
+	local ARRAY_START_1 = Allocate(1 * 12)
 	for Index = 1, 12 do
 		local Item_1 = Value[Index]
 		-- Item_1: DynamicArray
@@ -2049,10 +2059,7 @@ function SerdesFunctions.WriteEVENT_DynamicArray(Value: { { Static: number, Dyna
 			end
 			local Length = buffer.len(Item_1.Dynamic)
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			-- Allocate 2
-			local OPERATION_OFFSET_1 = ARRAY_START_1
-			ARRAY_START_1 += 2
-			buffer.writeu16(SendBuffer, OPERATION_OFFSET_1, Length)
+			WriteVarLength(Length)
 			Allocate(Length)
 			buffer.copy(SendBuffer, SendOffset, Item_1.Dynamic, 0, Length)
 		end
@@ -2068,8 +2075,8 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 	-- Value: PlayerEvent
 	if Value.Type == "Join" then
 		buffer.writeu8(SendBuffer, BLOCK_START + 1, 0)
-		-- Allocate BLOCK: 10 bytes
-		local BLOCK_START = Allocate(10)
+		-- Allocate BLOCK: 8 bytes
+		local BLOCK_START = Allocate(8)
 		-- Value: Join
 		do
 			-- Value.Name: Name
@@ -2078,7 +2085,7 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 			end
 			local Length = #Value.Name
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+			WriteVarLength(Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Value.Name, Length)
 		end
@@ -2086,11 +2093,11 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 		if typeof(Value.UserId) ~= "number" then
 			error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.`)
 		end
-		buffer.writef64(SendBuffer, BLOCK_START + 2, Value.UserId)
+		buffer.writef64(SendBuffer, BLOCK_START + 0, Value.UserId)
 	elseif Value.Type == "Chat" then
 		buffer.writeu8(SendBuffer, BLOCK_START + 1, 1)
-		-- Allocate BLOCK: 10 bytes
-		local BLOCK_START = Allocate(10)
+		-- Allocate BLOCK: 8 bytes
+		local BLOCK_START = Allocate(8)
 		-- Value: Chat
 		-- Value.UserId: UserId
 		if typeof(Value.UserId) ~= "number" then
@@ -2104,7 +2111,7 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 			end
 			local Length = #Value.Message
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
+			WriteVarLength(Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Value.Message, Length)
 		end
@@ -2124,12 +2131,10 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 end
 
 function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
-	-- Read BLOCK: 2 bytes
-	local BLOCK_START = Read(2)
 	local RecieveBuffer = RecieveBuffer
 	-- Value: Booleans
 	-- START ARRAY
-	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	local Length = ReadVarLength()
 	if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 	if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -2162,8 +2167,8 @@ function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
 end
 
 function SerdesFunctions.WriteEVENT_Generic(Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
-	-- Allocate BLOCK: 6 bytes
-	local BLOCK_START = Allocate(6)
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
 	local BITFIELD_0
 	-- EVENT_Generic (21)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 21)
@@ -2177,7 +2182,7 @@ function SerdesFunctions.WriteEVENT_Generic(Value: { Data: number, Array: { numb
 		-- Value.Array: Array
 		-- START ARRAY
 		if not (#Value.Array <= 65535) then error(`Expected "#Value.Array" to be smaller than or equal to 65535, got {#Value.Array} instead.`) end
-		buffer.writeu16(SendBuffer, BLOCK_START + 2, #Value.Array)
+		WriteVarLength(#Value.Array)
 			-- Allocate BLOCK: 1 bytes
 		local ARRAY_START_1 = Allocate(1 * #Value.Array)
 		for Index = 1, #Value.Array do
@@ -2210,8 +2215,8 @@ function SerdesFunctions.WriteEVENT_Generic(Value: { Data: number, Array: { numb
 	if typeof(Value.Nested.Value) ~= "number" then
 		error(`Expected Value.Nested.Value to be of type number, got {type(Value.Nested.Value)} instead.`)
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 5, Value.Nested.Value)
-	buffer.writeu8(SendBuffer, BLOCK_START + 4, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value.Nested.Value)
+	buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_0)
 end
 
 function SerdesFunctions.WriteEVENT_GenericArray(Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
@@ -2224,14 +2229,12 @@ function SerdesFunctions.WriteEVENT_GenericArray(Value: { { Data: number, Array:
 	BITFIELD_0 = 0
 	if Value ~= nil then BITFIELD_0 += 0x01 end
 	if Value ~= nil then
-		-- Allocate BLOCK: 2 bytes
-		local BLOCK_START = Allocate(2)
 		-- Value: GenericArray
 		-- START ARRAY
 		if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-		buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
-			-- Allocate BLOCK: 5 bytes
-		local ARRAY_START_2 = Allocate(5 * #Value)
+		WriteVarLength(#Value)
+			-- Allocate BLOCK: 3 bytes
+		local ARRAY_START_2 = Allocate(3 * #Value)
 		local BITFIELD_0_OFFSET
 		local BITFIELD_0
 		for Index = 1, #Value do
@@ -2251,10 +2254,7 @@ function SerdesFunctions.WriteEVENT_GenericArray(Value: { { Data: number, Array:
 				-- Item_2.Array: Array
 				-- START ARRAY
 				if not (#Item_2.Array <= 65535) then error(`Expected "#Item_2.Array" to be smaller than or equal to 65535, got {#Item_2.Array} instead.`) end
-				-- Allocate 2
-				local OPERATION_OFFSET_1 = ARRAY_START_2
-				ARRAY_START_2 += 2
-				buffer.writeu16(SendBuffer, OPERATION_OFFSET_1, #Item_2.Array)
+				WriteVarLength(#Item_2.Array)
 					-- Allocate BLOCK: 1 bytes
 				local ARRAY_START_3 = Allocate(1 * #Item_2.Array)
 				for Index = 1, #Item_2.Array do
@@ -2273,10 +2273,10 @@ function SerdesFunctions.WriteEVENT_GenericArray(Value: { { Data: number, Array:
 			do
 				-- Item_2.Optional: Optional
 				-- Allocate 1
-				local OPERATION_OFFSET_2 = ARRAY_START_2
+				local OPERATION_OFFSET_1 = ARRAY_START_2
 				ARRAY_START_2 += 1
 				BITFIELD_0 = 0
-				BITFIELD_0_OFFSET = OPERATION_OFFSET_2
+				BITFIELD_0_OFFSET = OPERATION_OFFSET_1
 				if Item_2.Optional ~= nil then BITFIELD_0 += 0x01 end
 				if Item_2.Optional ~= nil then
 					-- Allocate BLOCK: 1 bytes
@@ -2295,9 +2295,9 @@ function SerdesFunctions.WriteEVENT_GenericArray(Value: { { Data: number, Array:
 					error(`Expected Item_2.Nested.Value to be of type number, got {type(Item_2.Nested.Value)} instead.`)
 				end
 				-- Allocate 1
-				local OPERATION_OFFSET_3 = ARRAY_START_2
+				local OPERATION_OFFSET_2 = ARRAY_START_2
 				ARRAY_START_2 += 1
-				buffer.writeu8(SendBuffer, OPERATION_OFFSET_3, Item_2.Nested.Value)
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_2, Item_2.Nested.Value)
 			end
 			buffer.writeu8(SendBuffer, BITFIELD_0_OFFSET, BITFIELD_0)
 		end
@@ -2330,16 +2330,15 @@ function SerdesFunctions.WriteEVENT_MapEvent(Value: {[string]: number}): ()
 		end
 		local Length = #Key_1
 		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-		local OFFSET_0 = Allocate(2)
-		buffer.writeu16(SendBuffer, OFFSET_0, Length)
+		WriteVarLength(Length)
 		Allocate(Length)
 		buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 		-- Element_1: MapSimple
 		if typeof(Element_1) ~= "number" then
 			error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
 		end
-		local OFFSET_1 = Allocate(1)
-		buffer.writeu8(SendBuffer, OFFSET_1, Element_1)
+		local OFFSET_0 = Allocate(1)
+		buffer.writeu8(SendBuffer, OFFSET_0, Element_1)
 	end
 	if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
 	buffer.writeu16(SendBuffer, BLOCK_START + 1, Elements_1)
@@ -2362,16 +2361,15 @@ function SerdesFunctions.WriteEVENT_MapStructEvent(Value: { Map: {[string]: numb
 			end
 			local Length = #Key_1
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-			local OFFSET_0 = Allocate(2)
-			buffer.writeu16(SendBuffer, OFFSET_0, Length)
+			WriteVarLength(Length)
 			Allocate(Length)
 			buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 			-- Element_1: Map
 			if typeof(Element_1) ~= "number" then
 				error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
 			end
-			local OFFSET_1 = Allocate(1)
-			buffer.writeu8(SendBuffer, OFFSET_1, Element_1)
+			local OFFSET_0 = Allocate(1)
+			buffer.writeu8(SendBuffer, OFFSET_0, Element_1)
 		end
 		if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
 		buffer.writeu16(SendBuffer, BLOCK_START + 1, Elements_1)
@@ -3404,8 +3402,8 @@ function SerdesFunctions.ReadEVENT_UnknownInbound(): (any)
 end
 
 function SerdesFunctions.WriteEVENT_NamedTuple(Value1: number, Value2: string, Value3: number?): ()
-	-- Allocate BLOCK: 12 bytes
-	local BLOCK_START = Allocate(12)
+	-- Allocate BLOCK: 10 bytes
+	local BLOCK_START = Allocate(10)
 	local BITFIELD_0
 	-- EVENT_NamedTuple (48)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 48)
@@ -3421,7 +3419,7 @@ function SerdesFunctions.WriteEVENT_NamedTuple(Value1: number, Value2: string, V
 	end
 	local Length = #Value2
 	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-	buffer.writeu16(SendBuffer, BLOCK_START + 9, Length)
+	WriteVarLength(Length)
 	Allocate(Length)
 	buffer.writestring(SendBuffer, SendOffset, Value2, Length)
 	-- Value3: NamedTuple
@@ -3436,26 +3434,26 @@ function SerdesFunctions.WriteEVENT_NamedTuple(Value1: number, Value2: string, V
 		end
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value3)
 	end
-	buffer.writeu8(SendBuffer, BLOCK_START + 11, BITFIELD_0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 9, BITFIELD_0)
 end
 
 function SerdesFunctions.ReadFUNCTION_DATA_NamedTupleFunction(): (number, string)
-	-- Read BLOCK: 3 bytes
-	local BLOCK_START = Read(3)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
 	local RecieveBuffer = RecieveBuffer
 	-- Value: NamedTupleFunction
 	-- Value1: NamedTupleFunction
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	-- Value2: NamedTupleFunction
-	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+	local Length = ReadVarLength()
 	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 	local Value2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 	return Value1, Value2
 end
 
 function SerdesFunctions.WriteFUNCTION_RETURN_NamedTupleFunction(Value1: number, Value2: string, InvocationIdentifier: number): ()
-	-- Allocate BLOCK: 7 bytes
-	local BLOCK_START = Allocate(7)
+	-- Allocate BLOCK: 5 bytes
+	local BLOCK_START = Allocate(5)
 	-- FUNCTION_RETURN_NamedTupleFunction (49)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 49)
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
@@ -3472,14 +3470,14 @@ function SerdesFunctions.WriteFUNCTION_RETURN_NamedTupleFunction(Value1: number,
 	end
 	local Length = #Value2
 	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-	buffer.writeu16(SendBuffer, BLOCK_START + 5, Length)
+	WriteVarLength(Length)
 	Allocate(Length)
 	buffer.writestring(SendBuffer, SendOffset, Value2, Length)
 end
 
 function SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1: number, Value2: string, Value3: number): ()
-	-- Allocate BLOCK: 6 bytes
-	local BLOCK_START = Allocate(6)
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
 	-- EVENT_PartiallyNamedTuple (50)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 50)
 	-- Value: PartiallyNamedTuple
@@ -3494,14 +3492,14 @@ function SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1: number, Value2: 
 	end
 	local Length = #Value2
 	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-	buffer.writeu16(SendBuffer, BLOCK_START + 2, Length)
+	WriteVarLength(Length)
 	Allocate(Length)
 	buffer.writestring(SendBuffer, SendOffset, Value2, Length)
 	-- Value3: PartiallyNamedTuple
 	if typeof(Value3) ~= "number" then
 		error(`Expected Value3 to be of type number, got {type(Value3)} instead.`)
 	end
-	buffer.writeu16(SendBuffer, BLOCK_START + 4, Value3)
+	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value3)
 end
 
 function SerdesFunctions.ReadFUNCTION_DATA_NeverAnswered(): (number)
@@ -3750,8 +3748,8 @@ function SerdesFunctions.ReadEVENT_RangedFloat16(): (number)
 end
 
 function SerdesFunctions.WriteEVENT_NamedLength(Value1: string, Value2: number): ()
-	-- Allocate BLOCK: 5 bytes
-	local BLOCK_START = Allocate(5)
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
 	-- EVENT_NamedLength (62)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 62)
 	-- Value: NamedLength
@@ -3761,19 +3759,19 @@ function SerdesFunctions.WriteEVENT_NamedLength(Value1: string, Value2: number):
 	end
 	local Length = #Value1
 	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-	buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
+	WriteVarLength(Length)
 	Allocate(Length)
 	buffer.writestring(SendBuffer, SendOffset, Value1, Length)
 	-- Value2: NamedLength
 	if typeof(Value2) ~= "number" then
 		error(`Expected Value2 to be of type number, got {type(Value2)} instead.`)
 	end
-	buffer.writeu16(SendBuffer, BLOCK_START + 3, Value2)
+	buffer.writeu16(SendBuffer, BLOCK_START + 1, Value2)
 end
 
 function SerdesFunctions.WriteEVENT_LengthFirst(Value1: number, Value2: string): ()
-	-- Allocate BLOCK: 5 bytes
-	local BLOCK_START = Allocate(5)
+	-- Allocate BLOCK: 3 bytes
+	local BLOCK_START = Allocate(3)
 	-- EVENT_LengthFirst (63)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 63)
 	-- Value: LengthFirst
@@ -3788,7 +3786,7 @@ function SerdesFunctions.WriteEVENT_LengthFirst(Value1: number, Value2: string):
 	end
 	local Length = #Value2
 	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-	buffer.writeu16(SendBuffer, BLOCK_START + 3, Length)
+	WriteVarLength(Length)
 	Allocate(Length)
 	buffer.writestring(SendBuffer, SendOffset, Value2, Length)
 end
@@ -3946,12 +3944,10 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (ColorArray)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: ColorArray
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if Length * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -3987,12 +3983,10 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: ColorArray
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 					-- Allocate BLOCK: 3 bytes
 				local ARRAY_START_1 = Allocate(3 * #Value)
 				for Index = 1, #Value do
@@ -4467,11 +4461,9 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (Buffer)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: Buffer
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Value = buffer.create(Length)
 				buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
@@ -4489,15 +4481,13 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: Buffer
 				if typeof(Value) ~= "buffer" then
 					error(`Expected Value to be of type buffer, got {type(Value)} instead.`)
 				end
 				local Length = buffer.len(Value)
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+				WriteVarLength(Length)
 				Allocate(Length)
 				buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
 				local Result = buffer.create(SendCursor)
@@ -4567,11 +4557,9 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (BoundedBuffer)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: BoundedBuffer
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if Length < 0 then error(`Expected size of "Value" to be larger than or equal to 0, got {Length} instead.`) end
 				if Length > 1000 then error(`Expected size of "Value" to be smaller than or equal to 1000, got {Length} instead.`) end
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -4591,8 +4579,6 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: BoundedBuffer
 				if typeof(Value) ~= "buffer" then
 					error(`Expected Value to be of type buffer, got {type(Value)} instead.`)
@@ -4601,7 +4587,7 @@ if not RunService:IsRunning() then
 				if buffer.len(Value) > 1000 then error(`Expected size of "Value" to be smaller than or equal to 1000, got {buffer.len(Value)} instead.`) end
 				local Length = buffer.len(Value)
 				if not (Length <= 1000) then error(`Expected "Length" to be smaller than or equal to 1000, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+				WriteVarLength(Length)
 				Allocate(Length)
 				buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
 				local Result = buffer.create(SendCursor)
@@ -5132,12 +5118,10 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (QuatCFrames)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrames
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if Length * 19 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -5192,12 +5176,10 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: QuatCFrames
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 					-- Allocate BLOCK: 19 bytes
 				local ARRAY_START_1 = Allocate(19 * #Value)
 				for Index = 1, #Value do
@@ -5257,38 +5239,26 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (MultiDimensionalArray)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: MultiDimensionalArray
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Value = table.create(Length)
-					-- Read BLOCK: 2 bytes
-				local ARRAY_START_1 = Read(2 * Length)
 				for Slot_1 = 1, Length do
 					-- Item_1: MultiDimensionalArray
 					-- START ARRAY
-					-- Read 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Item_1 = table.create(Length)
-						-- Read BLOCK: 2 bytes
-					local ARRAY_START_2 = Read(2 * Length)
 					for Slot_2 = 1, Length do
 						-- Item_2: MultiDimensionalArray
 						-- START ARRAY
-						-- Read 2
-						local OPERATION_OFFSET_0 = ARRAY_START_2
-						ARRAY_START_2 += 2
-						Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+						local Length = ReadVarLength()
 						if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -5324,34 +5294,22 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: MultiDimensionalArray
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
-					-- Allocate BLOCK: 2 bytes
-				local ARRAY_START_1 = Allocate(2 * #Value)
+				WriteVarLength(#Value)
 				for Index = 1, #Value do
 					local Item_1 = Value[Index]
 					-- Item_1: MultiDimensionalArray
 					-- START ARRAY
 					if not (#Item_1 <= 65535) then error(`Expected "#Item_1" to be smaller than or equal to 65535, got {#Item_1} instead.`) end
-					-- Allocate 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
-						-- Allocate BLOCK: 2 bytes
-					local ARRAY_START_2 = Allocate(2 * #Item_1)
+					WriteVarLength(#Item_1)
 					for Index = 1, #Item_1 do
 						local Item_2 = Item_1[Index]
 						-- Item_2: MultiDimensionalArray
 						-- START ARRAY
 						if not (#Item_2 <= 65535) then error(`Expected "#Item_2" to be smaller than or equal to 65535, got {#Item_2} instead.`) end
-						-- Allocate 2
-						local OPERATION_OFFSET_0 = ARRAY_START_2
-						ARRAY_START_2 += 2
-						buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_2)
+						WriteVarLength(#Item_2)
 							-- Allocate BLOCK: 1 bytes
 						local ARRAY_START_3 = Allocate(1 * #Item_2)
 						for Index = 1, #Item_2 do
@@ -6868,12 +6826,10 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedBooleans)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBooleans
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -6916,12 +6872,10 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedBooleans
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 				do
 					local PACKED_LENGTH = #Value
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -7197,25 +7151,18 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedNested)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedNested
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Value = table.create(Length)
-					-- Read BLOCK: 2 bytes
-				local ARRAY_START_1 = Read(2 * Length)
 				for Slot_1 = 1, Length do
 					-- Item_1: PackedNested
 					-- START ARRAY
-					-- Read 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -7261,23 +7208,16 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedNested
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
-					-- Allocate BLOCK: 2 bytes
-				local ARRAY_START_1 = Allocate(2 * #Value)
+				WriteVarLength(#Value)
 				for Index = 1, #Value do
 					local Item_1 = Value[Index]
 					-- Item_1: PackedNested
 					-- START ARRAY
 					if not (#Item_1 <= 65535) then error(`Expected "#Item_1" to be smaller than or equal to 65535, got {#Item_1} instead.`) end
-					-- Allocate 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
+					WriteVarLength(#Item_1)
 					do
 						local PACKED_LENGTH = #Item_1
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -7336,12 +7276,10 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedThroughAlias)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedThroughAlias
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -7384,12 +7322,10 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedThroughAlias
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 				do
 					local PACKED_LENGTH = #Value
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -7446,8 +7382,8 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedBeside)
-				-- Read BLOCK: 5 bytes
-				local BLOCK_START = Read(5)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
 				local BITFIELD_0
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBeside
@@ -7458,7 +7394,7 @@ if not RunService:IsRunning() then
 				do
 					-- Value.List: List
 					-- START ARRAY
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -7496,7 +7432,7 @@ if not RunService:IsRunning() then
 					local Length = 3
 					Value.Fixed = table.create(Length)
 					do
-						local PACKED_OFFSET = BLOCK_START + 3
+						local PACKED_OFFSET = BLOCK_START + 1
 						local PACKED_WHOLE = Length // 8
 						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
@@ -7521,7 +7457,7 @@ if not RunService:IsRunning() then
 					-- END ARRAY
 				end
 				-- Value.C: C
-				Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
+				Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -7536,8 +7472,8 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 5 bytes
-				local BLOCK_START = Allocate(5)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
 				local BITFIELD_0
 				-- Value: PackedBeside
 				-- Value.A: A
@@ -7549,7 +7485,7 @@ if not RunService:IsRunning() then
 				-- Value.List: List
 				-- START ARRAY
 				if not (#Value.List <= 65535) then error(`Expected "#Value.List" to be smaller than or equal to 65535, got {#Value.List} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value.List)
+				WriteVarLength(#Value.List)
 				do
 					local PACKED_LENGTH = #Value.List
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -7597,7 +7533,7 @@ if not RunService:IsRunning() then
 				if #Value.Fixed ~= 3 then error(`Expected length of "Value.Fixed" to be equal to 3, got {#Value.Fixed} instead.`) end
 				do
 					local PACKED_LENGTH = 3
-					local PACKED_OFFSET = BLOCK_START + 3
+					local PACKED_OFFSET = BLOCK_START + 1
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
@@ -7636,7 +7572,7 @@ if not RunService:IsRunning() then
 				if typeof(Value.C) ~= "number" then
 					error(`Expected Value.C to be of type number, got {type(Value.C)} instead.`)
 				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 4, Value.C)
+				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.C)
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
@@ -7665,14 +7601,12 @@ if not RunService:IsRunning() then
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				for _ = 1, Elements_1 do
 					-- Key_1: PackedMap
-					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_1: PackedMap
 					-- START ARRAY
-					local OFFSET_1 = Read(2)
-					Length = buffer.readu16(RecieveBuffer, OFFSET_1)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -7729,15 +7663,13 @@ if not RunService:IsRunning() then
 					end
 					local Length = #Key_1
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					local OFFSET_0 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_0, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 					-- Element_1: PackedMap
 					-- START ARRAY
 					if not (#Element_1 <= 65535) then error(`Expected "#Element_1" to be smaller than or equal to 65535, got {#Element_1} instead.`) end
-					local OFFSET_1 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_1, #Element_1)
+					WriteVarLength(#Element_1)
 					do
 						local PACKED_LENGTH = #Element_1
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -7797,12 +7729,10 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedOptional)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedOptional
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -7842,12 +7772,10 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedOptional
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 					-- Allocate BLOCK: 1 bytes
 				local ARRAY_START_1 = Allocate(1 * #Value)
 				local BITFIELD_0_OFFSET
@@ -7925,23 +7853,21 @@ if not RunService:IsRunning() then
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				for _ = 1, Elements_1 do
 					-- Key_1: MapNested
-					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_1: MapNested
 					local Element_1 = {}
-					local OFFSET_1 = Read(2)
-					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
+					local OFFSET_0 = Read(2)
+					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
 					for _ = 1, Elements_2 do
 						-- Key_2: MapSimple
-						local OFFSET_0 = Read(2)
-						Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+						local Length = ReadVarLength()
 						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 						local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						-- Element_2: MapSimple
-						local OFFSET_1 = Read(1)
-						local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_1)
+						local OFFSET_0 = Read(1)
+						local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_0)
 						Element_1[Key_2] = Element_2
 					end
 					Value[Key_1] = Element_1
@@ -7972,12 +7898,11 @@ if not RunService:IsRunning() then
 					end
 					local Length = #Key_1
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					local OFFSET_0 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_0, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 					-- Element_1: MapNested
-					local OFFSET_1 = Allocate(2)
+					local OFFSET_0 = Allocate(2)
 					local Elements_2 = 0
 					for Key_2, Element_2 in Element_1 do
 						Elements_2 += 1
@@ -7987,19 +7912,18 @@ if not RunService:IsRunning() then
 						end
 						local Length = #Key_2
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						local OFFSET_0 = Allocate(2)
-						buffer.writeu16(SendBuffer, OFFSET_0, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
 						-- Element_2: MapSimple
 						if typeof(Element_2) ~= "number" then
 							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
 						end
-						local OFFSET_1 = Allocate(1)
-						buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
+						local OFFSET_0 = Allocate(1)
+						buffer.writeu8(SendBuffer, OFFSET_0, Element_2)
 					end
 					if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
-					buffer.writeu16(SendBuffer, OFFSET_1, Elements_2)
+					buffer.writeu16(SendBuffer, OFFSET_0, Elements_2)
 				end
 				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
@@ -8022,8 +7946,8 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (Standalone)
-				-- Read BLOCK: 8 bytes
-				local BLOCK_START = Read(8)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
@@ -8038,29 +7962,29 @@ if not RunService:IsRunning() then
 					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
 					Value.Event = true :: any
 					if Tag == 0 then
-						-- Read BLOCK: 10 bytes
-						local BLOCK_START = Read(10)
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
 						-- Value.Event: Join
 						Value.Event = {Name = false, UserId = false} :: any
 						do
 							-- Value.Event.Name: Name
-							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+							local Length = ReadVarLength()
 							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 							Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						end
 						-- Value.Event.UserId: UserId
-						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 						Value.Event.Type = "Join"
 					elseif Tag == 1 then
-						-- Read BLOCK: 10 bytes
-						local BLOCK_START = Read(10)
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
 						-- Value.Event: Chat
 						Value.Event = {UserId = false, Message = false} :: any
 						-- Value.Event.UserId: UserId
 						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 						do
 							-- Value.Event.Message: Message
-							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+							local Length = ReadVarLength()
 							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 							Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						end
@@ -8081,13 +8005,13 @@ if not RunService:IsRunning() then
 				Value.Nested = {Four = false, Five = false} :: any
 				do
 					-- Value.Nested.Four: Four
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				end
 				do
 					-- Value.Nested.Five: Five
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				end
@@ -8105,8 +8029,8 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 8 bytes
-				local BLOCK_START = Allocate(8)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
 				-- Value: Standalone
 				-- Value.One: One
 				if typeof(Value.One) ~= "number" then
@@ -8126,8 +8050,8 @@ if not RunService:IsRunning() then
 				-- Value.Event: Event
 				if Value.Event.Type == "Join" then
 					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
-					-- Allocate BLOCK: 10 bytes
-					local BLOCK_START = Allocate(10)
+					-- Allocate BLOCK: 8 bytes
+					local BLOCK_START = Allocate(8)
 					-- Value.Event: Join
 					do
 						-- Value.Event.Name: Name
@@ -8136,7 +8060,7 @@ if not RunService:IsRunning() then
 						end
 						local Length = #Value.Event.Name
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					end
@@ -8144,11 +8068,11 @@ if not RunService:IsRunning() then
 					if typeof(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
 					end
-					buffer.writef64(SendBuffer, BLOCK_START + 2, Value.Event.UserId)
+					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				elseif Value.Event.Type == "Chat" then
 					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
-					-- Allocate BLOCK: 10 bytes
-					local BLOCK_START = Allocate(10)
+					-- Allocate BLOCK: 8 bytes
+					local BLOCK_START = Allocate(8)
 					-- Value.Event: Chat
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -8162,7 +8086,7 @@ if not RunService:IsRunning() then
 						end
 						local Length = #Value.Event.Message
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
@@ -8187,7 +8111,7 @@ if not RunService:IsRunning() then
 					end
 					local Length = #Value.Nested.Four
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
 				end
@@ -8198,7 +8122,7 @@ if not RunService:IsRunning() then
 					end
 					local Length = #Value.Nested.Five
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
@@ -9271,8 +9195,8 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (FlagCarrier)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: FlagCarrier
 				local Value = {Flags = false, Text = false, Kind = false} :: any
@@ -9285,14 +9209,14 @@ if not RunService:IsRunning() then
 				end
 				do
 					-- Value.Text: Text
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Text" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					Value.Text = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				end
 				do
 					-- Value.Kind: Kind
 					Value.Kind = true :: any
-					local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 					if Index == 0 then
 						Value.Kind = "A"
 					elseif Index == 1 then
@@ -9315,8 +9239,8 @@ if not RunService:IsRunning() then
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
 				-- Value: FlagCarrier
 				do
 					-- Value.Flags: Flags
@@ -9332,15 +9256,15 @@ if not RunService:IsRunning() then
 					end
 					local Length = #Value.Text
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Text, Length)
 				end
 				-- Value.Kind: Kind
 				if Value.Kind == "A" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 1, 0)
 				elseif Value.Kind == "B" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
+					buffer.writeu8(SendBuffer, BLOCK_START + 1, 1)
 				else
 					error(`Unexpected enum: {Value.Kind}, expected one of "A" or "B".`)
 				end
@@ -11585,12 +11509,10 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (ColorArray)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: ColorArray
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if Length * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -11626,12 +11548,10 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: ColorArray
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 					-- Allocate BLOCK: 3 bytes
 				local ARRAY_START_1 = Allocate(3 * #Value)
 				for Index = 1, #Value do
@@ -12106,11 +12026,9 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (Buffer)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: Buffer
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Value = buffer.create(Length)
 				buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
@@ -12128,15 +12046,13 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: Buffer
 				if typeof(Value) ~= "buffer" then
 					error(`Expected Value to be of type buffer, got {type(Value)} instead.`)
 				end
 				local Length = buffer.len(Value)
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+				WriteVarLength(Length)
 				Allocate(Length)
 				buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
 				local Result = buffer.create(SendCursor)
@@ -12206,11 +12122,9 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (BoundedBuffer)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: BoundedBuffer
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if Length < 0 then error(`Expected size of "Value" to be larger than or equal to 0, got {Length} instead.`) end
 				if Length > 1000 then error(`Expected size of "Value" to be smaller than or equal to 1000, got {Length} instead.`) end
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -12230,8 +12144,6 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: BoundedBuffer
 				if typeof(Value) ~= "buffer" then
 					error(`Expected Value to be of type buffer, got {type(Value)} instead.`)
@@ -12240,7 +12152,7 @@ local Returns = table.freeze({
 				if buffer.len(Value) > 1000 then error(`Expected size of "Value" to be smaller than or equal to 1000, got {buffer.len(Value)} instead.`) end
 				local Length = buffer.len(Value)
 				if not (Length <= 1000) then error(`Expected "Length" to be smaller than or equal to 1000, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+				WriteVarLength(Length)
 				Allocate(Length)
 				buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
 				local Result = buffer.create(SendCursor)
@@ -12771,12 +12683,10 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (QuatCFrames)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrames
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if Length * 19 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -12831,12 +12741,10 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: QuatCFrames
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 					-- Allocate BLOCK: 19 bytes
 				local ARRAY_START_1 = Allocate(19 * #Value)
 				for Index = 1, #Value do
@@ -12896,38 +12804,26 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (MultiDimensionalArray)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: MultiDimensionalArray
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Value = table.create(Length)
-					-- Read BLOCK: 2 bytes
-				local ARRAY_START_1 = Read(2 * Length)
 				for Slot_1 = 1, Length do
 					-- Item_1: MultiDimensionalArray
 					-- START ARRAY
-					-- Read 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Item_1 = table.create(Length)
-						-- Read BLOCK: 2 bytes
-					local ARRAY_START_2 = Read(2 * Length)
 					for Slot_2 = 1, Length do
 						-- Item_2: MultiDimensionalArray
 						-- START ARRAY
-						-- Read 2
-						local OPERATION_OFFSET_0 = ARRAY_START_2
-						ARRAY_START_2 += 2
-						Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+						local Length = ReadVarLength()
 						if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -12963,34 +12859,22 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: MultiDimensionalArray
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
-					-- Allocate BLOCK: 2 bytes
-				local ARRAY_START_1 = Allocate(2 * #Value)
+				WriteVarLength(#Value)
 				for Index = 1, #Value do
 					local Item_1 = Value[Index]
 					-- Item_1: MultiDimensionalArray
 					-- START ARRAY
 					if not (#Item_1 <= 65535) then error(`Expected "#Item_1" to be smaller than or equal to 65535, got {#Item_1} instead.`) end
-					-- Allocate 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
-						-- Allocate BLOCK: 2 bytes
-					local ARRAY_START_2 = Allocate(2 * #Item_1)
+					WriteVarLength(#Item_1)
 					for Index = 1, #Item_1 do
 						local Item_2 = Item_1[Index]
 						-- Item_2: MultiDimensionalArray
 						-- START ARRAY
 						if not (#Item_2 <= 65535) then error(`Expected "#Item_2" to be smaller than or equal to 65535, got {#Item_2} instead.`) end
-						-- Allocate 2
-						local OPERATION_OFFSET_0 = ARRAY_START_2
-						ARRAY_START_2 += 2
-						buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_2)
+						WriteVarLength(#Item_2)
 							-- Allocate BLOCK: 1 bytes
 						local ARRAY_START_3 = Allocate(1 * #Item_2)
 						for Index = 1, #Item_2 do
@@ -14524,12 +14408,10 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedBooleans)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBooleans
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -14572,12 +14454,10 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedBooleans
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 				do
 					local PACKED_LENGTH = #Value
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -14853,25 +14733,18 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedNested)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedNested
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Value = table.create(Length)
-					-- Read BLOCK: 2 bytes
-				local ARRAY_START_1 = Read(2 * Length)
 				for Slot_1 = 1, Length do
 					-- Item_1: PackedNested
 					-- START ARRAY
-					-- Read 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -14917,23 +14790,16 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedNested
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
-					-- Allocate BLOCK: 2 bytes
-				local ARRAY_START_1 = Allocate(2 * #Value)
+				WriteVarLength(#Value)
 				for Index = 1, #Value do
 					local Item_1 = Value[Index]
 					-- Item_1: PackedNested
 					-- START ARRAY
 					if not (#Item_1 <= 65535) then error(`Expected "#Item_1" to be smaller than or equal to 65535, got {#Item_1} instead.`) end
-					-- Allocate 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
+					WriteVarLength(#Item_1)
 					do
 						local PACKED_LENGTH = #Item_1
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -14992,12 +14858,10 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedThroughAlias)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedThroughAlias
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -15040,12 +14904,10 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedThroughAlias
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 				do
 					local PACKED_LENGTH = #Value
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -15102,8 +14964,8 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedBeside)
-				-- Read BLOCK: 5 bytes
-				local BLOCK_START = Read(5)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
 				local BITFIELD_0
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBeside
@@ -15114,7 +14976,7 @@ local Returns = table.freeze({
 				do
 					-- Value.List: List
 					-- START ARRAY
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -15152,7 +15014,7 @@ local Returns = table.freeze({
 					local Length = 3
 					Value.Fixed = table.create(Length)
 					do
-						local PACKED_OFFSET = BLOCK_START + 3
+						local PACKED_OFFSET = BLOCK_START + 1
 						local PACKED_WHOLE = Length // 8
 						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
@@ -15177,7 +15039,7 @@ local Returns = table.freeze({
 					-- END ARRAY
 				end
 				-- Value.C: C
-				Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
+				Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -15192,8 +15054,8 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 5 bytes
-				local BLOCK_START = Allocate(5)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
 				local BITFIELD_0
 				-- Value: PackedBeside
 				-- Value.A: A
@@ -15205,7 +15067,7 @@ local Returns = table.freeze({
 				-- Value.List: List
 				-- START ARRAY
 				if not (#Value.List <= 65535) then error(`Expected "#Value.List" to be smaller than or equal to 65535, got {#Value.List} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value.List)
+				WriteVarLength(#Value.List)
 				do
 					local PACKED_LENGTH = #Value.List
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -15253,7 +15115,7 @@ local Returns = table.freeze({
 				if #Value.Fixed ~= 3 then error(`Expected length of "Value.Fixed" to be equal to 3, got {#Value.Fixed} instead.`) end
 				do
 					local PACKED_LENGTH = 3
-					local PACKED_OFFSET = BLOCK_START + 3
+					local PACKED_OFFSET = BLOCK_START + 1
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
@@ -15292,7 +15154,7 @@ local Returns = table.freeze({
 				if typeof(Value.C) ~= "number" then
 					error(`Expected Value.C to be of type number, got {type(Value.C)} instead.`)
 				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 4, Value.C)
+				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.C)
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
@@ -15321,14 +15183,12 @@ local Returns = table.freeze({
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				for _ = 1, Elements_1 do
 					-- Key_1: PackedMap
-					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_1: PackedMap
 					-- START ARRAY
-					local OFFSET_1 = Read(2)
-					Length = buffer.readu16(RecieveBuffer, OFFSET_1)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -15385,15 +15245,13 @@ local Returns = table.freeze({
 					end
 					local Length = #Key_1
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					local OFFSET_0 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_0, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 					-- Element_1: PackedMap
 					-- START ARRAY
 					if not (#Element_1 <= 65535) then error(`Expected "#Element_1" to be smaller than or equal to 65535, got {#Element_1} instead.`) end
-					local OFFSET_1 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_1, #Element_1)
+					WriteVarLength(#Element_1)
 					do
 						local PACKED_LENGTH = #Element_1
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -15453,12 +15311,10 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedOptional)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedOptional
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -15498,12 +15354,10 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedOptional
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 					-- Allocate BLOCK: 1 bytes
 				local ARRAY_START_1 = Allocate(1 * #Value)
 				local BITFIELD_0_OFFSET
@@ -15726,23 +15580,21 @@ local Returns = table.freeze({
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				for _ = 1, Elements_1 do
 					-- Key_1: MapNested
-					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_1: MapNested
 					local Element_1 = {}
-					local OFFSET_1 = Read(2)
-					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
+					local OFFSET_0 = Read(2)
+					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
 					for _ = 1, Elements_2 do
 						-- Key_2: MapSimple
-						local OFFSET_0 = Read(2)
-						Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+						local Length = ReadVarLength()
 						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 						local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						-- Element_2: MapSimple
-						local OFFSET_1 = Read(1)
-						local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_1)
+						local OFFSET_0 = Read(1)
+						local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_0)
 						Element_1[Key_2] = Element_2
 					end
 					Value[Key_1] = Element_1
@@ -15773,12 +15625,11 @@ local Returns = table.freeze({
 					end
 					local Length = #Key_1
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					local OFFSET_0 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_0, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 					-- Element_1: MapNested
-					local OFFSET_1 = Allocate(2)
+					local OFFSET_0 = Allocate(2)
 					local Elements_2 = 0
 					for Key_2, Element_2 in Element_1 do
 						Elements_2 += 1
@@ -15788,19 +15639,18 @@ local Returns = table.freeze({
 						end
 						local Length = #Key_2
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						local OFFSET_0 = Allocate(2)
-						buffer.writeu16(SendBuffer, OFFSET_0, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
 						-- Element_2: MapSimple
 						if typeof(Element_2) ~= "number" then
 							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
 						end
-						local OFFSET_1 = Allocate(1)
-						buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
+						local OFFSET_0 = Allocate(1)
+						buffer.writeu8(SendBuffer, OFFSET_0, Element_2)
 					end
 					if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
-					buffer.writeu16(SendBuffer, OFFSET_1, Elements_2)
+					buffer.writeu16(SendBuffer, OFFSET_0, Elements_2)
 				end
 				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
@@ -15823,8 +15673,8 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (Standalone)
-				-- Read BLOCK: 8 bytes
-				local BLOCK_START = Read(8)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
@@ -15839,29 +15689,29 @@ local Returns = table.freeze({
 					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
 					Value.Event = true :: any
 					if Tag == 0 then
-						-- Read BLOCK: 10 bytes
-						local BLOCK_START = Read(10)
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
 						-- Value.Event: Join
 						Value.Event = {Name = false, UserId = false} :: any
 						do
 							-- Value.Event.Name: Name
-							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+							local Length = ReadVarLength()
 							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 							Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						end
 						-- Value.Event.UserId: UserId
-						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 						Value.Event.Type = "Join"
 					elseif Tag == 1 then
-						-- Read BLOCK: 10 bytes
-						local BLOCK_START = Read(10)
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
 						-- Value.Event: Chat
 						Value.Event = {UserId = false, Message = false} :: any
 						-- Value.Event.UserId: UserId
 						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 						do
 							-- Value.Event.Message: Message
-							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+							local Length = ReadVarLength()
 							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 							Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						end
@@ -15882,13 +15732,13 @@ local Returns = table.freeze({
 				Value.Nested = {Four = false, Five = false} :: any
 				do
 					-- Value.Nested.Four: Four
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				end
 				do
 					-- Value.Nested.Five: Five
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				end
@@ -15906,8 +15756,8 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 8 bytes
-				local BLOCK_START = Allocate(8)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
 				-- Value: Standalone
 				-- Value.One: One
 				if typeof(Value.One) ~= "number" then
@@ -15927,8 +15777,8 @@ local Returns = table.freeze({
 				-- Value.Event: Event
 				if Value.Event.Type == "Join" then
 					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
-					-- Allocate BLOCK: 10 bytes
-					local BLOCK_START = Allocate(10)
+					-- Allocate BLOCK: 8 bytes
+					local BLOCK_START = Allocate(8)
 					-- Value.Event: Join
 					do
 						-- Value.Event.Name: Name
@@ -15937,7 +15787,7 @@ local Returns = table.freeze({
 						end
 						local Length = #Value.Event.Name
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					end
@@ -15945,11 +15795,11 @@ local Returns = table.freeze({
 					if typeof(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
 					end
-					buffer.writef64(SendBuffer, BLOCK_START + 2, Value.Event.UserId)
+					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				elseif Value.Event.Type == "Chat" then
 					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
-					-- Allocate BLOCK: 10 bytes
-					local BLOCK_START = Allocate(10)
+					-- Allocate BLOCK: 8 bytes
+					local BLOCK_START = Allocate(8)
 					-- Value.Event: Chat
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -15963,7 +15813,7 @@ local Returns = table.freeze({
 						end
 						local Length = #Value.Event.Message
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
@@ -15988,7 +15838,7 @@ local Returns = table.freeze({
 					end
 					local Length = #Value.Nested.Four
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
 				end
@@ -15999,7 +15849,7 @@ local Returns = table.freeze({
 					end
 					local Length = #Value.Nested.Five
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
@@ -19333,8 +19183,8 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (FlagCarrier)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: FlagCarrier
 				local Value = {Flags = false, Text = false, Kind = false} :: any
@@ -19347,14 +19197,14 @@ local Returns = table.freeze({
 				end
 				do
 					-- Value.Text: Text
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Text" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					Value.Text = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				end
 				do
 					-- Value.Kind: Kind
 					Value.Kind = true :: any
-					local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
 					if Index == 0 then
 						Value.Kind = "A"
 					elseif Index == 1 then
@@ -19377,8 +19227,8 @@ local Returns = table.freeze({
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
 				-- Value: FlagCarrier
 				do
 					-- Value.Flags: Flags
@@ -19394,15 +19244,15 @@ local Returns = table.freeze({
 					end
 					local Length = #Value.Text
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Text, Length)
 				end
 				-- Value.Kind: Kind
 				if Value.Kind == "A" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
+					buffer.writeu8(SendBuffer, BLOCK_START + 1, 0)
 				elseif Value.Kind == "B" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
+					buffer.writeu8(SendBuffer, BLOCK_START + 1, 1)
 				else
 					error(`Unexpected enum: {Value.Kind}, expected one of "A" or "B".`)
 				end

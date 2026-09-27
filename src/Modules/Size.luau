@@ -63,16 +63,29 @@ local MAP_LENGTH = (2 ^ 16 - 1)
 
 local BITS_PER_BYTE = 8
 
---- Bytes the generator spends on a length prefix, mirroring `Prefabs.GetTypeToUse`. The argument is
---- the SPAN between the bounds, not the upper bound: lengths are encoded relative to the minimum.
-local function LengthPrefixBytes(Upper: number): number
-	if Upper <= 255 then
-		return 1
-	elseif Upper <= 65535 then
-		return 2
+--- How a length prefix is written, for a length within a `Span` of its minimum -- lengths travel
+--- relative to it -- and whether the author wrote the bound. Whether it is a varint, and the fewest and
+--- most bytes it takes. The emitter (Prefabs/Lengths.luau, Serde.Array) asks this too, so the two
+--- cannot disagree.
+---
+--- A span a byte holds takes that byte. One that needs two takes a varint instead -- seven bits a
+--- byte, so a length under 128 costs one and the rest the two they always did. A length nobody bounded
+--- is one too, up to three bytes: its ceiling is the default 65535, and most such strings are short.
+--- A wider span the author wrote keeps a numeral of fixed width, which is never longer than it needs.
+local function LengthPrefix(Span: number, Written: boolean): (boolean, number, number)
+	if Span <= 255 then
+		return false, 1, 1
+	elseif Span < 16384 then
+		return true, 1, 2
+	elseif not Written and Span <= 65535 then
+		return true, 1, 3
+	elseif Span <= 65535 then
+		return false, 2, 2
+	elseif Span <= 16777215 then
+		return false, 3, 3
 	end
 
-	return 4
+	return false, 4, 4
 end
 
 --- Bytes a set partition costs, mirroring `Prefabs.GetTypeToUseByBits`.
@@ -168,10 +181,10 @@ local function MeasurePrimitive(Node: Node): Measurement
 
 		local Upper = if Range then Range.Max else DEFAULT_LENGTH
 		local Lower = if Range then Range.Min else 0
-		local Prefix = LengthPrefixBytes(Upper - Lower)
+		local _, PrefixMin, PrefixMax = LengthPrefix(Upper - Lower, Range ~= nil)
 
-		Result.Min = Prefix + Lower
-		Result.Max = Prefix + Upper
+		Result.Min = PrefixMin + Lower
+		Result.Max = PrefixMax + Upper
 		Result.Unbounded = (Range == nil)
 		Result.Culprit = if Result.Unbounded then Tokens.Primitive else nil
 		return Result
@@ -248,12 +261,16 @@ local function MeasureArray(Node: Node): Measurement
 	local Upper = Range.Max
 	local Result = Empty()
 
+	local _, PrefixMin, PrefixMax = LengthPrefix(Upper - Lower, RangeWritten(Node))
+	if Lower == Upper then
+		PrefixMin, PrefixMax = 0, 0
+	end
+
 	if PacksBooleans(Value.Of) then
 		local Low = math.ceil(Lower / BITS_PER_BYTE)
 		local High = math.ceil(Upper / BITS_PER_BYTE)
-		local Prefix = if Lower == Upper then 0 else LengthPrefixBytes(Upper - Lower)
-		Result.Min = Prefix + Low
-		Result.Max = Prefix + High
+		Result.Min = PrefixMin + Low
+		Result.Max = PrefixMax + High
 		Result.Unbounded = (Lower ~= Upper) and not RangeWritten(Node)
 		Result.Culprit = if Result.Unbounded then Node.Tokens.Range else nil
 		return Result
@@ -269,9 +286,8 @@ local function MeasureArray(Node: Node): Measurement
 		return Result
 	end
 
-	local Prefix = LengthPrefixBytes(Upper - Lower)
-	Result.Min = Prefix + (Of.Min * Lower)
-	Result.Max = Prefix + (Of.Max * Upper)
+	Result.Min = PrefixMin + (Of.Min * Lower)
+	Result.Max = PrefixMax + (Of.Max * Upper)
 	Result.Refs = Of.Refs * Upper
 
 	Result.Unbounded = Of.Unbounded or not RangeWritten(Node)
@@ -455,6 +471,7 @@ return {
 	PacksBooleans = PacksBooleans,
 	RangeWritten = RangeWritten,
 	TokenOf = TokenOf,
+	LengthPrefix = LengthPrefix,
 	DefaultLength = DEFAULT_LENGTH,
 	MapLength = MAP_LENGTH,
 	OrderingBytes = ORDERING_BYTES,

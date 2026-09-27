@@ -67,9 +67,25 @@ ExpectRejection(
 	`to be smaller than or equal to 400`
 )
 
+--> A length as the varint an unbounded or two-byte span travels as, followed by `Extra` bytes of
+--> nothing. Seven bits a byte, the lowest first, the top bit saying another follows.
+local function Varint(Value: number, Extra: number?): buffer
+	local Bytes = {}
+	repeat
+		local Low = Value % 0x80
+		Value //= 0x80
+		table.insert(Bytes, if Value > 0 then Low + 0x80 else Low)
+	until Value == 0
+
+	local Payload = buffer.create(#Bytes + (Extra or 0))
+	for Index, Byte in Bytes do
+		buffer.writeu8(Payload, Index - 1, Byte)
+	end
+	return Payload
+end
+
 --> A bounded buffer names a size the decoder would otherwise allocate before checking it.
-local OversizeBuffer = buffer.create(2)
-buffer.writeu16(OversizeBuffer, 0, 65535)
+local OversizeBuffer = Varint(16383)
 ExpectRejection(
 	"A buffer larger than its bound is rejected before it is allocated",
 	Client.BoundedBuffer.Read,
@@ -87,8 +103,7 @@ ExpectRejection("A vector with a NaN component fails its range", Client.RangedVe
 
 --> An unbounded buffer has no declared size to check, so the space left in the packet is the only
 --> thing standing between a two-byte payload and a 64 KB allocation.
-local UnboundedBuffer = buffer.create(2)
-buffer.writeu16(UnboundedBuffer, 0, 65535)
+local UnboundedBuffer = Varint(65535)
 ExpectRejection(
 	"An unbounded length is bounded by the packet",
 	Client.Buffer.Read,
@@ -99,8 +114,7 @@ ExpectRejection(
 --> `table.create(Length)` reserves every slot before the loop runs, so a count the packet cannot
 --> back still buys the allocation even though the first iteration fails. `ColorArray` is `Color3[]`
 --> at three bytes an element, so 65535 of them would need 196605 bytes the packet does not have.
-local OversizeArray = buffer.create(2)
-buffer.writeu16(OversizeArray, 0, 65535)
+local OversizeArray = Varint(65535)
 ExpectRejection(
 	"An array is refused before its slots are reserved",
 	Client.ColorArray.Read,
@@ -110,8 +124,7 @@ ExpectRejection(
 
 --> A packed `boolean[]` costs an eighth of a byte an element, so its guard is on the bytes the run
 --> takes rather than on the count. 65535 elements need 8192 bytes; ten are not enough.
-local OversizePacked = buffer.create(2 + 10)
-buffer.writeu16(OversizePacked, 0, 65535)
+local OversizePacked = Varint(65535, 10)
 ExpectRejection(
 	"A packed boolean array is refused before its slots are reserved",
 	Client.PackedBooleans.Read,
@@ -125,8 +138,7 @@ do
 	local Name = "A packed boolean array that fits is not refused"
 	PrettyPrint("cyan", `Testing: {Name}...`, true)
 
-	local Honest = buffer.create(2 + 100)
-	buffer.writeu16(Honest, 0, 800)
+	local Honest = Varint(800, 100)
 	local Success, Result = pcall(Client.PackedBooleans.Read, Honest)
 	if not Success or #Result ~= 800 then
 		ErrorPrint(`Failed "{Name}": {if Success then `read {#Result} elements` else tostring(Result)}.`)
@@ -134,6 +146,20 @@ do
 
 	OkPrint(`Test "{Name}" passed!`)
 end
+
+--> A varint length has one encoding for each value and none past 65535: a last byte that adds nothing
+--> is refused, and so is a third byte past 3, which covers every one that asks for a fourth.
+local LongZero = buffer.create(2 + 4)
+buffer.writeu8(LongZero, 0, 0x81)
+buffer.writeu8(LongZero, 1, 0x00)
+ExpectRejection("A length in more bytes than it needs is refused", Client.Buffer.Read, LongZero, `shortest form`)
+
+local Fourth = buffer.create(4 + 4)
+buffer.writeu8(Fourth, 0, 0xFF)
+buffer.writeu8(Fourth, 1, 0xFF)
+buffer.writeu8(Fourth, 2, 0xFF)
+buffer.writeu8(Fourth, 3, 0x01)
+ExpectRejection("A length that asks for a fourth byte is refused", Client.Buffer.Read, Fourth, `at most 65535`)
 
 --> `CFrame<quat>` names the dropped component in a byte, and only 0 to 3 name one.
 local BadRotation = buffer.create(19)

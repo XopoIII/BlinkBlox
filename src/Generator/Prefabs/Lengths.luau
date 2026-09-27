@@ -24,16 +24,35 @@ local Asserts = AssertsModule.Asserts
 local EmitLengthGuard = AssertsModule.EmitLengthGuard
 local GenerateSpaceGuard = AssertsModule.GenerateSpaceGuard
 
---- The bounds a length lies within, and the numeral that carries it. An unbounded value takes the
---- default ceiling the size analysis assumes too.
+--- The bounds a length lies within, and the numeral that carries it: a fixed-width one, or nil for a
+--- varint (ReadVarLength and WriteVarLength in the base template). An unbounded value takes the
+--- default ceiling the size analysis assumes too, and the choice is Size.LengthPrefix's.
 ---
---- The length is encoded RELATIVE to the declared minimum, in the smallest numeral that holds the
---- span: `string(300..400)` spends one byte on a hundred possible lengths rather than the two that
---- 400 alone would need.
-local function Span(Range: NumberRange?): (number, number, TypePrefab)
+--- The length is encoded RELATIVE to the declared minimum: `string(300..400)` spends one byte on a
+--- hundred possible lengths rather than the two that 400 alone would need.
+local function Span(Range: NumberRange?): (number, number, TypePrefab?)
 	local Upper = if Range then Range.Max else Size.DefaultLength
 	local Lower = if Range then Range.Min else 0
-	return Lower, Upper, GetTypeToUse(Upper - Lower)
+	local Varint = Size.LengthPrefix(Upper - Lower, Range ~= nil)
+	return Lower, Upper, if Varint then nil else GetTypeToUse(Upper - Lower)
+end
+
+--- Reads a length prefix into `Name`, fixed-width or varint.
+local function ReadPrefix(Name: string, Block: Block, LengthType: TypePrefab?)
+	if LengthType then
+		LengthType.Read(Name, Block)
+	else
+		Block:Line(`local {Name} = ReadVarLength()`)
+	end
+end
+
+--- Writes `Value` as a length prefix, fixed-width or varint.
+local function WritePrefix(Value: string, Block: Block, LengthType: TypePrefab?)
+	if LengthType then
+		LengthType.Write(Value, Block)
+	else
+		Block:Line(`WriteVarLength({Value})`)
+	end
 end
 
 --- Reads a length prefix into a local `Length`, and checks it before anything is read or allocated
@@ -42,10 +61,10 @@ local function ReadLength(Variable: string, Block: Block, Range: NumberRange?, A
 	local Lower, Upper, LengthType = Span(Range)
 
 	if Lower > 0 then
-		LengthType.Read("LengthOffset", Block)
+		ReadPrefix("LengthOffset", Block, LengthType)
 		Block:Line(`local Length = LengthOffset + {Lower}`)
 	else
-		LengthType.Read("Length", Block)
+		ReadPrefix("Length", Block, LengthType)
 	end
 
 	--> Checked before the read, and against the reconstructed length rather than the raw numeral:
@@ -69,9 +88,9 @@ local function WriteLength(Block: Block, Range: NumberRange?, Measure: string)
 
 	if Lower > 0 then
 		Block:Line(`local LengthOffset = Length - {Lower}`)
-		LengthType.Write("LengthOffset", Block)
+		WritePrefix("LengthOffset", Block, LengthType)
 	else
-		LengthType.Write("Length", Block)
+		WritePrefix("Length", Block, LengthType)
 	end
 end
 
@@ -145,4 +164,7 @@ do
 	}
 end
 
-return {}
+return {
+	ReadPrefix = ReadPrefix,
+	WritePrefix = WritePrefix,
+}

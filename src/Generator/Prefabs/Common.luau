@@ -69,6 +69,7 @@ local Primitives: { [string]: {
 local NumberTypeBounds = {
 	{ Bits = 8, Maximum = 255, Type = "u8" },
 	{ Bits = 16, Maximum = 65535, Type = "u16" },
+	{ Bits = 24, Maximum = 16777215, Type = "u24" },
 	{ Bits = 32, Maximum = 4294967295, Type = "u32" },
 }
 
