@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "b3785bbcd3715440"
+local SCHEMA_SIGNATURE = "55c00a6715ef1d01"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -870,6 +870,22 @@ local function UnwrapStamp(Stamp: number): number
     return Time / 1000
 end
 
+--> STREAMS. The newest server time taken for each stream. A stream is ordered by the time its every
+--> packet carries rather than by a sequence number of its own: a state that arrives after a newer one
+--> is dropped. One stamped the same millisecond as the last is taken, since a stream sends at most
+--> once a step. The times are absolute, so a stream silent for longer than the stamp's 65-second
+--> wrap is not taken for a stale one.
+local StreamTimes: {[number]: number} = {}
+
+local function StreamAccept(Index: number, Time: number): boolean
+    local Last = StreamTimes[Index]
+    if Last ~= nil and Time < Last then
+        return false
+    end
+
+    StreamTimes[Index] = Time
+    return true
+end
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -920,12 +936,9 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			local Value1: { { Id: number, Head: Vector3, Back: boolean } }?, Value2: number = SerdesFunctions.ReadEVENT_Heads()
 			Value2 = UnwrapStamp(Value2)
-			if OrderAccept(0, OrderIdentifier) == true then
+			if StreamAccept(0, Value2) == true then
 				local BOUND_LISTENER = Events.Unreliable[0]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Heads"
@@ -942,12 +955,9 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				Push(Queue.Unreliable[1], Arguments)
 			end
 		elseif Index == 2 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			local Value1: number?, Value2: number = SerdesFunctions.World_ReadEVENT_Clock()
 			Value2 = UnwrapStamp(Value2)
-			if OrderAccept(2, OrderIdentifier) == true then
+			if StreamAccept(2, Value2) == true then
 				local Epoch = ListenerEpoch
 				for _, Listener in Events.Unreliable[2] do
 					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[2], Listener) == nil then continue end

@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "Crossing_BLINK"
-local SCHEMA_SIGNATURE = "867c969c8917f8cc"
+local SCHEMA_SIGNATURE = "246f9fd568b7522d"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -510,25 +510,6 @@ local function ResetTrafficStats()
 	end
 end
 
---> Sequence numbers for ordered unreliable events, one counter per event each way.
-local OrderOut: { number } = {}
-local OrderIn: { number } = {}
-
---> Accepts a packet only if it is newer than the last one seen for this event.
-local function OrderAccept(Slot: number, Identifier: number): boolean
-	local State = OrderIn
-	local Last = State[Slot]
-	if Last ~= nil then
-		local Ahead = (Identifier - Last) % 65536
-		if Ahead == 0 or Ahead >= 32768 then
-			return false
-		end
-	end
-
-	State[Slot] = Identifier
-	return true
-end
-
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
 --> runtime, and says which event did it. Each Instance sent beside the buffer costs the
@@ -930,6 +911,22 @@ local function UnwrapStamp(Stamp: number): number
     return Time / 1000
 end
 
+--> STREAMS. The newest server time taken for each stream. A stream is ordered by the time its every
+--> packet carries rather than by a sequence number of its own: a state that arrives after a newer one
+--> is dropped. One stamped the same millisecond as the last is taken, since a stream sends at most
+--> once a step. The times are absolute, so a stream silent for longer than the stamp's 65-second
+--> wrap is not taken for a stale one.
+local StreamTimes: {[number]: number} = {}
+
+local function StreamAccept(Index: number, Time: number): boolean
+    local Last = StreamTimes[Index]
+    if Last ~= nil and Time < Last then
+        return false
+    end
+
+    StreamTimes[Index] = Time
+    return true
+end
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -984,15 +981,12 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-			local TrafficStart = RecieveCursor - 3
+			local TrafficStart = RecieveCursor - 1
 			local Value1: { { Id: number, Speed: number, Heat: number } }?, Value2: number = SerdesFunctions.ReadEVENT_Crawls()
 			TrafficCounters[11] += RecieveCursor - TrafficStart
 			TrafficCounters[12] += 1
 			Value2 = UnwrapStamp(Value2)
-			if OrderAccept(0, OrderIdentifier) == true then
+			if StreamAccept(0, Value2) == true then
 				local BOUND_LISTENER = Events.Unreliable[0]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Crawls"
@@ -1001,15 +995,12 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 				end
 			end
 		elseif Index == 1 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-			local TrafficStart = RecieveCursor - 3
+			local TrafficStart = RecieveCursor - 1
 			local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Tick()
 			TrafficCounters[15] += RecieveCursor - TrafficStart
 			TrafficCounters[16] += 1
 			Value2 = UnwrapStamp(Value2)
-			if OrderAccept(1, OrderIdentifier) == true then
+			if StreamAccept(1, Value2) == true then
 				local Epoch = ListenerEpoch
 				for _, Listener in Events.Unreliable[1] do
 					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[1], Listener) == nil then continue end

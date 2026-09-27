@@ -40,8 +40,11 @@ function Declarations.Event(Declaration: Parser.Event)
 	--> Ordered events travel the unreliable channel; the ordering is a sequence number on top of it.
 	local IsOrdered = (Reliability == "OrderedUnreliable")
 	local IsUnreliable = (Reliability == "Unreliable" or IsOrdered)
+	--> Whether a sequence number travels with the event. A stream is OrderedUnreliable too, but it is
+	--> ordered by the server time its every packet already carries; see StreamAccept.
+	local IsSequenced = IsOrdered and not Value.Stream
 
-	if IsOrdered then
+	if IsSequenced then
 		State.UsesOrdering = true
 	end
 	--> A stream or a stamped event always has a listener: it hands the game the stamp unwrapped, which
@@ -50,7 +53,7 @@ function Declarations.Event(Declaration: Parser.Event)
 	local IsSameContext = Value.From == State.Context
 
 	local Channel = IsUnreliable and State.Channels.Unreliable or State.Channels.Reliable
-	local Counters = Traffic.Register(Declaration.Name, Value.Data, IsOrdered)
+	local Counters = Traffic.Register(Declaration.Name, Value.Data, IsSequenced)
 
 	local Index = Channel.Count
 	--> Ordered events ride the unreliable channel, so they share its queue and listener tables --
@@ -64,7 +67,7 @@ function Declarations.Event(Declaration: Parser.Event)
 	--> for the decode branch, where a name like `Player` or `Index` would shadow the loop's own.
 	local DataTypes, Values, Arguments, _ = "nil", "Value: nil", "Value", nil
 	local InnerValues, InnerArguments = "Value: nil", "Value"
-	local Read, Write = Generators.Event(Value.Data, Index, Identifier, nil, IsOrdered)
+	local Read, Write = Generators.Event(Value.Data, Index, Identifier, nil, IsSequenced)
 
 	if Value.Data then
 		DataTypes, Values, _, Arguments = Generators.LuauType(Value.Data :: Type, true)
@@ -151,15 +154,16 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> Read before the payload, because that is the order it was written in. The DECISION comes
 		--> after the payload is decoded, for the same reason the rate limit's does: a variable-length
 		--> payload cannot be skipped without reading it.
-		if IsOrdered then
+		if IsSequenced then
 			Types.u16.Read("OrderIdentifier", Block)
 		end
 
-		Traffic.Start(Block, Counters, IsOrdered)
+		Traffic.Start(Block, Counters, IsSequenced)
 		Block:Line(`local {InnerValues} = {Util.GetPath(Identifier, false, State.Scope)}()`)
 		Traffic.Received(Block, Counters)
+		local StreamStamp: string? = nil
 		if Value.Stream then
-			Streams.Unwrap(Block, InnerArguments)
+			StreamStamp = Streams.Unwrap(Block, InnerArguments)
 		elseif Value.Stamp then
 			Stamps.Unwrap(Block, InnerArguments, Value.Stamp)
 		end
@@ -172,7 +176,9 @@ function Declarations.Event(Declaration: Parser.Event)
 			Block = Block:Compare(RateGuard, "true", "Equals")
 		end
 
-		local OrderGuard = OrderGuardExpression(IsOrdered, Index)
+		local OrderGuard = if StreamStamp
+			then Decode.StreamGuardExpression(Index, StreamStamp)
+			else OrderGuardExpression(IsSequenced, Index)
 		if OrderGuard then
 			Block = Block:Compare(OrderGuard, "true", "Equals")
 		end
@@ -276,7 +282,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		State.Events.Push(`EventNames.{ChannelName}[{Index}] = "{Declaration.Name}"`)
 		local Block = Decode.Open(IsUnreliable, Index)
 
-		if IsOrdered then
+		if IsSequenced then
 			Types.u16.Read("OrderIdentifier", Block)
 		end
 
@@ -285,7 +291,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			false,
 			State.Scope
 		)}())`
-		local PollOrderGuard = OrderGuardExpression(IsOrdered, Index)
+		local PollOrderGuard = OrderGuardExpression(IsSequenced, Index)
 		local PollRateGuard = RateGuardExpression(Value, Declaration.Name)
 
 		--> On the server the queue is filled by clients, so it stops at a cap; see MAX_POLLED in the
@@ -305,7 +311,7 @@ function Declarations.Event(Declaration: Parser.Event)
 
 		PollRateGuard = if #Checks > 0 then table.concat(Checks, " and ") else nil
 
-		Traffic.Start(Block, Counters, IsOrdered)
+		Traffic.Start(Block, Counters, IsSequenced)
 		if PollRateGuard then
 			--> Split because the one-liner decodes and enqueues at once, and only the enqueue may be
 			--> skipped.
@@ -387,7 +393,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			IsReliable = IsReliable,
 			WriteEvent = WriteEvent,
 			Name = Declaration.Name,
-			Ordered = if IsOrdered then Index else nil,
+			Ordered = if IsSequenced then Index else nil,
 			Traffic = Counters,
 		}
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)

@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "f1ad4a4c945941f2"
+local SCHEMA_SIGNATURE = "8886a63d397ac093"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -829,6 +829,22 @@ local function StampNow(): number
     return math.floor(StampClock:GetServerTimeNow() * 1000) % 65536
 end
 
+--> STREAMS. The newest server time taken for each stream. A stream is ordered by the time its every
+--> packet carries rather than by a sequence number of its own: a state that arrives after a newer one
+--> is dropped. One stamped the same millisecond as the last is taken, since a stream sends at most
+--> once a step. The times are absolute, so a stream silent for longer than the stamp's 65-second
+--> wrap is not taken for a stale one.
+local StreamTimes: {[number]: number} = {}
+
+local function StreamAccept(Index: number, Time: number): boolean
+    local Last = StreamTimes[Index]
+    if Last ~= nil and Time < Last then
+        return false
+    end
+
+    StreamTimes[Index] = Time
+    return true
+end
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -879,12 +895,9 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 1 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			local Value1: { Gap: number, Bucket: number }?, Value2: number = SerdesFunctions.ReadEVENT_Trust()
 			Value2 = UnwrapStamp(Value2)
-			if OrderAccept(1, OrderIdentifier) == true then
+			if StreamAccept(1, Value2) == true then
 				local BOUND_LISTENER = Events.Unreliable[1]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Trust"

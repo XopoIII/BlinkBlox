@@ -410,7 +410,8 @@ The check costs one `coroutine.status` per packet, which is why it is on by defa
 Default: `980` bytes
 
 The largest payload an unreliable event may send: its buffer, counting its one-byte event id and,
-for `OrderedUnreliable`, its two-byte sequence number, plus 6 bytes for each Instance sent beside it.
+for `OrderedUnreliable` other than a stream, its two-byte sequence number, plus 6 bytes for each
+Instance sent beside it.
 
 Roblox drops an `UnreliableRemoteEvent` whose payload is over
 [1000 bytes](https://create.roblox.com/docs/reference/engine/classes/UnreliableRemoteEvent). Studio's

@@ -323,4 +323,20 @@ StepReplication = function()
     StepReliable()
 end
 -- SPLIT --
+--> STREAMS. The newest server time taken for each stream. A stream is ordered by the time its every
+--> packet carries rather than by a sequence number of its own: a state that arrives after a newer one
+--> is dropped. One stamped the same millisecond as the last is taken, since a stream sends at most
+--> once a step. The times are absolute, so a stream silent for longer than the stamp's 65-second
+--> wrap is not taken for a stale one.
+local StreamTimes: {[number]: number} = {}
+
+local function StreamAccept(Index: number, Time: number): boolean
+    local Last = StreamTimes[Index]
+    if Last ~= nil and Time < Last then
+        return false
+    end
+
+    StreamTimes[Index] = Time
+    return true
+end
 ]]

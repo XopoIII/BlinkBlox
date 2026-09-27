@@ -115,8 +115,9 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 		local Measured = if Data then Size.Sealed(Data :: any) else nil
 
 		--> The event index is one byte, written ahead of the payload, and an ordered event adds its
-		--> sequence number on top of that.
-		local Header = 1 + (if Reliability == "OrderedUnreliable" then Size.OrderingBytes else 0)
+		--> sequence number on top of that -- all but a stream, which is ordered by its server time.
+		local Sequenced = Reliability == "OrderedUnreliable" and Event.Value.Stream == nil
+		local Header = 1 + (if Sequenced then Size.OrderingBytes else 0)
 		--> Instances cost the payload bytes of their own, beside the buffer. `Refs` counts the most an
 		--> event can carry, not the fewest, so it raises the maximum only: the minimum is what makes
 		--> E3018 an error, and an optional Instance must not make an event that can fit refuse to build.

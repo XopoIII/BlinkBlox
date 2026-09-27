@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "Crossing_BLINK"
-local SCHEMA_SIGNATURE = "867c969c8917f8cc"
+local SCHEMA_SIGNATURE = "246f9fd568b7522d"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -512,57 +512,6 @@ local function ResetTrafficStats()
 end
 local RATE_TEMPLATE = table.freeze({10, 0, 0, 0})
 
---> Sequence numbers for ordered unreliable events, per player and per event, both ways.
-local OrderOut: { [Player]: { number } } = {}
-local OrderIn: { [Player]: { number } } = {}
-
-Players.PlayerRemoving:Connect(function(Player)
-	OrderOut[Player] = nil
-	OrderIn[Player] = nil
-end)
-
---> The next sequence number this player is sent for this event. A player who has already left
---> gets a number and keeps no state, which PlayerRemoving would have nothing left to clear.
-local function NextOrder(Player: Player, Slot: number): number
-	local State = OrderOut[Player]
-	if not State then
-		if Player.Parent == nil then
-			return 0
-		end
-		State = {}
-		OrderOut[Player] = State
-	end
-
-	local Identifier = ((State[Slot] or 0) + 1) % 65536
-	State[Slot] = Identifier
-	return Identifier
-end
-
---> Accepts a packet only if it is newer than the last one this player sent for this event.
-local function OrderAccept(Player: Player, Slot: number, Identifier: number): boolean
-	if Player.Parent == nil then
-		OrderIn[Player] = nil
-		return false
-	end
-
-	local State = OrderIn[Player]
-	if not State then
-		State = {}
-		OrderIn[Player] = State
-	end
-
-	local Last = State[Slot]
-	if Last ~= nil then
-		local Ahead = (Identifier - Last) % 65536
-		if Ahead == 0 or Ahead >= 32768 then
-			return false
-		end
-	end
-
-	State[Slot] = Identifier
-	return true
-end
-
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
 --> runtime, and says which event did it. Each Instance sent beside the buffer costs the
@@ -584,12 +533,11 @@ Queue.Reliable[0] = table.create(256)
 EventNames.Reliable[0] = "Ready"
 export type Crawl = { Id: number, Speed: number, Heat: number }
 function SerdesFunctions.WriteEVENT_Crawls(Value1: { { Id: number, Speed: number, Heat: number } }?, Value2: number): ()
-	-- Allocate BLOCK: 6 bytes
-	local BLOCK_START = Allocate(6)
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
 	local BITFIELD_0
 	-- EVENT_Crawls (0)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
-	buffer.writeu16(SendBuffer, BLOCK_START + 1, 0)
 	-- Value: Crawls
 	-- Value1: Crawls
 	BITFIELD_0 = 0
@@ -634,17 +582,16 @@ function SerdesFunctions.WriteEVENT_Crawls(Value1: { { Id: number, Speed: number
 		-- END ARRAY
 	end
 	-- Value2: Crawls
-	buffer.writeu16(SendBuffer, BLOCK_START + 4, Value2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_0)
+	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
 end
 
 function SerdesFunctions.WriteEVENT_Tick(Value1: number?, Value2: number): ()
-	-- Allocate BLOCK: 6 bytes
-	local BLOCK_START = Allocate(6)
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
 	local BITFIELD_0
 	-- EVENT_Tick (1)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
-	buffer.writeu16(SendBuffer, BLOCK_START + 1, 0)
 	-- Value: Tick
 	-- Value1: Tick
 	BITFIELD_0 = 0
@@ -658,8 +605,8 @@ function SerdesFunctions.WriteEVENT_Tick(Value1: number?, Value2: number): ()
 		buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
 	end
 	-- Value2: Tick
-	buffer.writeu16(SendBuffer, BLOCK_START + 4, Value2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_0)
+	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
 end
 
 function SerdesFunctions.ReadEVENT_Ready(): (number)
@@ -1815,14 +1762,12 @@ local function SendSTREAM_0(Value: { { Id: number, Speed: number, Heat: number }
 	local Buffer = buffer.create(SendCursor)
 	buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 	KeepScratch()
-	for _, Player in Players:GetPlayers() do
-		buffer.writeu16(Buffer, 1, NextOrder(Player, 0))
-		Unreliable:FireClient(Player, Buffer, SendInstances)
-		TrafficCounters[9] += SendCursor
-		TrafficCounters[10] += 1
-		TrafficCounters[5] += SendCursor
-		TrafficCounters[6] += 1
-	end
+	Unreliable:FireAllClients(Buffer, SendInstances)
+	local Reached = #Players:GetPlayers()
+	TrafficCounters[9] += SendCursor * Reached
+	TrafficCounters[10] += Reached
+	TrafficCounters[5] += SendCursor * Reached
+	TrafficCounters[6] += Reached
 end
 local STREAM_0 = CreateStream("Crawls", 1 / 10, 1 / 20, 1, 0.5, SendSTREAM_0)
 
@@ -1835,14 +1780,12 @@ local function SendSTREAM_1(Value: number?, ServerTime: number): ()
 	local Buffer = buffer.create(SendCursor)
 	buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 	KeepScratch()
-	for _, Player in Players:GetPlayers() do
-		buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
-		Unreliable:FireClient(Player, Buffer, SendInstances)
-		TrafficCounters[13] += SendCursor
-		TrafficCounters[14] += 1
-		TrafficCounters[5] += SendCursor
-		TrafficCounters[6] += 1
-	end
+	Unreliable:FireAllClients(Buffer, SendInstances)
+	local Reached = #Players:GetPlayers()
+	TrafficCounters[13] += SendCursor * Reached
+	TrafficCounters[14] += Reached
+	TrafficCounters[5] += SendCursor * Reached
+	TrafficCounters[6] += Reached
 end
 local STREAM_1 = CreateStream("Tick", 1 / 5, 1 / 5, 1, 0, SendSTREAM_1)
 local function Listen()

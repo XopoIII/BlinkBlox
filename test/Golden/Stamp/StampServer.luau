@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "f1ad4a4c945941f2"
+local SCHEMA_SIGNATURE = "8886a63d397ac093"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -618,12 +618,11 @@ function SerdesFunctions.ReadEVENT_Aim(): (number, Vector3, number)
 end
 
 function SerdesFunctions.WriteEVENT_Trust(Value1: { Gap: number, Bucket: number }?, Value2: number): ()
-	-- Allocate BLOCK: 6 bytes
-	local BLOCK_START = Allocate(6)
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
 	local BITFIELD_0
 	-- EVENT_Trust (1)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
-	buffer.writeu16(SendBuffer, BLOCK_START + 1, 0)
 	-- Value: Trust
 	-- Value1: Trust
 	BITFIELD_0 = 0
@@ -638,8 +637,8 @@ function SerdesFunctions.WriteEVENT_Trust(Value1: { Gap: number, Bucket: number 
 		buffer.writef32(SendBuffer, BLOCK_START + 4, Value1.Bucket)
 	end
 	-- Value2: Trust
-	buffer.writeu16(SendBuffer, BLOCK_START + 4, Value2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_0)
+	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
 end
 
 if not RunService:IsRunning() then
@@ -1703,7 +1702,6 @@ local function SendSTREAM_1(Player: Player, Value: { Gap: number, Bucket: number
 	local Buffer = buffer.create(SendCursor)
 	buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 	KeepScratch()
-	buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
 	Unreliable:FireClient(Player, Buffer, SendInstances)
 end
 local STREAM_1 = CreatePlayerStream("Trust", 1 / 10, 1 / 20, 2, 0.01, SendSTREAM_1)

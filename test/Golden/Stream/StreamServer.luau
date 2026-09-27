@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "b3785bbcd3715440"
+local SCHEMA_SIGNATURE = "55c00a6715ef1d01"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -542,12 +542,11 @@ local SerdesEvent = "?"
 local SerdesThread: thread?
 export type Head = { Id: number, Head: Vector3, Back: boolean }
 function SerdesFunctions.WriteEVENT_Heads(Value1: { { Id: number, Head: Vector3, Back: boolean } }?, Value2: number): ()
-	-- Allocate BLOCK: 6 bytes
-	local BLOCK_START = Allocate(6)
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
 	local BITFIELD_0
 	-- EVENT_Heads (0)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
-	buffer.writeu16(SendBuffer, BLOCK_START + 1, 0)
 	-- Value: Heads
 	-- Value1: Heads
 	BITFIELD_0 = 0
@@ -654,8 +653,8 @@ function SerdesFunctions.WriteEVENT_Heads(Value1: { { Id: number, Head: Vector3,
 		-- END ARRAY
 	end
 	-- Value2: Heads
-	buffer.writeu16(SendBuffer, BLOCK_START + 4, Value2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_0)
+	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
 end
 
 function SerdesFunctions.WriteEVENT_Aim(Value: Vector3): ()
@@ -672,12 +671,11 @@ function SerdesFunctions.WriteEVENT_Aim(Value: Vector3): ()
 end
 
 function SerdesFunctions.World_WriteEVENT_Clock(Value1: number?, Value2: number): ()
-	-- Allocate BLOCK: 6 bytes
-	local BLOCK_START = Allocate(6)
+	-- Allocate BLOCK: 4 bytes
+	local BLOCK_START = Allocate(4)
 	local BITFIELD_0
 	-- EVENT_Clock (2)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
-	buffer.writeu16(SendBuffer, BLOCK_START + 1, 0)
 	-- Value: Clock
 	-- Value1: Clock
 	BITFIELD_0 = 0
@@ -689,8 +687,8 @@ function SerdesFunctions.World_WriteEVENT_Clock(Value1: number?, Value2: number)
 		buffer.writef64(SendBuffer, BLOCK_START + 0, Value1)
 	end
 	-- Value2: Clock
-	buffer.writeu16(SendBuffer, BLOCK_START + 4, Value2)
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_0)
+	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
 end
 
 if not RunService:IsRunning() then
@@ -1754,10 +1752,7 @@ local function SendSTREAM_0(Value: { { Id: number, Head: Vector3, Back: boolean 
 	local Buffer = buffer.create(SendCursor)
 	buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 	KeepScratch()
-	for _, Player in Players:GetPlayers() do
-		buffer.writeu16(Buffer, 1, NextOrder(Player, 0))
-		Unreliable:FireClient(Player, Buffer, SendInstances)
-	end
+	Unreliable:FireAllClients(Buffer, SendInstances)
 end
 local STREAM_0 = CreateStream("Heads", 1 / 10, 1 / 20, 1, 0.05, SendSTREAM_0)
 
@@ -1770,10 +1765,7 @@ local function SendSTREAM_2(Value: number?, ServerTime: number): ()
 	local Buffer = buffer.create(SendCursor)
 	buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 	KeepScratch()
-	for _, Player in Players:GetPlayers() do
-		buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
-		Unreliable:FireClient(Player, Buffer, SendInstances)
-	end
+	Unreliable:FireAllClients(Buffer, SendInstances)
 end
 local STREAM_2 = CreateStream("Clock", 1 / 2.5, 1 / 2.5, 1, 0, SendSTREAM_2)
 local function DecodeLoop(DecodeEvent: () -> (), Player: Player, Size: number)

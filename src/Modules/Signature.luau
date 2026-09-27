@@ -32,7 +32,8 @@
 --- catch, arriving through the one door an AST walk cannot watch.
 ---
 --- 2: 0.27.0 packed `boolean[]` eight elements to a byte, where every element had been a byte.
-local WIRE_VERSION = 2
+--- 3: 0.40.0 dropped a stream's sequence number, which it is now ordered by its server time instead.
+local WIRE_VERSION = 3
 
 --- Structural stand-ins for the parser's nodes. Requiring the parser here would close a cycle.
 type Node = any

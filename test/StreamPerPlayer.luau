@@ -93,12 +93,12 @@ RunClosure("A per-player stream sends each player their own state, to them alone
 	Expect("frames to the second", Sent[Second], { 1 })
 
 	--> Nothing goes out to everyone: every packet names its player, and carries that player's state
-	--> after the six bytes of header. Read from the bytes, since the one client here would take the
-	--> second player's packet, numbered 1 like the first's, as stale.
+	--> after the four bytes of header -- index, presence bits, stamp. Read from the bytes, since the
+	--> one client here would be handed both players' packets.
 	local States: { [any]: number } = {}
 	for _, Packet in Pair.Outbound do
 		assert(Packet.Player ~= nil, "a per-player stream used FireAllClients")
-		States[Packet.Player] = buffer.readf64(Packet.Buffer, 6)
+		States[Packet.Player] = buffer.readf64(Packet.Buffer, 4)
 	end
 	Expect("the states", { States[First], States[Second] }, { 1.5, 2.5 })
 end)
