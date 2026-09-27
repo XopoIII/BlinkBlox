@@ -44,6 +44,18 @@ export type UnboundUpper = f32(-0.0..)
 export type UnboundLower = f32(..-0.0)
 export type RangedVector = vector(0..1)
 
+-- Ranged numbers inside a struct and an array: each is read into a local and checked there before
+-- it is stored, and a side its read type already meets is not checked at all.
+export struct RangedFields {
+	Health: u8(0..100),
+	Angle: f32(-180..180),
+	Level: i16(-5..5),
+	Weight: f16(0..1),
+	Seven: u8(7),
+	Full: u16(0..65535)
+}
+export type RangedList = i8(-3..3)[..8]
+
 export type Buffer = buffer
 export type ExactBuffer = buffer(9)
 export type BoundedBuffer = buffer(0..1000)

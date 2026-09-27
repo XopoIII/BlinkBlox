@@ -763,6 +763,8 @@ export type NegativeRange = number
 export type UnboundUpper = number
 export type UnboundLower = number
 export type RangedVector = Vector3
+export type RangedFields = { Health: number, Angle: number, Level: number, Weight: number, Seven: number, Full: number }
+export type RangedList = { number }
 export type Buffer = buffer
 export type ExactBuffer = buffer
 export type BoundedBuffer = buffer
@@ -4286,6 +4288,245 @@ if not RunService:IsRunning() then
 				buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
 				buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
 				buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	RangedFields = {
+		Read = function(Buffer: buffer): (RangedFields)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (RangedFields)
+				-- Read BLOCK: 12 bytes
+				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: RangedFields
+				local Value = {Health = false, Angle = false, Level = false, Weight = false, Seven = false, Full = false} :: any
+				do
+					-- Value.Health: Health
+					local Checked = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					if not (Checked <= 100) then error(`Expected "Value.Health" to be smaller than or equal to 100, got {Checked} instead.`) end
+					Value.Health = Checked
+				end
+				do
+					-- Value.Angle: Angle
+					local Checked = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					if not (Checked >= -180) then error(`Expected "Value.Angle" to be larger than or equal to -180, got {Checked} instead.`) end
+					if not (Checked <= 180) then error(`Expected "Value.Angle" to be smaller than or equal to 180, got {Checked} instead.`) end
+					Value.Angle = Checked
+				end
+				do
+					-- Value.Level: Level
+					local Checked = buffer.readi16(RecieveBuffer, BLOCK_START + 5)
+					if not (Checked >= -5) then error(`Expected "Value.Level" to be larger than or equal to -5, got {Checked} instead.`) end
+					if not (Checked <= 5) then error(`Expected "Value.Level" to be smaller than or equal to 5, got {Checked} instead.`) end
+					Value.Level = Checked
+				end
+				do
+					-- Value.Weight: Weight
+					local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 7)
+					local Checked
+					local MantissaExponent = Encoded % 0x8000
+					if MantissaExponent == 0b0_11111_0000000000  then
+						if Encoded // 0x8000 == 1 then
+							Checked = -math.huge
+						else
+							Checked = math.huge
+						end
+					elseif MantissaExponent > 0b0_11111_0000000000 then
+						Checked = 0 / 0
+					elseif MantissaExponent == 0b0_00000_0000000000   then
+						Checked = if Encoded == 0 then 0 else -0
+					else
+						local Mantissa = MantissaExponent % 0x400
+						local Exponent = MantissaExponent // 0x400
+						local Fraction;
+						if Exponent == 0 then
+							Fraction = Mantissa / 0x400
+						else
+							Fraction = Mantissa / 0x800 + 0.5
+						end
+						local Result = math.ldexp(Fraction, Exponent - 14)
+						Checked = if Encoded // 0x8000 == 1 then -Result else Result
+					end
+					if not (Checked >= 0) then error(`Expected "Value.Weight" to be larger than or equal to 0, got {Checked} instead.`) end
+					if not (Checked <= 1) then error(`Expected "Value.Weight" to be smaller than or equal to 1, got {Checked} instead.`) end
+					Value.Weight = Checked
+				end
+				do
+					-- Value.Seven: Seven
+					local Checked = buffer.readu8(RecieveBuffer, BLOCK_START + 9)
+					if Checked ~= 7 then error(`Expected "Value.Seven" to be equal to 7, got {Checked} instead.`) end
+					Value.Seven = Checked
+				end
+				-- Value.Full: Full
+				Value.Full = buffer.readu16(RecieveBuffer, BLOCK_START + 10)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: RangedFields
+		end,
+		Write = function(Value: RangedFields): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 12 bytes
+				local BLOCK_START = Allocate(12)
+				-- Value: RangedFields
+				-- Value.Health: Health
+				if typeof(Value.Health) ~= "number" then
+					error(`Expected Value.Health to be of type number, got {type(Value.Health)} instead.`)
+				end
+				if not (Value.Health >= 0) then error(`Expected "Value.Health" to be larger than or equal to 0, got {Value.Health} instead.`) end
+				if not (Value.Health <= 100) then error(`Expected "Value.Health" to be smaller than or equal to 100, got {Value.Health} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Health)
+				-- Value.Angle: Angle
+				if typeof(Value.Angle) ~= "number" then
+					error(`Expected Value.Angle to be of type number, got {type(Value.Angle)} instead.`)
+				end
+				if not (Value.Angle >= -180) then error(`Expected "Value.Angle" to be larger than or equal to -180, got {Value.Angle} instead.`) end
+				if not (Value.Angle <= 180) then error(`Expected "Value.Angle" to be smaller than or equal to 180, got {Value.Angle} instead.`) end
+				buffer.writef32(SendBuffer, BLOCK_START + 1, Value.Angle)
+				-- Value.Level: Level
+				if typeof(Value.Level) ~= "number" then
+					error(`Expected Value.Level to be of type number, got {type(Value.Level)} instead.`)
+				end
+				if not (Value.Level >= -5) then error(`Expected "Value.Level" to be larger than or equal to -5, got {Value.Level} instead.`) end
+				if not (Value.Level <= 5) then error(`Expected "Value.Level" to be smaller than or equal to 5, got {Value.Level} instead.`) end
+				buffer.writei16(SendBuffer, BLOCK_START + 5, Value.Level)
+				-- Value.Weight: Weight
+				if typeof(Value.Weight) ~= "number" then
+					error(`Expected Value.Weight to be of type number, got {type(Value.Weight)} instead.`)
+				end
+				if not (Value.Weight >= 0) then error(`Expected "Value.Weight" to be larger than or equal to 0, got {Value.Weight} instead.`) end
+				if not (Value.Weight <= 1) then error(`Expected "Value.Weight" to be smaller than or equal to 1, got {Value.Weight} instead.`) end
+				if Value.Weight > 65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b0_11111_0000000000)
+				elseif Value.Weight < -65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b1_11111_0000000000)
+				elseif Value.Weight ~= Value.Weight then
+					buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b1_11111_0000000001)
+				elseif Value.Weight == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 7, if 1 / Value.Weight < 0 then 0x8000 else 0)
+				else
+					local float = Value.Weight
+					local Abosulte = math.abs(float)
+					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+					local RoundedValue = (Abosulte // Interval) * Interval
+					local Fraction, Exponent = math.frexp(RoundedValue)
+					Exponent += 14
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+						+ if float < 0 then 0x8000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 7, Result)
+				end
+				-- Value.Seven: Seven
+				if typeof(Value.Seven) ~= "number" then
+					error(`Expected Value.Seven to be of type number, got {type(Value.Seven)} instead.`)
+				end
+				if Value.Seven ~= 7 then error(`Expected "Value.Seven" to be equal to 7, got {Value.Seven} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 9, Value.Seven)
+				-- Value.Full: Full
+				if typeof(Value.Full) ~= "number" then
+					error(`Expected Value.Full to be of type number, got {type(Value.Full)} instead.`)
+				end
+				if not (Value.Full >= 0) then error(`Expected "Value.Full" to be larger than or equal to 0, got {Value.Full} instead.`) end
+				if not (Value.Full <= 65535) then error(`Expected "Value.Full" to be smaller than or equal to 65535, got {Value.Full} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 10, Value.Full)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	RangedList = {
+		Read = function(Buffer: buffer): (RangedList)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (RangedList)
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: RangedList
+				-- START ARRAY
+				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				if not (Length <= 8) then error(`Expected "Length" to be smaller than or equal to 8, got {Length} instead.`) end
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Value = table.create(Length)
+					-- Read BLOCK: 1 bytes
+				local ARRAY_START_1 = Read(1 * Length)
+				for Slot_1 = 1, Length do
+					-- Item_1: RangedList
+					-- Read 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					local Item_1 = buffer.readi8(RecieveBuffer, OPERATION_OFFSET_0)
+					if not (Item_1 >= -3) then error(`Expected "Item_1" to be larger than or equal to -3, got {Item_1} instead.`) end
+					if not (Item_1 <= 3) then error(`Expected "Item_1" to be smaller than or equal to 3, got {Item_1} instead.`) end
+					Value[Slot_1] = Item_1
+				end
+				-- END ARRAY
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: RangedList
+		end,
+		Write = function(Value: RangedList): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: RangedList
+				-- START ARRAY
+				if not (#Value <= 8) then error(`Expected "#Value" to be smaller than or equal to 8, got {#Value} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, #Value)
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_1 = Allocate(1 * #Value)
+				for Index = 1, #Value do
+					local Item_1 = Value[Index]
+					-- Item_1: RangedList
+					if typeof(Item_1) ~= "number" then
+						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+					end
+					if not (Item_1 >= -3) then error(`Expected "Item_1" to be larger than or equal to -3, got {Item_1} instead.`) end
+					if not (Item_1 <= 3) then error(`Expected "Item_1" to be smaller than or equal to 3, got {Item_1} instead.`) end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					buffer.writei8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+				end
+				-- END ARRAY
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -11550,6 +11791,245 @@ local Returns = table.freeze({
 				buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
 				buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
 				buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	RangedFields = {
+		Read = function(Buffer: buffer): (RangedFields)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (RangedFields)
+				-- Read BLOCK: 12 bytes
+				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: RangedFields
+				local Value = {Health = false, Angle = false, Level = false, Weight = false, Seven = false, Full = false} :: any
+				do
+					-- Value.Health: Health
+					local Checked = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					if not (Checked <= 100) then error(`Expected "Value.Health" to be smaller than or equal to 100, got {Checked} instead.`) end
+					Value.Health = Checked
+				end
+				do
+					-- Value.Angle: Angle
+					local Checked = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					if not (Checked >= -180) then error(`Expected "Value.Angle" to be larger than or equal to -180, got {Checked} instead.`) end
+					if not (Checked <= 180) then error(`Expected "Value.Angle" to be smaller than or equal to 180, got {Checked} instead.`) end
+					Value.Angle = Checked
+				end
+				do
+					-- Value.Level: Level
+					local Checked = buffer.readi16(RecieveBuffer, BLOCK_START + 5)
+					if not (Checked >= -5) then error(`Expected "Value.Level" to be larger than or equal to -5, got {Checked} instead.`) end
+					if not (Checked <= 5) then error(`Expected "Value.Level" to be smaller than or equal to 5, got {Checked} instead.`) end
+					Value.Level = Checked
+				end
+				do
+					-- Value.Weight: Weight
+					local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 7)
+					local Checked
+					local MantissaExponent = Encoded % 0x8000
+					if MantissaExponent == 0b0_11111_0000000000  then
+						if Encoded // 0x8000 == 1 then
+							Checked = -math.huge
+						else
+							Checked = math.huge
+						end
+					elseif MantissaExponent > 0b0_11111_0000000000 then
+						Checked = 0 / 0
+					elseif MantissaExponent == 0b0_00000_0000000000   then
+						Checked = if Encoded == 0 then 0 else -0
+					else
+						local Mantissa = MantissaExponent % 0x400
+						local Exponent = MantissaExponent // 0x400
+						local Fraction;
+						if Exponent == 0 then
+							Fraction = Mantissa / 0x400
+						else
+							Fraction = Mantissa / 0x800 + 0.5
+						end
+						local Result = math.ldexp(Fraction, Exponent - 14)
+						Checked = if Encoded // 0x8000 == 1 then -Result else Result
+					end
+					if not (Checked >= 0) then error(`Expected "Value.Weight" to be larger than or equal to 0, got {Checked} instead.`) end
+					if not (Checked <= 1) then error(`Expected "Value.Weight" to be smaller than or equal to 1, got {Checked} instead.`) end
+					Value.Weight = Checked
+				end
+				do
+					-- Value.Seven: Seven
+					local Checked = buffer.readu8(RecieveBuffer, BLOCK_START + 9)
+					if Checked ~= 7 then error(`Expected "Value.Seven" to be equal to 7, got {Checked} instead.`) end
+					Value.Seven = Checked
+				end
+				-- Value.Full: Full
+				Value.Full = buffer.readu16(RecieveBuffer, BLOCK_START + 10)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: RangedFields
+		end,
+		Write = function(Value: RangedFields): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 12 bytes
+				local BLOCK_START = Allocate(12)
+				-- Value: RangedFields
+				-- Value.Health: Health
+				if typeof(Value.Health) ~= "number" then
+					error(`Expected Value.Health to be of type number, got {type(Value.Health)} instead.`)
+				end
+				if not (Value.Health >= 0) then error(`Expected "Value.Health" to be larger than or equal to 0, got {Value.Health} instead.`) end
+				if not (Value.Health <= 100) then error(`Expected "Value.Health" to be smaller than or equal to 100, got {Value.Health} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Health)
+				-- Value.Angle: Angle
+				if typeof(Value.Angle) ~= "number" then
+					error(`Expected Value.Angle to be of type number, got {type(Value.Angle)} instead.`)
+				end
+				if not (Value.Angle >= -180) then error(`Expected "Value.Angle" to be larger than or equal to -180, got {Value.Angle} instead.`) end
+				if not (Value.Angle <= 180) then error(`Expected "Value.Angle" to be smaller than or equal to 180, got {Value.Angle} instead.`) end
+				buffer.writef32(SendBuffer, BLOCK_START + 1, Value.Angle)
+				-- Value.Level: Level
+				if typeof(Value.Level) ~= "number" then
+					error(`Expected Value.Level to be of type number, got {type(Value.Level)} instead.`)
+				end
+				if not (Value.Level >= -5) then error(`Expected "Value.Level" to be larger than or equal to -5, got {Value.Level} instead.`) end
+				if not (Value.Level <= 5) then error(`Expected "Value.Level" to be smaller than or equal to 5, got {Value.Level} instead.`) end
+				buffer.writei16(SendBuffer, BLOCK_START + 5, Value.Level)
+				-- Value.Weight: Weight
+				if typeof(Value.Weight) ~= "number" then
+					error(`Expected Value.Weight to be of type number, got {type(Value.Weight)} instead.`)
+				end
+				if not (Value.Weight >= 0) then error(`Expected "Value.Weight" to be larger than or equal to 0, got {Value.Weight} instead.`) end
+				if not (Value.Weight <= 1) then error(`Expected "Value.Weight" to be smaller than or equal to 1, got {Value.Weight} instead.`) end
+				if Value.Weight > 65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b0_11111_0000000000)
+				elseif Value.Weight < -65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b1_11111_0000000000)
+				elseif Value.Weight ~= Value.Weight then
+					buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b1_11111_0000000001)
+				elseif Value.Weight == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 7, if 1 / Value.Weight < 0 then 0x8000 else 0)
+				else
+					local float = Value.Weight
+					local Abosulte = math.abs(float)
+					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+					local RoundedValue = (Abosulte // Interval) * Interval
+					local Fraction, Exponent = math.frexp(RoundedValue)
+					Exponent += 14
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+						+ if float < 0 then 0x8000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 7, Result)
+				end
+				-- Value.Seven: Seven
+				if typeof(Value.Seven) ~= "number" then
+					error(`Expected Value.Seven to be of type number, got {type(Value.Seven)} instead.`)
+				end
+				if Value.Seven ~= 7 then error(`Expected "Value.Seven" to be equal to 7, got {Value.Seven} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 9, Value.Seven)
+				-- Value.Full: Full
+				if typeof(Value.Full) ~= "number" then
+					error(`Expected Value.Full to be of type number, got {type(Value.Full)} instead.`)
+				end
+				if not (Value.Full >= 0) then error(`Expected "Value.Full" to be larger than or equal to 0, got {Value.Full} instead.`) end
+				if not (Value.Full <= 65535) then error(`Expected "Value.Full" to be smaller than or equal to 65535, got {Value.Full} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 10, Value.Full)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	RangedList = {
+		Read = function(Buffer: buffer): (RangedList)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (RangedList)
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: RangedList
+				-- START ARRAY
+				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				if not (Length <= 8) then error(`Expected "Length" to be smaller than or equal to 8, got {Length} instead.`) end
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Value = table.create(Length)
+					-- Read BLOCK: 1 bytes
+				local ARRAY_START_1 = Read(1 * Length)
+				for Slot_1 = 1, Length do
+					-- Item_1: RangedList
+					-- Read 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					local Item_1 = buffer.readi8(RecieveBuffer, OPERATION_OFFSET_0)
+					if not (Item_1 >= -3) then error(`Expected "Item_1" to be larger than or equal to -3, got {Item_1} instead.`) end
+					if not (Item_1 <= 3) then error(`Expected "Item_1" to be smaller than or equal to 3, got {Item_1} instead.`) end
+					Value[Slot_1] = Item_1
+				end
+				-- END ARRAY
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: RangedList
+		end,
+		Write = function(Value: RangedList): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: RangedList
+				-- START ARRAY
+				if not (#Value <= 8) then error(`Expected "#Value" to be smaller than or equal to 8, got {#Value} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, #Value)
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_1 = Allocate(1 * #Value)
+				for Index = 1, #Value do
+					local Item_1 = Value[Index]
+					-- Item_1: RangedList
+					if typeof(Item_1) ~= "number" then
+						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+					end
+					if not (Item_1 >= -3) then error(`Expected "Item_1" to be larger than or equal to -3, got {Item_1} instead.`) end
+					if not (Item_1 <= 3) then error(`Expected "Item_1" to be smaller than or equal to 3, got {Item_1} instead.`) end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					buffer.writei8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+				end
+				-- END ARRAY
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result

@@ -42,8 +42,9 @@ local function Bounds(
 end
 
 local Asserts = {
-	number = function(Variable: string, Min: number, Max: number): AssertPrefab
-		return Bounds(Variable, Min, Max, "", Variable, true)
+	--> `Measure` names a local the value was read into, when it is checked there and stored after.
+	number = function(Variable: string, Min: number, Max: number, Measure: string?): AssertPrefab
+		return Bounds(Variable, Min, Max, "", Measure or Variable, true)
 	end,
 
 	--> `Measure` names the expression to compare. The read path passes the decoded length so the

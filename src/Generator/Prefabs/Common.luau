@@ -115,7 +115,7 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 		local Modified = Value.Scale ~= nil or Value.Saturate == true
 		local WireRange = if Range and Value.Scale then Fixed.WireBounds(Declaration) else Range
 
-		local function GenerateValidation(Block: Block, TargetVariable: string)
+		local function GenerateValidation(Block: Block, TargetVariable: string, Measure: string?)
 			if Block == Write and WriteValidations ~= true then
 				return
 			end
@@ -152,7 +152,7 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 					end
 				end
 
-				local Assert = AssertGenerator(TargetVariable, Min, Max)
+				local Assert = AssertGenerator(TargetVariable, Min, Max, Measure)
 				if not IsVariableSize and Assert.Exact then
 					Block:Line(Assert.Exact)
 				else
@@ -184,6 +184,18 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 			end
 		end
 
+		--> A number checked on receipt into a field is read into a local, checked there, then stored.
+		--> Checked where it was stored, each comparison read the field back out of its table, and on a
+		--> struct of three ranged numbers that was a third of the time spent decoding it. The local lives
+		--> in the field's own scope (Generator/Scope.luau), so it costs no register past the field.
+		local Checked = Target
+		if Type == "number" and not Modified and WireRange and string.find(Target, "[%.%[]") then
+			local Floor, Ceiling = Narrow.Readable(Primitive)
+			if not IsVariableSize or WireRange.Min > Floor or WireRange.Max < Ceiling then
+				Checked = "Checked"
+			end
+		end
+
 		if Modified then
 			Fixed.Write(Declaration, Target, Write, WriteValidations, function(Converted: string)
 				Prefab.Write(Converted, Write, Range, Components)
@@ -192,12 +204,17 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 			GenerateValidation(Write, Target)
 		end
 
-		Prefab.Read(Target, Read, Range, Components)
+		Prefab.Read(Checked, Read, Range, Components)
 		if not Modified then
 			Prefab.Write(Target, Write, Range, Components)
 		end
 
-		GenerateValidation(Read, Target)
+		if Checked ~= Target then
+			GenerateValidation(Read, Target, Checked)
+			Read:Line(`{Target} = {Checked}`)
+		else
+			GenerateValidation(Read, Target)
+		end
 		if Modified then
 			Fixed.Read(Declaration, Target, Read)
 		end
