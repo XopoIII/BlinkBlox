@@ -70,10 +70,10 @@ function Decode.Open(Unreliable: boolean, Index: number): Blocks.Block
 end
 
 --> A run of at most this many branches is tested one index after another; a longer one is split in
---> two by a comparison. Four keeps a schema of up to four declarations a channel emitting the chain
---> it always did, and costs a branch at most one comparison more than a tree cut down to single
---> leaves would.
-local LEAF = 4
+--> two by a comparison. Eight keeps a channel of up to eight declarations emitting the chain it always
+--> did: split, the first of five paid a comparison it had not, and a hundred sends over 128 events
+--> decoded no faster with runs of four (0.053 ms a frame either way).
+local LEAF = 8
 
 --- Appends a branch's lines to `Decoder`, `Depth` tabs deeper than the branch was built at.
 local function Nest(Decoder: Blocks.Block, Lines: { string }, Depth: number)
@@ -95,7 +95,7 @@ end
 --- It was one `if Index == 0 ... elseif` chain, and an interpreted client walked it one comparison
 --- at a time -- a hundred to reach the hundredth event, on every event it received. The branches
 --- are now halved by `Index < Middle` until a run of `LEAF` is left, so reaching any of 256 takes
---- at most eight comparisons. Each run ends in `Unknown`, and every index outside the declared ones
+--- at most thirteen comparisons rather than 256. Each run ends in `Unknown`, and every index outside the declared ones
 --- lands in some run, so an unclaimed index is refused exactly as before.
 function Decode.Close(Decoder: Blocks.Block, Branches: { State.Branch }, Unknown: string): Blocks.Block
 	table.sort(Branches, function(Left: State.Branch, Right: State.Branch): boolean

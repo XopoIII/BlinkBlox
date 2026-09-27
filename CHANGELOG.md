@@ -15,9 +15,9 @@ The wire does not change, and neither does a module built without the new option
 
 - A channel's events are dispatched by halving the index range rather than one `elseif` after another,
   so an interpreted client no longer makes a hundred comparisons to reach the hundredth event. A
-  hundred sends over 128 events decode in 0.053 ms a frame, from 0.086. A channel of up to four
-  declarations emits exactly what it did; the first event of a large one pays a few comparisons more
-  (index 0 of 133: 0.088 to 0.094 ms).
+  hundred sends over 128 events decode in 0.053 ms a frame, from 0.086. A channel of up to eight
+  declarations emits exactly what it did; the first event of a larger one pays a few comparisons more
+  (index 0 of 133: 0.089 to 0.093 ms).
 - A received length is no longer checked against a bound its prefix already meets: never below its
   minimum, and not above 65535 when it is a varint, which refuses past that itself. Every unbounded
   string and array carried both checks on every packet. An integer skips a side its read type meets.
