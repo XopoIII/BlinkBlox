@@ -115,6 +115,57 @@ local function Load(Save: BLINK_BUFFER_SAVE?)
     SendInstances = {}
 end
 
+--> A buffer for writes that are copied out as soon as they are made: an unreliable send, and a
+--> broadcast before it is appended to each player's batch. Each used to write into a fresh 64-byte
+--> buffer and a fresh table, and to regrow the buffer on the way to the event's size. This one is
+--> kept at whatever size a write grew it to, up to SCRATCH_LIMIT, so a burst is not held for good.
+--> Nothing keeps a reference past the copy: a remote serialises its arguments when it is fired.
+local SCRATCH_LIMIT = 65536
+local ScratchSize = 64
+local ScratchBuffer = buffer.create(64)
+local ScratchInstances = {}
+
+local function LoadScratch()
+    SendSize = ScratchSize
+    SendCursor = 0
+    SendOffset = 0
+    SendBuffer = ScratchBuffer
+    table.clear(ScratchInstances)
+    SendInstances = ScratchInstances
+end
+
+--> Called once the scratch write is done, before anything else is loaded.
+local function KeepScratch()
+    if SendBuffer ~= ScratchBuffer and SendSize <= SCRATCH_LIMIT then
+        ScratchSize = SendSize
+        ScratchBuffer = SendBuffer
+    end
+end
+
+--> The client's batch, set aside while an unreliable Fire writes into the scratch buffer. A Save
+--> table did the same, and a Fire allocated one.
+local HeldSize = 0
+local HeldCursor = 0
+local HeldBuffer = SendBuffer
+local HeldInstances = SendInstances
+
+local function Hold()
+    HeldSize = SendSize
+    HeldCursor = SendCursor
+    HeldBuffer = SendBuffer
+    HeldInstances = SendInstances
+    LoadScratch()
+end
+
+local function Release()
+    KeepScratch()
+    SendSize = HeldSize
+    SendCursor = HeldCursor
+    SendOffset = HeldCursor
+    SendBuffer = HeldBuffer
+    SendInstances = HeldInstances
+end
+
 --> Undoes a write that threw part way through.
 -->
 --> Every serialiser writes straight into SendBuffer through Allocate, and an assert can fire in the
@@ -126,10 +177,6 @@ end
 --> Only the cursor and the instance count are restored. A buffer that Allocate grew on the way is
 --> kept deliberately: growing copied the earlier bytes across, so the larger buffer is just as
 --> valid, and discarding it would only make the next write grow it again.
-local function Mark(): (number, number)
-    return SendCursor, #SendInstances
-end
-
 local function Rollback(Cursor: number, Instances: number)
     SendCursor = Cursor
     SendOffset = Cursor
@@ -139,23 +186,56 @@ local function Rollback(Cursor: number, Instances: number)
     end
 end
 
-local function Allocate(Bytes: number)
-    local InUse = (SendCursor + Bytes)
-    if InUse > SendSize then
-        --> Avoid resizing the buffer for every write
-        while InUse > SendSize do
-            SendSize *= 1.5
-        end
+--> The same undo without a pcall, for the client's reliable Fire, where a pcall cost more than a
+--> small event's whole write. `Begin` records where the batch stands and a write that returns clears
+--> the record; a write that threw leaves it behind, and whatever touches the batch next -- the next
+--> write, or the flush -- undoes the half-written event first, through `Settle`. The server needs
+--> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
+--> reaches the save.
+local PendingCursor = -1
+local PendingInstances = 0
 
-        local Buffer = buffer.create(SendSize)
-        buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-        SendBuffer = Buffer
+local function Settle()
+    if PendingCursor >= 0 then
+        Rollback(PendingCursor, PendingInstances)
+        PendingCursor = -1
+    end
+end
+
+local function Begin()
+    Settle()
+    PendingCursor = SendCursor
+    PendingInstances = #SendInstances
+end
+
+local function Mark(): (number, number)
+    Settle()
+    return SendCursor, #SendInstances
+end
+
+--> Grows SendBuffer to hold `InUse` bytes, by half again at a time so a steady writer does not
+--> regrow it on every write. Kept out of Allocate, which runs for every event and every string: a
+--> function with a loop in it is not inlined, and Allocate without one is.
+local function Grow(InUse: number)
+    while InUse > SendSize do
+        SendSize *= 1.5
     end
 
-    SendOffset = SendCursor
-    SendCursor += Bytes
-    
-    return SendOffset
+    local Buffer = buffer.create(SendSize)
+    buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+    SendBuffer = Buffer
+end
+
+local function Allocate(Bytes: number)
+    local Offset = SendCursor
+    local InUse = Offset + Bytes
+    if InUse > SendSize then
+        Grow(InUse)
+    end
+
+    SendOffset = Offset
+    SendCursor = InUse
+    return Offset
 end
 
 local function CreateQueue(): BLINK_QUEUE
@@ -762,6 +842,7 @@ end
 function SerdesFunctions.ReadEVENT_OrderedPosition(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: OrderedPosition
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -770,6 +851,7 @@ end
 function SerdesFunctions.ReadEVENT_RateLimited(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RateLimited
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -778,6 +860,7 @@ end
 function SerdesFunctions.ReadEVENT_RateLimitedPoll(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RateLimitedPoll
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -786,6 +869,7 @@ end
 function SerdesFunctions.ReadEVENT_UnreliableOversize(): (string)
 	-- Read BLOCK: 2 bytes
 	local BLOCK_START = Read(2)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: UnreliableOversize
 	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -796,6 +880,7 @@ end
 function SerdesFunctions.ReadEVENT_UnreliableInstances(): (buffer, { Instance })
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: UnreliableInstances
 	-- Value1: UnreliableInstances
 	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -825,6 +910,7 @@ end
 function SerdesFunctions.ReadFUNCTION_DATA_RateLimitedCall(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RateLimitedCall
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -847,6 +933,7 @@ end
 function SerdesFunctions.ReadFUNCTION_DATA_ConcurrentCall(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ConcurrentCall
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -885,18 +972,19 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 	-- Read BLOCK: 19 bytes
 	local BLOCK_START = Read(19)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ClientPollEvent
 	local Value = {Enum = false, Nested = false, Map = false, Data = false, Struct = false, AnotherNested = false} :: any
 	-- Value.Field: Field
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value.Field: Field
 		Value.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	end
 	-- Value.Float16Field: Float16Field
-	if bit32.btest(BITFIELD_0, 0x02) == true then
+	if bit32.btest(BITFIELD_0, 0x02) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Float16Field: Float16Field
@@ -963,7 +1051,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		-- END ARRAY
 	end
 	-- Value.Nested.OptionalArray: OptionalArray
-	if bit32.btest(BITFIELD_0, 0x04) == true then
+	if bit32.btest(BITFIELD_0, 0x04) then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
 		local Length = 2
@@ -1023,7 +1111,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		-- END ARRAY
 	end
 	-- Value.Struct.Optional: Optional
-	if bit32.btest(BITFIELD_0, 0x08) == true then
+	if bit32.btest(BITFIELD_0, 0x08) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Struct.Optional: Optional
@@ -1066,18 +1154,19 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 	-- Read BLOCK: 19 bytes
 	local BLOCK_START = Read(19)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ClientUnreliablePollEvent
 	local Value = {Enum = false, Nested = false, Map = false, Data = false, Struct = false, AnotherNested = false} :: any
 	-- Value.Field: Field
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value.Field: Field
 		Value.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	end
 	-- Value.Float16Field: Float16Field
-	if bit32.btest(BITFIELD_0, 0x02) == true then
+	if bit32.btest(BITFIELD_0, 0x02) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Float16Field: Float16Field
@@ -1144,7 +1233,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		-- END ARRAY
 	end
 	-- Value.Nested.OptionalArray: OptionalArray
-	if bit32.btest(BITFIELD_0, 0x04) == true then
+	if bit32.btest(BITFIELD_0, 0x04) then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
 		local Length = 2
@@ -1204,7 +1293,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		-- END ARRAY
 	end
 	-- Value.Struct.Optional: Optional
-	if bit32.btest(BITFIELD_0, 0x08) == true then
+	if bit32.btest(BITFIELD_0, 0x08) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Struct.Optional: Optional
@@ -1244,10 +1333,12 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 end
 
 function SerdesFunctions.ReadEVENT_ClientEmptyPollEvent(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
 function SerdesFunctions.ReadEVENT_ClientEmptyUnreliablePollEvent(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
@@ -1694,10 +1785,12 @@ function SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value: nil): 
 end
 
 function SerdesFunctions.ReadEVENT_ClientEmptyEvent(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
 function SerdesFunctions.ReadEVENT_ClientEmptyUnreliableEvent(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
@@ -1716,6 +1809,7 @@ function SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value: nil): ()
 end
 
 function SerdesFunctions.ReadFUNCTION_DATA_EmptyFunction(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
@@ -1729,6 +1823,7 @@ function SerdesFunctions.WriteFUNCTION_RETURN_EmptyFunction(Value: nil, Invocati
 end
 
 function SerdesFunctions.ReadFUNCTION_DATA_UnitFunction(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: UnitFunction
 	return nil
 end
@@ -2022,6 +2117,7 @@ end
 function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
 	-- Read BLOCK: 2 bytes
 	local BLOCK_START = Read(2)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Booleans
 	-- START ARRAY
 	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -2487,6 +2583,7 @@ end
 function SerdesFunctions.ReadEVENT_ReliableClient(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ReliableClient
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -2519,6 +2616,7 @@ end
 function SerdesFunctions.ReadEVENT_UnreliableClient(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: UnreliableClient
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -2958,6 +3056,7 @@ end
 function SerdesFunctions.ReadFUNCTION_DATA_RemoteFunction(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RemoteFunction
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -3098,6 +3197,7 @@ function SerdesFunctions.ReadFUNCTION_DATA_TupleFunction(): (number, ("A" | "B" 
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: TupleFunction
 	-- Value1: TupleFunction
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -3118,7 +3218,7 @@ function SerdesFunctions.ReadFUNCTION_DATA_TupleFunction(): (number, ("A" | "B" 
 	-- Value3: TupleFunction
 	local Value3
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value3: TupleFunction
@@ -3286,6 +3386,7 @@ function SerdesFunctions.Issue33_WriteEVENT_Event(Value1: {[("One" | "Two")]: nu
 end
 
 function SerdesFunctions.ReadEVENT_UnknownInbound(): (any)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: UnknownInbound
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
@@ -3332,6 +3433,7 @@ end
 function SerdesFunctions.ReadFUNCTION_DATA_NamedTupleFunction(): (number, string)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: NamedTupleFunction
 	-- Value1: NamedTupleFunction
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -3396,6 +3498,7 @@ end
 function SerdesFunctions.ReadFUNCTION_DATA_NeverAnswered(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: NeverAnswered
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -3431,6 +3534,7 @@ end
 function SerdesFunctions.ReadFUNCTION_RETURN_AskClient(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: AskClient
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -3439,6 +3543,7 @@ end
 function SerdesFunctions.ReadEVENT_RangedFromClient(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RangedFromClient
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if not (Value >= 10) then error(`Expected "Value" to be larger than or equal to 10, got {Value} instead.`) end
@@ -3449,6 +3554,7 @@ end
 function SerdesFunctions.ReadEVENT_RangedUnreliableFromClient(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RangedUnreliableFromClient
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if not (Value >= 10) then error(`Expected "Value" to be larger than or equal to 10, got {Value} instead.`) end
@@ -3459,6 +3565,7 @@ end
 function SerdesFunctions.ReadEVENT_RangedVectorFromClient(): (Vector3)
 	-- Read BLOCK: 12 bytes
 	local BLOCK_START = Read(12)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RangedVectorFromClient
 	local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 	local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -3472,6 +3579,7 @@ end
 function SerdesFunctions.ReadFUNCTION_DATA_BadlyAnswered(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: BadlyAnswered
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -3494,16 +3602,19 @@ end
 function SerdesFunctions.ReadEVENT_PlainFromClient(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: PlainFromClient
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
 end
 
 function SerdesFunctions.ReadEVENT_Unlistened(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
 function SerdesFunctions.ReadFUNCTION_DATA_Unanswered(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
@@ -3586,6 +3697,7 @@ end
 function SerdesFunctions.ReadEVENT_RangedFloat32(): (number)
 	-- Read BLOCK: 4 bytes
 	local BLOCK_START = Read(4)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RangedFloat32
 	local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 	if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -3596,6 +3708,7 @@ end
 function SerdesFunctions.ReadEVENT_RangedFloat16(): (number)
 	-- Read BLOCK: 2 bytes
 	local BLOCK_START = Read(2)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RangedFloat16
 	local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	local Value
@@ -3674,6 +3787,7 @@ end
 function SerdesFunctions.ReadEVENT_RangedFloat24(): (number)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RangedFloat24
 	local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 	local Value
@@ -3732,6 +3846,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Byte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Byte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -3776,6 +3891,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Color)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Color
 				local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
 				return Value
@@ -3823,6 +3939,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (ColorArray)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ColorArray
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -3911,6 +4028,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (DateSeconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateSeconds
 				local Value = DateTime.fromUnixTimestamp(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -3956,6 +4074,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (DateMilliseconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateMilliseconds
 				local Value = DateTime.fromUnixTimestampMillis(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -4001,6 +4120,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (BrickkColor)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BrickkColor
 				local Value = BrickColor.new(buffer.readu16(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -4046,6 +4166,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (ExactRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
@@ -4092,6 +4213,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (DecimalRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DecimalRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
@@ -4140,6 +4262,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (NegativeRange)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: NegativeRange
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -4188,6 +4311,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (UnboundUpper)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundUpper
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
@@ -4234,6 +4358,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (UnboundLower)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundLower
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
@@ -4280,6 +4405,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (RangedVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: RangedVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -4334,6 +4460,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Buffer)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Buffer
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -4385,6 +4512,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (ExactBuffer)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactBuffer
 				local Value = buffer.create(9)
 				buffer.copy(Value, 0, RecieveBuffer, BLOCK_START + 0, 9)
@@ -4432,6 +4560,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (BoundedBuffer)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BoundedBuffer
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Length < 0 then error(`Expected size of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -4487,6 +4616,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PlainCFrame)
 				-- Read BLOCK: 24 bytes
 				local BLOCK_START = Read(24)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PlainCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -4545,6 +4675,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (QuatCFrame)
 				-- Read BLOCK: 19 bytes
 				local BLOCK_START = Read(19)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -4604,6 +4735,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (QuatHalfCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatHalfCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -4798,6 +4930,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (QuatFirstCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatFirstCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -4992,6 +5125,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (QuatCFrames)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrames
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -5116,6 +5250,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (MultiDimensionalArray)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MultiDimensionalArray
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -5247,6 +5382,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeByte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeByte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -5291,6 +5427,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeFixedString)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedString
 				local Value = buffer.readstring(RecieveBuffer, BLOCK_START + 0, 8)
 				if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
@@ -5337,6 +5474,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeBoundedString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedString
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if Length < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -5389,6 +5527,7 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (SizeFixedArray)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedArray
 				-- START ARRAY
 				local Length = 4
@@ -5456,6 +5595,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeBoundedArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedArray
 				-- START ARRAY
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -5530,10 +5670,11 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeOptionalByte
 				local Value
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				if bit32.btest(BITFIELD_0, 0x01) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value: SizeOptionalByte
@@ -5590,6 +5731,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -5641,6 +5783,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeStruct
 				local Value = {A = false, B = false, C = false} :: any
 				-- Value.A: A
@@ -5706,6 +5849,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeEnum)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeEnum
 				local Value = true :: any
 				local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -5765,6 +5909,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeFlags)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFlags
 				local Value = {}
 				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -5814,6 +5959,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -5886,6 +6032,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (OffsetArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetArray
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -5962,6 +6109,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (OffsetString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetString
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -6019,6 +6167,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (OffsetBuffer)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetBuffer
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -6078,6 +6227,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsOne
 				local Value = {A = false} :: any
 				-- Value.A: A
@@ -6130,6 +6280,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeven
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false} :: any
 				-- Value.A: A
@@ -6224,6 +6375,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsEight
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false} :: any
 				-- Value.A: A
@@ -6326,6 +6478,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Read(2)
 				local BITFIELD_1
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsNine
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false} :: any
 				-- Value.A: A
@@ -6440,6 +6593,7 @@ if not RunService:IsRunning() then
 				local BITFIELD_2
 				local BITFIELD_1
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeventeen
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false, J = false, K = false, L = false, M = false, N = false, O = false, P = false, Q = false} :: any
 				-- Value.A: A
@@ -6612,13 +6766,14 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsMixed
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
-				if bit32.btest(BITFIELD_0, 0x02) == true then
+				if bit32.btest(BITFIELD_0, 0x02) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value.B: B
@@ -6627,7 +6782,7 @@ if not RunService:IsRunning() then
 				-- Value.C: C
 				Value.C = bit32.btest(BITFIELD_0, 0x04)
 				-- Value.D: D
-				if bit32.btest(BITFIELD_0, 0x08) == true then
+				if bit32.btest(BITFIELD_0, 0x08) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.D: D
@@ -6706,6 +6861,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedBooleans)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBooleans
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -6815,6 +6971,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedFixed)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedFixed
 				-- START ARRAY
 				local Length = 10
@@ -6920,6 +7077,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedRanged)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedRanged
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -7032,6 +7190,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedNested
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -7170,6 +7329,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedThroughAlias)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedThroughAlias
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -7280,6 +7440,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 5 bytes
 				local BLOCK_START = Read(5)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBeside
 				local Value = {A = false, List = false, B = false, Fixed = false, C = false} :: any
 				-- Value.A: A
@@ -7489,6 +7650,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -7628,6 +7790,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedOptional)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedOptional
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -7645,7 +7808,7 @@ if not RunService:IsRunning() then
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					if bit32.btest(BITFIELD_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
 						local BITFIELD_0
@@ -7747,6 +7910,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (MapNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MapNested
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -7851,6 +8015,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Standalone)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
@@ -8430,6 +8595,7 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (OptionalHoles)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OptionalHoles
 				-- START ARRAY
 				local Length = 3
@@ -8444,7 +8610,7 @@ if not RunService:IsRunning() then
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					if bit32.btest(BITFIELD_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
 						-- Item_1: OptionalHoles
@@ -8516,6 +8682,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (HalfFloat)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: HalfFloat
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -8605,6 +8772,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Float24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Float24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local Value
@@ -8681,6 +8849,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Unsigned24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Unsigned24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -8726,6 +8895,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Signed24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Signed24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -8771,6 +8941,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Vector24)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Vector24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -8917,6 +9088,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (QuatCFrame24)
 				-- Read BLOCK: 16 bytes
 				local BLOCK_START = Read(16)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -9092,6 +9264,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FlagCarrier)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FlagCarrier
 				local Value = {Flags = false, Text = false, Kind = false} :: any
 				do
@@ -9187,6 +9360,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				Value = Value / 10
@@ -9235,6 +9409,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedRanged)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedRanged
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -9285,6 +9460,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedSigned)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedSigned
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -400) then error(`Expected "Value" to be larger than or equal to -400, got {Value} instead.`) end
@@ -9335,6 +9511,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedCoarse)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedCoarse
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value = Value * 2.5
@@ -9383,6 +9560,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedTriple)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTriple
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				Value = Value / 1000
@@ -9432,6 +9610,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedWide)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWide
 				local Value = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -9482,6 +9661,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedWhole)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWhole
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -9529,6 +9709,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedCount)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedCount
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 1) then error(`Expected "Value" to be larger than or equal to 1, got {Value} instead.`) end
@@ -9577,6 +9758,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedSigned)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedSigned
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -9625,6 +9807,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedNegative)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedNegative
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -10) then error(`Expected "Value" to be larger than or equal to -10, got {Value} instead.`) end
@@ -9673,6 +9856,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -9722,6 +9906,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedHalf)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedHalf
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -9813,6 +9998,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedUnit)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedUnit
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -9862,6 +10048,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedStruct
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
@@ -9869,7 +10056,7 @@ if not RunService:IsRunning() then
 				Value.A = Value.A / 10
 				-- Value.B: B
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				if bit32.btest(BITFIELD_0, 0x01) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.B: B
@@ -10481,16 +10668,18 @@ end)
 --> then, so a plain `PlayersMap[Player] = Save()` puts back an entry that nothing will ever remove
 --> again: StepReplication would allocate a buffer and fire a remote at a player who is gone, on
 --> every Heartbeat, for the lifetime of the server.
+-->
+--> Only a new entry needs the check. An entry that exists has not been through PlayerRemoving yet,
+--> and one written in its narrow window is dropped by StepReplication; asking the DataModel on every
+--> send cost a reflected call per player per event, which is most of what a FireAll cost.
 local function SavePlayerBuffer(Player: Player)
-    if not Player:IsDescendantOf(Players) then
-        return
-    end
-
     --> Written into the entry the player already has, rather than a new one each time: this runs on
     --> every reliable send to a player, and the entry also carries its shrink count.
     local Entry = PlayersMap[Player]
     if Entry == nil then
-        PlayersMap[Player] = Save()
+        if Player:IsDescendantOf(Players) then
+            PlayersMap[Player] = Save()
+        end
         return
     end
 
@@ -10498,6 +10687,45 @@ local function SavePlayerBuffer(Player: Player)
     Entry.Cursor = SendCursor
     Entry.Buffer = SendBuffer
     Entry.Instances = SendInstances
+end
+
+--> Appends a broadcast's bytes and Instances to one player's batch. A player with a batch gets them
+--> straight into it; one without goes the long way, through SavePlayerBuffer and its checks.
+local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instances: {Instance})
+    local Entry = PlayersMap[Player]
+    if Entry == nil then
+        Load()
+        local Position = Allocate(Size)
+        buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+        table.move(Instances, 1, #Instances, 1, SendInstances)
+        SavePlayerBuffer(Player)
+        return
+    end
+
+    local Cursor = Entry.Cursor
+    local InUse = Cursor + Size
+    local Target = Entry.Buffer
+    if InUse > Entry.Size then
+        local Grown = Entry.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Target, 0, Cursor)
+        Target = Resized
+        Entry.Buffer = Resized
+        Entry.Size = Grown
+    end
+
+    buffer.copy(Target, Cursor, Buffer, 0, Size)
+    Entry.Cursor = InUse
+
+    local Count = #Instances
+    if Count > 0 then
+        local List = Entry.Instances
+        table.move(Instances, 1, Count, #List + 1, List)
+    end
 end
 
 local function StepReplication()
@@ -10570,9 +10798,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		if Index == 0 then
 			local Value: number = SerdesFunctions.ReadEVENT_RateLimited()
 			if RateAccept(Player, 1, 5, 10, "RateLimited") == true then
-				if Events.Reliable[0] ~= nil then
+				local BOUND_LISTENER = Events.Reliable[0]
+				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "RateLimited"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[0], Player, Value)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 					if not ListenerRan and not ListenerFailed(Player, "RateLimited", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 				else
 					if #Queue.Reliable[0] < 256 then
@@ -10654,9 +10883,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			end
 		elseif Index == 9 then
 			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyEvent()
-			if Events.Reliable[9] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[9]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ClientEmptyEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[9], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "ClientEmptyEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[9] < 256 then
@@ -10703,8 +10933,9 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			end
 		elseif Index == 20 then
 			local Value: { boolean } = SerdesFunctions.ReadEVENT_Booleans()
-			if Events.Reliable[20] ~= nil then
-				Spawn(RunListener, "Booleans", Events.Reliable[20], Player, Value)
+			local BOUND_LISTENER = Events.Reliable[20]
+			if BOUND_LISTENER ~= nil then
+				Spawn(RunListener, "Booleans", BOUND_LISTENER, Player, Value)
 			else
 				if #Queue.Reliable[20] < 256 then
 					table.insert(Queue.Reliable[20], table.pack(Player, Value))
@@ -10712,9 +10943,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			end
 		elseif Index == 32 then
 			local Value: number = SerdesFunctions.ReadEVENT_ReliableClient()
-			if Events.Reliable[32] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[32]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ReliableClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[32], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "ReliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[32] < 256 then
@@ -10761,9 +10993,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			end
 		elseif Index == 47 then
 			local Value: any = SerdesFunctions.ReadEVENT_UnknownInbound()
-			if Events.Reliable[47] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[47]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnknownInbound"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[47], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "UnknownInbound", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[47] < 256 then
@@ -10828,9 +11061,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 		elseif Index == 53 then
 			local Value: number = SerdesFunctions.ReadEVENT_RangedFromClient()
-			if Events.Reliable[53] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[53]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[53], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[53] < 256 then
@@ -10839,9 +11073,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			end
 		elseif Index == 54 then
 			local Value: Vector3 = SerdesFunctions.ReadEVENT_RangedVectorFromClient()
-			if Events.Reliable[54] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[54]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedVectorFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[54], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedVectorFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[54] < 256 then
@@ -10869,9 +11104,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			end
 		elseif Index == 56 then
 			local Value: number = SerdesFunctions.ReadEVENT_PlainFromClient()
-			if Events.Reliable[56] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[56]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "PlainFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[56], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "PlainFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[56] < 256 then
@@ -10880,8 +11116,9 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			end
 		elseif Index == 57 then
 			local Value: nil = SerdesFunctions.ReadEVENT_Unlistened()
-			if Events.Reliable[57] ~= nil then
-				Spawn(RunListener, "Unlistened", Events.Reliable[57], Player, Value)
+			local BOUND_LISTENER = Events.Reliable[57]
+			if BOUND_LISTENER ~= nil then
+				Spawn(RunListener, "Unlistened", BOUND_LISTENER, Player, Value)
 			else
 				if #Queue.Reliable[57] < 256 then
 					table.insert(Queue.Reliable[57], table.pack(Player, Value))
@@ -10908,9 +11145,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			end
 		elseif Index == 60 then
 			local Value: number = SerdesFunctions.ReadEVENT_RangedFloat32()
-			if Events.Reliable[60] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[60]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedFloat32"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[60], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedFloat32", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[60] < 256 then
@@ -10919,9 +11157,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			end
 		elseif Index == 61 then
 			local Value: number = SerdesFunctions.ReadEVENT_RangedFloat16()
-			if Events.Reliable[61] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[61]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedFloat16"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[61], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedFloat16", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[61] < 256 then
@@ -10930,9 +11169,10 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			end
 		elseif Index == 64 then
 			local Value: number = SerdesFunctions.ReadEVENT_RangedFloat24()
-			if Events.Reliable[64] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[64]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedFloat24"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[64], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedFloat24", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[64] < 256 then
@@ -10943,18 +11183,20 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
-		DecodedEvents += 1
-		if DecodedEvents > 64 then
-			ReportDrop(Player, "Events", 64)
-			break
+	local function DecodePacket()
+		while (RecieveCursor < Size and Player.Parent ~= nil) do
+			DecodedEvents += 1
+			if DecodedEvents > 64 then
+				ReportDrop(Player, "Events", 64)
+				break
+			end
+			Decoding = -1
+			DecodeEvent()
 		end
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
-			break
-		end
+	end
+	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	if not Parsed then
+		ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
 	end
 end)
 Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -10996,24 +11238,27 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			local Value: number = SerdesFunctions.ReadEVENT_OrderedPosition()
 			if OrderAccept(Player, 1, OrderIdentifier) == true then
-				if Events.Unreliable[1] ~= nil then
+				local BOUND_LISTENER = Events.Unreliable[1]
+				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "OrderedPosition"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[1], Player, Value)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 					if not ListenerRan and not ListenerFailed(Player, "OrderedPosition", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
 		elseif Index == 2 then
 			local Value: string = SerdesFunctions.ReadEVENT_UnreliableOversize()
-			if Events.Unreliable[2] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[2]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnreliableOversize"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[2], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "UnreliableOversize", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 3 then
 			local Value1: buffer, Value2: { Instance } = SerdesFunctions.ReadEVENT_UnreliableInstances()
-			if Events.Unreliable[3] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[3]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnreliableInstances"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[3], Player, Value1, Value2)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value1, Value2)
 				if not ListenerRan and not ListenerFailed(Player, "UnreliableInstances", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 4 then
@@ -11028,41 +11273,46 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			end
 		elseif Index == 8 then
 			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyUnreliableEvent()
-			if Events.Unreliable[8] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[8]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ClientEmptyUnreliableEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[8], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "ClientEmptyUnreliableEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 16 then
 			local Value: number = SerdesFunctions.ReadEVENT_UnreliableClient()
-			if Events.Unreliable[16] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[16]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnreliableClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[16], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "UnreliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 18 then
 			local Value: number = SerdesFunctions.ReadEVENT_RangedUnreliableFromClient()
-			if Events.Unreliable[18] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[18]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedUnreliableFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[18], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedUnreliableFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
-		DecodedEvents += 1
-		if DecodedEvents > 64 then
-			ReportDrop(Player, "Events", 64)
-			break
+	local function DecodePacket()
+		while (RecieveCursor < Size and Player.Parent ~= nil) do
+			DecodedEvents += 1
+			if DecodedEvents > 64 then
+				ReportDrop(Player, "Events", 64)
+				break
+			end
+			Decoding = -1
+			DecodeEvent()
 		end
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
-			break
-		end
+	end
+	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	if not Parsed then
+		ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
 	end
 end)
 
@@ -11083,37 +11333,41 @@ local Returns = table.freeze({
 	Indexers = {
 		TestEvent = {
 			Fire = function(Player: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
 				if not CheckUnreliableSize("TestEvent") then return end
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+				KeepScratch()
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end,
 			FireAll = function(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
 				if not CheckUnreliableSize("TestEvent") then return end
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+				KeepScratch()
 				Unreliable:FireAllClients(Buffer, SendInstances)
 			end,
 			FireList = function(List: {Player}, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
 				if not CheckUnreliableSize("TestEvent") then return end
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+				KeepScratch()
 				for _, Player in List do
 					Unreliable:FireClient(Player, Buffer, SendInstances)
 				end
 			end,
 			FireExcept = function(Except: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
 				if not CheckUnreliableSize("TestEvent") then return end
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+				KeepScratch()
 				for _, Player in Players:GetPlayers() do
 					if Player == Except then
 						continue
@@ -11141,6 +11395,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Byte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Byte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -11185,6 +11440,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Color)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Color
 				local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
 				return Value
@@ -11232,6 +11488,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (ColorArray)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ColorArray
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -11320,6 +11577,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (DateSeconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateSeconds
 				local Value = DateTime.fromUnixTimestamp(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -11365,6 +11623,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (DateMilliseconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateMilliseconds
 				local Value = DateTime.fromUnixTimestampMillis(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -11410,6 +11669,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (BrickkColor)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BrickkColor
 				local Value = BrickColor.new(buffer.readu16(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -11455,6 +11715,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (ExactRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
@@ -11501,6 +11762,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (DecimalRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DecimalRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
@@ -11549,6 +11811,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (NegativeRange)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: NegativeRange
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -11597,6 +11860,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (UnboundUpper)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundUpper
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
@@ -11643,6 +11907,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (UnboundLower)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundLower
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
@@ -11689,6 +11954,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (RangedVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: RangedVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -11743,6 +12009,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Buffer)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Buffer
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -11794,6 +12061,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (ExactBuffer)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactBuffer
 				local Value = buffer.create(9)
 				buffer.copy(Value, 0, RecieveBuffer, BLOCK_START + 0, 9)
@@ -11841,6 +12109,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (BoundedBuffer)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BoundedBuffer
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Length < 0 then error(`Expected size of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -11896,6 +12165,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PlainCFrame)
 				-- Read BLOCK: 24 bytes
 				local BLOCK_START = Read(24)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PlainCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -11954,6 +12224,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (QuatCFrame)
 				-- Read BLOCK: 19 bytes
 				local BLOCK_START = Read(19)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -12013,6 +12284,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (QuatHalfCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatHalfCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -12207,6 +12479,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (QuatFirstCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatFirstCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -12401,6 +12674,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (QuatCFrames)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrames
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -12525,6 +12799,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (MultiDimensionalArray)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MultiDimensionalArray
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -12656,6 +12931,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeByte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeByte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -12700,6 +12976,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeFixedString)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedString
 				local Value = buffer.readstring(RecieveBuffer, BLOCK_START + 0, 8)
 				if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
@@ -12746,6 +13023,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeBoundedString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedString
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if Length < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -12798,6 +13076,7 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (SizeFixedArray)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedArray
 				-- START ARRAY
 				local Length = 4
@@ -12865,6 +13144,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeBoundedArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedArray
 				-- START ARRAY
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -12939,10 +13219,11 @@ local Returns = table.freeze({
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeOptionalByte
 				local Value
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				if bit32.btest(BITFIELD_0, 0x01) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value: SizeOptionalByte
@@ -12999,6 +13280,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -13050,6 +13332,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeStruct
 				local Value = {A = false, B = false, C = false} :: any
 				-- Value.A: A
@@ -13115,6 +13398,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeEnum)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeEnum
 				local Value = true :: any
 				local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -13174,6 +13458,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeFlags)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFlags
 				local Value = {}
 				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -13223,6 +13508,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -13294,9 +13580,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: number): ()
-			if Events.Unreliable[1] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[1]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "OrderedPosition"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[1], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "OrderedPosition", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -13311,6 +13598,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (OffsetArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetArray
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -13387,6 +13675,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (OffsetString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetString
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -13444,6 +13733,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (OffsetBuffer)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetBuffer
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -13503,6 +13793,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsOne
 				local Value = {A = false} :: any
 				-- Value.A: A
@@ -13555,6 +13846,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeven
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false} :: any
 				-- Value.A: A
@@ -13649,6 +13941,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsEight
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false} :: any
 				-- Value.A: A
@@ -13751,6 +14044,7 @@ local Returns = table.freeze({
 				local BLOCK_START = Read(2)
 				local BITFIELD_1
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsNine
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false} :: any
 				-- Value.A: A
@@ -13865,6 +14159,7 @@ local Returns = table.freeze({
 				local BITFIELD_2
 				local BITFIELD_1
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeventeen
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false, J = false, K = false, L = false, M = false, N = false, O = false, P = false, Q = false} :: any
 				-- Value.A: A
@@ -14037,13 +14332,14 @@ local Returns = table.freeze({
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsMixed
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
-				if bit32.btest(BITFIELD_0, 0x02) == true then
+				if bit32.btest(BITFIELD_0, 0x02) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value.B: B
@@ -14052,7 +14348,7 @@ local Returns = table.freeze({
 				-- Value.C: C
 				Value.C = bit32.btest(BITFIELD_0, 0x04)
 				-- Value.D: D
-				if bit32.btest(BITFIELD_0, 0x08) == true then
+				if bit32.btest(BITFIELD_0, 0x08) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.D: D
@@ -14131,6 +14427,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedBooleans)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBooleans
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -14240,6 +14537,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedFixed)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedFixed
 				-- START ARRAY
 				local Length = 10
@@ -14345,6 +14643,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedRanged)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedRanged
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -14457,6 +14756,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedNested
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -14595,6 +14895,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedThroughAlias)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedThroughAlias
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -14705,6 +15006,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 5 bytes
 				local BLOCK_START = Read(5)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBeside
 				local Value = {A = false, List = false, B = false, Fixed = false, C = false} :: any
 				-- Value.A: A
@@ -14914,6 +15216,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -15053,6 +15356,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedOptional)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedOptional
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -15070,7 +15374,7 @@ local Returns = table.freeze({
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					if bit32.btest(BITFIELD_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
 						local BITFIELD_0
@@ -15159,9 +15463,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: number): ()
-			if Events.Reliable[0] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[0]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RateLimited"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[0], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RateLimited", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[0] < 256 then
@@ -15210,9 +15515,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: string): ()
-			if Events.Unreliable[2] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[2]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnreliableOversize"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[2], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "UnreliableOversize", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -15230,9 +15536,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value1: buffer, Value2: { Instance }): ()
-			if Events.Unreliable[3] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[3]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnreliableInstances"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[3], Player, Value1, Value2)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value1, Value2)
 				if not ListenerRan and not ListenerFailed(Player, "UnreliableInstances", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -15314,6 +15621,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (MapNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MapNested
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -15418,6 +15726,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Standalone)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
@@ -15609,51 +15918,37 @@ local Returns = table.freeze({
 	SendOccupiedCell = {
 		Fire = function(Player: Player, Value: Vector3): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_SendOccupiedCell, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: Vector3): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: Vector3): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: Vector3): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
@@ -15768,87 +16063,77 @@ local Returns = table.freeze({
 	ServerPollEvent = {
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ServerPollEvent, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	ServerUnreliablePollEvent = {
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
 			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
 		FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
 			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireAllClients(Buffer, SendInstances)
 		end,
 		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
 			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
 			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -15860,87 +16145,77 @@ local Returns = table.freeze({
 	ServerEmptyPollEvent = {
 		Fire = function(Player: Player, Value: nil): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ServerEmptyPollEvent, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	ServerEmptyUnreliablePollEvent = {
 		Fire = function(Player: Player, Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
 			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
 		FireAll = function(Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
 			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireAllClients(Buffer, SendInstances)
 		end,
 		FireList = function(List: {Player}, Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
 			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
 			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -15968,9 +16243,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: nil): ()
-			if Events.Reliable[9] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[9]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ClientEmptyEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[9], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "ClientEmptyEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[9] < 256 then
@@ -15992,9 +16268,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: nil): ()
-			if Events.Unreliable[8] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[8]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ClientEmptyUnreliableEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[8], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "ClientEmptyUnreliableEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -16002,87 +16279,77 @@ local Returns = table.freeze({
 	EmptyEvent = {
 		Fire = function(Player: Player, Value: nil): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_EmptyEvent, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_EmptyEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_EmptyEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_EmptyEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_EmptyEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	EmptyUnreliableEvent = {
 		Fire = function(Player: Player, Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
 			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
 		FireAll = function(Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
 			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireAllClients(Buffer, SendInstances)
 		end,
 		FireList = function(List: {Player}, Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
 			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: nil): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
 			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -16160,357 +16427,259 @@ local Returns = table.freeze({
 	Flags8 = {
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags8, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_Flags8(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags8(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags8(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags8(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	Flags16 = {
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags16, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_Flags16(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags16(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags16(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags16(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	Flags32 = {
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags32, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_Flags32(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags32(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags32(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags32(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	Flags33 = {
 		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Flags33, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_Flags33(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags33(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags33(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Flags33(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	DynamicMap = {
 		Fire = function(Player: Player, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_DynamicMap, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_DynamicMap(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: {[number]: { Static: number, Dynamic: buffer }}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_DynamicMap(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_DynamicMap(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_DynamicMap(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	DynamicArray = {
 		Fire = function(Player: Player, Value: { { Static: number, Dynamic: buffer } }): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_DynamicArray, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_DynamicArray(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: { { Static: number, Dynamic: buffer } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_DynamicArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: { { Static: number, Dynamic: buffer } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_DynamicArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { { Static: number, Dynamic: buffer } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_DynamicArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	PlayerEvent = {
 		Fire = function(Player: Player, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_PlayerEvent, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_PlayerEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_PlayerEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_PlayerEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_PlayerEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
@@ -16532,8 +16701,9 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: { boolean }): ()
-			if Events.Reliable[20] ~= nil then
-				Spawn(RunListener, "Booleans", Events.Reliable[20], Player, Value)
+			local BOUND_LISTENER = Events.Reliable[20]
+			if BOUND_LISTENER ~= nil then
+				Spawn(RunListener, "Booleans", BOUND_LISTENER, Player, Value)
 			else
 				if #Queue.Reliable[20] < 256 then
 					table.insert(Queue.Reliable[20], table.pack(Player, Value))
@@ -16544,102 +16714,74 @@ local Returns = table.freeze({
 	Generic = {
 		Fire = function(Player: Player, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Generic, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_Generic(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Generic(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Generic(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Generic(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	GenericArray = {
 		Fire = function(Player: Player, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_GenericArray, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_GenericArray(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_GenericArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_GenericArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_GenericArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
@@ -16655,282 +16797,221 @@ local Returns = table.freeze({
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: any): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Unknown(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: any): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Unknown(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: any): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Unknown(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	MapEvent = {
 		Fire = function(Player: Player, Value: {[string]: number}): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapEvent, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_MapEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: {[string]: number}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: {[string]: number}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: {[string]: number}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	MapStructEvent = {
 		Fire = function(Player: Player, Value: { Map: {[string]: number} }): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapStructEvent, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_MapStructEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: { Map: {[string]: number} }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapStructEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: { Map: {[string]: number} }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapStructEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { Map: {[string]: number} }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapStructEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	MapComplexEvent = {
 		Fire = function(Player: Player, Value: {[string]: { number }}): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapComplexEvent, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: {[string]: { number }}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: {[string]: { number }}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: {[string]: { number }}): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	MapReferenceEvent = {
 		Fire = function(Player: Player, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_MapReferenceEvent, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	ArrayPrimitive = {
 		Fire = function(Player: Player, Value: { number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
 			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
 		FireAll = function(Value: { number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
 			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireAllClients(Buffer, SendInstances)
 		end,
 		FireList = function(List: {Player}, Value: { number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
 			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
 			if not CheckUnreliableSize("ArrayPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -16941,37 +17022,41 @@ local Returns = table.freeze({
 	},
 	OptionalPrimitive = {
 		Fire = function(Player: Player, Value: number?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
 			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
 		FireAll = function(Value: number?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
 			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireAllClients(Buffer, SendInstances)
 		end,
 		FireList = function(List: {Player}, Value: number?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
 			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
 			if not CheckUnreliableSize("OptionalPrimitive") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -16983,138 +17068,114 @@ local Returns = table.freeze({
 	ManyReliableSync = {
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ManyReliableSync, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	ManyReliableAsync = {
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ManyReliableAsync, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	ManyUnreliableSync = {
 		Fire = function(Player: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
 			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
 			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireAllClients(Buffer, SendInstances)
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
 			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
 			if not CheckUnreliableSize("ManyUnreliableSync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -17125,37 +17186,41 @@ local Returns = table.freeze({
 	},
 	ManyUnreliableAsync = {
 		Fire = function(Player: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
 			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
 			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireAllClients(Buffer, SendInstances)
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
 			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
 			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -17167,102 +17232,74 @@ local Returns = table.freeze({
 	ReliableServer = {
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReliableServer, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_ReliableServer(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReliableServer(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReliableServer(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReliableServer(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	ReliableServerAsync = {
 		Fire = function(Player: Player, Value: number): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReliableServerAsync, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
@@ -17285,9 +17322,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: number): ()
-			if Events.Reliable[32] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[32]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ReliableClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[32], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "ReliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[32] < 256 then
@@ -17298,37 +17336,41 @@ local Returns = table.freeze({
 	},
 	UnreliableServer = {
 		Fire = function(Player: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
 			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
 			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireAllClients(Buffer, SendInstances)
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
 			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
 			if not CheckUnreliableSize("UnreliableServer") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -17339,37 +17381,41 @@ local Returns = table.freeze({
 	},
 	UnreliableServerAsync = {
 		Fire = function(Player: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
 			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
 			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireAllClients(Buffer, SendInstances)
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
 			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
 			if not CheckUnreliableSize("UnreliableServerAsync") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -17391,9 +17437,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: number): ()
-			if Events.Unreliable[16] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[16]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnreliableClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[16], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "UnreliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -17410,42 +17457,33 @@ local Returns = table.freeze({
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: Instance): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceAny(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: Instance): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceAny(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: Instance): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceAny(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
@@ -17461,42 +17499,33 @@ local Returns = table.freeze({
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: Sound): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceOfType(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: Sound): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceOfType(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: Sound): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceOfType(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
@@ -17512,42 +17541,33 @@ local Returns = table.freeze({
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: Instance?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceOptional(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: Instance?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceOptional(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: Instance?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceOptional(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
@@ -17563,195 +17583,144 @@ local Returns = table.freeze({
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: Motor6D): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: Motor6D): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: Motor6D): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	Reference = {
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Reference, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_Reference(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Reference(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Reference(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Reference(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	ReferenceArray = {
 		Fire = function(Player: Player, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReferenceArray, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_ReferenceArray(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReferenceArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReferenceArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReferenceArray(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	ReferenceOptional = {
 		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReferenceOptional, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
@@ -17800,78 +17769,73 @@ local Returns = table.freeze({
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	TupleUnreliable = {
 		Fire = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
 			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
 		FireAll = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
 			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireAllClients(Buffer, SendInstances)
 		end,
 		FireList = function(List: {Player}, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
 			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
 			if not CheckUnreliableSize("TupleUnreliable") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -17917,51 +17881,37 @@ local Returns = table.freeze({
 		InScopeEvent = {
 			Fire = function(Player: Player, Value: number): ()
 				Load(PlayersMap[Player])
-				local Cursor, Instances = Mark()
-				local Sent: boolean, Failure: any = pcall(SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent, Value)
-				if Sent ~= true then
-					Rollback(Cursor, Instances)
-					error(Failure, 0)
-				end
+				SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
 				SavePlayerBuffer(Player)
 			end,
 			FireAll = function(Value: number): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
 				for _, Player in Players:GetPlayers() do
-					Load(PlayersMap[Player])
-					local Position = Allocate(Size)
-					buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-					table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-					SavePlayerBuffer(Player)
+					AppendPlayer(Player, Buffer, Size, Instances)
 				end
 			end,
 			FireList = function(List: {Player}, Value: number): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
 				for _, Player in List do
-					Load(PlayersMap[Player])
-					local Position = Allocate(Size)
-					buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-					table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-					SavePlayerBuffer(Player)
+					AppendPlayer(Player, Buffer, Size, Instances)
 				end
 			end,
 			FireExcept = function(Except: Player, Value: number): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
 				for _, Player in Players:GetPlayers() do
 					if Player == Except then
 						continue
 					end
-					Load(PlayersMap[Player])
-					local Position = Allocate(Size)
-					buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-					table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-					SavePlayerBuffer(Player)
+					AppendPlayer(Player, Buffer, Size, Instances)
 				end
 			end,
 		},
@@ -17969,51 +17919,37 @@ local Returns = table.freeze({
 			InAnotherScopeEvent = {
 				Fire = function(Player: Player, Value: number): ()
 					Load(PlayersMap[Player])
-					local Cursor, Instances = Mark()
-					local Sent: boolean, Failure: any = pcall(SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent, Value)
-					if Sent ~= true then
-						Rollback(Cursor, Instances)
-						error(Failure, 0)
-					end
+					SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
 					SavePlayerBuffer(Player)
 				end,
 				FireAll = function(Value: number): ()
-					Load()
+					LoadScratch()
 					SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
 					local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+					KeepScratch()
 					for _, Player in Players:GetPlayers() do
-						Load(PlayersMap[Player])
-						local Position = Allocate(Size)
-						buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-						table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-						SavePlayerBuffer(Player)
+						AppendPlayer(Player, Buffer, Size, Instances)
 					end
 				end,
 				FireList = function(List: {Player}, Value: number): ()
-					Load()
+					LoadScratch()
 					SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
 					local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+					KeepScratch()
 					for _, Player in List do
-						Load(PlayersMap[Player])
-						local Position = Allocate(Size)
-						buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-						table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-						SavePlayerBuffer(Player)
+						AppendPlayer(Player, Buffer, Size, Instances)
 					end
 				end,
 				FireExcept = function(Except: Player, Value: number): ()
-					Load()
+					LoadScratch()
 					SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
 					local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+					KeepScratch()
 					for _, Player in Players:GetPlayers() do
 						if Player == Except then
 							continue
 						end
-						Load(PlayersMap[Player])
-						local Position = Allocate(Size)
-						buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-						table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-						SavePlayerBuffer(Player)
+						AppendPlayer(Player, Buffer, Size, Instances)
 					end
 				end,
 			},
@@ -18023,51 +17959,37 @@ local Returns = table.freeze({
 		InScopeEvent = {
 			Fire = function(Player: Player, Value: number): ()
 				Load(PlayersMap[Player])
-				local Cursor, Instances = Mark()
-				local Sent: boolean, Failure: any = pcall(SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent, Value)
-				if Sent ~= true then
-					Rollback(Cursor, Instances)
-					error(Failure, 0)
-				end
+				SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
 				SavePlayerBuffer(Player)
 			end,
 			FireAll = function(Value: number): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
 				for _, Player in Players:GetPlayers() do
-					Load(PlayersMap[Player])
-					local Position = Allocate(Size)
-					buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-					table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-					SavePlayerBuffer(Player)
+					AppendPlayer(Player, Buffer, Size, Instances)
 				end
 			end,
 			FireList = function(List: {Player}, Value: number): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
 				for _, Player in List do
-					Load(PlayersMap[Player])
-					local Position = Allocate(Size)
-					buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-					table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-					SavePlayerBuffer(Player)
+					AppendPlayer(Player, Buffer, Size, Instances)
 				end
 			end,
 			FireExcept = function(Except: Player, Value: number): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
 				for _, Player in Players:GetPlayers() do
 					if Player == Except then
 						continue
 					end
-					Load(PlayersMap[Player])
-					local Position = Allocate(Size)
-					buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-					table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-					SavePlayerBuffer(Player)
+					AppendPlayer(Player, Buffer, Size, Instances)
 				end
 			end,
 		},
@@ -18076,51 +17998,37 @@ local Returns = table.freeze({
 		Event = {
 			Fire = function(Player: Player, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
 				Load(PlayersMap[Player])
-				local Cursor, Instances = Mark()
-				local Sent: boolean, Failure: any = pcall(SerdesFunctions.Issue33_WriteEVENT_Event, Value1, Value2, Value3)
-				if Sent ~= true then
-					Rollback(Cursor, Instances)
-					error(Failure, 0)
-				end
+				SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
 				SavePlayerBuffer(Player)
 			end,
 			FireAll = function(Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
 				for _, Player in Players:GetPlayers() do
-					Load(PlayersMap[Player])
-					local Position = Allocate(Size)
-					buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-					table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-					SavePlayerBuffer(Player)
+					AppendPlayer(Player, Buffer, Size, Instances)
 				end
 			end,
 			FireList = function(List: {Player}, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
 				for _, Player in List do
-					Load(PlayersMap[Player])
-					local Position = Allocate(Size)
-					buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-					table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-					SavePlayerBuffer(Player)
+					AppendPlayer(Player, Buffer, Size, Instances)
 				end
 			end,
 			FireExcept = function(Except: Player, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
-				Load()
+				LoadScratch()
 				SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
 				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
 				for _, Player in Players:GetPlayers() do
 					if Player == Except then
 						continue
 					end
-					Load(PlayersMap[Player])
-					local Position = Allocate(Size)
-					buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-					table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-					SavePlayerBuffer(Player)
+					AppendPlayer(Player, Buffer, Size, Instances)
 				end
 			end,
 		},
@@ -18144,9 +18052,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: any): ()
-			if Events.Reliable[47] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[47]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnknownInbound"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[47], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "UnknownInbound", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[47] < 256 then
@@ -18158,51 +18067,37 @@ local Returns = table.freeze({
 	NamedTuple = {
 		Fire = function(Player: Player, chefId: number, dish: string, portions: number?): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_NamedTuple, chefId, dish, portions)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(chefId: number, dish: string, portions: number?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, chefId: number, dish: string, portions: number?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, chefId: number, dish: string, portions: number?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
@@ -18242,51 +18137,37 @@ local Returns = table.freeze({
 	PartiallyNamedTuple = {
 		Fire = function(Player: Player, Value1: number, named: string, Value3: number): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_PartiallyNamedTuple, Value1, named, Value3)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value1: number, named: string, Value3: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value1: number, named: string, Value3: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value1: number, named: string, Value3: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
@@ -18363,9 +18244,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: number): ()
-			if Events.Reliable[53] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[53]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[53], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[53] < 256 then
@@ -18387,9 +18269,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: number): ()
-			if Events.Unreliable[18] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[18]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedUnreliableFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[18], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedUnreliableFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -18413,9 +18296,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: Vector3): ()
-			if Events.Reliable[54] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[54]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedVectorFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[54], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedVectorFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[54] < 256 then
@@ -18476,9 +18360,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: number): ()
-			if Events.Reliable[56] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[56]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "PlainFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[56], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "PlainFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[56] < 256 then
@@ -18505,8 +18390,9 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: nil): ()
-			if Events.Reliable[57] ~= nil then
-				Spawn(RunListener, "Unlistened", Events.Reliable[57], Player, Value)
+			local BOUND_LISTENER = Events.Reliable[57]
+			if BOUND_LISTENER ~= nil then
+				Spawn(RunListener, "Unlistened", BOUND_LISTENER, Player, Value)
 			else
 				if #Queue.Reliable[57] < 256 then
 					table.insert(Queue.Reliable[57], table.pack(Player, Value))
@@ -18550,92 +18436,82 @@ local Returns = table.freeze({
 	QueuedHoles = {
 		Fire = function(Player: Player, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_QueuedHoles, Value1, Value2, Value3, Value4, Value5)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	OrderedToClient = {
 		Fire = function(Player: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
 			if not CheckUnreliableSize("OrderedToClient") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			buffer.writeu16(Buffer, 1, NextOrder(Player, 19))
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
 			if not CheckUnreliableSize("OrderedToClient") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				buffer.writeu16(Buffer, 1, NextOrder(Player, 19))
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
 			if not CheckUnreliableSize("OrderedToClient") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				buffer.writeu16(Buffer, 1, NextOrder(Player, 19))
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
 			if not CheckUnreliableSize("OrderedToClient") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -18653,6 +18529,7 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (OptionalHoles)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OptionalHoles
 				-- START ARRAY
 				local Length = 3
@@ -18667,7 +18544,7 @@ local Returns = table.freeze({
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					if bit32.btest(BITFIELD_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
 						-- Item_1: OptionalHoles
@@ -18739,6 +18616,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (HalfFloat)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: HalfFloat
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -18828,6 +18706,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Float24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Float24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local Value
@@ -18904,6 +18783,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Unsigned24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Unsigned24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -18949,6 +18829,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Signed24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Signed24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -18994,6 +18875,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Vector24)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Vector24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -19140,6 +19022,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (QuatCFrame24)
 				-- Read BLOCK: 16 bytes
 				local BLOCK_START = Read(16)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -19304,9 +19187,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: number): ()
-			if Events.Reliable[60] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[60]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedFloat32"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[60], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedFloat32", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[60] < 256 then
@@ -19334,9 +19218,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: number): ()
-			if Events.Reliable[61] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[61]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedFloat16"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[61], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedFloat16", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[61] < 256 then
@@ -19348,102 +19233,74 @@ local Returns = table.freeze({
 	NamedLength = {
 		Fire = function(Player: Player, s: string, Length: number): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_NamedLength, s, Length)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(s: string, Length: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, s: string, Length: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, s: string, Length: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
 	LengthFirst = {
 		Fire = function(Player: Player, Length: number, s: string): ()
 			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_LengthFirst, Length, s)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Length: number, s: string): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireList = function(List: {Player}, Length: number, s: string): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 		FireExcept = function(Except: Player, Length: number, s: string): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
 		end,
 	},
@@ -19457,6 +19314,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FlagCarrier)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FlagCarrier
 				local Value = {Flags = false, Text = false, Kind = false} :: any
 				do
@@ -19557,9 +19415,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Player: Player, Value: number): ()
-			if Events.Reliable[64] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[64]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "RangedFloat24"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[64], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "RangedFloat24", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[64] < 256 then
@@ -19578,6 +19437,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				Value = Value / 10
@@ -19626,6 +19486,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedRanged)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedRanged
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -19676,6 +19537,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedSigned)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedSigned
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -400) then error(`Expected "Value" to be larger than or equal to -400, got {Value} instead.`) end
@@ -19726,6 +19588,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedCoarse)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedCoarse
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value = Value * 2.5
@@ -19774,6 +19637,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedTriple)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTriple
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				Value = Value / 1000
@@ -19823,6 +19687,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedWide)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWide
 				local Value = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -19873,6 +19738,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedWhole)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWhole
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -19920,6 +19786,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedCount)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedCount
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 1) then error(`Expected "Value" to be larger than or equal to 1, got {Value} instead.`) end
@@ -19968,6 +19835,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedSigned)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedSigned
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -20016,6 +19884,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedNegative)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedNegative
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -10) then error(`Expected "Value" to be larger than or equal to -10, got {Value} instead.`) end
@@ -20064,6 +19933,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -20113,6 +19983,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedHalf)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedHalf
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -20204,6 +20075,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedUnit)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedUnit
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -20253,6 +20125,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedStruct
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
@@ -20260,7 +20133,7 @@ local Returns = table.freeze({
 				Value.A = Value.A / 10
 				-- Value.B: B
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				if bit32.btest(BITFIELD_0, 0x01) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.B: B

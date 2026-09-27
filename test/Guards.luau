@@ -95,17 +95,28 @@ RunClosure("Inbound packets are bounded", function()
 		end
 	end
 
-	--> 2. A packet carrying more events than the cap is truncated, not parsed whole. Sent through
-	--> the real client API so this exercises the same path a legitimate flood would take.
+	--> 2. A packet carrying more events than the cap is truncated, not parsed whole. Written by hand,
+	--> as a modified client would: the module's own client cuts its batch at the cap, so firing through
+	--> it no longer produces such a packet (PacketCuts.luau checks that).
 	do
 		local Received = 0
 		local Disconnect = Server.ReliableClient.On(function()
 			Received += 1
 		end)
 
-		for _ = 1, MaxEventsPerPacket * 2 do
-			Client.ReliableClient.Fire(1)
+		local Generated = fs.readFile("../Network/Server.luau")
+		local Index = tonumber(string.match(Generated, 'EventNames%.Reliable%[(%d+)%] = "ReliableClient"'))
+		assert(Index, "ReliableClient has no index in the generated server")
+
+		local Count = MaxEventsPerPacket * 2
+		local Packet = buffer.create(Count * 2)
+		for Event = 0, Count - 1 do
+			buffer.writeu8(Packet, Event * 2, Index)
+			buffer.writeu8(Packet, Event * 2 + 1, 1)
 		end
+
+		local Remote = ServerEnvironment.Instances.BLINK_RELIABLE_REMOTE
+		Remote.OnServerEvent:Fire(Shared.Player, Packet, {})
 
 		task.wait(0.5)
 		Disconnect()
@@ -141,7 +152,7 @@ RunClosure("Inbound packets are bounded", function()
 			["oversized packet check"] = "if buffer.len(Buffer) >",
 			["instance count check"] = "if #Instances >",
 			["decoded event counter"] = "DecodedEvents += 1",
-			["decode pcall"] = "local Parsed: boolean, Failure: any = pcall(DecodeEvent)",
+			["decode pcall"] = "local Parsed: boolean, Failure: any = pcall(DecodePacket)",
 			["decode failure is reported"] = `ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)`,
 			["unknown event id stops the packet"] = `error("[BlinkBlox]: Unknown event index.")`,
 		}

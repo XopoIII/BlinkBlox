@@ -459,7 +459,7 @@ function Serde.Optional(Declaration: Parser.Optional, Read: Blocks.Block, Write:
 		Write:Line(`if {Variable} ~= nil then {WriteAccumulator} += {WriteMask} end`)
 
 		local ReadAccumulator, ReadMask = Read:Bit("Read")
-		Read = Read:Compare(`bit32.btest({ReadAccumulator}, {ReadMask})`, "true", "Equals")
+		Read = Read:Scope(`if bit32.btest({ReadAccumulator}, {ReadMask}) then`)
 		Write = Write:Compare(Variable, "nil", "Not")
 	end
 

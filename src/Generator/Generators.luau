@@ -63,6 +63,9 @@ end
 --- names a schema gives belong in what the game sees -- a Fire's parameters, a listener's type -- and
 --- nowhere else: inside a serialiser, a decode branch or a listener's reply they shared a scope with
 --- the generated code's own locals, and `(s: string, Length: u16)` wrote `#s` as the u16.
+--> See the reader in Generators.Event.
+local READ_LOCAL = "local RecieveBuffer = RecieveBuffer"
+
 function Generators.LuauType(
 	Declaration: Type,
 	UseTypeAsValue: boolean?,
@@ -171,6 +174,7 @@ function Generators.Export(Declaration: Type)
 	--> and a failed Read left the receive cursors pointing into the caller's buffer, under a decode
 	--> loop that would carry on reading from it.
 	local Reader = Blocks.Function("", "", `({Export})`)
+	Reader:Line(READ_LOCAL)
 	local Writer = Blocks.Function("", "", "(buffer)")
 
 	Generators.UserType(Declaration, Reader, Writer)
@@ -249,6 +253,11 @@ function Generators.Event(
 	local Arguments = `{Values}{Function and ", InvocationIdentifier: number" or ""}`
 	local Read = Blocks.Function(Util.GetPath(Identifier, false, State.Scope), "", `({Type})`)
 	local Write = Blocks.Function(Util.GetPath(Identifier, true, State.Scope), Arguments, "()")
+
+	--> The packet being read is an upvalue, and every read in the function fetched it again; a local
+	--> of the same name is read from a register. Nothing replaces the packet while a reader runs. The
+	--> writers get no such local: Allocate replaces SendBuffer whenever it grows it.
+	Read:Line(READ_LOCAL)
 
 	if not _G.RELEASE then
 		Write:Comment(`{Identifier} ({Index})`)

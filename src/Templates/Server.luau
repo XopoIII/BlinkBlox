@@ -138,17 +138,19 @@ end)
 --> then, so a plain `PlayersMap[Player] = Save()` puts back an entry that nothing will ever remove
 --> again: StepReplication would allocate a buffer and fire a remote at a player who is gone, on
 --> every Heartbeat, for the lifetime of the server.
+-->
+--> Only a new entry needs the check. An entry that exists has not been through PlayerRemoving yet,
+--> and one written in its narrow window is dropped by StepReplication; asking the DataModel on every
+--> send cost a reflected call per player per event, which is most of what a FireAll cost.
 local function SavePlayerBuffer(Player: Player)
 -- STARTED --
-    if not Player:IsDescendantOf(Players) then
-        return
-    end
-
     --> Written into the entry the player already has, rather than a new one each time: this runs on
     --> every reliable send to a player, and the entry also carries its shrink count.
     local Entry = PlayersMap[Player]
     if Entry == nil then
-        PlayersMap[Player] = Save()
+        if Player:IsDescendantOf(Players) then
+            PlayersMap[Player] = Save()
+        end
         return
     end
 
@@ -156,6 +158,45 @@ local function SavePlayerBuffer(Player: Player)
     Entry.Cursor = SendCursor
     Entry.Buffer = SendBuffer
     Entry.Instances = SendInstances
+end
+
+--> Appends a broadcast's bytes and Instances to one player's batch. A player with a batch gets them
+--> straight into it; one without goes the long way, through SavePlayerBuffer and its checks.
+local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instances: {Instance})
+    local Entry = PlayersMap[Player]
+    if Entry == nil then
+        Load()
+        local Position = Allocate(Size)
+        buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+        table.move(Instances, 1, #Instances, 1, SendInstances)
+        SavePlayerBuffer(Player)
+        return
+    end
+
+    local Cursor = Entry.Cursor
+    local InUse = Cursor + Size
+    local Target = Entry.Buffer
+    if InUse > Entry.Size then
+        local Grown = Entry.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Target, 0, Cursor)
+        Target = Resized
+        Entry.Buffer = Resized
+        Entry.Size = Grown
+    end
+
+    buffer.copy(Target, Cursor, Buffer, 0, Size)
+    Entry.Cursor = InUse
+
+    local Count = #Instances
+    if Count > 0 then
+        local List = Entry.Instances
+        table.move(Instances, 1, Count, #List + 1, List)
+    end
 end
 
 local function StepReplication()

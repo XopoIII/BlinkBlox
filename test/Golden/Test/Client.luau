@@ -114,6 +114,57 @@ local function Load(Save: BLINK_BUFFER_SAVE?)
     SendInstances = {}
 end
 
+--> A buffer for writes that are copied out as soon as they are made: an unreliable send, and a
+--> broadcast before it is appended to each player's batch. Each used to write into a fresh 64-byte
+--> buffer and a fresh table, and to regrow the buffer on the way to the event's size. This one is
+--> kept at whatever size a write grew it to, up to SCRATCH_LIMIT, so a burst is not held for good.
+--> Nothing keeps a reference past the copy: a remote serialises its arguments when it is fired.
+local SCRATCH_LIMIT = 65536
+local ScratchSize = 64
+local ScratchBuffer = buffer.create(64)
+local ScratchInstances = {}
+
+local function LoadScratch()
+    SendSize = ScratchSize
+    SendCursor = 0
+    SendOffset = 0
+    SendBuffer = ScratchBuffer
+    table.clear(ScratchInstances)
+    SendInstances = ScratchInstances
+end
+
+--> Called once the scratch write is done, before anything else is loaded.
+local function KeepScratch()
+    if SendBuffer ~= ScratchBuffer and SendSize <= SCRATCH_LIMIT then
+        ScratchSize = SendSize
+        ScratchBuffer = SendBuffer
+    end
+end
+
+--> The client's batch, set aside while an unreliable Fire writes into the scratch buffer. A Save
+--> table did the same, and a Fire allocated one.
+local HeldSize = 0
+local HeldCursor = 0
+local HeldBuffer = SendBuffer
+local HeldInstances = SendInstances
+
+local function Hold()
+    HeldSize = SendSize
+    HeldCursor = SendCursor
+    HeldBuffer = SendBuffer
+    HeldInstances = SendInstances
+    LoadScratch()
+end
+
+local function Release()
+    KeepScratch()
+    SendSize = HeldSize
+    SendCursor = HeldCursor
+    SendOffset = HeldCursor
+    SendBuffer = HeldBuffer
+    SendInstances = HeldInstances
+end
+
 --> Undoes a write that threw part way through.
 -->
 --> Every serialiser writes straight into SendBuffer through Allocate, and an assert can fire in the
@@ -125,10 +176,6 @@ end
 --> Only the cursor and the instance count are restored. A buffer that Allocate grew on the way is
 --> kept deliberately: growing copied the earlier bytes across, so the larger buffer is just as
 --> valid, and discarding it would only make the next write grow it again.
-local function Mark(): (number, number)
-    return SendCursor, #SendInstances
-end
-
 local function Rollback(Cursor: number, Instances: number)
     SendCursor = Cursor
     SendOffset = Cursor
@@ -138,23 +185,56 @@ local function Rollback(Cursor: number, Instances: number)
     end
 end
 
-local function Allocate(Bytes: number)
-    local InUse = (SendCursor + Bytes)
-    if InUse > SendSize then
-        --> Avoid resizing the buffer for every write
-        while InUse > SendSize do
-            SendSize *= 1.5
-        end
+--> The same undo without a pcall, for the client's reliable Fire, where a pcall cost more than a
+--> small event's whole write. `Begin` records where the batch stands and a write that returns clears
+--> the record; a write that threw leaves it behind, and whatever touches the batch next -- the next
+--> write, or the flush -- undoes the half-written event first, through `Settle`. The server needs
+--> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
+--> reaches the save.
+local PendingCursor = -1
+local PendingInstances = 0
 
-        local Buffer = buffer.create(SendSize)
-        buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-        SendBuffer = Buffer
+local function Settle()
+    if PendingCursor >= 0 then
+        Rollback(PendingCursor, PendingInstances)
+        PendingCursor = -1
+    end
+end
+
+local function Begin()
+    Settle()
+    PendingCursor = SendCursor
+    PendingInstances = #SendInstances
+end
+
+local function Mark(): (number, number)
+    Settle()
+    return SendCursor, #SendInstances
+end
+
+--> Grows SendBuffer to hold `InUse` bytes, by half again at a time so a steady writer does not
+--> regrow it on every write. Kept out of Allocate, which runs for every event and every string: a
+--> function with a loop in it is not inlined, and Allocate without one is.
+local function Grow(InUse: number)
+    while InUse > SendSize do
+        SendSize *= 1.5
     end
 
-    SendOffset = SendCursor
-    SendCursor += Bytes
-    
-    return SendOffset
+    local Buffer = buffer.create(SendSize)
+    buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+    SendBuffer = Buffer
+end
+
+local function Allocate(Bytes: number)
+    local Offset = SendCursor
+    local InUse = Offset + Bytes
+    if InUse > SendSize then
+        Grow(InUse)
+    end
+
+    SendOffset = Offset
+    SendCursor = InUse
+    return Offset
 end
 
 local function CreateQueue(): BLINK_QUEUE
@@ -471,6 +551,9 @@ local function CheckUnreliableSize(Name: string): boolean
 	warn(`[BlinkBlox]: Dropped unreliable event "{Name}", {Size} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
 	return false
 end
+local MAX_PACKET_SIZE = 8192
+local MAX_EVENTS_PER_PACKET = 64
+local MAX_INSTANCES_PER_PACKET = 256
 local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Unreliable[0] = table.create(256)
@@ -735,6 +818,7 @@ export type FixedStruct = { A: number, B: number?, C: { number } }
 function SerdesFunctions.Indexers_ReadEVENT_TestEvent(): ({ ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, {["a a"]: boolean,}, ("b b"), { Type: "c c", Test: number })
 	-- Read BLOCK: 7 bytes
 	local BLOCK_START = Read(7)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: TestEvent
 	-- Value1: TestEvent
 	local Value1 = {["z z"] = false, ["1 1"] = false, ["2 2"] = false, ["3 3"] = false} :: any
@@ -878,6 +962,7 @@ end
 function SerdesFunctions.ReadFUNCTION_RETURN_RateLimitedCall(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RateLimitedCall
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -899,6 +984,7 @@ end
 function SerdesFunctions.ReadFUNCTION_RETURN_ConcurrentCall(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ConcurrentCall
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -907,6 +993,7 @@ end
 function SerdesFunctions.ReadEVENT_SendOccupiedCell(): (Vector3)
 	-- Read BLOCK: 6 bytes
 	local BLOCK_START = Read(6)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: SendOccupiedCell
 	local X = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 	local Y = buffer.readi16(RecieveBuffer, BLOCK_START + 2)
@@ -1361,18 +1448,19 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 	-- Read BLOCK: 19 bytes
 	local BLOCK_START = Read(19)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ServerPollEvent
 	local Value = {Enum = false, Nested = false, Map = false, Data = false, Struct = false, AnotherNested = false} :: any
 	-- Value.Field: Field
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value.Field: Field
 		Value.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	end
 	-- Value.Float16Field: Float16Field
-	if bit32.btest(BITFIELD_0, 0x02) == true then
+	if bit32.btest(BITFIELD_0, 0x02) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Float16Field: Float16Field
@@ -1439,7 +1527,7 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 		-- END ARRAY
 	end
 	-- Value.Nested.OptionalArray: OptionalArray
-	if bit32.btest(BITFIELD_0, 0x04) == true then
+	if bit32.btest(BITFIELD_0, 0x04) then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
 		local Length = 2
@@ -1499,7 +1587,7 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 		-- END ARRAY
 	end
 	-- Value.Struct.Optional: Optional
-	if bit32.btest(BITFIELD_0, 0x08) == true then
+	if bit32.btest(BITFIELD_0, 0x08) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Struct.Optional: Optional
@@ -1542,18 +1630,19 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 	-- Read BLOCK: 19 bytes
 	local BLOCK_START = Read(19)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ServerUnreliablePollEvent
 	local Value = {Enum = false, Nested = false, Map = false, Data = false, Struct = false, AnotherNested = false} :: any
 	-- Value.Field: Field
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value.Field: Field
 		Value.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	end
 	-- Value.Float16Field: Float16Field
-	if bit32.btest(BITFIELD_0, 0x02) == true then
+	if bit32.btest(BITFIELD_0, 0x02) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Float16Field: Float16Field
@@ -1620,7 +1709,7 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 		-- END ARRAY
 	end
 	-- Value.Nested.OptionalArray: OptionalArray
-	if bit32.btest(BITFIELD_0, 0x04) == true then
+	if bit32.btest(BITFIELD_0, 0x04) then
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
 		local Length = 2
@@ -1680,7 +1769,7 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 		-- END ARRAY
 	end
 	-- Value.Struct.Optional: Optional
-	if bit32.btest(BITFIELD_0, 0x08) == true then
+	if bit32.btest(BITFIELD_0, 0x08) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value.Struct.Optional: Optional
@@ -1720,10 +1809,12 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 end
 
 function SerdesFunctions.ReadEVENT_ServerEmptyPollEvent(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
 function SerdesFunctions.ReadEVENT_ServerEmptyUnreliablePollEvent(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
@@ -1742,10 +1833,12 @@ function SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent(Value: nil): ()
 end
 
 function SerdesFunctions.ReadEVENT_EmptyEvent(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
 function SerdesFunctions.ReadEVENT_EmptyUnreliableEvent(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
@@ -1758,6 +1851,7 @@ function SerdesFunctions.WriteFUNCTION_DATA_EmptyFunction(Value: nil, Invocation
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_EmptyFunction(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
@@ -1771,6 +1865,7 @@ function SerdesFunctions.WriteFUNCTION_DATA_UnitFunction(Value: nil, InvocationI
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_UnitFunction(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: UnitFunction
 	return nil
 end
@@ -1778,6 +1873,7 @@ end
 function SerdesFunctions.ReadEVENT_Flags8(): ({F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,})
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Flags8
 	local Value = {}
 	local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -1795,6 +1891,7 @@ end
 function SerdesFunctions.ReadEVENT_Flags16(): ({F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,})
 	-- Read BLOCK: 2 bytes
 	local BLOCK_START = Read(2)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Flags16
 	local Value = {}
 	local SET_BITS = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -1820,6 +1917,7 @@ end
 function SerdesFunctions.ReadEVENT_Flags32(): ({F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,})
 	-- Read BLOCK: 4 bytes
 	local BLOCK_START = Read(4)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Flags32
 	local Value = {}
 	local SET_BITS = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
@@ -1861,6 +1959,7 @@ end
 function SerdesFunctions.ReadEVENT_Flags33(): ({F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,})
 	-- Read BLOCK: 5 bytes
 	local BLOCK_START = Read(5)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Flags33
 	local Value = {}
 	local SET_BITS = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
@@ -1904,6 +2003,7 @@ end
 function SerdesFunctions.ReadEVENT_DynamicMap(): ({[number]: { Static: number, Dynamic: buffer }})
 	-- Read BLOCK: 2 bytes
 	local BLOCK_START = Read(2)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: DynamicMap
 	local Value = {}
 	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -1932,6 +2032,7 @@ function SerdesFunctions.ReadEVENT_DynamicMap(): ({[number]: { Static: number, D
 end
 
 function SerdesFunctions.ReadEVENT_DynamicArray(): ({ { Static: number, Dynamic: buffer } })
+	local RecieveBuffer = RecieveBuffer
 	-- Value: DynamicArray
 	-- START ARRAY
 	local Length = 12
@@ -1967,6 +2068,7 @@ end
 function SerdesFunctions.ReadEVENT_PlayerEvent(): ({ Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number })
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: PlayerEvent
 	local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	local Value = true :: any
@@ -2064,6 +2166,7 @@ function SerdesFunctions.ReadEVENT_Generic(): ({ Data: number, Array: { number }
 	-- Read BLOCK: 5 bytes
 	local BLOCK_START = Read(5)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Generic
 	local Value = {Data = false, Array = false, Nested = false} :: any
 	-- Value.Data: Data
@@ -2090,7 +2193,7 @@ function SerdesFunctions.ReadEVENT_Generic(): ({ Data: number, Array: { number }
 	end
 	-- Value.Optional: Optional
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value.Optional: Optional
@@ -2107,10 +2210,11 @@ function SerdesFunctions.ReadEVENT_GenericArray(): ({ { Data: number, Array: { n
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: GenericArray
 	local Value
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value: GenericArray
@@ -2162,7 +2266,7 @@ function SerdesFunctions.ReadEVENT_GenericArray(): ({ { Data: number, Array: { n
 				local OPERATION_OFFSET_2 = ARRAY_START_2
 				ARRAY_START_2 += 1
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				if bit32.btest(BITFIELD_0, 0x01) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Item_2.Optional: Optional
@@ -2186,6 +2290,7 @@ function SerdesFunctions.ReadEVENT_GenericArray(): ({ { Data: number, Array: { n
 end
 
 function SerdesFunctions.ReadEVENT_Unknown(): (any)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Unknown
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
@@ -2196,6 +2301,7 @@ end
 function SerdesFunctions.ReadEVENT_MapEvent(): ({[string]: number})
 	-- Read BLOCK: 2 bytes
 	local BLOCK_START = Read(2)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: MapEvent
 	local Value = {}
 	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -2216,6 +2322,7 @@ end
 function SerdesFunctions.ReadEVENT_MapStructEvent(): ({ Map: {[string]: number} })
 	-- Read BLOCK: 2 bytes
 	local BLOCK_START = Read(2)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: MapStructEvent
 	local Value = {Map = false} :: any
 	do
@@ -2240,6 +2347,7 @@ end
 function SerdesFunctions.ReadEVENT_MapComplexEvent(): ({[string]: { number }})
 	-- Read BLOCK: 2 bytes
 	local BLOCK_START = Read(2)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: MapComplexEvent
 	local Value = {}
 	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -2277,10 +2385,11 @@ function SerdesFunctions.ReadEVENT_MapReferenceEvent(): ({[("A" | "B" | "C" | "D
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: MapReferenceEvent
 	local Value
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value: MapReference
@@ -2324,6 +2433,7 @@ function SerdesFunctions.ReadEVENT_MapReferenceEvent(): ({[("A" | "B" | "C" | "D
 end
 
 function SerdesFunctions.ReadEVENT_ArrayPrimitive(): ({ number })
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ArrayPrimitive
 	-- START ARRAY
 	local Length = 8
@@ -2346,10 +2456,11 @@ function SerdesFunctions.ReadEVENT_OptionalPrimitive(): (number?)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: OptionalPrimitive
 	local Value
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value: OptionalPrimitive
@@ -2361,6 +2472,7 @@ end
 function SerdesFunctions.ReadEVENT_ManyReliableSync(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ManyReliableSync
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -2369,6 +2481,7 @@ end
 function SerdesFunctions.ReadEVENT_ManyReliableAsync(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ManyReliableAsync
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -2377,6 +2490,7 @@ end
 function SerdesFunctions.ReadEVENT_ManyUnreliableSync(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ManyUnreliableSync
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -2385,6 +2499,7 @@ end
 function SerdesFunctions.ReadEVENT_ManyUnreliableAsync(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ManyUnreliableAsync
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -2393,6 +2508,7 @@ end
 function SerdesFunctions.ReadEVENT_ReliableServer(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ReliableServer
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -2401,6 +2517,7 @@ end
 function SerdesFunctions.ReadEVENT_ReliableServerAsync(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ReliableServerAsync
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -2421,6 +2538,7 @@ end
 function SerdesFunctions.ReadEVENT_UnreliableServer(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: UnreliableServer
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -2429,6 +2547,7 @@ end
 function SerdesFunctions.ReadEVENT_UnreliableServerAsync(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: UnreliableServerAsync
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -2447,6 +2566,7 @@ function SerdesFunctions.WriteEVENT_UnreliableClient(Value: number): ()
 end
 
 function SerdesFunctions.ReadEVENT_InstanceAny(): (Instance)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: InstanceAny
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
@@ -2455,6 +2575,7 @@ function SerdesFunctions.ReadEVENT_InstanceAny(): (Instance)
 end
 
 function SerdesFunctions.ReadEVENT_InstanceOfType(): (Sound)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: InstanceOfType
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
@@ -2464,6 +2585,7 @@ function SerdesFunctions.ReadEVENT_InstanceOfType(): (Sound)
 end
 
 function SerdesFunctions.ReadEVENT_InstanceOptional(): (Instance?)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: InstanceOptional
 	local Value
 	RecieveInstanceCursor += 1
@@ -2478,6 +2600,7 @@ function SerdesFunctions.ReadEVENT_InstanceOptional(): (Instance?)
 end
 
 function SerdesFunctions.ReadEVENT_InstanceOfClassWithDigit(): (Motor6D)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: InstanceOfClassWithDigit
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
@@ -2490,10 +2613,11 @@ function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field:
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Reference
 	local Value
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 3 bytes
 		local BLOCK_START = Read(3)
 		local BITFIELD_0
@@ -2501,14 +2625,14 @@ function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field:
 		Value = {Enum = false, Nested = false} :: any
 		-- Value.Field: Field
 		BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		if bit32.btest(BITFIELD_0, 0x01) == true then
+		if bit32.btest(BITFIELD_0, 0x01) then
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
 			-- Value.Field: Field
 			Value.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		end
 		-- Value.Float16Field: Float16Field
-		if bit32.btest(BITFIELD_0, 0x02) == true then
+		if bit32.btest(BITFIELD_0, 0x02) then
 			-- Read BLOCK: 2 bytes
 			local BLOCK_START = Read(2)
 			-- Value.Float16Field: Float16Field
@@ -2575,7 +2699,7 @@ function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field:
 			-- END ARRAY
 		end
 		-- Value.Nested.OptionalArray: OptionalArray
-		if bit32.btest(BITFIELD_0, 0x04) == true then
+		if bit32.btest(BITFIELD_0, 0x04) then
 			-- Value.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
 			local Length = 2
@@ -2597,6 +2721,7 @@ function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field:
 end
 
 function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } })
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ReferenceArray
 	-- START ARRAY
 	local Length = 8
@@ -2613,7 +2738,7 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 			local OPERATION_OFFSET_0 = ARRAY_START_1
 			ARRAY_START_1 += 1
 			BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			if bit32.btest(BITFIELD_0, 0x01) == true then
+			if bit32.btest(BITFIELD_0, 0x01) then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				-- Item_1.Field: Field
@@ -2621,7 +2746,7 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 			end
 		end
 		-- Item_1.Float16Field: Float16Field
-		if bit32.btest(BITFIELD_0, 0x02) == true then
+		if bit32.btest(BITFIELD_0, 0x02) then
 			-- Read BLOCK: 2 bytes
 			local BLOCK_START = Read(2)
 			-- Item_1.Float16Field: Float16Field
@@ -2696,7 +2821,7 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 			-- END ARRAY
 		end
 		-- Item_1.Nested.OptionalArray: OptionalArray
-		if bit32.btest(BITFIELD_0, 0x04) == true then
+		if bit32.btest(BITFIELD_0, 0x04) then
 			-- Item_1.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
 			local Length = 2
@@ -2723,10 +2848,11 @@ function SerdesFunctions.ReadEVENT_ReferenceOptional(): ({ Field: number?, Float
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: ReferenceOptional
 	local Value
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 3 bytes
 		local BLOCK_START = Read(3)
 		local BITFIELD_0
@@ -2734,14 +2860,14 @@ function SerdesFunctions.ReadEVENT_ReferenceOptional(): ({ Field: number?, Float
 		Value = {Enum = false, Nested = false} :: any
 		-- Value.Field: Field
 		BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		if bit32.btest(BITFIELD_0, 0x01) == true then
+		if bit32.btest(BITFIELD_0, 0x01) then
 			-- Read BLOCK: 1 bytes
 			local BLOCK_START = Read(1)
 			-- Value.Field: Field
 			Value.Field = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		end
 		-- Value.Float16Field: Float16Field
-		if bit32.btest(BITFIELD_0, 0x02) == true then
+		if bit32.btest(BITFIELD_0, 0x02) then
 			-- Read BLOCK: 2 bytes
 			local BLOCK_START = Read(2)
 			-- Value.Float16Field: Float16Field
@@ -2808,7 +2934,7 @@ function SerdesFunctions.ReadEVENT_ReferenceOptional(): ({ Field: number?, Float
 			-- END ARRAY
 		end
 		-- Value.Nested.OptionalArray: OptionalArray
-		if bit32.btest(BITFIELD_0, 0x04) == true then
+		if bit32.btest(BITFIELD_0, 0x04) then
 			-- Value.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
 			local Length = 2
@@ -2845,6 +2971,7 @@ end
 function SerdesFunctions.ReadFUNCTION_RETURN_RemoteFunction(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: RemoteFunction
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -2854,6 +2981,7 @@ function SerdesFunctions.ReadEVENT_Tuple(): (number, ("A" | "B" | "C" | "D"), nu
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Tuple
 	-- Value1: Tuple
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2874,7 +3002,7 @@ function SerdesFunctions.ReadEVENT_Tuple(): (number, ("A" | "B" | "C" | "D"), nu
 	-- Value3: Tuple
 	local Value3
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value3: Tuple
@@ -2916,6 +3044,7 @@ function SerdesFunctions.ReadEVENT_TupleUnreliable(): (number, ("A" | "B" | "C" 
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: TupleUnreliable
 	-- Value1: TupleUnreliable
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2936,7 +3065,7 @@ function SerdesFunctions.ReadEVENT_TupleUnreliable(): (number, ("A" | "B" | "C" 
 	-- Value3: TupleUnreliable
 	local Value3
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value3: TupleUnreliable
@@ -3014,6 +3143,7 @@ function SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction(): (Instance?, Instan
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: TupleFunction
 	-- Value1: TupleFunction
 	local Value1
@@ -3032,7 +3162,7 @@ function SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction(): (Instance?, Instan
 	-- Value3: TupleFunction
 	local Value3
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value3: TupleFunction
@@ -3060,6 +3190,7 @@ end
 function SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: InScopeEvent
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -3068,6 +3199,7 @@ end
 function SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_ReadEVENT_InAnotherScopeEvent(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: InAnotherScopeEvent
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -3076,6 +3208,7 @@ end
 function SerdesFunctions.ExampleScope_ReadEVENT_InScopeEvent(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: InScopeEvent
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -3084,6 +3217,7 @@ end
 function SerdesFunctions.Issue33_ReadEVENT_Event(): ({[("One" | "Two")]: number}, { Tag: "Variant", field: ("One" | "Two") }, { field: ("One" | "Two") })
 	-- Read BLOCK: 4 bytes
 	local BLOCK_START = Read(4)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Event
 	-- Value1: Event
 	local Value1 = {}
@@ -3159,6 +3293,7 @@ function SerdesFunctions.ReadEVENT_NamedTuple(): (number, string, number?)
 	-- Read BLOCK: 11 bytes
 	local BLOCK_START = Read(11)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: NamedTuple
 	-- Value1: NamedTuple
 	local Value1 = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
@@ -3169,7 +3304,7 @@ function SerdesFunctions.ReadEVENT_NamedTuple(): (number, string, number?)
 	-- Value3: NamedTuple
 	local Value3
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 10)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value3: NamedTuple
@@ -3204,6 +3339,7 @@ end
 function SerdesFunctions.ReadFUNCTION_RETURN_NamedTupleFunction(): (number, string)
 	-- Read BLOCK: 4 bytes
 	local BLOCK_START = Read(4)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: NamedTupleFunction
 	-- Value1: NamedTupleFunction
 	local Value1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -3217,6 +3353,7 @@ end
 function SerdesFunctions.ReadEVENT_PartiallyNamedTuple(): (number, string, number)
 	-- Read BLOCK: 5 bytes
 	local BLOCK_START = Read(5)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: PartiallyNamedTuple
 	-- Value1: PartiallyNamedTuple
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -3245,6 +3382,7 @@ end
 function SerdesFunctions.ReadFUNCTION_RETURN_NeverAnswered(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: NeverAnswered
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -3253,6 +3391,7 @@ end
 function SerdesFunctions.ReadFUNCTION_DATA_AskClient(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: AskClient
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -3333,6 +3472,7 @@ end
 function SerdesFunctions.ReadFUNCTION_RETURN_BadlyAnswered(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: BadlyAnswered
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -3366,6 +3506,7 @@ function SerdesFunctions.WriteFUNCTION_DATA_Unanswered(Value: nil, InvocationIde
 end
 
 function SerdesFunctions.ReadFUNCTION_RETURN_Unanswered(): (nil)
+	local RecieveBuffer = RecieveBuffer
 	return nil
 end
 
@@ -3373,13 +3514,14 @@ function SerdesFunctions.ReadEVENT_QueuedHoles(): (number, number?, number?, num
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: QueuedHoles
 	-- Value1: QueuedHoles
 	local Value1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	-- Value2: QueuedHoles
 	local Value2
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value2: QueuedHoles
@@ -3387,7 +3529,7 @@ function SerdesFunctions.ReadEVENT_QueuedHoles(): (number, number?, number?, num
 	end
 	-- Value3: QueuedHoles
 	local Value3
-	if bit32.btest(BITFIELD_0, 0x02) == true then
+	if bit32.btest(BITFIELD_0, 0x02) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value3: QueuedHoles
@@ -3397,7 +3539,7 @@ function SerdesFunctions.ReadEVENT_QueuedHoles(): (number, number?, number?, num
 	local Value4 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 	-- Value5: QueuedHoles
 	local Value5
-	if bit32.btest(BITFIELD_0, 0x04) == true then
+	if bit32.btest(BITFIELD_0, 0x04) then
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
 		-- Value5: QueuedHoles
@@ -3409,6 +3551,7 @@ end
 function SerdesFunctions.ReadEVENT_OrderedToClient(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: OrderedToClient
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -3466,6 +3609,7 @@ end
 function SerdesFunctions.ReadEVENT_NamedLength(): (string, number)
 	-- Read BLOCK: 4 bytes
 	local BLOCK_START = Read(4)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: NamedLength
 	-- Value1: NamedLength
 	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -3479,6 +3623,7 @@ end
 function SerdesFunctions.ReadEVENT_LengthFirst(): (number, string)
 	-- Read BLOCK: 4 bytes
 	local BLOCK_START = Read(4)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: LengthFirst
 	-- Value1: LengthFirst
 	local Value1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -3554,6 +3699,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Byte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Byte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -3598,6 +3744,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Color)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Color
 				local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
 				return Value
@@ -3645,6 +3792,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (ColorArray)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ColorArray
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -3733,6 +3881,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (DateSeconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateSeconds
 				local Value = DateTime.fromUnixTimestamp(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -3778,6 +3927,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (DateMilliseconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateMilliseconds
 				local Value = DateTime.fromUnixTimestampMillis(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -3823,6 +3973,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (BrickkColor)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BrickkColor
 				local Value = BrickColor.new(buffer.readu16(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -3868,6 +4019,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (ExactRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
@@ -3914,6 +4066,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (DecimalRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DecimalRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
@@ -3962,6 +4115,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (NegativeRange)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: NegativeRange
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -4010,6 +4164,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (UnboundUpper)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundUpper
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
@@ -4056,6 +4211,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (UnboundLower)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundLower
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
@@ -4102,6 +4258,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (RangedVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: RangedVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -4156,6 +4313,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Buffer)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Buffer
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -4207,6 +4365,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (ExactBuffer)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactBuffer
 				local Value = buffer.create(9)
 				buffer.copy(Value, 0, RecieveBuffer, BLOCK_START + 0, 9)
@@ -4254,6 +4413,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (BoundedBuffer)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BoundedBuffer
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Length < 0 then error(`Expected size of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -4309,6 +4469,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PlainCFrame)
 				-- Read BLOCK: 24 bytes
 				local BLOCK_START = Read(24)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PlainCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -4367,6 +4528,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (QuatCFrame)
 				-- Read BLOCK: 19 bytes
 				local BLOCK_START = Read(19)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -4426,6 +4588,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (QuatHalfCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatHalfCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -4620,6 +4783,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (QuatFirstCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatFirstCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -4814,6 +4978,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (QuatCFrames)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrames
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -4938,6 +5103,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (MultiDimensionalArray)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MultiDimensionalArray
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -5069,6 +5235,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeByte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeByte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -5113,6 +5280,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeFixedString)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedString
 				local Value = buffer.readstring(RecieveBuffer, BLOCK_START + 0, 8)
 				if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
@@ -5159,6 +5327,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeBoundedString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedString
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if Length < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -5211,6 +5380,7 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (SizeFixedArray)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedArray
 				-- START ARRAY
 				local Length = 4
@@ -5278,6 +5448,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeBoundedArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedArray
 				-- START ARRAY
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -5352,10 +5523,11 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeOptionalByte
 				local Value
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				if bit32.btest(BITFIELD_0, 0x01) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value: SizeOptionalByte
@@ -5412,6 +5584,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -5463,6 +5636,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeStruct
 				local Value = {A = false, B = false, C = false} :: any
 				-- Value.A: A
@@ -5528,6 +5702,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeEnum)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeEnum
 				local Value = true :: any
 				local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -5587,6 +5762,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeFlags)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFlags
 				local Value = {}
 				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -5636,6 +5812,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SizeMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -5707,6 +5884,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (OffsetArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetArray
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -5783,6 +5961,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (OffsetString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetString
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -5840,6 +6019,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (OffsetBuffer)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetBuffer
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -5899,6 +6079,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsOne
 				local Value = {A = false} :: any
 				-- Value.A: A
@@ -5951,6 +6132,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeven
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false} :: any
 				-- Value.A: A
@@ -6045,6 +6227,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsEight
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false} :: any
 				-- Value.A: A
@@ -6147,6 +6330,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Read(2)
 				local BITFIELD_1
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsNine
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false} :: any
 				-- Value.A: A
@@ -6261,6 +6445,7 @@ if not RunService:IsRunning() then
 				local BITFIELD_2
 				local BITFIELD_1
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeventeen
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false, J = false, K = false, L = false, M = false, N = false, O = false, P = false, Q = false} :: any
 				-- Value.A: A
@@ -6433,13 +6618,14 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsMixed
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
-				if bit32.btest(BITFIELD_0, 0x02) == true then
+				if bit32.btest(BITFIELD_0, 0x02) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value.B: B
@@ -6448,7 +6634,7 @@ if not RunService:IsRunning() then
 				-- Value.C: C
 				Value.C = bit32.btest(BITFIELD_0, 0x04)
 				-- Value.D: D
-				if bit32.btest(BITFIELD_0, 0x08) == true then
+				if bit32.btest(BITFIELD_0, 0x08) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.D: D
@@ -6527,6 +6713,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedBooleans)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBooleans
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -6636,6 +6823,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedFixed)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedFixed
 				-- START ARRAY
 				local Length = 10
@@ -6741,6 +6929,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedRanged)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedRanged
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -6853,6 +7042,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedNested
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -6991,6 +7181,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedThroughAlias)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedThroughAlias
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -7101,6 +7292,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 5 bytes
 				local BLOCK_START = Read(5)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBeside
 				local Value = {A = false, List = false, B = false, Fixed = false, C = false} :: any
 				-- Value.A: A
@@ -7310,6 +7502,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -7449,6 +7642,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (PackedOptional)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedOptional
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -7466,7 +7660,7 @@ if not RunService:IsRunning() then
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					if bit32.btest(BITFIELD_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
 						local BITFIELD_0
@@ -7564,6 +7758,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (MapNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MapNested
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -7668,6 +7863,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Standalone)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
@@ -8136,6 +8332,7 @@ if not RunService:IsRunning() then
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (OptionalHoles)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OptionalHoles
 				-- START ARRAY
 				local Length = 3
@@ -8150,7 +8347,7 @@ if not RunService:IsRunning() then
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					if bit32.btest(BITFIELD_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
 						-- Item_1: OptionalHoles
@@ -8222,6 +8419,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (HalfFloat)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: HalfFloat
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -8311,6 +8509,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Float24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Float24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local Value
@@ -8387,6 +8586,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Unsigned24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Unsigned24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -8432,6 +8632,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Signed24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Signed24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -8477,6 +8678,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (Vector24)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Vector24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -8623,6 +8825,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (QuatCFrame24)
 				-- Read BLOCK: 16 bytes
 				local BLOCK_START = Read(16)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -8792,6 +8995,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FlagCarrier)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FlagCarrier
 				local Value = {Flags = false, Text = false, Kind = false} :: any
 				do
@@ -8886,6 +9090,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				Value = Value / 10
@@ -8934,6 +9139,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedRanged)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedRanged
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -8984,6 +9190,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedSigned)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedSigned
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -400) then error(`Expected "Value" to be larger than or equal to -400, got {Value} instead.`) end
@@ -9034,6 +9241,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedCoarse)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedCoarse
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value = Value * 2.5
@@ -9082,6 +9290,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedTriple)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTriple
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				Value = Value / 1000
@@ -9131,6 +9340,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedWide)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWide
 				local Value = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -9181,6 +9391,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (FixedWhole)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWhole
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -9228,6 +9439,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedCount)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedCount
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 1) then error(`Expected "Value" to be larger than or equal to 1, got {Value} instead.`) end
@@ -9276,6 +9488,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedSigned)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedSigned
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -9324,6 +9537,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedNegative)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedNegative
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -10) then error(`Expected "Value" to be larger than or equal to -10, got {Value} instead.`) end
@@ -9372,6 +9586,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -9421,6 +9636,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedHalf)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedHalf
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -9512,6 +9728,7 @@ if not RunService:IsRunning() then
 			local Success, Result = pcall(function (): (SaturatedUnit)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedUnit
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -9561,6 +9778,7 @@ if not RunService:IsRunning() then
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedStruct
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
@@ -9568,7 +9786,7 @@ if not RunService:IsRunning() then
 				Value.A = Value.A / 10
 				-- Value.B: B
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				if bit32.btest(BITFIELD_0, 0x01) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.B: B
@@ -9755,17 +9973,74 @@ end
 
 local SendUnderused = 0
 
+--> The server refuses a packet past any of its limits and reports the player who sent it, and a game
+--> may strike or ban on that report. A client that fires more in one frame than one packet may carry
+--> -- after a hitch, or from a busy interface -- is not hostile, so its batch is cut into packets that
+--> fit, each at an event's boundary. Most frames fit in one and pay a few comparisons an event; a
+--> cut is recorded only where one is needed. An event too large to fit on its own goes in a packet
+--> of its own, which the server refuses as it always did.
+local PacketStart = 0
+local PacketInstances = 0
+local PacketEvents = 0
+local Cuts: {number} = {}
+
+--> An event has been written into the batch from `Start`, with `Instances` instances ahead of it.
+local function Close(Start: number, Instances: number)
+    PacketEvents += 1
+    if PacketEvents > MAX_EVENTS_PER_PACKET
+        or SendCursor - PacketStart > MAX_PACKET_SIZE
+        or #SendInstances - PacketInstances > MAX_INSTANCES_PER_PACKET
+    then
+        if Start > PacketStart then
+            table.insert(Cuts, Start)
+            table.insert(Cuts, Instances)
+            PacketStart = Start
+            PacketInstances = Instances
+            PacketEvents = 1
+        end
+    end
+end
+
+--> The end of a write that Begin started.
+local function Commit()
+    local Start = PendingCursor
+    PendingCursor = -1
+    Close(Start, PendingInstances)
+end
+
+local function SendPacket(From: number, To: number, FromInstances: number, ToInstances: number)
+    local Buffer = buffer.create(To - From)
+    buffer.copy(Buffer, 0, SendBuffer, From, To - From)
+    Reliable:FireServer(Buffer, table.move(SendInstances, FromInstances + 1, ToInstances, 1, {}))
+end
+
 local function StepReplication()
+    Settle()
     local Used = SendCursor
     if Used > 0 then
-        local Buffer = buffer.create(Used)
-        buffer.copy(Buffer, 0, SendBuffer, 0, Used)
-        Reliable:FireServer(Buffer, SendInstances)
+        if #Cuts == 0 then
+            local Buffer = buffer.create(Used)
+            buffer.copy(Buffer, 0, SendBuffer, 0, Used)
+            Reliable:FireServer(Buffer, SendInstances)
+        else
+            local From, FromInstances = 0, 0
+            for Index = 1, #Cuts, 2 do
+                local To, ToInstances = Cuts[Index], Cuts[Index + 1]
+                SendPacket(From, To, FromInstances, ToInstances)
+                From, FromInstances = To, ToInstances
+            end
+            SendPacket(From, Used, FromInstances, #SendInstances)
+            table.clear(Cuts)
+        end
 
         SendCursor = 0
         SendOffset = 0
         table.clear(SendInstances)
     end
+
+    PacketStart = 0
+    PacketInstances = 0
+    PacketEvents = 0
 
     --> Kept for the next frame, as the server keeps each player's. Checked on a frame that sent
     --> nothing as well, or a client that went quiet after a burst would hold the burst's buffer.
@@ -9832,9 +10107,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 		elseif Index == 4 then
 			local Value: Vector3 = SerdesFunctions.ReadEVENT_SendOccupiedCell()
-			if Events.Reliable[4] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[4]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "SendOccupiedCell"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[4], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[4] > 256 then
@@ -9848,9 +10124,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			Push(Queue.Reliable[8], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyPollEvent()))
 		elseif Index == 10 then
 			local Value: nil = SerdesFunctions.ReadEVENT_EmptyEvent()
-			if Events.Reliable[10] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[10]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "EmptyEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[10], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[10] > 256 then
@@ -9896,9 +10173,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			if Answered == 1 and Success ~= true then error(Value, 0) end
 		elseif Index == 13 then
 			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,} = SerdesFunctions.ReadEVENT_Flags8()
-			if Events.Reliable[13] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[13]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Flags8"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[13], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[13] > 256 then
@@ -9908,9 +10186,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 14 then
 			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,} = SerdesFunctions.ReadEVENT_Flags16()
-			if Events.Reliable[14] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[14]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Flags16"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[14], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[14] > 256 then
@@ -9920,9 +10199,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 15 then
 			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,} = SerdesFunctions.ReadEVENT_Flags32()
-			if Events.Reliable[15] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[15]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Flags32"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[15], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[15] > 256 then
@@ -9932,9 +10212,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 16 then
 			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,} = SerdesFunctions.ReadEVENT_Flags33()
-			if Events.Reliable[16] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[16]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Flags33"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[16], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[16] > 256 then
@@ -9944,9 +10225,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 17 then
 			local Value: {[number]: { Static: number, Dynamic: buffer }} = SerdesFunctions.ReadEVENT_DynamicMap()
-			if Events.Reliable[17] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[17]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "DynamicMap"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[17], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[17] > 256 then
@@ -9956,9 +10238,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 18 then
 			local Value: { { Static: number, Dynamic: buffer } } = SerdesFunctions.ReadEVENT_DynamicArray()
-			if Events.Reliable[18] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[18]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "DynamicArray"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[18], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[18] > 256 then
@@ -9968,9 +10251,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 19 then
 			local Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number } = SerdesFunctions.ReadEVENT_PlayerEvent()
-			if Events.Reliable[19] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[19]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "PlayerEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[19], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[19] > 256 then
@@ -9980,9 +10264,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 21 then
 			local Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } = SerdesFunctions.ReadEVENT_Generic()
-			if Events.Reliable[21] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[21]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Generic"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[21], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[21] > 256 then
@@ -9992,9 +10277,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 22 then
 			local Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }? = SerdesFunctions.ReadEVENT_GenericArray()
-			if Events.Reliable[22] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[22]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "GenericArray"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[22], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[22] > 256 then
@@ -10004,9 +10290,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 23 then
 			local Value: any = SerdesFunctions.ReadEVENT_Unknown()
-			if Events.Reliable[23] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[23]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Unknown"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[23], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[23] > 256 then
@@ -10016,9 +10303,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 24 then
 			local Value: {[string]: number} = SerdesFunctions.ReadEVENT_MapEvent()
-			if Events.Reliable[24] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[24]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "MapEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[24], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[24] > 256 then
@@ -10028,9 +10316,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 25 then
 			local Value: { Map: {[string]: number} } = SerdesFunctions.ReadEVENT_MapStructEvent()
-			if Events.Reliable[25] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[25]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "MapStructEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[25], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[25] > 256 then
@@ -10040,9 +10329,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 26 then
 			local Value: {[string]: { number }} = SerdesFunctions.ReadEVENT_MapComplexEvent()
-			if Events.Reliable[26] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[26]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "MapComplexEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[26], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[26] > 256 then
@@ -10052,9 +10342,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 27 then
 			local Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}? = SerdesFunctions.ReadEVENT_MapReferenceEvent()
-			if Events.Reliable[27] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[27]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "MapReferenceEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[27], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[27] > 256 then
@@ -10094,9 +10385,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 30 then
 			local Value: number = SerdesFunctions.ReadEVENT_ReliableServer()
-			if Events.Reliable[30] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[30]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ReliableServer"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[30], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[30] > 256 then
@@ -10106,8 +10398,9 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 31 then
 			local Value: number = SerdesFunctions.ReadEVENT_ReliableServerAsync()
-			if Events.Reliable[31] ~= nil then
-				Spawn(Events.Reliable[31], Value)
+			local BOUND_LISTENER = Events.Reliable[31]
+			if BOUND_LISTENER ~= nil then
+				Spawn(BOUND_LISTENER, Value)
 			else
 				if #Queue.Reliable[31] > 256 then
 					warn("[BlinkBlox]: Event queue of \"ReliableServerAsync\" exceeded 256, did you forget to implement a listener?")
@@ -10116,9 +10409,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 33 then
 			local Value: Instance = SerdesFunctions.ReadEVENT_InstanceAny()
-			if Events.Reliable[33] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[33]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "InstanceAny"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[33], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[33] > 256 then
@@ -10128,9 +10422,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 34 then
 			local Value: Sound = SerdesFunctions.ReadEVENT_InstanceOfType()
-			if Events.Reliable[34] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[34]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "InstanceOfType"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[34], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[34] > 256 then
@@ -10140,9 +10435,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 35 then
 			local Value: Instance? = SerdesFunctions.ReadEVENT_InstanceOptional()
-			if Events.Reliable[35] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[35]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "InstanceOptional"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[35], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[35] > 256 then
@@ -10152,9 +10448,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 36 then
 			local Value: Motor6D = SerdesFunctions.ReadEVENT_InstanceOfClassWithDigit()
-			if Events.Reliable[36] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[36]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "InstanceOfClassWithDigit"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[36], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[36] > 256 then
@@ -10164,9 +10461,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 37 then
 			local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_Reference()
-			if Events.Reliable[37] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[37]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Reference"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[37], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[37] > 256 then
@@ -10176,9 +10474,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 38 then
 			local Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } } = SerdesFunctions.ReadEVENT_ReferenceArray()
-			if Events.Reliable[38] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[38]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ReferenceArray"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[38], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[38] > 256 then
@@ -10188,9 +10487,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 39 then
 			local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_ReferenceOptional()
-			if Events.Reliable[39] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[39]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ReferenceOptional"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[39], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[39] > 256 then
@@ -10218,9 +10518,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 		elseif Index == 41 then
 			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number } = SerdesFunctions.ReadEVENT_Tuple()
-			if Events.Reliable[41] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[41]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Tuple"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[41], Value1, Value2, Value3, Value4, Value5, Value6)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5, Value6)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[41] > 256 then
@@ -10248,9 +10549,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			if Answered == 1 and Success ~= true then error(ReturnValue1, 0) end
 		elseif Index == 43 then
 			local Value: number = SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent()
-			if Events.Reliable[43] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[43]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "InScopeEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[43], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[43] > 256 then
@@ -10260,9 +10562,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 44 then
 			local Value: number = SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_ReadEVENT_InAnotherScopeEvent()
-			if Events.Reliable[44] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[44]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "InAnotherScopeEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[44], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[44] > 256 then
@@ -10272,9 +10575,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 45 then
 			local Value: number = SerdesFunctions.ExampleScope_ReadEVENT_InScopeEvent()
-			if Events.Reliable[45] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[45]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "InScopeEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[45], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[45] > 256 then
@@ -10284,9 +10588,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 46 then
 			local Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") } = SerdesFunctions.Issue33_ReadEVENT_Event()
-			if Events.Reliable[46] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[46]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Event"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[46], Value1, Value2, Value3)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[46] > 256 then
@@ -10296,9 +10601,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 48 then
 			local Value1: number, Value2: string, Value3: number? = SerdesFunctions.ReadEVENT_NamedTuple()
-			if Events.Reliable[48] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[48]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "NamedTuple"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[48], Value1, Value2, Value3)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[48] > 256 then
@@ -10326,9 +10632,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			if Answered == 1 and Success ~= true then error(ReturnValue1, 0) end
 		elseif Index == 50 then
 			local Value1: number, Value2: string, Value3: number = SerdesFunctions.ReadEVENT_PartiallyNamedTuple()
-			if Events.Reliable[50] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[50]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "PartiallyNamedTuple"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[50], Value1, Value2, Value3)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[50] > 256 then
@@ -10405,9 +10712,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 		elseif Index == 59 then
 			local Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number? = SerdesFunctions.ReadEVENT_QueuedHoles()
-			if Events.Reliable[59] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[59]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "QueuedHoles"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[59], Value1, Value2, Value3, Value4, Value5)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[59] > 256 then
@@ -10417,9 +10725,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 62 then
 			local Value1: string, Value2: number = SerdesFunctions.ReadEVENT_NamedLength()
-			if Events.Reliable[62] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[62]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "NamedLength"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[62], Value1, Value2)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[62] > 256 then
@@ -10429,9 +10738,10 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 63 then
 			local Value1: number, Value2: string = SerdesFunctions.ReadEVENT_LengthFirst()
-			if Events.Reliable[63] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[63]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "LengthFirst"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[63], Value1, Value2)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[63] > 256 then
@@ -10443,13 +10753,15 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	while (RecieveCursor < Size) do
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
-			break
+	local function DecodePacket()
+		while (RecieveCursor < Size) do
+			Decoding = -1
+			DecodeEvent()
 		end
+	end
+	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	if not Parsed then
+		ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
 	end
 end)
 Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -10471,9 +10783,10 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		Decoding = Index
 		if Index == 0 then
 			local Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number } = SerdesFunctions.Indexers_ReadEVENT_TestEvent()
-			if Events.Unreliable[0] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[0]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "TestEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[0], Value1, Value2, Value3, Value4)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 6 then
@@ -10482,23 +10795,26 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			Push(Queue.Unreliable[7], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyUnreliablePollEvent()))
 		elseif Index == 9 then
 			local Value: nil = SerdesFunctions.ReadEVENT_EmptyUnreliableEvent()
-			if Events.Unreliable[9] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[9]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "EmptyUnreliableEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[9], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 10 then
 			local Value: { number } = SerdesFunctions.ReadEVENT_ArrayPrimitive()
-			if Events.Unreliable[10] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[10]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ArrayPrimitive"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[10], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 11 then
 			local Value: number? = SerdesFunctions.ReadEVENT_OptionalPrimitive()
-			if Events.Unreliable[11] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[11]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "OptionalPrimitive"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[11], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 12 then
@@ -10519,21 +10835,24 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			end
 		elseif Index == 14 then
 			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServer()
-			if Events.Unreliable[14] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[14]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnreliableServer"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[14], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 15 then
 			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServerAsync()
-			if Events.Unreliable[15] ~= nil then
-				Spawn(Events.Unreliable[15], Value)
+			local BOUND_LISTENER = Events.Unreliable[15]
+			if BOUND_LISTENER ~= nil then
+				Spawn(BOUND_LISTENER, Value)
 			end
 		elseif Index == 17 then
 			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadEVENT_TupleUnreliable()
-			if Events.Unreliable[17] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[17]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "TupleUnreliable"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[17], Value1, Value2, Value3, Value4, Value5)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 19 then
@@ -10542,9 +10861,10 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			local Value: number = SerdesFunctions.ReadEVENT_OrderedToClient()
 			if OrderAccept(19, OrderIdentifier) == true then
-				if Events.Unreliable[19] ~= nil then
+				local BOUND_LISTENER = Events.Unreliable[19]
+				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "OrderedToClient"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[19], Value)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
@@ -10552,13 +10872,15 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	while (RecieveCursor < Size) do
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
-			break
+	local function DecodePacket()
+		while (RecieveCursor < Size) do
+			Decoding = -1
+			DecodeEvent()
 		end
+	end
+	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	if not Parsed then
+		ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
 	end
 end)
 
@@ -10590,9 +10912,10 @@ local Returns = table.freeze({
 				end
 			end,
 			Predict = function(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-				if Events.Unreliable[0] ~= nil then
+				local BOUND_LISTENER = Events.Unreliable[0]
+				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "TestEvent"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[0], Value1, Value2, Value3, Value4)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
@@ -10616,6 +10939,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Byte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Byte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -10660,6 +10984,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Color)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Color
 				local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
 				return Value
@@ -10707,6 +11032,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (ColorArray)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ColorArray
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -10795,6 +11121,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (DateSeconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateSeconds
 				local Value = DateTime.fromUnixTimestamp(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -10840,6 +11167,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (DateMilliseconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateMilliseconds
 				local Value = DateTime.fromUnixTimestampMillis(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -10885,6 +11213,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (BrickkColor)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BrickkColor
 				local Value = BrickColor.new(buffer.readu16(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -10930,6 +11259,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (ExactRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
@@ -10976,6 +11306,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (DecimalRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DecimalRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
@@ -11024,6 +11355,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (NegativeRange)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: NegativeRange
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -11072,6 +11404,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (UnboundUpper)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundUpper
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
@@ -11118,6 +11451,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (UnboundLower)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundLower
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
@@ -11164,6 +11498,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (RangedVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: RangedVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -11218,6 +11553,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Buffer)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Buffer
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -11269,6 +11605,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (ExactBuffer)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactBuffer
 				local Value = buffer.create(9)
 				buffer.copy(Value, 0, RecieveBuffer, BLOCK_START + 0, 9)
@@ -11316,6 +11653,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (BoundedBuffer)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BoundedBuffer
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Length < 0 then error(`Expected size of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -11371,6 +11709,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PlainCFrame)
 				-- Read BLOCK: 24 bytes
 				local BLOCK_START = Read(24)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PlainCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -11429,6 +11768,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (QuatCFrame)
 				-- Read BLOCK: 19 bytes
 				local BLOCK_START = Read(19)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -11488,6 +11828,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (QuatHalfCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatHalfCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -11682,6 +12023,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (QuatFirstCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatFirstCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -11876,6 +12218,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (QuatCFrames)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrames
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -12000,6 +12343,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (MultiDimensionalArray)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MultiDimensionalArray
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -12131,6 +12475,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeByte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeByte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -12175,6 +12520,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeFixedString)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedString
 				local Value = buffer.readstring(RecieveBuffer, BLOCK_START + 0, 8)
 				if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
@@ -12221,6 +12567,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeBoundedString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedString
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if Length < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -12273,6 +12620,7 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (SizeFixedArray)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedArray
 				-- START ARRAY
 				local Length = 4
@@ -12340,6 +12688,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeBoundedArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedArray
 				-- START ARRAY
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -12414,10 +12763,11 @@ local Returns = table.freeze({
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeOptionalByte
 				local Value
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				if bit32.btest(BITFIELD_0, 0x01) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value: SizeOptionalByte
@@ -12474,6 +12824,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -12525,6 +12876,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeStruct
 				local Value = {A = false, B = false, C = false} :: any
 				-- Value.A: A
@@ -12590,6 +12942,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeEnum)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeEnum
 				local Value = true :: any
 				local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -12649,6 +13002,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeFlags)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFlags
 				local Value = {}
 				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -12698,6 +13052,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SizeMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -12758,15 +13113,14 @@ local Returns = table.freeze({
 	},
 	OrderedPosition = {
 		Fire = function(Value: number): ()
-			local Previous = Save()
-			Load()
+			Hold()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_OrderedPosition, Value)
 			if Sent and CheckUnreliableSize("OrderedPosition") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
-			Load(Previous)
+			Release()
 			if Sent ~= true then
 				error(Failure, 0)
 			end
@@ -12782,6 +13136,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (OffsetArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetArray
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -12858,6 +13213,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (OffsetString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetString
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -12915,6 +13271,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (OffsetBuffer)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetBuffer
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -12974,6 +13331,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsOne
 				local Value = {A = false} :: any
 				-- Value.A: A
@@ -13026,6 +13384,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeven
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false} :: any
 				-- Value.A: A
@@ -13120,6 +13479,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsEight
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false} :: any
 				-- Value.A: A
@@ -13222,6 +13582,7 @@ local Returns = table.freeze({
 				local BLOCK_START = Read(2)
 				local BITFIELD_1
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsNine
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false} :: any
 				-- Value.A: A
@@ -13336,6 +13697,7 @@ local Returns = table.freeze({
 				local BITFIELD_2
 				local BITFIELD_1
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeventeen
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false, J = false, K = false, L = false, M = false, N = false, O = false, P = false, Q = false} :: any
 				-- Value.A: A
@@ -13508,13 +13870,14 @@ local Returns = table.freeze({
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsMixed
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
-				if bit32.btest(BITFIELD_0, 0x02) == true then
+				if bit32.btest(BITFIELD_0, 0x02) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value.B: B
@@ -13523,7 +13886,7 @@ local Returns = table.freeze({
 				-- Value.C: C
 				Value.C = bit32.btest(BITFIELD_0, 0x04)
 				-- Value.D: D
-				if bit32.btest(BITFIELD_0, 0x08) == true then
+				if bit32.btest(BITFIELD_0, 0x08) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.D: D
@@ -13602,6 +13965,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedBooleans)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBooleans
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -13711,6 +14075,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedFixed)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedFixed
 				-- START ARRAY
 				local Length = 10
@@ -13816,6 +14181,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedRanged)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedRanged
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -13928,6 +14294,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedNested
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -14066,6 +14433,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedThroughAlias)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedThroughAlias
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -14176,6 +14544,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 5 bytes
 				local BLOCK_START = Read(5)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBeside
 				local Value = {A = false, List = false, B = false, Fixed = false, C = false} :: any
 				-- Value.A: A
@@ -14385,6 +14754,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -14524,6 +14894,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (PackedOptional)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedOptional
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -14541,7 +14912,7 @@ local Returns = table.freeze({
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					if bit32.btest(BITFIELD_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
 						local BITFIELD_0
@@ -14613,35 +14984,28 @@ local Returns = table.freeze({
 	},
 	RateLimited = {
 		Fire = function(Value: number): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_RateLimited, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_RateLimited(Value)
+			Commit()
 		end
 	},
 	RateLimitedPoll = {
 		Fire = function(Value: number): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_RateLimitedPoll, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_RateLimitedPoll(Value)
+			Commit()
 		end
 	},
 	UnreliableOversize = {
 		Fire = function(Value: string): ()
-			local Previous = Save()
-			Load()
+			Hold()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_UnreliableOversize, Value)
 			if Sent and CheckUnreliableSize("UnreliableOversize") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
-			Load(Previous)
+			Release()
 			if Sent ~= true then
 				error(Failure, 0)
 			end
@@ -14649,15 +15013,14 @@ local Returns = table.freeze({
 	},
 	UnreliableInstances = {
 		Fire = function(Value1: buffer, Value2: { Instance }): ()
-			local Previous = Save()
-			Load()
+			Hold()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_UnreliableInstances, Value1, Value2)
 			if Sent and CheckUnreliableSize("UnreliableInstances") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
-			Load(Previous)
+			Release()
 			if Sent ~= true then
 				error(Failure, 0)
 			end
@@ -14673,6 +15036,7 @@ local Returns = table.freeze({
 				ReleaseInvocation(Invocations, InvocationIdentifier)
 				error(Failure, 0)
 			end
+			Close(Cursor, Instances)
 			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
 			TimeoutInvocation(Invocations, InvocationIdentifier, 3, '"RateLimitedCall" was never answered')
 			local Success, ReturnValue: number = coroutine.yield()
@@ -14692,6 +15056,7 @@ local Returns = table.freeze({
 				ReleaseInvocation(Invocations, InvocationIdentifier)
 				error(Failure, 0)
 			end
+			Close(Cursor, Instances)
 			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
 			TimeoutInvocation(Invocations, InvocationIdentifier, 3, '"ConcurrentCall" was never answered')
 			local Success, ReturnValue: number = coroutine.yield()
@@ -14711,6 +15076,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (MapNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MapNested
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -14815,6 +15181,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Standalone)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
@@ -15022,9 +15389,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: Vector3): ()
-			if Events.Reliable[4] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[4]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "SendOccupiedCell"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[4], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[4] > 256 then
@@ -15036,25 +15404,21 @@ local Returns = table.freeze({
 	},
 	ClientPollEvent = {
 		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientPollEvent, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_ClientPollEvent(Value)
+			Commit()
 		end
 	},
 	ClientUnreliablePollEvent = {
 		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			local Previous = Save()
-			Load()
+			Hold()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent, Value)
 			if Sent and CheckUnreliableSize("ClientUnreliablePollEvent") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
-			Load(Previous)
+			Release()
 			if Sent ~= true then
 				error(Failure, 0)
 			end
@@ -15062,25 +15426,21 @@ local Returns = table.freeze({
 	},
 	ClientEmptyPollEvent = {
 		Fire = function(Value: nil): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyPollEvent, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_ClientEmptyPollEvent(Value)
+			Commit()
 		end
 	},
 	ClientEmptyUnreliablePollEvent = {
 		Fire = function(Value: nil): ()
-			local Previous = Save()
-			Load()
+			Hold()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent, Value)
 			if Sent and CheckUnreliableSize("ClientEmptyUnreliablePollEvent") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
-			Load(Previous)
+			Release()
 			if Sent ~= true then
 				error(Failure, 0)
 			end
@@ -15196,25 +15556,21 @@ local Returns = table.freeze({
 	},
 	ClientEmptyEvent = {
 		Fire = function(Value: nil): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyEvent, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_ClientEmptyEvent(Value)
+			Commit()
 		end
 	},
 	ClientEmptyUnreliableEvent = {
 		Fire = function(Value: nil): ()
-			local Previous = Save()
-			Load()
+			Hold()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent, Value)
 			if Sent and CheckUnreliableSize("ClientEmptyUnreliableEvent") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
-			Load(Previous)
+			Release()
 			if Sent ~= true then
 				error(Failure, 0)
 			end
@@ -15239,9 +15595,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: nil): ()
-			if Events.Reliable[10] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[10]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "EmptyEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[10], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[10] > 256 then
@@ -15264,9 +15621,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: nil): ()
-			if Events.Unreliable[9] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[9]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "EmptyUnreliableEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[9], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -15281,6 +15639,7 @@ local Returns = table.freeze({
 				ReleaseInvocation(Invocations, InvocationIdentifier)
 				error(Failure, 0)
 			end
+			Close(Cursor, Instances)
 			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
 			TimeoutInvocation(Invocations, InvocationIdentifier, 3, '"EmptyFunction" was never answered')
 			local Success, ReturnValue: nil = coroutine.yield()
@@ -15300,6 +15659,7 @@ local Returns = table.freeze({
 				ReleaseInvocation(Invocations, InvocationIdentifier)
 				error(Failure, 0)
 			end
+			Close(Cursor, Instances)
 			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
 			TimeoutInvocation(Invocations, InvocationIdentifier, 3, '"UnitFunction" was never answered')
 			local Success, Value: nil = coroutine.yield()
@@ -15328,9 +15688,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
-			if Events.Reliable[13] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[13]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Flags8"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[13], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[13] > 256 then
@@ -15359,9 +15720,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
-			if Events.Reliable[14] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[14]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Flags16"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[14], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[14] > 256 then
@@ -15390,9 +15752,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
-			if Events.Reliable[15] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[15]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Flags32"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[15], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[15] > 256 then
@@ -15421,9 +15784,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
-			if Events.Reliable[16] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[16]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Flags33"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[16], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[16] > 256 then
@@ -15452,9 +15816,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: {[number]: { Static: number, Dynamic: buffer }}): ()
-			if Events.Reliable[17] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[17]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "DynamicMap"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[17], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[17] > 256 then
@@ -15483,9 +15848,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: { { Static: number, Dynamic: buffer } }): ()
-			if Events.Reliable[18] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[18]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "DynamicArray"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[18], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[18] > 256 then
@@ -15514,9 +15880,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
-			if Events.Reliable[19] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[19]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "PlayerEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[19], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[19] > 256 then
@@ -15528,12 +15895,9 @@ local Returns = table.freeze({
 	},
 	Booleans = {
 		Fire = function(Value: { boolean }): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Booleans, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_Booleans(Value)
+			Commit()
 		end
 	},
 	Generic = {
@@ -15555,9 +15919,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
-			if Events.Reliable[21] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[21]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Generic"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[21], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[21] > 256 then
@@ -15586,9 +15951,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
-			if Events.Reliable[22] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[22]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "GenericArray"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[22], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[22] > 256 then
@@ -15617,9 +15983,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: any): ()
-			if Events.Reliable[23] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[23]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Unknown"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[23], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[23] > 256 then
@@ -15648,9 +16015,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: {[string]: number}): ()
-			if Events.Reliable[24] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[24]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "MapEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[24], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[24] > 256 then
@@ -15679,9 +16047,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: { Map: {[string]: number} }): ()
-			if Events.Reliable[25] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[25]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "MapStructEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[25], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[25] > 256 then
@@ -15710,9 +16079,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: {[string]: { number }}): ()
-			if Events.Reliable[26] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[26]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "MapComplexEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[26], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[26] > 256 then
@@ -15741,9 +16111,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
-			if Events.Reliable[27] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[27]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "MapReferenceEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[27], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[27] > 256 then
@@ -15766,9 +16137,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: { number }): ()
-			if Events.Unreliable[10] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[10]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ArrayPrimitive"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[10], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -15786,9 +16158,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: number?): ()
-			if Events.Unreliable[11] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[11]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "OptionalPrimitive"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[11], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -15933,9 +16306,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: number): ()
-			if Events.Reliable[30] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[30]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ReliableServer"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[30], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[30] > 256 then
@@ -15963,8 +16337,9 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: number): ()
-			if Events.Reliable[31] ~= nil then
-				Spawn(Events.Reliable[31], Value)
+			local BOUND_LISTENER = Events.Reliable[31]
+			if BOUND_LISTENER ~= nil then
+				Spawn(BOUND_LISTENER, Value)
 			else
 				if #Queue.Reliable[31] > 256 then
 					warn("[BlinkBlox]: Event queue of \"ReliableServerAsync\" exceeded 256, did you forget to implement a listener?")
@@ -15975,12 +16350,9 @@ local Returns = table.freeze({
 	},
 	ReliableClient = {
 		Fire = function(Value: number): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ReliableClient, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_ReliableClient(Value)
+			Commit()
 		end
 	},
 	UnreliableServer = {
@@ -15996,9 +16368,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: number): ()
-			if Events.Unreliable[14] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[14]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnreliableServer"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[14], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -16016,22 +16389,22 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: number): ()
-			if Events.Unreliable[15] ~= nil then
-				Spawn(Events.Unreliable[15], Value)
+			local BOUND_LISTENER = Events.Unreliable[15]
+			if BOUND_LISTENER ~= nil then
+				Spawn(BOUND_LISTENER, Value)
 			end
 		end
 	},
 	UnreliableClient = {
 		Fire = function(Value: number): ()
-			local Previous = Save()
-			Load()
+			Hold()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_UnreliableClient, Value)
 			if Sent and CheckUnreliableSize("UnreliableClient") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
-			Load(Previous)
+			Release()
 			if Sent ~= true then
 				error(Failure, 0)
 			end
@@ -16056,9 +16429,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: Instance): ()
-			if Events.Reliable[33] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[33]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "InstanceAny"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[33], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[33] > 256 then
@@ -16087,9 +16461,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: Sound): ()
-			if Events.Reliable[34] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[34]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "InstanceOfType"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[34], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[34] > 256 then
@@ -16118,9 +16493,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: Instance?): ()
-			if Events.Reliable[35] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[35]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "InstanceOptional"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[35], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[35] > 256 then
@@ -16149,9 +16525,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: Motor6D): ()
-			if Events.Reliable[36] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[36]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "InstanceOfClassWithDigit"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[36], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[36] > 256 then
@@ -16180,9 +16557,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			if Events.Reliable[37] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[37]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Reference"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[37], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[37] > 256 then
@@ -16211,9 +16589,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
-			if Events.Reliable[38] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[38]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ReferenceArray"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[38], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[38] > 256 then
@@ -16242,9 +16621,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			if Events.Reliable[39] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[39]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ReferenceOptional"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[39], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[39] > 256 then
@@ -16264,6 +16644,7 @@ local Returns = table.freeze({
 				ReleaseInvocation(Invocations, InvocationIdentifier)
 				error(Failure, 0)
 			end
+			Close(Cursor, Instances)
 			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
 			TimeoutInvocation(Invocations, InvocationIdentifier, 3, '"RemoteFunction" was never answered')
 			local Success, ReturnValue: number = coroutine.yield()
@@ -16292,9 +16673,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-			if Events.Reliable[41] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[41]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Tuple"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[41], Value1, Value2, Value3, Value4, Value5, Value6)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5, Value6)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[41] > 256 then
@@ -16317,9 +16699,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-			if Events.Unreliable[17] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[17]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "TupleUnreliable"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[17], Value1, Value2, Value3, Value4, Value5)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -16334,6 +16717,7 @@ local Returns = table.freeze({
 				ReleaseInvocation(Invocations, InvocationIdentifier)
 				error(Failure, 0)
 			end
+			Close(Cursor, Instances)
 			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
 			TimeoutInvocation(Invocations, InvocationIdentifier, 3, '"TupleFunction" was never answered')
 			local Success, ReturnValue1: Instance?, ReturnValue2: Instance, ReturnValue3: number?, ReturnValue4: ("A" | "B" | "C" | "D"), ReturnValue5: number = coroutine.yield()
@@ -16363,9 +16747,10 @@ local Returns = table.freeze({
 				end
 			end,
 			Predict = function(Value: number): ()
-				if Events.Reliable[43] ~= nil then
+				local BOUND_LISTENER = Events.Reliable[43]
+				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InScopeEvent"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[43], Value)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				else
 					if #Queue.Reliable[43] > 256 then
@@ -16395,9 +16780,10 @@ local Returns = table.freeze({
 					end
 				end,
 				Predict = function(Value: number): ()
-					if Events.Reliable[44] ~= nil then
+					local BOUND_LISTENER = Events.Reliable[44]
+					if BOUND_LISTENER ~= nil then
 						SerdesEvent = "InAnotherScopeEvent"
-						local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[44], Value)
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 					else
 						if #Queue.Reliable[44] > 256 then
@@ -16429,9 +16815,10 @@ local Returns = table.freeze({
 				end
 			end,
 			Predict = function(Value: number): ()
-				if Events.Reliable[45] ~= nil then
+				local BOUND_LISTENER = Events.Reliable[45]
+				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InScopeEvent"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[45], Value)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				else
 					if #Queue.Reliable[45] > 256 then
@@ -16462,9 +16849,10 @@ local Returns = table.freeze({
 				end
 			end,
 			Predict = function(Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
-				if Events.Reliable[46] ~= nil then
+				local BOUND_LISTENER = Events.Reliable[46]
+				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Event"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[46], Value1, Value2, Value3)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				else
 					if #Queue.Reliable[46] > 256 then
@@ -16477,12 +16865,9 @@ local Returns = table.freeze({
 	},
 	UnknownInbound = {
 		Fire = function(Value: any): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_UnknownInbound, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_UnknownInbound(Value)
+			Commit()
 		end
 	},
 	NamedTuple = {
@@ -16504,9 +16889,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(chefId: number, dish: string, portions: number?): ()
-			if Events.Reliable[48] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[48]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "NamedTuple"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[48], chefId, dish, portions)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, chefId, dish, portions)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[48] > 256 then
@@ -16526,6 +16912,7 @@ local Returns = table.freeze({
 				ReleaseInvocation(Invocations, InvocationIdentifier)
 				error(Failure, 0)
 			end
+			Close(Cursor, Instances)
 			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
 			TimeoutInvocation(Invocations, InvocationIdentifier, 3, '"NamedTupleFunction" was never answered')
 			local Success, ReturnValue1: number, ReturnValue2: string = coroutine.yield()
@@ -16554,9 +16941,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value1: number, named: string, Value3: number): ()
-			if Events.Reliable[50] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[50]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "PartiallyNamedTuple"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[50], Value1, named, Value3)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, named, Value3)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[50] > 256 then
@@ -16576,6 +16964,7 @@ local Returns = table.freeze({
 				ReleaseInvocation(Invocations, InvocationIdentifier)
 				error(Failure, 0)
 			end
+			Close(Cursor, Instances)
 			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
 			TimeoutInvocation(Invocations, InvocationIdentifier, 3, '"NeverAnswered" was never answered')
 			local Success, ReturnValue: number = coroutine.yield()
@@ -16592,6 +16981,8 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					ReturnValue = Listener(Value)
 				end)
+				Settle()
+				local ReplyStart, ReplyInstances = SendCursor, #SendInstances
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_AskClient, ReturnValue, InvocationIdentifier)
@@ -16606,6 +16997,7 @@ local Returns = table.freeze({
 					buffer.writeu8(SendBuffer, Position + 2, 0)
 					warn(`"AskClient" encountered an error, {Error}`)
 				end
+				Close(ReplyStart, ReplyInstances)
 			end
 			Spawn(function (): ()
 				local EventQueue = Queue.Reliable[52] or {}
@@ -16618,25 +17010,21 @@ local Returns = table.freeze({
 	},
 	RangedFromClient = {
 		Fire = function(Value: number): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_RangedFromClient, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_RangedFromClient(Value)
+			Commit()
 		end
 	},
 	RangedUnreliableFromClient = {
 		Fire = function(Value: number): ()
-			local Previous = Save()
-			Load()
+			Hold()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_RangedUnreliableFromClient, Value)
 			if Sent and CheckUnreliableSize("RangedUnreliableFromClient") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
-			Load(Previous)
+			Release()
 			if Sent ~= true then
 				error(Failure, 0)
 			end
@@ -16644,12 +17032,9 @@ local Returns = table.freeze({
 	},
 	RangedVectorFromClient = {
 		Fire = function(Value: Vector3): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_RangedVectorFromClient, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_RangedVectorFromClient(Value)
+			Commit()
 		end
 	},
 	BadlyAnswered = {
@@ -16662,6 +17047,7 @@ local Returns = table.freeze({
 				ReleaseInvocation(Invocations, InvocationIdentifier)
 				error(Failure, 0)
 			end
+			Close(Cursor, Instances)
 			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
 			TimeoutInvocation(Invocations, InvocationIdentifier, 3, '"BadlyAnswered" was never answered')
 			local Success, ReturnValue: number = coroutine.yield()
@@ -16673,22 +17059,16 @@ local Returns = table.freeze({
 	},
 	PlainFromClient = {
 		Fire = function(Value: number): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_PlainFromClient, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_PlainFromClient(Value)
+			Commit()
 		end
 	},
 	Unlistened = {
 		Fire = function(Value: nil): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Unlistened, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_Unlistened(Value)
+			Commit()
 		end
 	},
 	Unanswered = {
@@ -16701,6 +17081,7 @@ local Returns = table.freeze({
 				ReleaseInvocation(Invocations, InvocationIdentifier)
 				error(Failure, 0)
 			end
+			Close(Cursor, Instances)
 			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
 			TimeoutInvocation(Invocations, InvocationIdentifier, 3, '"Unanswered" was never answered')
 			local Success, ReturnValue: nil = coroutine.yield()
@@ -16729,9 +17110,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
-			if Events.Reliable[59] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[59]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "QueuedHoles"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[59], Value1, Value2, Value3, Value4, Value5)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[59] > 256 then
@@ -16754,9 +17136,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Value: number): ()
-			if Events.Unreliable[19] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[19]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "OrderedToClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[19], Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		end
@@ -16769,6 +17152,7 @@ local Returns = table.freeze({
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (OptionalHoles)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OptionalHoles
 				-- START ARRAY
 				local Length = 3
@@ -16783,7 +17167,7 @@ local Returns = table.freeze({
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					if bit32.btest(BITFIELD_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
 						-- Item_1: OptionalHoles
@@ -16855,6 +17239,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (HalfFloat)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: HalfFloat
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -16944,6 +17329,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Float24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Float24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local Value
@@ -17020,6 +17406,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Unsigned24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Unsigned24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -17065,6 +17452,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Signed24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Signed24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -17110,6 +17498,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (Vector24)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Vector24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -17256,6 +17645,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (QuatCFrame24)
 				-- Read BLOCK: 16 bytes
 				local BLOCK_START = Read(16)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -17403,22 +17793,16 @@ local Returns = table.freeze({
 	},
 	RangedFloat32 = {
 		Fire = function(Value: number): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_RangedFloat32, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_RangedFloat32(Value)
+			Commit()
 		end
 	},
 	RangedFloat16 = {
 		Fire = function(Value: number): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_RangedFloat16, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_RangedFloat16(Value)
+			Commit()
 		end
 	},
 	NamedLength = {
@@ -17440,9 +17824,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(s: string, Length: number): ()
-			if Events.Reliable[62] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[62]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "NamedLength"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[62], s, Length)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, s, Length)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[62] > 256 then
@@ -17471,9 +17856,10 @@ local Returns = table.freeze({
 			end
 		end,
 		Predict = function(Length: number, s: string): ()
-			if Events.Reliable[63] ~= nil then
+			local BOUND_LISTENER = Events.Reliable[63]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "LengthFirst"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Reliable[63], Length, s)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Length, s)
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
 				if #Queue.Reliable[63] > 256 then
@@ -17493,6 +17879,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FlagCarrier)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FlagCarrier
 				local Value = {Flags = false, Text = false, Kind = false} :: any
 				do
@@ -17576,12 +17963,9 @@ local Returns = table.freeze({
 	},
 	RangedFloat24 = {
 		Fire = function(Value: number): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_RangedFloat24, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_RangedFloat24(Value)
+			Commit()
 		end
 	},
 	FixedTenths = {
@@ -17594,6 +17978,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				Value = Value / 10
@@ -17642,6 +18027,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedRanged)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedRanged
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -17692,6 +18078,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedSigned)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedSigned
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -400) then error(`Expected "Value" to be larger than or equal to -400, got {Value} instead.`) end
@@ -17742,6 +18129,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedCoarse)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedCoarse
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value = Value * 2.5
@@ -17790,6 +18178,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedTriple)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTriple
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				Value = Value / 1000
@@ -17839,6 +18228,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedWide)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWide
 				local Value = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -17889,6 +18279,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (FixedWhole)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWhole
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -17936,6 +18327,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedCount)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedCount
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 1) then error(`Expected "Value" to be larger than or equal to 1, got {Value} instead.`) end
@@ -17984,6 +18376,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedSigned)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedSigned
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -18032,6 +18425,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedNegative)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedNegative
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -10) then error(`Expected "Value" to be larger than or equal to -10, got {Value} instead.`) end
@@ -18080,6 +18474,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -18129,6 +18524,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedHalf)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedHalf
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -18220,6 +18616,7 @@ local Returns = table.freeze({
 			local Success, Result = pcall(function (): (SaturatedUnit)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedUnit
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -18269,6 +18666,7 @@ local Returns = table.freeze({
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedStruct
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
@@ -18276,7 +18674,7 @@ local Returns = table.freeze({
 				Value.A = Value.A / 10
 				-- Value.B: B
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				if bit32.btest(BITFIELD_0, 0x01) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.B: B

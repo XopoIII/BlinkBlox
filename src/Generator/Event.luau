@@ -16,6 +16,7 @@ local Prefabs = require("./Prefabs")
 local Queues = require("./Queue")
 local Send = require("./Send")
 local Serde = require("./Serde")
+local Size = require("../Modules/Size")
 local Stamps = require("./Stamp")
 local State = require("./State")
 local Streams = require("./Stream")
@@ -93,11 +94,45 @@ function Declarations.Event(Declaration: Parser.Event)
 	--> flush reached the client one place out. A broadcast writes into a fresh buffer and needs none.
 	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, State.Scope)}, {WriteArguments})`
 
+	--> Whether a write can put anything in the instance list. Measured as the size analysis measures
+	--> it; a payload it cannot measure is taken to carry one.
+	local CarriesInstances = false
+	if Value.Data then
+		local Measured, Measurement = pcall(Size.Sealed, Value.Data :: any)
+		CarriesInstances = not Measured or Measurement.Refs > 0
+	end
+
 	--> Writes into a batch that is kept, undoing whatever a write that throws had already added.
 	local function WriteKept(Target: Blocks.Block)
 		Target:Line("local Cursor, Instances = Mark()")
 		Target:Line(`local Sent: boolean, Failure: any = {TryWriteEvent}`)
 		Target:Compare("Sent", "true", "Not"):Line("Rollback(Cursor, Instances)"):Line("error(Failure, 0)"):End()
+	end
+
+	--> The client's batch, undone lazily rather than under a pcall; see Begin in the base template.
+	local function WriteBegun(Target: Blocks.Block)
+		Target:Line("Begin()")
+		if Counters then
+			Target:Line("local Cursor = SendCursor")
+		end
+		Target:Line(WriteEvent)
+		Target:Line("Commit()")
+	end
+
+	--> A player's batch on the server. A write that throws never reaches SavePlayerBuffer, so the
+	--> player's saved cursor is where it was and the bytes past it are never sent. The instance list
+	--> is the exception: `Load` installs the player's own rather than a copy, so a payload that can
+	--> append to it is still written under Mark and Rollback.
+	local function WritePlayer(Target: Blocks.Block)
+		if CarriesInstances then
+			WriteKept(Target)
+			return
+		end
+
+		if Counters then
+			Target:Line("local Cursor = SendCursor")
+		end
+		Target:Line(WriteEvent)
 	end
 
 	Body.Push(`{Declaration.Name} = \{`, 0, Indent)
@@ -202,12 +237,18 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> Hands the event to its listeners, or -- for a reliable event with none bound -- queues it for
 		--> the listener to come. The receive branch and Predict both go through this, so an event
 		--> predicted locally is delivered exactly as one received from the network would be.
+		--> A Single event's listener is read once, into a local, rather than looked up through two tables
+		--> for the check and again for the call.
 		local function Deliver(Target: Blocks.Block, Payload: string)
 			local ListenerArguments = `{Sender}{Payload}`
-			local Call = Listeners.Call(Event, Connection, ListenerArguments, "Player", true)
+			local Call = Listeners.Call(Event, "BOUND_LISTENER", ListenerArguments, "Player", true)
+			if IsSingle then
+				Target:Line(`local BOUND_LISTENER = {Connection}`)
+			end
+
 			if not IsReliable then
 				if IsSingle then
-					Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent):End()
+					Target:Compare("BOUND_LISTENER", "nil", "Not"):Lines(Call.Content, Target.Indent):End()
 				else
 					Listeners.Each(Target, Event, ListenerArguments)
 				end
@@ -217,7 +258,7 @@ function Declarations.Event(Declaration: Parser.Event)
 
 			local Bound: Blocks.Block
 			if IsSingle then
-				Bound = Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent)
+				Bound = Target:Compare("BOUND_LISTENER", "nil", "Not"):Lines(Call.Content, Target.Indent)
 			else
 				Bound = Listeners.Each(Target:Compare(`#{Connection}`, "0", "Greater"), Event, ListenerArguments)
 			end
@@ -355,16 +396,15 @@ function Declarations.Event(Declaration: Parser.Event)
 			--> Rolled back rather than left, because this write lands in the batch every other event
 			--> is queued in. Half an event in there is not one bad send: the receiver reads the
 			--> truncated event and then decodes the REST of the batch from the wrong offset.
-			WriteKept(Fire)
+			WriteBegun(Fire)
 			Traffic.Sent(Fire, Counters, "SendCursor - Cursor", false)
 		else
-			Fire:Line(`local Previous = Save()`)
-			Fire:Line(`Load()`)
+			Fire:Line("Hold()")
 			Fire:Line(`local Sent: boolean, Failure: any = {TryWriteEvent}`)
 			--> Wrapped rather than returned out of: the saved buffer has to be restored either way,
 			--> and an early return here would leave the caller's outgoing state swapped out.
 			-->
-			--> Which is exactly why the write is protected. A throw used to skip `Load(Previous)`
+			--> Which is exactly why the write is protected. A throw used to skip restoring the batch
 			--> entirely, leaving this temporary buffer installed as the outgoing one -- so the next
 			--> RELIABLE flush sent the scratch buffer and dropped everything already batched.
 			Fire:Line(`if Sent and CheckUnreliableSize("{Declaration.Name}") then`)
@@ -373,7 +413,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Fire:Line("\tUnreliable:FireServer(Buffer, SendInstances)")
 			Traffic.Sent(Fire, Counters, "SendCursor", true, nil, "\t")
 			Fire:Line("end")
-			Fire:Line("Load(Previous)")
+			Fire:Line("Release()")
 			Fire:Compare("Sent", "true", "Not"):Line("error(Failure, 0)"):End()
 		end
 		Fire:End()
@@ -395,7 +435,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 		if IsReliable then
 			Fire:Line("Load(PlayersMap[Player])")
-			WriteKept(Fire)
+			WritePlayer(Fire)
 			Traffic.Sent(Fire, Counters, "SendCursor - Cursor", false)
 			Fire:Line("SavePlayerBuffer(Player)")
 		else

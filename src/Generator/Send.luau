@@ -18,7 +18,15 @@ local Send = {}
 --- What a server send needs to know about the event it sends. `Ordered` is the event's index when it
 --- is an ordered unreliable one, whose sequence number each send stamps per recipient. `Traffic` is
 --- where its counters start under `option TrafficStats`, and nil otherwise.
-export type Send = { IsReliable: boolean, WriteEvent: string, Name: string, Ordered: number?, Traffic: number? }
+export type Send = {
+	IsReliable: boolean,
+	WriteEvent: string,
+	Name: string,
+	Ordered: number?,
+	Traffic: number?,
+	--> A stream's scheduled send rather than the game's Fire; see CheckSize.
+	Stream: boolean?,
+}
 
 --- Stamps the recipient's own sequence number into an ordered packet. An unreliable server send always
 --- starts from a fresh buffer, so the event sits at offset 0 and its sequence at offset 1.
@@ -28,12 +36,28 @@ function Send.StampOrder(Target: Blocks.Block, Event: Send)
 	end
 end
 
+--- Refuses a packet past the unreliable limit. An event's send drops it and warns, as it always has.
+--- A stream's send throws instead: SendStream then reports it once and stops the stream until the
+--- game sets another state. Dropped quietly, it was counted as sent, so the stream went on believing
+--- the players had a state they never got, and warned at every step it was due.
+local function CheckSize(Fire: Blocks.Block, Event: Send)
+	if Event.Stream then
+		Fire:Line("local Bytes = SendCursor + #SendInstances * UNRELIABLE_INSTANCE_BYTES")
+		Fire:Line(
+			`if Bytes > MAX_UNRELIABLE_SIZE then error(\`\{Bytes} bytes exceeds the \{MAX_UNRELIABLE_SIZE} byte limit.\`) end`
+		)
+		return
+	end
+
+	Fire:Line(`if not CheckUnreliableSize("{Event.Name}") then return end`)
+end
+
 --- An unreliable server send to one player, `Player`: the unreliable `Fire`, and a `Per: Player`
 --- stream's send. Leaves the function open for the caller to end.
 function Send.One(Fire: Blocks.Block, Event: Send): Blocks.Block
-	Fire:Line("Load()")
+	Fire:Line("LoadScratch()")
 	Fire:Line(Event.WriteEvent)
-	Fire:Line(`if not CheckUnreliableSize("{Event.Name}") then return end`)
+	CheckSize(Fire, Event)
 	Fire:Lines(UNRELIABLE_BODY, 1)
 	Send.StampOrder(Fire, Event)
 	Fire:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
@@ -63,16 +87,16 @@ function Send.Broadcast(
 	Recipients: string,
 	Options: { AllClients: boolean?, SkipExcept: boolean? }
 ): Blocks.Block
-	Fire:Line("Load()")
+	Fire:Line("LoadScratch()")
 	Fire:Line(Event.WriteEvent)
 
 	if Event.IsReliable then
-		Fire:Line(RELIABLE_BODY.Header)
+		Fire:Lines(RELIABLE_BODY.Header, 1)
 		local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept):Lines(RELIABLE_BODY.Body, 2)
 		Traffic.Sent(Loop, Event.Traffic, "Size", false)
 		Loop:End()
 	else
-		Fire:Line(`if not CheckUnreliableSize("{Event.Name}") then return end`)
+		CheckSize(Fire, Event)
 		Fire:Lines(UNRELIABLE_BODY, 1)
 
 		--> An ordered packet carries a different number to each player, so it is sent one by one.

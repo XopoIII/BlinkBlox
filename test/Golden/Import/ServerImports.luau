@@ -115,6 +115,57 @@ local function Load(Save: BLINK_BUFFER_SAVE?)
     SendInstances = {}
 end
 
+--> A buffer for writes that are copied out as soon as they are made: an unreliable send, and a
+--> broadcast before it is appended to each player's batch. Each used to write into a fresh 64-byte
+--> buffer and a fresh table, and to regrow the buffer on the way to the event's size. This one is
+--> kept at whatever size a write grew it to, up to SCRATCH_LIMIT, so a burst is not held for good.
+--> Nothing keeps a reference past the copy: a remote serialises its arguments when it is fired.
+local SCRATCH_LIMIT = 65536
+local ScratchSize = 64
+local ScratchBuffer = buffer.create(64)
+local ScratchInstances = {}
+
+local function LoadScratch()
+    SendSize = ScratchSize
+    SendCursor = 0
+    SendOffset = 0
+    SendBuffer = ScratchBuffer
+    table.clear(ScratchInstances)
+    SendInstances = ScratchInstances
+end
+
+--> Called once the scratch write is done, before anything else is loaded.
+local function KeepScratch()
+    if SendBuffer ~= ScratchBuffer and SendSize <= SCRATCH_LIMIT then
+        ScratchSize = SendSize
+        ScratchBuffer = SendBuffer
+    end
+end
+
+--> The client's batch, set aside while an unreliable Fire writes into the scratch buffer. A Save
+--> table did the same, and a Fire allocated one.
+local HeldSize = 0
+local HeldCursor = 0
+local HeldBuffer = SendBuffer
+local HeldInstances = SendInstances
+
+local function Hold()
+    HeldSize = SendSize
+    HeldCursor = SendCursor
+    HeldBuffer = SendBuffer
+    HeldInstances = SendInstances
+    LoadScratch()
+end
+
+local function Release()
+    KeepScratch()
+    SendSize = HeldSize
+    SendCursor = HeldCursor
+    SendOffset = HeldCursor
+    SendBuffer = HeldBuffer
+    SendInstances = HeldInstances
+end
+
 --> Undoes a write that threw part way through.
 -->
 --> Every serialiser writes straight into SendBuffer through Allocate, and an assert can fire in the
@@ -126,10 +177,6 @@ end
 --> Only the cursor and the instance count are restored. A buffer that Allocate grew on the way is
 --> kept deliberately: growing copied the earlier bytes across, so the larger buffer is just as
 --> valid, and discarding it would only make the next write grow it again.
-local function Mark(): (number, number)
-    return SendCursor, #SendInstances
-end
-
 local function Rollback(Cursor: number, Instances: number)
     SendCursor = Cursor
     SendOffset = Cursor
@@ -139,23 +186,56 @@ local function Rollback(Cursor: number, Instances: number)
     end
 end
 
-local function Allocate(Bytes: number)
-    local InUse = (SendCursor + Bytes)
-    if InUse > SendSize then
-        --> Avoid resizing the buffer for every write
-        while InUse > SendSize do
-            SendSize *= 1.5
-        end
+--> The same undo without a pcall, for the client's reliable Fire, where a pcall cost more than a
+--> small event's whole write. `Begin` records where the batch stands and a write that returns clears
+--> the record; a write that threw leaves it behind, and whatever touches the batch next -- the next
+--> write, or the flush -- undoes the half-written event first, through `Settle`. The server needs
+--> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
+--> reaches the save.
+local PendingCursor = -1
+local PendingInstances = 0
 
-        local Buffer = buffer.create(SendSize)
-        buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-        SendBuffer = Buffer
+local function Settle()
+    if PendingCursor >= 0 then
+        Rollback(PendingCursor, PendingInstances)
+        PendingCursor = -1
+    end
+end
+
+local function Begin()
+    Settle()
+    PendingCursor = SendCursor
+    PendingInstances = #SendInstances
+end
+
+local function Mark(): (number, number)
+    Settle()
+    return SendCursor, #SendInstances
+end
+
+--> Grows SendBuffer to hold `InUse` bytes, by half again at a time so a steady writer does not
+--> regrow it on every write. Kept out of Allocate, which runs for every event and every string: a
+--> function with a loop in it is not inlined, and Allocate without one is.
+local function Grow(InUse: number)
+    while InUse > SendSize do
+        SendSize *= 1.5
     end
 
-    SendOffset = SendCursor
-    SendCursor += Bytes
-    
-    return SendOffset
+    local Buffer = buffer.create(SendSize)
+    buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+    SendBuffer = Buffer
+end
+
+local function Allocate(Bytes: number)
+    local Offset = SendCursor
+    local InUse = Offset + Bytes
+    if InUse > SendSize then
+        Grow(InUse)
+    end
+
+    SendOffset = Offset
+    SendCursor = InUse
+    return Offset
 end
 
 local function CreateQueue(): BLINK_QUEUE
@@ -424,6 +504,7 @@ export type Source2_a = number
 function SerdesFunctions.Generics_ReadEVENT_Snapshot(): ({ Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } })
 	-- Read BLOCK: 5 bytes
 	local BLOCK_START = Read(5)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Snapshot
 	local Value = {Sequence = false, Ack = false, Data = false} :: any
 	-- Value.Sequence: Sequence
@@ -486,6 +567,7 @@ end
 function SerdesFunctions.Example_ReadEVENT_Snapshot(): ({ Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } })
 	-- Read BLOCK: 5 bytes
 	local BLOCK_START = Read(5)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Snapshot
 	local Value = {Sequence = false, Ack = false, Data = false} :: any
 	-- Value.Sequence: Sequence
@@ -566,6 +648,7 @@ if not RunService:IsRunning() then
 				local Success, Result = pcall(function (): (Generics_Entity)
 					-- Read BLOCK: 15 bytes
 					local BLOCK_START = Read(15)
+					local RecieveBuffer = RecieveBuffer
 					-- Value: Entity
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
@@ -633,6 +716,7 @@ if not RunService:IsRunning() then
 				local Success, Result = pcall(function (): (Example_Entity)
 					-- Read BLOCK: 15 bytes
 					local BLOCK_START = Read(15)
+					local RecieveBuffer = RecieveBuffer
 					-- Value: Entity
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
@@ -1201,16 +1285,18 @@ end)
 --> then, so a plain `PlayersMap[Player] = Save()` puts back an entry that nothing will ever remove
 --> again: StepReplication would allocate a buffer and fire a remote at a player who is gone, on
 --> every Heartbeat, for the lifetime of the server.
+-->
+--> Only a new entry needs the check. An entry that exists has not been through PlayerRemoving yet,
+--> and one written in its narrow window is dropped by StepReplication; asking the DataModel on every
+--> send cost a reflected call per player per event, which is most of what a FireAll cost.
 local function SavePlayerBuffer(Player: Player)
-    if not Player:IsDescendantOf(Players) then
-        return
-    end
-
     --> Written into the entry the player already has, rather than a new one each time: this runs on
     --> every reliable send to a player, and the entry also carries its shrink count.
     local Entry = PlayersMap[Player]
     if Entry == nil then
-        PlayersMap[Player] = Save()
+        if Player:IsDescendantOf(Players) then
+            PlayersMap[Player] = Save()
+        end
         return
     end
 
@@ -1218,6 +1304,45 @@ local function SavePlayerBuffer(Player: Player)
     Entry.Cursor = SendCursor
     Entry.Buffer = SendBuffer
     Entry.Instances = SendInstances
+end
+
+--> Appends a broadcast's bytes and Instances to one player's batch. A player with a batch gets them
+--> straight into it; one without goes the long way, through SavePlayerBuffer and its checks.
+local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instances: {Instance})
+    local Entry = PlayersMap[Player]
+    if Entry == nil then
+        Load()
+        local Position = Allocate(Size)
+        buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+        table.move(Instances, 1, #Instances, 1, SendInstances)
+        SavePlayerBuffer(Player)
+        return
+    end
+
+    local Cursor = Entry.Cursor
+    local InUse = Cursor + Size
+    local Target = Entry.Buffer
+    if InUse > Entry.Size then
+        local Grown = Entry.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Target, 0, Cursor)
+        Target = Resized
+        Entry.Buffer = Resized
+        Entry.Size = Grown
+    end
+
+    buffer.copy(Target, Cursor, Buffer, 0, Size)
+    Entry.Cursor = InUse
+
+    local Count = #Instances
+    if Count > 0 then
+        local List = Entry.Instances
+        table.move(Instances, 1, Count, #List + 1, List)
+    end
 end
 
 local function StepReplication()
@@ -1289,18 +1414,20 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
 	end
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
-		DecodedEvents += 1
-		if DecodedEvents > 64 then
-			ReportDrop(Player, "Events", 64)
-			break
+	local function DecodePacket()
+		while (RecieveCursor < Size and Player.Parent ~= nil) do
+			DecodedEvents += 1
+			if DecodedEvents > 64 then
+				ReportDrop(Player, "Events", 64)
+				break
+			end
+			Decoding = -1
+			DecodeEvent()
 		end
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
-			break
-		end
+	end
+	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	if not Parsed then
+		ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
 	end
 end)
 Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -1338,34 +1465,38 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		Decoding = Index
 		if Index == 0 then
 			local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Generics_ReadEVENT_Snapshot()
-			if Events.Unreliable[0] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[0]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Snapshot"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[0], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "Snapshot", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		elseif Index == 1 then
 			local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Example_ReadEVENT_Snapshot()
-			if Events.Unreliable[1] ~= nil then
+			local BOUND_LISTENER = Events.Unreliable[1]
+			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Snapshot"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[1], Player, Value)
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
 				if not ListenerRan and not ListenerFailed(Player, "Snapshot", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
-		DecodedEvents += 1
-		if DecodedEvents > 64 then
-			ReportDrop(Player, "Events", 64)
-			break
+	local function DecodePacket()
+		while (RecieveCursor < Size and Player.Parent ~= nil) do
+			DecodedEvents += 1
+			if DecodedEvents > 64 then
+				ReportDrop(Player, "Events", 64)
+				break
+			end
+			Decoding = -1
+			DecodeEvent()
 		end
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
-			break
-		end
+	end
+	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	if not Parsed then
+		ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
 	end
 end)
 
@@ -1394,6 +1525,7 @@ local Returns = table.freeze({
 				local Success, Result = pcall(function (): (Generics_Entity)
 					-- Read BLOCK: 15 bytes
 					local BLOCK_START = Read(15)
+					local RecieveBuffer = RecieveBuffer
 					-- Value: Entity
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id
@@ -1471,6 +1603,7 @@ local Returns = table.freeze({
 				local Success, Result = pcall(function (): (Example_Entity)
 					-- Read BLOCK: 15 bytes
 					local BLOCK_START = Read(15)
+					local RecieveBuffer = RecieveBuffer
 					-- Value: Entity
 					local Value = {id = false, pos = false, angle = false} :: any
 					-- Value.id: id

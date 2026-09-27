@@ -114,6 +114,57 @@ local function Load(Save: BLINK_BUFFER_SAVE?)
     SendInstances = {}
 end
 
+--> A buffer for writes that are copied out as soon as they are made: an unreliable send, and a
+--> broadcast before it is appended to each player's batch. Each used to write into a fresh 64-byte
+--> buffer and a fresh table, and to regrow the buffer on the way to the event's size. This one is
+--> kept at whatever size a write grew it to, up to SCRATCH_LIMIT, so a burst is not held for good.
+--> Nothing keeps a reference past the copy: a remote serialises its arguments when it is fired.
+local SCRATCH_LIMIT = 65536
+local ScratchSize = 64
+local ScratchBuffer = buffer.create(64)
+local ScratchInstances = {}
+
+local function LoadScratch()
+    SendSize = ScratchSize
+    SendCursor = 0
+    SendOffset = 0
+    SendBuffer = ScratchBuffer
+    table.clear(ScratchInstances)
+    SendInstances = ScratchInstances
+end
+
+--> Called once the scratch write is done, before anything else is loaded.
+local function KeepScratch()
+    if SendBuffer ~= ScratchBuffer and SendSize <= SCRATCH_LIMIT then
+        ScratchSize = SendSize
+        ScratchBuffer = SendBuffer
+    end
+end
+
+--> The client's batch, set aside while an unreliable Fire writes into the scratch buffer. A Save
+--> table did the same, and a Fire allocated one.
+local HeldSize = 0
+local HeldCursor = 0
+local HeldBuffer = SendBuffer
+local HeldInstances = SendInstances
+
+local function Hold()
+    HeldSize = SendSize
+    HeldCursor = SendCursor
+    HeldBuffer = SendBuffer
+    HeldInstances = SendInstances
+    LoadScratch()
+end
+
+local function Release()
+    KeepScratch()
+    SendSize = HeldSize
+    SendCursor = HeldCursor
+    SendOffset = HeldCursor
+    SendBuffer = HeldBuffer
+    SendInstances = HeldInstances
+end
+
 --> Undoes a write that threw part way through.
 -->
 --> Every serialiser writes straight into SendBuffer through Allocate, and an assert can fire in the
@@ -125,10 +176,6 @@ end
 --> Only the cursor and the instance count are restored. A buffer that Allocate grew on the way is
 --> kept deliberately: growing copied the earlier bytes across, so the larger buffer is just as
 --> valid, and discarding it would only make the next write grow it again.
-local function Mark(): (number, number)
-    return SendCursor, #SendInstances
-end
-
 local function Rollback(Cursor: number, Instances: number)
     SendCursor = Cursor
     SendOffset = Cursor
@@ -138,23 +185,56 @@ local function Rollback(Cursor: number, Instances: number)
     end
 end
 
-local function Allocate(Bytes: number)
-    local InUse = (SendCursor + Bytes)
-    if InUse > SendSize then
-        --> Avoid resizing the buffer for every write
-        while InUse > SendSize do
-            SendSize *= 1.5
-        end
+--> The same undo without a pcall, for the client's reliable Fire, where a pcall cost more than a
+--> small event's whole write. `Begin` records where the batch stands and a write that returns clears
+--> the record; a write that threw leaves it behind, and whatever touches the batch next -- the next
+--> write, or the flush -- undoes the half-written event first, through `Settle`. The server needs
+--> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
+--> reaches the save.
+local PendingCursor = -1
+local PendingInstances = 0
 
-        local Buffer = buffer.create(SendSize)
-        buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-        SendBuffer = Buffer
+local function Settle()
+    if PendingCursor >= 0 then
+        Rollback(PendingCursor, PendingInstances)
+        PendingCursor = -1
+    end
+end
+
+local function Begin()
+    Settle()
+    PendingCursor = SendCursor
+    PendingInstances = #SendInstances
+end
+
+local function Mark(): (number, number)
+    Settle()
+    return SendCursor, #SendInstances
+end
+
+--> Grows SendBuffer to hold `InUse` bytes, by half again at a time so a steady writer does not
+--> regrow it on every write. Kept out of Allocate, which runs for every event and every string: a
+--> function with a loop in it is not inlined, and Allocate without one is.
+local function Grow(InUse: number)
+    while InUse > SendSize do
+        SendSize *= 1.5
     end
 
-    SendOffset = SendCursor
-    SendCursor += Bytes
-    
-    return SendOffset
+    local Buffer = buffer.create(SendSize)
+    buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+    SendBuffer = Buffer
+end
+
+local function Allocate(Bytes: number)
+    local Offset = SendCursor
+    local InUse = Offset + Bytes
+    if InUse > SendSize then
+        Grow(InUse)
+    end
+
+    SendOffset = Offset
+    SendCursor = InUse
+    return Offset
 end
 
 local function CreateQueue(): BLINK_QUEUE
@@ -415,6 +495,9 @@ local function CheckUnreliableSize(Name: string): boolean
 	warn(`[BlinkBlox]: Dropped unreliable event "{Name}", {Size} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
 	return false
 end
+local MAX_PACKET_SIZE = 8192
+local MAX_EVENTS_PER_PACKET = 64
+local MAX_INSTANCES_PER_PACKET = 256
 local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Unreliable[1] = table.create(256)
@@ -504,11 +587,12 @@ function SerdesFunctions.ReadEVENT_Trust(): ({ Gap: number, Bucket: number }?, n
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
 	local BITFIELD_0
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Trust
 	-- Value1: Trust
 	local Value1
 	BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if bit32.btest(BITFIELD_0, 0x01) == true then
+	if bit32.btest(BITFIELD_0, 0x01) then
 		-- Read BLOCK: 8 bytes
 		local BLOCK_START = Read(8)
 		-- Value1: Trust
@@ -623,17 +707,74 @@ end
 
 local SendUnderused = 0
 
+--> The server refuses a packet past any of its limits and reports the player who sent it, and a game
+--> may strike or ban on that report. A client that fires more in one frame than one packet may carry
+--> -- after a hitch, or from a busy interface -- is not hostile, so its batch is cut into packets that
+--> fit, each at an event's boundary. Most frames fit in one and pay a few comparisons an event; a
+--> cut is recorded only where one is needed. An event too large to fit on its own goes in a packet
+--> of its own, which the server refuses as it always did.
+local PacketStart = 0
+local PacketInstances = 0
+local PacketEvents = 0
+local Cuts: {number} = {}
+
+--> An event has been written into the batch from `Start`, with `Instances` instances ahead of it.
+local function Close(Start: number, Instances: number)
+    PacketEvents += 1
+    if PacketEvents > MAX_EVENTS_PER_PACKET
+        or SendCursor - PacketStart > MAX_PACKET_SIZE
+        or #SendInstances - PacketInstances > MAX_INSTANCES_PER_PACKET
+    then
+        if Start > PacketStart then
+            table.insert(Cuts, Start)
+            table.insert(Cuts, Instances)
+            PacketStart = Start
+            PacketInstances = Instances
+            PacketEvents = 1
+        end
+    end
+end
+
+--> The end of a write that Begin started.
+local function Commit()
+    local Start = PendingCursor
+    PendingCursor = -1
+    Close(Start, PendingInstances)
+end
+
+local function SendPacket(From: number, To: number, FromInstances: number, ToInstances: number)
+    local Buffer = buffer.create(To - From)
+    buffer.copy(Buffer, 0, SendBuffer, From, To - From)
+    Reliable:FireServer(Buffer, table.move(SendInstances, FromInstances + 1, ToInstances, 1, {}))
+end
+
 local function StepReplication()
+    Settle()
     local Used = SendCursor
     if Used > 0 then
-        local Buffer = buffer.create(Used)
-        buffer.copy(Buffer, 0, SendBuffer, 0, Used)
-        Reliable:FireServer(Buffer, SendInstances)
+        if #Cuts == 0 then
+            local Buffer = buffer.create(Used)
+            buffer.copy(Buffer, 0, SendBuffer, 0, Used)
+            Reliable:FireServer(Buffer, SendInstances)
+        else
+            local From, FromInstances = 0, 0
+            for Index = 1, #Cuts, 2 do
+                local To, ToInstances = Cuts[Index], Cuts[Index + 1]
+                SendPacket(From, To, FromInstances, ToInstances)
+                From, FromInstances = To, ToInstances
+            end
+            SendPacket(From, Used, FromInstances, #SendInstances)
+            table.clear(Cuts)
+        end
 
         SendCursor = 0
         SendOffset = 0
         table.clear(SendInstances)
     end
+
+    PacketStart = 0
+    PacketInstances = 0
+    PacketEvents = 0
 
     --> Kept for the next frame, as the server keeps each player's. Checked on a frame that sent
     --> nothing as well, or a client that went quiet after a burst would hold the burst's buffer.
@@ -684,13 +825,15 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
 	end
-	while (RecieveCursor < Size) do
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
-			break
+	local function DecodePacket()
+		while (RecieveCursor < Size) do
+			Decoding = -1
+			DecodeEvent()
 		end
+	end
+	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	if not Parsed then
+		ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
 	end
 end)
 Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -717,9 +860,10 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			local Value1: { Gap: number, Bucket: number }?, Value2: number = SerdesFunctions.ReadEVENT_Trust()
 			Value2 = UnwrapStamp(Value2)
 			if OrderAccept(1, OrderIdentifier) == true then
-				if Events.Unreliable[1] ~= nil then
+				local BOUND_LISTENER = Events.Unreliable[1]
+				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Trust"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Events.Unreliable[1], Value1, Value2)
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
@@ -727,13 +871,15 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	while (RecieveCursor < Size) do
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
-			break
+	local function DecodePacket()
+		while (RecieveCursor < Size) do
+			Decoding = -1
+			DecodeEvent()
 		end
+	end
+	local Parsed: boolean, Failure: any = pcall(DecodePacket)
+	if not Parsed then
+		ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
 	end
 end)
 
@@ -753,25 +899,21 @@ local Returns = table.freeze({
 
 	Swing = {
 		Fire = function(): ()
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Swing, StampNow())
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			Begin()
+			SerdesFunctions.WriteEVENT_Swing(StampNow())
+			Commit()
 		end
 	},
 	Aim = {
 		Fire = function(Target: number, At: Vector3): ()
-			local Previous = Save()
-			Load()
+			Hold()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Aim, Target, At, StampNow())
 			if Sent and CheckUnreliableSize("Aim") then
 				local Buffer = buffer.create(SendCursor)
 				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
 				Unreliable:FireServer(Buffer, SendInstances)
 			end
-			Load(Previous)
+			Release()
 			if Sent ~= true then
 				error(Failure, 0)
 			end

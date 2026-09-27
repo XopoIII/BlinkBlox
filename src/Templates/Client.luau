@@ -82,17 +82,74 @@ end
 
 local SendUnderused = 0
 
+--> The server refuses a packet past any of its limits and reports the player who sent it, and a game
+--> may strike or ban on that report. A client that fires more in one frame than one packet may carry
+--> -- after a hitch, or from a busy interface -- is not hostile, so its batch is cut into packets that
+--> fit, each at an event's boundary. Most frames fit in one and pay a few comparisons an event; a
+--> cut is recorded only where one is needed. An event too large to fit on its own goes in a packet
+--> of its own, which the server refuses as it always did.
+local PacketStart = 0
+local PacketInstances = 0
+local PacketEvents = 0
+local Cuts: {number} = {}
+
+--> An event has been written into the batch from `Start`, with `Instances` instances ahead of it.
+local function Close(Start: number, Instances: number)
+    PacketEvents += 1
+    if PacketEvents > MAX_EVENTS_PER_PACKET
+        or SendCursor - PacketStart > MAX_PACKET_SIZE
+        or #SendInstances - PacketInstances > MAX_INSTANCES_PER_PACKET
+    then
+        if Start > PacketStart then
+            table.insert(Cuts, Start)
+            table.insert(Cuts, Instances)
+            PacketStart = Start
+            PacketInstances = Instances
+            PacketEvents = 1
+        end
+    end
+end
+
+--> The end of a write that Begin started.
+local function Commit()
+    local Start = PendingCursor
+    PendingCursor = -1
+    Close(Start, PendingInstances)
+end
+
+local function SendPacket(From: number, To: number, FromInstances: number, ToInstances: number)
+    local Buffer = buffer.create(To - From)
+    buffer.copy(Buffer, 0, SendBuffer, From, To - From)
+    Reliable:FireServer(Buffer, table.move(SendInstances, FromInstances + 1, ToInstances, 1, {}))
+end
+
 local function StepReplication()
+    Settle()
     local Used = SendCursor
     if Used > 0 then
-        local Buffer = buffer.create(Used)
-        buffer.copy(Buffer, 0, SendBuffer, 0, Used)
-        Reliable:FireServer(Buffer, SendInstances)
+        if #Cuts == 0 then
+            local Buffer = buffer.create(Used)
+            buffer.copy(Buffer, 0, SendBuffer, 0, Used)
+            Reliable:FireServer(Buffer, SendInstances)
+        else
+            local From, FromInstances = 0, 0
+            for Index = 1, #Cuts, 2 do
+                local To, ToInstances = Cuts[Index], Cuts[Index + 1]
+                SendPacket(From, To, FromInstances, ToInstances)
+                From, FromInstances = To, ToInstances
+            end
+            SendPacket(From, Used, FromInstances, #SendInstances)
+            table.clear(Cuts)
+        end
 
         SendCursor = 0
         SendOffset = 0
         table.clear(SendInstances)
     end
+
+    PacketStart = 0
+    PacketInstances = 0
+    PacketEvents = 0
 
     --> Kept for the next frame, as the server keeps each player's. Checked on a frame that sent
     --> nothing as well, or a client that went quiet after a burst would hold the burst's buffer.

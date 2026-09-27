@@ -185,6 +185,11 @@ function Declarations.Function(Declaration: Parser.Function)
 
 		if OnServer then
 			TrueListener:Line("Load(PlayersMap[Player])")
+		else
+			--> The failure reply below writes without Mark, and has to land after a Fire that threw
+			--> has been undone rather than behind it.
+			TrueListener:Line("Settle()")
+			TrueListener:Line("local ReplyStart, ReplyInstances = SendCursor, #SendInstances")
 		end
 
 		--> Serialising the reply is protected for the same reason calling the listener is.
@@ -229,6 +234,8 @@ function Declarations.Function(Declaration: Parser.Function)
 
 		if OnServer then
 			TrueListener:Line("SavePlayerBuffer(Player)")
+		else
+			TrueListener:Line("Close(ReplyStart, ReplyInstances)")
 		end
 
 		TrueListener:End()
@@ -306,6 +313,8 @@ function Declarations.Function(Declaration: Parser.Function)
 
 			if ServerCalls then
 				Target:Line("SavePlayerBuffer(Player)")
+			else
+				Target:Line("Close(Cursor, Instances)")
 			end
 
 			return Target

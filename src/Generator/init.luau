@@ -9,6 +9,7 @@ local Builder = require("./Modules/Builder")
 local Table = require("./Modules/Table")
 
 local Blocks = require("@self/Blocks")
+local Bodies = require("@self/Bodies")
 local Fragments = require("@self/Fragments")
 local GenerateTypescript = require("@self/Typescript")
 local Lifecycle = require("@self/Lifecycle")
@@ -29,8 +30,6 @@ local SYNC_VALIDATION_BODY = Fragments.SYNC_VALIDATION_BODY
 local EVENT_SYNC_VALIDATION = Fragments.EVENT_SYNC_VALIDATION
 
 local DEFAULT_MAX_EVENTS_PER_PACKET = Fragments.DEFAULT_MAX_EVENTS_PER_PACKET
-local DEFAULT_MAX_UNRELIABLE_SIZE = Fragments.DEFAULT_MAX_UNRELIABLE_SIZE
-local UNRELIABLE_INSTANCE_BYTES = Fragments.UNRELIABLE_INSTANCE_BYTES
 
 --> The stream runtime (the server's half, then the client's) and the stamp runtime (the unwrap both
 --> share, the server's clamp, the client's stamp). Spliced only into a module that uses them.
@@ -149,11 +148,12 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> every index one event out. Without this the user gets a raw `buffer access out of bounds` from
 	--> inside OnClientEvent, which is what upstream issue #26 and the devforum report were.
 	-->
-	--> Each event is decoded by one call of `DecodeEvent` under its own pcall. The function is made
-	--> once per packet, ahead of the loop. It used to be a closure written inside the loop, so every
-	--> event allocated a fresh closure and the upvalues it captured before a byte of it was read --
-	--> a quarter of what a one-byte event cost the server to decode. `Decoding` carries the index
-	--> out of the pcall, so a failure can name the event it happened in.
+	--> Each event is decoded by one call of `DecodeEvent`, and the loop making those calls runs under
+	--> one pcall for the whole packet. The function is made once per packet, ahead of the loop. It
+	--> used to be a closure written inside the loop, so every event allocated a fresh closure and the
+	--> upvalues it captured before a byte of it was read -- a quarter of what a one-byte event cost
+	--> the server to decode. `Decoding` carries the index out of the pcall, so a failure can name the
+	--> event it happened in.
 	local function OpenDecode(Channel: Blocks.Block): Blocks.Block
 		Channel:Line("local Decoding = -1")
 		local Decoder = Channel:Scope("local function DecodeEvent()")
@@ -237,12 +237,19 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	State.Reliables = CloseIndex(State.Reliables, State.Channels.Reliable.Listening)
 	State.Unreliables = CloseIndex(State.Unreliables, State.Channels.Unreliable.Listening)
 
-	--> Close the decode function opened above, then decode the packet one event at a time and act on
-	--> each result. What is said about a failure, and to whom, is ReportDecodeFailure's business: the
-	--> server is silent unless the game installed a handler, the client warns. See the two templates.
+	--> Close the decode function opened above, then decode the packet one event at a time. What is
+	--> said about a failure, and to whom, is ReportDecodeFailure's business: the server is silent
+	--> unless the game installed a handler, the client warns. See the two templates.
+	-->
+	--> The pcall is around the loop rather than around each event. A failure stops the packet either
+	--> way -- the cursor is wherever the throw left it -- so one pcall a packet stops it at the same
+	--> event, and a pcall an event had cost a one-byte event more than its decode did. A listener's
+	--> own error never reaches it: each listener is called under a pcall of its own. `return` inside
+	--> an event's branch still leaves only that event, because it returns from `DecodeEvent`.
 	local function CloseDecode(Channel: Blocks.Block, Name: string): Blocks.Block
 		local Connection = Channel:End()
-		local Loop = Connection:While(Condition)
+		local Packet = Connection:Scope("local function DecodePacket()")
+		local Loop = Packet:While(Condition)
 
 		--> The event cap; see MaxEvents above.
 		if State.Context == "Server" then
@@ -255,12 +262,13 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 
 		local Sender = if State.Context == "Server" then `Player, "{Name}", ` else ""
 		Loop:Line("Decoding = -1")
-		Loop:Line("local Parsed: boolean, Failure: any = pcall(DecodeEvent)")
-		Loop:Line("if not Parsed then")
-		Loop:Line(`\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], Failure)`)
-		Loop:Line("\tbreak")
-		Loop:Line("end")
-		return Loop:End()
+		Loop:Line("DecodeEvent()")
+		Connection = Loop:End():End()
+		Connection:Line("local Parsed: boolean, Failure: any = pcall(DecodePacket)")
+		Connection:Line("if not Parsed then")
+		Connection:Line(`\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], Failure)`)
+		Connection:Line("end")
+		return Connection
 	end
 
 	State.Reliables = CloseDecode(State.Reliables, "Reliable"):End()
@@ -286,132 +294,6 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		}
 	end
 
-	--> Sequence bookkeeping for OrderedUnreliable, emitted only where the schema uses it.
-	-->
-	--> Incoming is the last sequence seen per event, per SOURCE -- which on the server means per
-	--> player, since each client runs its own. Outgoing is per event on a client, which has one
-	--> recipient, and per event PER PLAYER on the server: one counter shared by every player told a
-	--> player left out of 32768 sends that each later packet was older than the last one it had seen,
-	--> until the counter came round again. The server's serialiser writes a placeholder and each send
-	--> stamps the recipient's own number over it.
-	-->
-	--> A sequence is newer when it is less than half the counter's range AHEAD of the last one, the
-	--> usual serial-number comparison, which is what makes the wrap at 65536 harmless. The earlier
-	--> check refused only what was below the last sequence, so a packet from just before the wrap
-	--> arriving just after it was taken as newer and delivered out of order.
-	local OrderingBody = {}
-	if State.UsesOrdering then
-		local Newer = {
-			"\tlocal Last = State[Slot]\n",
-			"\tif Last ~= nil then\n",
-			"\t\tlocal Ahead = (Identifier - Last) % 65536\n",
-			"\t\tif Ahead == 0 or Ahead >= 32768 then\n",
-			"\t\t\treturn false\n",
-			"\t\tend\n",
-			"\tend\n",
-			"\n",
-			"\tState[Slot] = Identifier\n",
-			"\treturn true\n",
-			"end\n",
-		}
-
-		if State.Context == "Server" then
-			OrderingBody = {
-				"\n",
-				"--> Sequence numbers for ordered unreliable events, per player and per event, both ways.\n",
-				"local OrderOut: { [Player]: { number } } = {}\n",
-				"local OrderIn: { [Player]: { number } } = {}\n",
-				"\n",
-				"Players.PlayerRemoving:Connect(function(Player)\n",
-				"\tOrderOut[Player] = nil\n",
-				"\tOrderIn[Player] = nil\n",
-				"end)\n",
-				"\n",
-				"--> The next sequence number this player is sent for this event. A player who has already left\n",
-				"--> gets a number and keeps no state, which PlayerRemoving would have nothing left to clear.\n",
-				"local function NextOrder(Player: Player, Slot: number): number\n",
-				"\tlocal State = OrderOut[Player]\n",
-				"\tif not State then\n",
-				"\t\tif Player.Parent == nil then\n",
-				"\t\t\treturn 0\n",
-				"\t\tend\n",
-				"\t\tState = {}\n",
-				"\t\tOrderOut[Player] = State\n",
-				"\tend\n",
-				"\n",
-				"\tlocal Identifier = ((State[Slot] or 0) + 1) % 65536\n",
-				"\tState[Slot] = Identifier\n",
-				"\treturn Identifier\n",
-				"end\n",
-				"\n",
-				"--> Accepts a packet only if it is newer than the last one this player sent for this event.\n",
-				"local function OrderAccept(Player: Player, Slot: number, Identifier: number): boolean\n",
-				"\tif Player.Parent == nil then\n",
-				"\t\tOrderIn[Player] = nil\n",
-				"\t\treturn false\n",
-				"\tend\n",
-				"\n",
-				"\tlocal State = OrderIn[Player]\n",
-				"\tif not State then\n",
-				"\t\tState = {}\n",
-				"\t\tOrderIn[Player] = State\n",
-				"\tend\n",
-				"\n",
-			}
-		else
-			OrderingBody = {
-				"\n",
-				"--> Sequence numbers for ordered unreliable events, one counter per event each way.\n",
-				"local OrderOut: { number } = {}\n",
-				"local OrderIn: { number } = {}\n",
-				"\n",
-				"--> Accepts a packet only if it is newer than the last one seen for this event.\n",
-				"local function OrderAccept(Slot: number, Identifier: number): boolean\n",
-				"\tlocal State = OrderIn\n",
-			}
-		end
-
-		table.move(Newer, 1, #Newer, #OrderingBody + 1, OrderingBody)
-	end
-
-	--> Emitted only when the schema actually has unreliable events -- most do not, and a helper
-	--> nothing calls is noise in a file people read when debugging their own traffic.
-	local UnreliableGuardBody = {}
-	if State.Channels.Unreliable.Count > 0 then
-		local MaxUnreliableSize = State.Options.MaxUnreliableSize or DEFAULT_MAX_UNRELIABLE_SIZE
-		UnreliableGuardBody = {
-			"\n",
-			"--> Roblox drops an unreliable payload past this size and tells nobody. The compiler\n",
-			"--> refuses schemas that can never fit; this catches the ones that merely overflow at\n",
-			"--> runtime, and says which event did it. Each Instance sent beside the buffer costs the\n",
-			"--> payload bytes of its own, measured in Studio, so it counts against the same limit.\n",
-			`local MAX_UNRELIABLE_SIZE = {MaxUnreliableSize}\n`,
-			`local UNRELIABLE_INSTANCE_BYTES = {UNRELIABLE_INSTANCE_BYTES}\n`,
-			"local function CheckUnreliableSize(Name: string): boolean\n",
-			"\tlocal Size = SendCursor + #SendInstances * UNRELIABLE_INSTANCE_BYTES\n",
-			"\tif Size <= MAX_UNRELIABLE_SIZE then\n",
-			"\t\treturn true\n",
-			"\tend\n",
-			"\n",
-			'\twarn(`[BlinkBlox]: Dropped unreliable event "{Name}", {Size} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)\n',
-			"\treturn false\n",
-			"end\n",
-		}
-	end
-
-	--> Initial contents of a player's rate bucket: tokens, refill clock, report clock, refusals since
-	--> that report, per limited declaration. Cloned per player on first use, so one allocation per player per session rather
-	--> than a table per event.
-	local RateTemplateBody = {}
-	if State.Context == "Server" then
-		local Entries = {}
-		for _, Slot in State.RateSlots do
-			table.insert(Entries, `{Slot.Burst}, 0, 0, 0`)
-		end
-
-		RateTemplateBody = { `local RATE_TEMPLATE = table.freeze(\{{table.concat(Entries, ", ")}\})\n` }
-	end
-
 	local MergedOutput = Table.Merge(
 		DIRECTIVES,
 		VERSION_HEADER,
@@ -423,9 +305,10 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		string.split(Sources.Base, "\r"),
 		Traffic.Body(),
 		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
-		RateTemplateBody,
-		OrderingBody,
-		UnreliableGuardBody,
+		Bodies.RateTemplate(),
+		Bodies.Ordering(),
+		Bodies.UnreliableGuard(),
+		Bodies.PacketLimits(),
 		(if State.Options.SyncValidation then SYNC_VALIDATION_BODY else {}),
 		State.Events.DumpLines(),
 		State.LuauTypes.DumpLines(),

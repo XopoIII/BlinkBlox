@@ -54,7 +54,7 @@ function Streams.Server(
 	--> Every player, each with their own sequence number: a stream is always OrderedUnreliable. A
 	--> `Per: Player` stream sends each player's own state to that player alone.
 	local Outgoing: Sends.Send =
-		{ IsReliable = false, WriteEvent = WriteEvent, Name = Name, Ordered = Index, Traffic = Counters }
+		{ IsReliable = false, WriteEvent = WriteEvent, Name = Name, Ordered = Index, Traffic = Counters, Stream = true }
 	local PerPlayer = Settings.PerPlayer
 	local Send = if PerPlayer
 		then Sends.One(Blocks.Function(`Send{Stream}`, `Player: Player, {Values}`, "()", false, true), Outgoing):End()

@@ -102,6 +102,57 @@ local function Load(Save: BLINK_BUFFER_SAVE?)
     SendInstances = {}
 end
 
+--> A buffer for writes that are copied out as soon as they are made: an unreliable send, and a
+--> broadcast before it is appended to each player's batch. Each used to write into a fresh 64-byte
+--> buffer and a fresh table, and to regrow the buffer on the way to the event's size. This one is
+--> kept at whatever size a write grew it to, up to SCRATCH_LIMIT, so a burst is not held for good.
+--> Nothing keeps a reference past the copy: a remote serialises its arguments when it is fired.
+local SCRATCH_LIMIT = 65536
+local ScratchSize = 64
+local ScratchBuffer = buffer.create(64)
+local ScratchInstances = {}
+
+local function LoadScratch()
+    SendSize = ScratchSize
+    SendCursor = 0
+    SendOffset = 0
+    SendBuffer = ScratchBuffer
+    table.clear(ScratchInstances)
+    SendInstances = ScratchInstances
+end
+
+--> Called once the scratch write is done, before anything else is loaded.
+local function KeepScratch()
+    if SendBuffer ~= ScratchBuffer and SendSize <= SCRATCH_LIMIT then
+        ScratchSize = SendSize
+        ScratchBuffer = SendBuffer
+    end
+end
+
+--> The client's batch, set aside while an unreliable Fire writes into the scratch buffer. A Save
+--> table did the same, and a Fire allocated one.
+local HeldSize = 0
+local HeldCursor = 0
+local HeldBuffer = SendBuffer
+local HeldInstances = SendInstances
+
+local function Hold()
+    HeldSize = SendSize
+    HeldCursor = SendCursor
+    HeldBuffer = SendBuffer
+    HeldInstances = SendInstances
+    LoadScratch()
+end
+
+local function Release()
+    KeepScratch()
+    SendSize = HeldSize
+    SendCursor = HeldCursor
+    SendOffset = HeldCursor
+    SendBuffer = HeldBuffer
+    SendInstances = HeldInstances
+end
+
 --> Undoes a write that threw part way through.
 -->
 --> Every serialiser writes straight into SendBuffer through Allocate, and an assert can fire in the
@@ -113,10 +164,6 @@ end
 --> Only the cursor and the instance count are restored. A buffer that Allocate grew on the way is
 --> kept deliberately: growing copied the earlier bytes across, so the larger buffer is just as
 --> valid, and discarding it would only make the next write grow it again.
-local function Mark(): (number, number)
-    return SendCursor, #SendInstances
-end
-
 local function Rollback(Cursor: number, Instances: number)
     SendCursor = Cursor
     SendOffset = Cursor
@@ -126,23 +173,56 @@ local function Rollback(Cursor: number, Instances: number)
     end
 end
 
-local function Allocate(Bytes: number)
-    local InUse = (SendCursor + Bytes)
-    if InUse > SendSize then
-        --> Avoid resizing the buffer for every write
-        while InUse > SendSize do
-            SendSize *= 1.5
-        end
+--> The same undo without a pcall, for the client's reliable Fire, where a pcall cost more than a
+--> small event's whole write. `Begin` records where the batch stands and a write that returns clears
+--> the record; a write that threw leaves it behind, and whatever touches the batch next -- the next
+--> write, or the flush -- undoes the half-written event first, through `Settle`. The server needs
+--> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
+--> reaches the save.
+local PendingCursor = -1
+local PendingInstances = 0
 
-        local Buffer = buffer.create(SendSize)
-        buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-        SendBuffer = Buffer
+local function Settle()
+    if PendingCursor >= 0 then
+        Rollback(PendingCursor, PendingInstances)
+        PendingCursor = -1
+    end
+end
+
+local function Begin()
+    Settle()
+    PendingCursor = SendCursor
+    PendingInstances = #SendInstances
+end
+
+local function Mark(): (number, number)
+    Settle()
+    return SendCursor, #SendInstances
+end
+
+--> Grows SendBuffer to hold `InUse` bytes, by half again at a time so a steady writer does not
+--> regrow it on every write. Kept out of Allocate, which runs for every event and every string: a
+--> function with a loop in it is not inlined, and Allocate without one is.
+local function Grow(InUse: number)
+    while InUse > SendSize do
+        SendSize *= 1.5
     end
 
-    SendOffset = SendCursor
-    SendCursor += Bytes
-    
-    return SendOffset
+    local Buffer = buffer.create(SendSize)
+    buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+    SendBuffer = Buffer
+end
+
+local function Allocate(Bytes: number)
+    local Offset = SendCursor
+    local InUse = Offset + Bytes
+    if InUse > SendSize then
+        Grow(InUse)
+    end
+
+    SendOffset = Offset
+    SendCursor = InUse
+    return Offset
 end
 
 local function CreateQueue(): BLINK_QUEUE
@@ -579,6 +659,7 @@ return {
 			local Success, Result = pcall(function (): (Byte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Byte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -623,6 +704,7 @@ return {
 			local Success, Result = pcall(function (): (Color)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Color
 				local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
 				return Value
@@ -670,6 +752,7 @@ return {
 			local Success, Result = pcall(function (): (ColorArray)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ColorArray
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -758,6 +841,7 @@ return {
 			local Success, Result = pcall(function (): (DateSeconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateSeconds
 				local Value = DateTime.fromUnixTimestamp(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -803,6 +887,7 @@ return {
 			local Success, Result = pcall(function (): (DateMilliseconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateMilliseconds
 				local Value = DateTime.fromUnixTimestampMillis(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -848,6 +933,7 @@ return {
 			local Success, Result = pcall(function (): (BrickkColor)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BrickkColor
 				local Value = BrickColor.new(buffer.readu16(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -893,6 +979,7 @@ return {
 			local Success, Result = pcall(function (): (ExactRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
@@ -939,6 +1026,7 @@ return {
 			local Success, Result = pcall(function (): (DecimalRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DecimalRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
@@ -987,6 +1075,7 @@ return {
 			local Success, Result = pcall(function (): (NegativeRange)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: NegativeRange
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -1035,6 +1124,7 @@ return {
 			local Success, Result = pcall(function (): (UnboundUpper)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundUpper
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
@@ -1081,6 +1171,7 @@ return {
 			local Success, Result = pcall(function (): (UnboundLower)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundLower
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
@@ -1127,6 +1218,7 @@ return {
 			local Success, Result = pcall(function (): (RangedVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: RangedVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -1181,6 +1273,7 @@ return {
 			local Success, Result = pcall(function (): (Buffer)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Buffer
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -1232,6 +1325,7 @@ return {
 			local Success, Result = pcall(function (): (ExactBuffer)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactBuffer
 				local Value = buffer.create(9)
 				buffer.copy(Value, 0, RecieveBuffer, BLOCK_START + 0, 9)
@@ -1279,6 +1373,7 @@ return {
 			local Success, Result = pcall(function (): (BoundedBuffer)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BoundedBuffer
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Length < 0 then error(`Expected size of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -1334,6 +1429,7 @@ return {
 			local Success, Result = pcall(function (): (PlainCFrame)
 				-- Read BLOCK: 24 bytes
 				local BLOCK_START = Read(24)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PlainCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -1392,6 +1488,7 @@ return {
 			local Success, Result = pcall(function (): (QuatCFrame)
 				-- Read BLOCK: 19 bytes
 				local BLOCK_START = Read(19)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -1451,6 +1548,7 @@ return {
 			local Success, Result = pcall(function (): (QuatHalfCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatHalfCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -1645,6 +1743,7 @@ return {
 			local Success, Result = pcall(function (): (QuatFirstCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatFirstCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -1839,6 +1938,7 @@ return {
 			local Success, Result = pcall(function (): (QuatCFrames)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrames
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -1963,6 +2063,7 @@ return {
 			local Success, Result = pcall(function (): (MultiDimensionalArray)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MultiDimensionalArray
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -2094,6 +2195,7 @@ return {
 			local Success, Result = pcall(function (): (SizeByte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeByte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -2138,6 +2240,7 @@ return {
 			local Success, Result = pcall(function (): (SizeFixedString)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedString
 				local Value = buffer.readstring(RecieveBuffer, BLOCK_START + 0, 8)
 				if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
@@ -2184,6 +2287,7 @@ return {
 			local Success, Result = pcall(function (): (SizeBoundedString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedString
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if Length < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -2236,6 +2340,7 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (SizeFixedArray)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedArray
 				-- START ARRAY
 				local Length = 4
@@ -2303,6 +2408,7 @@ return {
 			local Success, Result = pcall(function (): (SizeBoundedArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedArray
 				-- START ARRAY
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2377,10 +2483,11 @@ return {
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeOptionalByte
 				local Value
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				if bit32.btest(BITFIELD_0, 0x01) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value: SizeOptionalByte
@@ -2437,6 +2544,7 @@ return {
 			local Success, Result = pcall(function (): (SizeVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -2488,6 +2596,7 @@ return {
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeStruct
 				local Value = {A = false, B = false, C = false} :: any
 				-- Value.A: A
@@ -2553,6 +2662,7 @@ return {
 			local Success, Result = pcall(function (): (SizeEnum)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeEnum
 				local Value = true :: any
 				local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2612,6 +2722,7 @@ return {
 			local Success, Result = pcall(function (): (SizeFlags)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFlags
 				local Value = {}
 				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2661,6 +2772,7 @@ return {
 			local Success, Result = pcall(function (): (SizeMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -2729,6 +2841,7 @@ return {
 			local Success, Result = pcall(function (): (OffsetArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetArray
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2805,6 +2918,7 @@ return {
 			local Success, Result = pcall(function (): (OffsetString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetString
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -2862,6 +2976,7 @@ return {
 			local Success, Result = pcall(function (): (OffsetBuffer)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetBuffer
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -2921,6 +3036,7 @@ return {
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsOne
 				local Value = {A = false} :: any
 				-- Value.A: A
@@ -2973,6 +3089,7 @@ return {
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeven
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false} :: any
 				-- Value.A: A
@@ -3067,6 +3184,7 @@ return {
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsEight
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false} :: any
 				-- Value.A: A
@@ -3169,6 +3287,7 @@ return {
 				local BLOCK_START = Read(2)
 				local BITFIELD_1
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsNine
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false} :: any
 				-- Value.A: A
@@ -3283,6 +3402,7 @@ return {
 				local BITFIELD_2
 				local BITFIELD_1
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeventeen
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false, J = false, K = false, L = false, M = false, N = false, O = false, P = false, Q = false} :: any
 				-- Value.A: A
@@ -3455,13 +3575,14 @@ return {
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsMixed
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value.A = bit32.btest(BITFIELD_0, 0x01)
 				-- Value.B: B
-				if bit32.btest(BITFIELD_0, 0x02) == true then
+				if bit32.btest(BITFIELD_0, 0x02) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value.B: B
@@ -3470,7 +3591,7 @@ return {
 				-- Value.C: C
 				Value.C = bit32.btest(BITFIELD_0, 0x04)
 				-- Value.D: D
-				if bit32.btest(BITFIELD_0, 0x08) == true then
+				if bit32.btest(BITFIELD_0, 0x08) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.D: D
@@ -3549,6 +3670,7 @@ return {
 			local Success, Result = pcall(function (): (PackedBooleans)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBooleans
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -3658,6 +3780,7 @@ return {
 			local Success, Result = pcall(function (): (PackedFixed)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedFixed
 				-- START ARRAY
 				local Length = 10
@@ -3763,6 +3886,7 @@ return {
 			local Success, Result = pcall(function (): (PackedRanged)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedRanged
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -3875,6 +3999,7 @@ return {
 			local Success, Result = pcall(function (): (PackedNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedNested
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -4013,6 +4138,7 @@ return {
 			local Success, Result = pcall(function (): (PackedThroughAlias)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedThroughAlias
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -4123,6 +4249,7 @@ return {
 				-- Read BLOCK: 5 bytes
 				local BLOCK_START = Read(5)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBeside
 				local Value = {A = false, List = false, B = false, Fixed = false, C = false} :: any
 				-- Value.A: A
@@ -4332,6 +4459,7 @@ return {
 			local Success, Result = pcall(function (): (PackedMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -4471,6 +4599,7 @@ return {
 			local Success, Result = pcall(function (): (PackedOptional)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedOptional
 				-- START ARRAY
 				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -4488,7 +4617,7 @@ return {
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					if bit32.btest(BITFIELD_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
 						local BITFIELD_0
@@ -4568,6 +4697,7 @@ return {
 			local Success, Result = pcall(function (): (MapNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MapNested
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -4672,6 +4802,7 @@ return {
 			local Success, Result = pcall(function (): (Standalone)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
@@ -4876,6 +5007,7 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (OptionalHoles)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OptionalHoles
 				-- START ARRAY
 				local Length = 3
@@ -4890,7 +5022,7 @@ return {
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					if bit32.btest(BITFIELD_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
 						-- Item_1: OptionalHoles
@@ -4962,6 +5094,7 @@ return {
 			local Success, Result = pcall(function (): (HalfFloat)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: HalfFloat
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -5051,6 +5184,7 @@ return {
 			local Success, Result = pcall(function (): (Float24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Float24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local Value
@@ -5127,6 +5261,7 @@ return {
 			local Success, Result = pcall(function (): (Unsigned24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Unsigned24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -5172,6 +5307,7 @@ return {
 			local Success, Result = pcall(function (): (Signed24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Signed24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -5217,6 +5353,7 @@ return {
 			local Success, Result = pcall(function (): (Vector24)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Vector24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -5363,6 +5500,7 @@ return {
 			local Success, Result = pcall(function (): (QuatCFrame24)
 				-- Read BLOCK: 16 bytes
 				local BLOCK_START = Read(16)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -5518,6 +5656,7 @@ return {
 			local Success, Result = pcall(function (): (FlagCarrier)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FlagCarrier
 				local Value = {Flags = false, Text = false, Kind = false} :: any
 				do
@@ -5609,6 +5748,7 @@ return {
 			local Success, Result = pcall(function (): (FixedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				Value = Value / 10
@@ -5657,6 +5797,7 @@ return {
 			local Success, Result = pcall(function (): (FixedRanged)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedRanged
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -5707,6 +5848,7 @@ return {
 			local Success, Result = pcall(function (): (FixedSigned)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedSigned
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -400) then error(`Expected "Value" to be larger than or equal to -400, got {Value} instead.`) end
@@ -5757,6 +5899,7 @@ return {
 			local Success, Result = pcall(function (): (FixedCoarse)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedCoarse
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value = Value * 2.5
@@ -5805,6 +5948,7 @@ return {
 			local Success, Result = pcall(function (): (FixedTriple)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTriple
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				Value = Value / 1000
@@ -5854,6 +5998,7 @@ return {
 			local Success, Result = pcall(function (): (FixedWide)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWide
 				local Value = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -5904,6 +6049,7 @@ return {
 			local Success, Result = pcall(function (): (FixedWhole)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWhole
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -5951,6 +6097,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedCount)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedCount
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 1) then error(`Expected "Value" to be larger than or equal to 1, got {Value} instead.`) end
@@ -5999,6 +6146,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedSigned)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedSigned
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -6047,6 +6195,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedNegative)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedNegative
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -10) then error(`Expected "Value" to be larger than or equal to -10, got {Value} instead.`) end
@@ -6095,6 +6244,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -6144,6 +6294,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedHalf)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedHalf
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -6235,6 +6386,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedUnit)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedUnit
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -6284,6 +6436,7 @@ return {
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
 				local BITFIELD_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedStruct
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
@@ -6291,7 +6444,7 @@ return {
 				Value.A = Value.A / 10
 				-- Value.B: B
 				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				if bit32.btest(BITFIELD_0, 0x01) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.B: B

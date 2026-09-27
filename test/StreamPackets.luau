@@ -178,6 +178,46 @@ RunClosure("A state that fails to send is reported and stops the stream", functi
 	Expect("frames after a good Set", Frames(Pair, 1), { 1 })
 end)
 
+RunClosure("A state too large for one packet is reported once and stops the stream", function()
+	--> Refused on send rather than dropped: dropped, the stream counted it as sent, never sent it again
+	--> until it changed, and warned at every step it was due.
+	local Pair = Isolated.Build(
+		Isolated.Parse([[
+event Note {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Stream: { Rate: 10 },
+	Data: string(..2000)
+}
+]]),
+		"STREAMS_OVERSIZE"
+	)
+	Pair.Server.StepReplication()
+
+	local Raised: { string } = {}
+	Shared.Task.spawn = function(Function, ...)
+		if Function == error then
+			table.insert(Raised, tostring((...)))
+			return nil :: any
+		end
+
+		return task.spawn(Function, ...)
+	end
+
+	Pair.Server.Note.Set(string.rep("x", 1500))
+	local Sent = Frames(Pair, 120)
+	Shared.Task.spawn = nil :: any
+
+	Expect("frames that sent", Sent, {})
+	assert(#Raised == 1, `reported {#Raised} times, expected once`)
+	assert(string.find(Raised[1], 'Stream "Note" could not send its state:', 1, true), `reported as: {Raised[1]}`)
+	assert(string.find(Raised[1], "exceeds the", 1, true), `reported as: {Raised[1]}`)
+
+	Pair.Server.Note.Set("short")
+	Expect("frames after a good Set", Frames(Pair, 1), { 1 })
+end)
+
 --> Each refusal on its own, with the message that names it; the Invalid fixtures check the codes.
 local STREAM = "event S {\n\tFrom: %s,\n\tType: %s,\n\tCall: %s,\n\tStream: { Rate: 10%s },\n\tData: %s\n}"
 local REFUSED = {
