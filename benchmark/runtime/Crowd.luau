@@ -135,22 +135,25 @@ end
 --> An Instance, for the one scenario that sends them. Lune has none, so `typeof` is replaced in the
 --> modules that scenario loads, and only there: a replaced builtin is no longer a fastcall, and every
 --> other scenario would pay for it.
+local Parts: { [any]: true } = setmetatable({}, { __mode = "k" }) :: any
+
 local function MockTypeof(Value: any): string
-	if type(Value) == "table" and Value.__typeof then
-		return Value.__typeof
+	if Parts[Value] then
+		return "Instance"
 	end
 	return typeof(Value)
 end
 
 function Crowd.Part(Name: string): any
-	return {
-		__typeof = "Instance",
+	local Part = Environment.Instance({
 		Name = Name,
 		ClassName = "Part",
 		IsA = function(_self, Class: string)
 			return Class == "Part" or Class == "BasePart" or Class == "Instance"
 		end,
-	}
+	})
+	Parts[Part] = true
+	return Part
 end
 
 local PRELUDE = "local game, task, warn, _G, Instance = ...\n"
@@ -174,14 +177,14 @@ function Crowd.Load(
 
 	local List: { any } = {}
 	for Index = 1, Count do
-		List[Index] = {
+		List[Index] = Environment.Instance({
 			Name = `Player{Index}`,
 			UserId = Index,
 			Parent = PlayersService,
 			IsDescendantOf = function(_self, _Ancestor)
 				return true
 			end,
-		}
+		})
 	end
 
 	function PlayersService.GetPlayers(_self)

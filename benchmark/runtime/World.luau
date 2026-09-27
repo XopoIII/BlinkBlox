@@ -65,46 +65,54 @@ local function Create(ClassName: string, Name: string?): any
 		Changed = Signal(),
 	}
 
-	local Object = setmetatable({}, {
-		__index = function(Self, Key)
-			local Method = Methods[Key]
-			if Method then
-				return Method
-			end
-			if Key == "AttributeChanged" or Key == "Changed" then
-				return State[Key]
-			end
-			local Value = State.Properties[Key]
-			if Value ~= nil then
-				return Value
-			end
-			for _, Child in State.Children do
-				if Child.Name == Key then
-					return Child
+	--> A userdata, as in Environment.Instance: a table would send every function that annotates a
+	--> parameter `Player` or `Instance` back to the interpreter.
+	local Object = newproxy(true)
+	local Metatable = getmetatable(Object)
+	for Key, Value in
+		{
+			__index = function(Self, Key)
+				local Method = Methods[Key]
+				if Method then
+					return Method
 				end
-			end
-			return nil
-		end,
-		__newindex = function(Self, Key, Value)
-			if Key == "Parent" then
-				local Previous = State.Properties.Parent
-				if Previous then
-					local Siblings = Hidden[Previous].Children
-					table.remove(Siblings, table.find(Siblings, Self))
+				if Key == "AttributeChanged" or Key == "Changed" then
+					return State[Key]
 				end
-				if Value then
-					table.insert(Hidden[Value].Children, Self)
+				local Value = State.Properties[Key]
+				if Value ~= nil then
+					return Value
 				end
-			end
-			State.Properties[Key] = Value
-			if Key == "Value" then
-				State.Changed:Fire(Value)
-			end
-		end,
-		__tostring = function()
-			return State.Properties.Name
-		end,
-	})
+				for _, Child in State.Children do
+					if Child.Name == Key then
+						return Child
+					end
+				end
+				return nil
+			end,
+			__newindex = function(Self, Key, Value)
+				if Key == "Parent" then
+					local Previous = State.Properties.Parent
+					if Previous then
+						local Siblings = Hidden[Previous].Children
+						table.remove(Siblings, table.find(Siblings, Self))
+					end
+					if Value then
+						table.insert(Hidden[Value].Children, Self)
+					end
+				end
+				State.Properties[Key] = Value
+				if Key == "Value" then
+					State.Changed:Fire(Value)
+				end
+			end,
+			__tostring = function()
+				return State.Properties.Name
+			end,
+		} :: { [string]: any }
+	do
+		Metatable[Key] = Value
+	end
 
 	Hidden[Object] = State
 	return Object
@@ -376,7 +384,7 @@ local PRELUDE_TYPEOF =
 
 --> What `typeof` says with Universe.Instances on: a mock instance is an "Instance".
 local function MockTypeof(Value: any): string
-	if type(Value) == "table" and Hidden[Value] then
+	if Hidden[Value] then
 		return "Instance"
 	end
 	return typeof(Value)

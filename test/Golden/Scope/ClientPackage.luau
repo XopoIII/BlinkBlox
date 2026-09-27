@@ -194,6 +194,11 @@ end
 local PendingCursor = -1
 local PendingInstances = 0
 
+--> How many Instances the client's batch held after the last write into it that returned. Every write
+--> into the batch starts from there, so Begin takes it from here rather than counting the list, and
+--> only a write that can add Instances counts it again; see the commits in the client template.
+local CommittedInstances = 0
+
 local function Settle()
     if PendingCursor >= 0 then
         Rollback(PendingCursor, PendingInstances)
@@ -204,7 +209,7 @@ end
 local function Begin()
     Settle()
     PendingCursor = SendCursor
-    PendingInstances = #SendInstances
+    PendingInstances = CommittedInstances
 end
 
 local function Mark(): (number, number)
@@ -567,28 +572,56 @@ local PacketInstances = 0
 local PacketEvents = 0
 local Cuts: {number} = {}
 
---> An event has been written into the batch from `Start`, with `Instances` instances ahead of it.
-local function Close(Start: number, Instances: number)
-    PacketEvents += 1
-    if PacketEvents > MAX_EVENTS_PER_PACKET
-        or SendCursor - PacketStart > MAX_PACKET_SIZE
-        or #SendInstances - PacketInstances > MAX_INSTANCES_PER_PACKET
-    then
-        if Start > PacketStart then
-            table.insert(Cuts, Start)
-            table.insert(Cuts, Instances)
-            PacketStart = Start
-            PacketInstances = Instances
-            PacketEvents = 1
-        end
+--> Starts a new packet at the event that begins at `Start`, with `Instances` instances ahead of it,
+--> unless it is the packet's first: an event too large on its own goes out alone.
+local function Cut(Start: number, Instances: number)
+    if Start > PacketStart then
+        table.insert(Cuts, Start)
+        table.insert(Cuts, Instances)
+        PacketStart = Start
+        PacketInstances = Instances
+        PacketEvents = 1
     end
 end
 
---> The end of a write that Begin started.
+--> An event has been written into the batch from `Start`, with `Instances` instances ahead of it, by
+--> a write that Mark began: a call, or a reply to one.
+local function Close(Start: number, Instances: number)
+    local Count = #SendInstances
+    CommittedInstances = Count
+    PacketEvents += 1
+    if PacketEvents > MAX_EVENTS_PER_PACKET
+        or SendCursor - PacketStart > MAX_PACKET_SIZE
+        or Count - PacketInstances > MAX_INSTANCES_PER_PACKET
+    then
+        Cut(Start, Instances)
+    end
+end
+
+--> The end of a Fire that Begin started, for an event that carries no Instance: the instance count is
+--> what it was, and so is the instance cap.
 local function Commit()
     local Start = PendingCursor
     PendingCursor = -1
-    Close(Start, PendingInstances)
+    PacketEvents += 1
+    if PacketEvents > MAX_EVENTS_PER_PACKET or SendCursor - PacketStart > MAX_PACKET_SIZE then
+        Cut(Start, CommittedInstances)
+    end
+end
+
+--> The same for an event that can carry Instances.
+local function CommitInstances()
+    local Start, Before = PendingCursor, CommittedInstances
+    local Count = #SendInstances
+    PendingCursor = -1
+    CommittedInstances = Count
+    PacketEvents += 1
+    if PacketEvents > MAX_EVENTS_PER_PACKET
+        or SendCursor - PacketStart > MAX_PACKET_SIZE
+        or Count - PacketInstances > MAX_INSTANCES_PER_PACKET
+    then
+        Cut(Start, Before)
+    end
 end
 
 local function SendPacket(From: number, To: number, FromInstances: number, ToInstances: number)
@@ -624,6 +657,7 @@ local function StepReplication()
     PacketStart = 0
     PacketInstances = 0
     PacketEvents = 0
+    CommittedInstances = 0
 
     --> Kept for the next frame, as the server keeps each player's. Checked on a frame that sent
     --> nothing as well, or a client that went quiet after a burst would hold the burst's buffer.

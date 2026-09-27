@@ -116,7 +116,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Target:Line("local Cursor = SendCursor")
 		end
 		Target:Line(WriteEvent)
-		Target:Line("Commit()")
+		Target:Line(if CarriesInstances then "CommitInstances()" else "Commit()")
 	end
 
 	--> A player's batch on the server. A write that throws never reaches SavePlayerBuffer, so the

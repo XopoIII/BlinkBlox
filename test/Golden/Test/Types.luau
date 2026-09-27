@@ -182,6 +182,11 @@ end
 local PendingCursor = -1
 local PendingInstances = 0
 
+--> How many Instances the client's batch held after the last write into it that returned. Every write
+--> into the batch starts from there, so Begin takes it from here rather than counting the list, and
+--> only a write that can add Instances counts it again; see the commits in the client template.
+local CommittedInstances = 0
+
 local function Settle()
     if PendingCursor >= 0 then
         Rollback(PendingCursor, PendingInstances)
@@ -192,7 +197,7 @@ end
 local function Begin()
     Settle()
     PendingCursor = SendCursor
-    PendingInstances = #SendInstances
+    PendingInstances = CommittedInstances
 end
 
 local function Mark(): (number, number)

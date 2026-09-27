@@ -76,14 +76,30 @@ local Players = {
 	PlayerAdded = Signal(),
 }
 
+--- A userdata standing for a Roblox Instance, reading and writing `Fields`.
+---
+--- Not a table: a parameter the modules annotate `Player` or `Instance` is native code's promise that
+--- a userdata arrives, and a table there sends the whole function back to the interpreter on every
+--- call. In a game these are userdata, so a table would time the bench's mock rather than the module.
+function Environment.Instance(Fields: { [string]: any }): any
+	local Object = newproxy(true)
+	local Metatable = getmetatable(Object)
+	Metatable.__index = Fields
+	Metatable.__newindex = Fields
+	Metatable.__tostring = function()
+		return tostring(Fields.Name)
+	end
+	return Object
+end
+
 --> One player, whose `Parent` never changes: the server asks for it on every event it decodes.
-local Player = {
+local Player = Environment.Instance({
 	Name = "Player",
 	Parent = Players,
 	IsDescendantOf = function(_self, _Ancestor)
 		return true
 	end,
-}
+})
 
 function Players.GetPlayers(_self)
 	return { Player }
