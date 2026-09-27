@@ -243,8 +243,14 @@ always gathered player by player. A client's packet is also cut at the server's
 A frame's worth of small events then costs one remote call and one packet header instead of one each,
 and a client stays further inside the server's inbound budget, which charges every packet at least 128
 bytes. The price is time: an event waits for the flush, up to a frame, as a reliable one always has.
-[Streams](/BlinkBlox/language/streams/) are gathered this way whatever the option says, since they are
-sent from the flush already.
+It pays where a recipient gets several unreliable events a frame -- a client's input, a server's
+effects. Where each player gets one, there is nothing to gather: the call count stays the same, and
+the batch's bookkeeping costs an interpreted side a little more than sending at once did.
+
+A [stream](/BlinkBlox/language/streams/) to everyone is gathered this way whatever the option says,
+since it is sent from the flush already. A stream [held per player](/BlinkBlox/language/streams/#one-state-per-player)
+sends each player one state a step, so it joins the player's batch only under this option, beside
+their other events.
 
 ```blink
 option BatchUnreliable = true

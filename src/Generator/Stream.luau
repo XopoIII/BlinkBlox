@@ -13,6 +13,7 @@ local Generators = require("./Generators")
 local Parser = require("../Parser")
 local Sends = require("./Send")
 local State = require("./State")
+local Writes = require("./Writes")
 
 local Streams = {}
 
@@ -55,8 +56,15 @@ function Streams.Server(
 	--> Every player the same packet, in one FireAllClients: a stream is ordered by the server time it
 	--> carries, not by a sequence number per player. A `Per: Player` stream sends each player's own
 	--> state to that player alone.
-	local Outgoing: Sends.Send =
-		{ IsReliable = false, WriteEvent = WriteEvent, Name = Name, Traffic = Counters, Stream = true }
+	local Outgoing: Sends.Send = {
+		IsReliable = false,
+		WriteEvent = WriteEvent,
+		Name = Name,
+		Traffic = Counters,
+		Stream = true,
+		PerPlayer = Settings.PerPlayer == true,
+		Instances = Writes.CarriesInstances(Declaration.Value.Data),
+	}
 	local PerPlayer = Settings.PerPlayer
 	local Send = if PerPlayer
 		then Sends.One(Blocks.Function(`Send{Stream}`, `Player: Player, {Values}`, "()", false, true), Outgoing):End()

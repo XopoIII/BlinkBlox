@@ -401,6 +401,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			WriteEvent = WriteEvent,
 			Name = Declaration.Name,
 			Ordered = if IsSequenced then Index else nil,
+			Instances = Writes.CarriesInstances(Value.Data),
 			Traffic = Counters,
 		}
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)

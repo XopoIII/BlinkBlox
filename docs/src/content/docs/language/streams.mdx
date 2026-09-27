@@ -110,8 +110,8 @@ went out.
 | `SetFast` | `(Fast: boolean) -> ()` | Switches between `Rate` and `Fast`. |
 
 A stream has no `Fire`, `FireAll`, `FireList` or `FireExcept`: every player is sent every state, in one
-`FireAllClients` -- unless it is [held per player](#one-state-per-player). The streams due in a frame
-share their packets: a frame's states go out in as few as the unreliable limit allows. Between two steps the last call wins: a `Set` then a `Clear` clears
+`FireAllClients` -- unless it is [held per player](#one-state-per-player). The streams to everyone due
+in a frame share their packets: a frame's states go out in as few as the unreliable limit allows. Between two steps the last call wins: a `Set` then a `Clear` clears
 (and sends nothing if the clients never saw a state), a `Clear` then a `Set` sends the new state.
 
 A state that fails to send -- an array past its bound, say -- is reported on a thread of its own, as

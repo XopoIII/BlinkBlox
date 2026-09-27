@@ -28,19 +28,25 @@ end
 local COMMON = [[
 
 --> UNRELIABLE BATCHES; see Generator/Batches.luau.
---> `Committed` counts the Instances of the events kept: one written straight into the batch that then
---> threw has left its own behind, and they are dropped before the batch is used again.
-type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Committed: number, Events: number }
+--> `Committed` counts the Instances of the events kept. `Pending` is set while an event is written
+--> straight into the batch: one that then threw has left its own Instances behind, and they are
+--> dropped before the batch is used again. Checking the flag spares every other use a count.
+type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Committed: number, Events: number, Pending: boolean }
 
 local function NewUnreliable(): BLINK_UNRELIABLE
-    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Committed = 0, Events = 0 }
+    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Committed = 0, Events = 0, Pending = false }
 end
 
 local function Clean(Batch: BLINK_UNRELIABLE)
+    if not Batch.Pending then
+        return
+    end
+
     local Instances = Batch.Instances
     for Index = #Instances, Batch.Committed + 1, -1 do
         Instances[Index] = nil
     end
+    Batch.Pending = false
 end
 
 --> Appends what the scratch buffer holds -- one event, written there by the send -- to `Batch`.
@@ -104,9 +110,11 @@ local function SendUnreliable(Batch: BLINK_UNRELIABLE, Player: Player?)
     end
 
     Batch.Cursor = 0
-    Batch.Committed = 0
     Batch.Events = 0
-    table.clear(Batch.Instances)
+    if Batch.Committed > 0 then
+        Batch.Committed = 0
+        table.clear(Batch.Instances)
+    end
 end
 
 --> A player's batch, made on their first unreliable event of the session. None for a player who has
@@ -157,9 +165,9 @@ local function LoadBatch(Player: Player?): BLINK_UNRELIABLE?
     end
 
     Clean(Batch)
+    Batch.Pending = true
     SendSize = Batch.Size
     SendCursor = Batch.Cursor
-    SendOffset = Batch.Cursor
     SendBuffer = Batch.Buffer
     SendInstances = Batch.Instances
     BatchStart = Batch.Cursor
@@ -170,14 +178,14 @@ end
 --> Keeps the event just written into `Batch`, stamping an ordered one's sequence at `Slot`. When the
 --> event does not fit one packet beside what the batch already held, that goes first, on its own, and
 --> the event moves to the front.
-local function CommitBatch(Batch: BLINK_UNRELIABLE?, Player: Player?, Slot: number?)
+local function CommitBatch(Batch: BLINK_UNRELIABLE?, Player: Player?, Slot: number?, Instances: boolean)
     if Batch == nil then
         return
     end
 
     local Buffer = SendBuffer
     local Start = BatchStart
-    local Count = #SendInstances
+    local Count = if Instances then #SendInstances else BatchInstances
     if Start > 0 and SendCursor + Count * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE then
         local Packet = buffer.create(Start)
         buffer.copy(Packet, 0, Buffer, 0, Start)
@@ -205,20 +213,19 @@ local function CommitBatch(Batch: BLINK_UNRELIABLE?, Player: Player?, Slot: numb
     Batch.Size = SendSize
     Batch.Cursor = SendCursor
     Batch.Committed = Count
-    Batch.Events += 1
+    Batch.Pending = false
 end
 %ORDERED%
 local StepBeforeUnreliable = StepReplication
+--> A batch is made only for a player still in the game, and PlayerRemoving drops it, so the flush asks
+--> nobody whether they are still here: that was a property read per player per frame.
 StepReplication = function()
     StepBeforeUnreliable()
     SendUnreliable(SharedUnreliable, nil)
     for Player, Batch in PlayerUnreliable do
-        if Player.Parent == nil then
-            PlayerUnreliable[Player] = nil
-            continue
+        if Batch.Cursor > 0 then
+            SendUnreliable(Batch, Player)
         end
-
-        SendUnreliable(Batch, Player)
     end
 end
 ]]
@@ -257,9 +264,11 @@ local function SendUnreliable()
     Unreliable:FireServer(Packet, ClientUnreliable.Instances)
 
     ClientUnreliable.Cursor = 0
-    ClientUnreliable.Committed = 0
     ClientUnreliable.Events = 0
-    table.clear(ClientUnreliable.Instances)
+    if ClientUnreliable.Committed > 0 then
+        ClientUnreliable.Committed = 0
+        table.clear(ClientUnreliable.Instances)
+    end
 end
 
 --> Appends the event in the scratch buffer to the batch, sending the batch first when the event would

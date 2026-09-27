@@ -1478,19 +1478,25 @@ local function StepReplication()
 end
 
 --> UNRELIABLE BATCHES; see Generator/Batches.luau.
---> `Committed` counts the Instances of the events kept: one written straight into the batch that then
---> threw has left its own behind, and they are dropped before the batch is used again.
-type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Committed: number, Events: number }
+--> `Committed` counts the Instances of the events kept. `Pending` is set while an event is written
+--> straight into the batch: one that then threw has left its own Instances behind, and they are
+--> dropped before the batch is used again. Checking the flag spares every other use a count.
+type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Committed: number, Events: number, Pending: boolean }
 
 local function NewUnreliable(): BLINK_UNRELIABLE
-    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Committed = 0, Events = 0 }
+    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Committed = 0, Events = 0, Pending = false }
 end
 
 local function Clean(Batch: BLINK_UNRELIABLE)
+    if not Batch.Pending then
+        return
+    end
+
     local Instances = Batch.Instances
     for Index = #Instances, Batch.Committed + 1, -1 do
         Instances[Index] = nil
     end
+    Batch.Pending = false
 end
 
 --> Appends what the scratch buffer holds -- one event, written there by the send -- to `Batch`.
@@ -1551,9 +1557,11 @@ local function SendUnreliable(Batch: BLINK_UNRELIABLE, Player: Player?)
     end
 
     Batch.Cursor = 0
-    Batch.Committed = 0
     Batch.Events = 0
-    table.clear(Batch.Instances)
+    if Batch.Committed > 0 then
+        Batch.Committed = 0
+        table.clear(Batch.Instances)
+    end
 end
 
 --> A player's batch, made on their first unreliable event of the session. None for a player who has
@@ -1615,9 +1623,9 @@ local function LoadBatch(Player: Player?): BLINK_UNRELIABLE?
     end
 
     Clean(Batch)
+    Batch.Pending = true
     SendSize = Batch.Size
     SendCursor = Batch.Cursor
-    SendOffset = Batch.Cursor
     SendBuffer = Batch.Buffer
     SendInstances = Batch.Instances
     BatchStart = Batch.Cursor
@@ -1628,14 +1636,14 @@ end
 --> Keeps the event just written into `Batch`, stamping an ordered one's sequence at `Slot`. When the
 --> event does not fit one packet beside what the batch already held, that goes first, on its own, and
 --> the event moves to the front.
-local function CommitBatch(Batch: BLINK_UNRELIABLE?, Player: Player?, Slot: number?)
+local function CommitBatch(Batch: BLINK_UNRELIABLE?, Player: Player?, Slot: number?, Instances: boolean)
     if Batch == nil then
         return
     end
 
     local Buffer = SendBuffer
     local Start = BatchStart
-    local Count = #SendInstances
+    local Count = if Instances then #SendInstances else BatchInstances
     if Start > 0 and SendCursor + Count * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE then
         local Packet = buffer.create(Start)
         buffer.copy(Packet, 0, Buffer, 0, Start)
@@ -1663,20 +1671,19 @@ local function CommitBatch(Batch: BLINK_UNRELIABLE?, Player: Player?, Slot: numb
     Batch.Size = SendSize
     Batch.Cursor = SendCursor
     Batch.Committed = Count
-    Batch.Events += 1
+    Batch.Pending = false
 end
 
 local StepBeforeUnreliable = StepReplication
+--> A batch is made only for a player still in the game, and PlayerRemoving drops it, so the flush asks
+--> nobody whether they are still here: that was a property read per player per frame.
 StepReplication = function()
     StepBeforeUnreliable()
     SendUnreliable(SharedUnreliable, nil)
     for Player, Batch in PlayerUnreliable do
-        if Player.Parent == nil then
-            PlayerUnreliable[Player] = nil
-            continue
+        if Batch.Cursor > 0 then
+            SendUnreliable(Batch, Player)
         end
-
-        SendUnreliable(Batch, Player)
     end
 end
 --> STAMPS. A stamp is a server time in milliseconds modulo 65536; this puts it back in seconds, the
@@ -2005,14 +2012,14 @@ end
 local function SendSTREAM_0(Value: { { Id: number, Speed: number, Heat: number } }?, ServerTime: number): ()
 	local BATCH = LoadBatch(nil)
 	SerdesFunctions.WriteEVENT_Crawls(Value, ServerTime)
-	local EVENT_BYTES = SendCursor - BatchStart + (#SendInstances - BatchInstances) * UNRELIABLE_INSTANCE_BYTES
+	local EVENT_BYTES = SendCursor - BatchStart
 	if EVENT_BYTES > MAX_UNRELIABLE_SIZE then error(`{EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`) end
 	local Reached = #Players:GetPlayers()
 	TrafficCounters[9] += (SendCursor - BatchStart) * Reached
 	TrafficCounters[10] += Reached
 	TrafficCounters[5] += (SendCursor - BatchStart) * Reached
 	TrafficCounters[6] += Reached
-	CommitBatch(BATCH, nil, nil)
+	CommitBatch(BATCH, nil, nil, false)
 end
 local STREAM_0 = CreateStream("Crawls", 1 / 10, 1 / 20, 1, 0.5, SendSTREAM_0)
 
@@ -2020,14 +2027,14 @@ local STREAM_0 = CreateStream("Crawls", 1 / 10, 1 / 20, 1, 0.5, SendSTREAM_0)
 local function SendSTREAM_1(Value: number?, ServerTime: number): ()
 	local BATCH = LoadBatch(nil)
 	SerdesFunctions.WriteEVENT_Tick(Value, ServerTime)
-	local EVENT_BYTES = SendCursor - BatchStart + (#SendInstances - BatchInstances) * UNRELIABLE_INSTANCE_BYTES
+	local EVENT_BYTES = SendCursor - BatchStart
 	if EVENT_BYTES > MAX_UNRELIABLE_SIZE then error(`{EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`) end
 	local Reached = #Players:GetPlayers()
 	TrafficCounters[13] += (SendCursor - BatchStart) * Reached
 	TrafficCounters[14] += Reached
 	TrafficCounters[5] += (SendCursor - BatchStart) * Reached
 	TrafficCounters[6] += Reached
-	CommitBatch(BATCH, nil, nil)
+	CommitBatch(BATCH, nil, nil, false)
 end
 local STREAM_1 = CreateStream("Tick", 1 / 5, 1 / 5, 1, 0, SendSTREAM_1)
 local function Listen()

@@ -16,6 +16,17 @@ type Type = Parser.TypeNode
 
 local Writes = {}
 
+--- Whether a write of `Data` can put anything in the instance list. Measured as the size analysis
+--- measures it; a payload it cannot measure is taken to carry one.
+function Writes.CarriesInstances(Data: Type?): boolean
+	if not Data then
+		return false
+	end
+
+	local Measured, Measurement = pcall(Size.Sealed, Data :: any)
+	return not Measured or Measurement.Refs > 0
+end
+
 export type Write = {
 	--- The client's reliable Fire.
 	Begun: (Target: Blocks.Block) -> (),
@@ -38,13 +49,7 @@ function Writes.new(
 	--> place out.
 	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, State.Scope)}, {WriteArguments})`
 
-	--> Whether a write can put anything in the instance list. Measured as the size analysis measures
-	--> it; a payload it cannot measure is taken to carry one.
-	local CarriesInstances = false
-	if Data then
-		local Measured, Measurement = pcall(Size.Sealed, Data :: any)
-		CarriesInstances = not Measured or Measurement.Refs > 0
-	end
+	local CarriesInstances = Writes.CarriesInstances(Data)
 
 	--> Writes into a batch that is kept, undoing whatever a write that throws had already added.
 	local function WriteKept(Target: Blocks.Block)

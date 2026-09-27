@@ -28,6 +28,10 @@ export type Send = {
 	Traffic: number?,
 	--> A stream's scheduled send rather than the game's Fire; see CheckSize.
 	Stream: boolean?,
+	--> A stream held per player; see Batched.
+	PerPlayer: boolean?,
+	--> Whether the event can carry an Instance; a batched write that cannot counts none.
+	Instances: boolean?,
 }
 
 --- Stamps the recipient's own sequence number into an ordered packet. An unreliable server send always
@@ -54,10 +58,14 @@ local function CheckSize(Fire: Blocks.Block, Event: Send)
 	Fire:Line(`if not CheckUnreliableSize("{Event.Name}") then return end`)
 end
 
---- Whether this send goes to a batch rather than straight out: a stream's always, an event's under
---- `option BatchUnreliable`. See Batches.luau.
+--- Whether this send goes to a batch rather than straight out: a stream's to everyone always, an
+--- event's, and a stream's held per player, under `option BatchUnreliable`. See Batches.luau.
+---
+--- A per-player stream sends each player one state a step, so on its own it has nothing to gather,
+--- and a batch would only add its bookkeeping to the send; it joins the player's batch when the
+--- option gathers other events there too.
 local function Batched(Event: Send): boolean
-	local Batch = Event.Stream == true or Batches.Events()
+	local Batch = (Event.Stream == true and not Event.PerPlayer) or Batches.Events()
 	if Batch then
 		State.UsesBatches = true
 	end
@@ -80,7 +88,9 @@ local function WriteBatched(Fire: Blocks.Block, Event: Send, Recipient: string, 
 	Fire:Line(`local BATCH = LoadBatch({Recipient})`)
 	Fire:Line(Event.WriteEvent)
 	Fire:Line(
-		"local EVENT_BYTES = SendCursor - BatchStart + (#SendInstances - BatchInstances) * UNRELIABLE_INSTANCE_BYTES"
+		if Event.Instances
+			then "local EVENT_BYTES = SendCursor - BatchStart + (#SendInstances - BatchInstances) * UNRELIABLE_INSTANCE_BYTES"
+			else "local EVENT_BYTES = SendCursor - BatchStart"
 	)
 	if Event.Stream then
 		Fire:Line(
@@ -101,7 +111,11 @@ local function WriteBatched(Fire: Blocks.Block, Event: Send, Recipient: string, 
 	else
 		Traffic.Sent(Fire, Event.Traffic, "(SendCursor - BatchStart)", true)
 	end
-	Fire:Line(`CommitBatch(BATCH, {Recipient}, {if Event.Ordered then Event.Ordered else "nil"})`)
+	Fire:Line(
+		`CommitBatch(BATCH, {Recipient}, {if Event.Ordered then Event.Ordered else "nil"}, {if Event.Instances
+			then "true"
+			else "false"})`
+	)
 end
 
 --- An unreliable server send to one player, `Player`: the unreliable `Fire`, and a `Per: Player`
