@@ -52,6 +52,12 @@ function Decode.OrderGuardExpression(IsOrdered: boolean, Index: number): string?
 	return `OrderAccept({Index}, OrderIdentifier)`
 end
 
+--- The call that decides whether a stream's state is newer than the last one taken, by the server
+--- time `Stamp` it carries, already unwrapped. Streams go from the server to the clients only.
+function Decode.StreamGuardExpression(Index: number, Stamp: string): string
+	return `StreamAccept({Index}, {Stamp})`
+end
+
 --- Opens the branch of a channel's decode loop that receives declaration `Index`, and makes it the
 --- block the channel's next declaration branches from. The first one on a channel is an `if`; each
 --- after it is an `elseif` on the one before.

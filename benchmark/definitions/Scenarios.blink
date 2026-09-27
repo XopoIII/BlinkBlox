@@ -1,0 +1,80 @@
+-- What benchmark/Scenarios.luau times: the paths Definition.blink never runs. The server sending to a
+-- crowd, small unreliable events, streams, and events carrying Instances. Only BlinkBlox compiles it;
+-- the other tools have no streams to compare.
+--
+-- The limits are raised for the same reason Definition.blink raises them: the bench fires far faster
+-- than any honest client, and measures the work, not the refusal.
+option MaxPacketSize = 2097152
+option MaxEventsPerPacket = 2048
+option MaxInstancesPerPacket = 2048
+option InboundBytesPerSecond = 1073741824
+option InboundBurst = 1073741824
+
+-- Numbers rather than a vector: Lune has no Vector3.
+struct Unit {
+	id: u16,
+	x: f32,
+	y: f32,
+	z: f32,
+	health: u8,
+	moving: boolean,
+	crouched: boolean
+}
+
+-- The server telling every player about one unit, through FireAll.
+event Snapshot {
+	From: Server,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: Unit
+}
+
+-- A client's input, a few a frame, unreliable.
+event Input {
+	From: Client,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: struct { move: u8, turn: i16, jump: boolean, sprint: boolean }
+}
+
+-- A client naming a part, reliable.
+event Touch {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: (Part: Instance, Force: u8)
+}
+
+-- The whole world's units, streamed to every player.
+event World {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Stream: { Rate: 20 },
+	Data: Unit[..16]
+}
+
+-- Each player's own view of themselves, streamed to that player alone.
+event Self {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Stream: { Rate: 20, Per: Player },
+	Data: Unit
+}
+
+-- The world and each player's own state as plain unreliable events rather than streams, for
+-- Rivals.luau: the other tools have no streams, and this is how a game sends state with them.
+event WorldState {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: Unit[..16]
+}
+
+event SelfState {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: Unit
+}

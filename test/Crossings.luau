@@ -93,17 +93,17 @@ event Ready { From: Client, Type: Reliable, Call: SingleSync, Rate: 10, Data: u8
 	end)
 	List("frames that sent", Sent, { 1, 7, 13, 20 })
 
-	--> A state is its index, a u16 sequence number, the optional's flag byte, the u16 steps and the
-	--> u16 stamp: 8 bytes. The clear carries no state: 6.
+	--> A state is its index, the optional's flag byte, the u16 steps and the u16 stamp: 6 bytes. The
+	--> clear carries no state: 4. A stream has no sequence number; it is ordered by its stamp.
 	local Lengths = {}
 	for _, Packet in Pair.Outbound do
 		table.insert(Lengths, buffer.len(Packet.Buffer))
 	end
-	List("packet lengths", Lengths, { 8, 8, 8, 6 })
+	List("packet lengths", Lengths, { 6, 6, 6, 4 })
 
 	local Server = Pair.Server.GetTrafficStats()
-	Counted("the server's Tick", Server.Events.Tick, 4, 30, 0, 0)
-	Counted("the server's unreliable channel", Server.Unreliable, 4, 30, 0, 0)
+	Counted("the server's Tick", Server.Events.Tick, 4, 22, 0, 0)
+	Counted("the server's unreliable channel", Server.Unreliable, 4, 22, 0, 0)
 	Counted("the server's reliable channel", Server.Reliable, 0, 0, 0, 0)
 	Counted("the server's Ready", Server.Events.Ready, 0, 0, 0, 0)
 
@@ -117,8 +117,8 @@ event Ready { From: Client, Type: Reliable, Call: SingleSync, Rate: 10, Data: u8
 	List("values heard", Heard, { 1.5, 2.5, 2.5, "nil" })
 
 	local Client = Pair.Client.GetTrafficStats()
-	Counted("the client's Tick", Client.Events.Tick, 0, 0, 4, 30)
-	Counted("the client's unreliable channel", Client.Unreliable, 0, 0, 4, 30)
+	Counted("the client's Tick", Client.Events.Tick, 0, 0, 4, 22)
+	Counted("the client's unreliable channel", Client.Unreliable, 0, 0, 4, 22)
 
 	Pair.Server.ResetTrafficStats()
 	Counted("the server's Tick after a reset", Pair.Server.GetTrafficStats().Events.Tick, 0, 0, 0, 0)

@@ -52,6 +52,7 @@ const sidebar = [
 	{
 		label: 'Guides',
 		items: [
+			'guides/whats-new',
 			'guides/securing-the-server',
 			'guides/places-without-a-server',
 			'guides/bandwidth',

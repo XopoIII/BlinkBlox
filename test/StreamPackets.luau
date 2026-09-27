@@ -16,8 +16,9 @@ local Fresh, Frame, Frames, Expect, Heads = Support.Fresh, Support.Frame, Suppor
 local ServerClock = ServerEnvironment.Services.Workspace
 local ClientClock = ClientEnvironment.Services.Workspace
 
---- [event index][u16 sequence][presence bits][u16 stamp], then the state when there is one.
-local HEADER = 6
+--- [event index][presence bits][u16 stamp], then the state when there is one. There is no sequence
+--- number: a stream is ordered by its stamp.
+local HEADER = 4
 
 RunClosure("A stream's stamp wraps at 65536 ms and the client unwraps it", function()
 	local Pair = Fresh()
@@ -41,7 +42,7 @@ RunClosure("A stream's stamp wraps at 65536 ms and the client unwraps it", funct
 
 	local Stamps = {}
 	for Index, Packet in Packets do
-		Stamps[Index] = buffer.readu16(Packet.Buffer, 4)
+		Stamps[Index] = buffer.readu16(Packet.Buffer, 2)
 	end
 	Expect("stamps", Stamps, { 65428, 65521, 142 })
 
@@ -56,6 +57,36 @@ RunClosure("A stream's stamp wraps at 65536 ms and the client unwraps it", funct
 	Expect("server times", Received, { 196500 / 1000, 196593 / 1000, 196750 / 1000 })
 end)
 
+RunClosure("A stream is ordered by its stamp: a state older than the last one taken is dropped", function()
+	local Pair = Fresh()
+	local Received: { number } = {}
+	Pair.Client.Heads.On(function(Value)
+		table.insert(Received, Value[1].At.X)
+	end)
+
+	--> Sent at 100 s, 100.5 s and, after a silence longer than half the stamp's wrap, 150 s.
+	local Packets = {}
+	for _, Seconds in { 100, 100.5, 150 } do
+		ServerClock.Fixed = Seconds
+		Pair.Server.Heads.Set(Heads(Seconds))
+		Pair.Server.Heads.Urgent()
+		local Sent = Frame(Pair)
+		assert(#Sent == 1, `the send at {Seconds} s sent {#Sent} packets`)
+		table.insert(Packets, Sent[1])
+	end
+	ServerClock.Fixed = nil
+
+	--> The second arrives first, so the first is stale by then; the third is taken although the
+	--> stamp has come most of the way round since.
+	for _, Order in { 2, 1, 3 } do
+		ClientClock.Fixed = if Order == 3 then 150 else 100.5
+		Pair.Deliver(Packets[Order])
+	end
+	ClientClock.Fixed = nil
+
+	Expect("states taken", Received, { 100.5, 150 })
+end)
+
 RunClosure("A stream packet is its header, then the state", function()
 	local Pair = Fresh()
 	Pair.Server.Speed.Set(1.5)
@@ -64,11 +95,7 @@ RunClosure("A stream packet is its header, then the state", function()
 
 	local Packet = Sent[1].Buffer
 	--> Speed is the second unreliable declaration, and this is the first packet the player got of it.
-	Expect(
-		"header",
-		{ buffer.len(Packet), buffer.readu8(Packet, 0), buffer.readu16(Packet, 1), buffer.readu8(Packet, 3) },
-		{ HEADER + 8, 1, 1, 1 }
-	)
+	Expect("header", { buffer.len(Packet), buffer.readu8(Packet, 0), buffer.readu8(Packet, 1) }, { HEADER + 8, 1, 1 })
 	assert(buffer.readf64(Packet, HEADER) == 1.5, `the state reads {buffer.readf64(Packet, HEADER)}, expected 1.5`)
 end)
 
@@ -87,7 +114,7 @@ RunClosure("Clear sends nil once, and the stream is silent until the next Set", 
 	Expect("frames after Clear", Frames(Pair, 150), { 1 })
 
 	local Cleared = Pair.Outbound[#Pair.Outbound].Buffer
-	Expect("the clear's length and presence bits", { buffer.len(Cleared), buffer.readu8(Cleared, 3) }, { HEADER, 0 })
+	Expect("the clear's length and presence bits", { buffer.len(Cleared), buffer.readu8(Cleared, 1) }, { HEADER, 0 })
 
 	Pair.Server.Heads.Set(Heads(8))
 	Expect("frames after the next Set", Frames(Pair, 3), { 1 })
@@ -121,7 +148,7 @@ RunClosure("A Set after Clear in the same frame sends the state, not the clear",
 	Pair.Server.Heads.Set(Heads(2))
 	local Sent = Frame(Pair)
 	assert(#Sent == 1, `sent {#Sent} packets, expected one`)
-	assert(buffer.readu8(Sent[1].Buffer, 3) == 1, "the packet was a clear, expected the state")
+	assert(buffer.readu8(Sent[1].Buffer, 1) == 1, "the packet was a clear, expected the state")
 end)
 
 RunClosure("An emptied set is a state, not a clear: sent, then kept alive", function()
@@ -142,7 +169,7 @@ RunClosure("An emptied set is a state, not a clear: sent, then kept alive", func
 	--> Present, with a zero length after it: one byte more than the header, where a clear is none.
 	Expect(
 		"the empty list's length and presence bits",
-		{ buffer.len(Empty), buffer.readu8(Empty, 3) },
+		{ buffer.len(Empty), buffer.readu8(Empty, 1) },
 		{ HEADER + 1, 1 }
 	)
 
@@ -178,6 +205,46 @@ RunClosure("A state that fails to send is reported and stops the stream", functi
 	Expect("frames after a good Set", Frames(Pair, 1), { 1 })
 end)
 
+RunClosure("A state too large for one packet is reported once and stops the stream", function()
+	--> Refused on send rather than dropped: dropped, the stream counted it as sent, never sent it again
+	--> until it changed, and warned at every step it was due.
+	local Pair = Isolated.Build(
+		Isolated.Parse([[
+event Note {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Stream: { Rate: 10 },
+	Data: string(..2000)
+}
+]]),
+		"STREAMS_OVERSIZE"
+	)
+	Pair.Server.StepReplication()
+
+	local Raised: { string } = {}
+	Shared.Task.spawn = function(Function, ...)
+		if Function == error then
+			table.insert(Raised, tostring((...)))
+			return nil :: any
+		end
+
+		return task.spawn(Function, ...)
+	end
+
+	Pair.Server.Note.Set(string.rep("x", 1500))
+	local Sent = Frames(Pair, 120)
+	Shared.Task.spawn = nil :: any
+
+	Expect("frames that sent", Sent, {})
+	assert(#Raised == 1, `reported {#Raised} times, expected once`)
+	assert(string.find(Raised[1], 'Stream "Note" could not send its state:', 1, true), `reported as: {Raised[1]}`)
+	assert(string.find(Raised[1], "exceeds the", 1, true), `reported as: {Raised[1]}`)
+
+	Pair.Server.Note.Set("short")
+	Expect("frames after a good Set", Frames(Pair, 1), { 1 })
+end)
+
 --> Each refusal on its own, with the message that names it; the Invalid fixtures check the codes.
 local STREAM = "event S {\n\tFrom: %s,\n\tType: %s,\n\tCall: %s,\n\tStream: { Rate: 10%s },\n\tData: %s\n}"
 local REFUSED = {
@@ -188,7 +255,8 @@ local REFUSED = {
 	{ { "Server", "OrderedUnreliable", "SingleSync", "", "(u8, u8)" }, 'Stream "S" streams a type pack' },
 	{ { "Server", "OrderedUnreliable", "SingleSync", ", Fast: 5", "u8" }, "has a Fast rate no faster than its Rate" },
 	{ { "Server", "OrderedUnreliable", "SingleSync", ", Rat: 5", "u8" }, 'Unknown option "Rat"' },
-	{ { "Server", "OrderedUnreliable", "SingleSync", "", "u8[975]" }, 'Unreliable event "S" cannot fit in one packet' },
+	--> An index, 977 bytes, the stamp and the presence byte: 981, one past the 980 a packet may carry.
+	{ { "Server", "OrderedUnreliable", "SingleSync", "", "u8[977]" }, 'Unreliable event "S" cannot fit in one packet' },
 }
 
 RunClosure("The compiler refuses a stream it cannot schedule", function()

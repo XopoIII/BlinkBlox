@@ -9,12 +9,11 @@
 local AssertsModule = require("@self/Asserts")
 local Common = require("@self/Common")
 
---> Each adds its prefabs to the registries as it loads; the values are not used.
-local _ = {
-	require("@self/Numbers"),
-	require("@self/Lengths"),
-	require("@self/Roblox"),
-}
+--> Each adds its prefabs to the registries as it loads. Only Lengths's value is used: the length
+--> prefixes arrays share with strings.
+local Lengths = require("@self/Lengths")
+local _ = require("@self/Numbers")
+local _ = require("@self/Roblox")
 
 return {
 	Types = Common.Types,
@@ -25,4 +24,6 @@ return {
 	Required = Common.Required,
 	GetTypeToUse = Common.GetTypeToUse,
 	GetTypeToUseByBits = Common.GetTypeToUseByBits,
+	ReadPrefix = Lengths.ReadPrefix,
+	WritePrefix = Lengths.WritePrefix,
 }

@@ -102,6 +102,57 @@ local function Load(Save: BLINK_BUFFER_SAVE?)
     SendInstances = {}
 end
 
+--> A buffer for writes that are copied out as soon as they are made: an unreliable send, and a
+--> broadcast before it is appended to each player's batch. Each used to write into a fresh 64-byte
+--> buffer and a fresh table, and to regrow the buffer on the way to the event's size. This one is
+--> kept at whatever size a write grew it to, up to SCRATCH_LIMIT, so a burst is not held for good.
+--> Nothing keeps a reference past the copy: a remote serialises its arguments when it is fired.
+local SCRATCH_LIMIT = 65536
+local ScratchSize = 64
+local ScratchBuffer = buffer.create(64)
+local ScratchInstances = {}
+
+local function LoadScratch()
+    SendSize = ScratchSize
+    SendCursor = 0
+    SendOffset = 0
+    SendBuffer = ScratchBuffer
+    table.clear(ScratchInstances)
+    SendInstances = ScratchInstances
+end
+
+--> Called once the scratch write is done, before anything else is loaded.
+local function KeepScratch()
+    if SendBuffer ~= ScratchBuffer and SendSize <= SCRATCH_LIMIT then
+        ScratchSize = SendSize
+        ScratchBuffer = SendBuffer
+    end
+end
+
+--> The client's batch, set aside while an unreliable Fire writes into the scratch buffer. A Save
+--> table did the same, and a Fire allocated one.
+local HeldSize = 0
+local HeldCursor = 0
+local HeldBuffer = SendBuffer
+local HeldInstances = SendInstances
+
+local function Hold()
+    HeldSize = SendSize
+    HeldCursor = SendCursor
+    HeldBuffer = SendBuffer
+    HeldInstances = SendInstances
+    LoadScratch()
+end
+
+local function Release()
+    KeepScratch()
+    SendSize = HeldSize
+    SendCursor = HeldCursor
+    SendOffset = HeldCursor
+    SendBuffer = HeldBuffer
+    SendInstances = HeldInstances
+end
+
 --> Undoes a write that threw part way through.
 -->
 --> Every serialiser writes straight into SendBuffer through Allocate, and an assert can fire in the
@@ -113,10 +164,6 @@ end
 --> Only the cursor and the instance count are restored. A buffer that Allocate grew on the way is
 --> kept deliberately: growing copied the earlier bytes across, so the larger buffer is just as
 --> valid, and discarding it would only make the next write grow it again.
-local function Mark(): (number, number)
-    return SendCursor, #SendInstances
-end
-
 local function Rollback(Cursor: number, Instances: number)
     SendCursor = Cursor
     SendOffset = Cursor
@@ -126,23 +173,110 @@ local function Rollback(Cursor: number, Instances: number)
     end
 end
 
-local function Allocate(Bytes: number)
-    local InUse = (SendCursor + Bytes)
-    if InUse > SendSize then
-        --> Avoid resizing the buffer for every write
-        while InUse > SendSize do
-            SendSize *= 1.5
-        end
+--> The same undo without a pcall, for the client's reliable Fire, where a pcall cost more than a
+--> small event's whole write. `Begin` records where the batch stands and a write that returns clears
+--> the record; a write that threw leaves it behind, and whatever touches the batch next -- the next
+--> write, or the flush -- undoes the half-written event first, through `Settle`. The server needs
+--> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
+--> reaches the save.
+local PendingCursor = -1
+local PendingInstances = 0
 
-        local Buffer = buffer.create(SendSize)
-        buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-        SendBuffer = Buffer
+--> How many Instances the client's batch held after the last write into it that returned. Every write
+--> into the batch starts from there, so Begin takes it from here rather than counting the list, and
+--> only a write that can add Instances counts it again; see the commits in the client template.
+local CommittedInstances = 0
+
+local function Settle()
+    if PendingCursor >= 0 then
+        Rollback(PendingCursor, PendingInstances)
+        PendingCursor = -1
+    end
+end
+
+local function Begin()
+    --> Checked here rather than left to Settle, so a Fire pays for no call when there is nothing to
+    --> undo, which is always but after a throw.
+    if PendingCursor >= 0 then
+        Settle()
+    end
+    PendingCursor = SendCursor
+    PendingInstances = CommittedInstances
+end
+
+local function Mark(): (number, number)
+    Settle()
+    return SendCursor, #SendInstances
+end
+
+--> Grows SendBuffer to hold `InUse` bytes, by half again at a time so a steady writer does not
+--> regrow it on every write. Kept out of Allocate, which runs for every event and every string: a
+--> function with a loop in it is not inlined, and Allocate without one is.
+local function Grow(InUse: number)
+    while InUse > SendSize do
+        SendSize *= 1.5
     end
 
-    SendOffset = SendCursor
-    SendCursor += Bytes
-    
-    return SendOffset
+    local Buffer = buffer.create(SendSize)
+    buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+    SendBuffer = Buffer
+end
+
+local function Allocate(Bytes: number)
+    local Offset = SendCursor
+    local InUse = Offset + Bytes
+    if InUse > SendSize then
+        Grow(InUse)
+    end
+
+    SendOffset = Offset
+    SendCursor = InUse
+    return Offset
+end
+
+--> A length as a varint, 0 to 65535 in one to three bytes: seven bits a byte, the lowest first, the top
+--> bit saying another byte follows. Size.LengthPrefix in the compiler decides which lengths travel
+--> this way.
+local function WriteVarLength(Length: number)
+    --> Allocate first, on a line of its own: it may replace SendBuffer, which an argument list would
+    --> already have read.
+    if Length < 0x80 then
+        local At = Allocate(1)
+        buffer.writeu8(SendBuffer, At, Length)
+    elseif Length < 0x4000 then
+        local At = Allocate(2)
+        buffer.writeu8(SendBuffer, At, Length % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 1, Length // 0x80)
+    else
+        local At = Allocate(3)
+        buffer.writeu8(SendBuffer, At, Length % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 1, Length // 0x80 % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 2, Length // 0x4000)
+    end
+end
+
+--> Refuses what WriteVarLength never writes, so each length has one encoding and none can claim more
+--> than 65535: a byte that ends the number but adds nothing to it, and a third byte past 3 -- which
+--> is also every third byte that asks for a fourth. Checked before anything is read for the length.
+local function ReadVarLength(): number
+    local First = buffer.readu8(RecieveBuffer, Read(1))
+    if First < 0x80 then
+        return First
+    end
+
+    local Second = buffer.readu8(RecieveBuffer, Read(1))
+    if Second < 0x80 then
+        if Second == 0 then
+            error("Expected a length in its shortest form.")
+        end
+        return First - 0x80 + Second * 0x80
+    end
+
+    local Third = buffer.readu8(RecieveBuffer, Read(1))
+    if Third == 0 or Third > 3 then
+        error(`Expected a length of at most 65535, in its shortest form, got a last byte of {Third}.`)
+    end
+    return First - 0x80 + (Second - 0x80) * 0x80 + Third * 0x4000
 end
 
 local function CreateQueue(): BLINK_QUEUE
@@ -579,6 +713,7 @@ return {
 			local Success, Result = pcall(function (): (Byte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Byte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -623,6 +758,7 @@ return {
 			local Success, Result = pcall(function (): (Color)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Color
 				local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
 				return Value
@@ -668,11 +804,10 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (ColorArray)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ColorArray
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if Length * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -708,12 +843,10 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: ColorArray
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 					-- Allocate BLOCK: 3 bytes
 				local ARRAY_START_1 = Allocate(3 * #Value)
 				for Index = 1, #Value do
@@ -758,6 +891,7 @@ return {
 			local Success, Result = pcall(function (): (DateSeconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateSeconds
 				local Value = DateTime.fromUnixTimestamp(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -803,6 +937,7 @@ return {
 			local Success, Result = pcall(function (): (DateMilliseconds)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DateMilliseconds
 				local Value = DateTime.fromUnixTimestampMillis(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -848,6 +983,7 @@ return {
 			local Success, Result = pcall(function (): (BrickkColor)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BrickkColor
 				local Value = BrickColor.new(buffer.readu16(RecieveBuffer, BLOCK_START + 0))
 				return Value
@@ -893,6 +1029,7 @@ return {
 			local Success, Result = pcall(function (): (ExactRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
@@ -939,6 +1076,7 @@ return {
 			local Success, Result = pcall(function (): (DecimalRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DecimalRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
@@ -987,6 +1125,7 @@ return {
 			local Success, Result = pcall(function (): (NegativeRange)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: NegativeRange
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -1035,6 +1174,7 @@ return {
 			local Success, Result = pcall(function (): (UnboundUpper)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundUpper
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
@@ -1081,6 +1221,7 @@ return {
 			local Success, Result = pcall(function (): (UnboundLower)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundLower
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
@@ -1127,6 +1268,7 @@ return {
 			local Success, Result = pcall(function (): (RangedVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: RangedVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -1179,10 +1321,9 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (Buffer)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Buffer
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Value = buffer.create(Length)
 				buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
@@ -1200,15 +1341,13 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: Buffer
 				if typeof(Value) ~= "buffer" then
 					error(`Expected Value to be of type buffer, got {type(Value)} instead.`)
 				end
 				local Length = buffer.len(Value)
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+				WriteVarLength(Length)
 				Allocate(Length)
 				buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
 				local Result = buffer.create(SendCursor)
@@ -1232,6 +1371,7 @@ return {
 			local Success, Result = pcall(function (): (ExactBuffer)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactBuffer
 				local Value = buffer.create(9)
 				buffer.copy(Value, 0, RecieveBuffer, BLOCK_START + 0, 9)
@@ -1277,10 +1417,9 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (BoundedBuffer)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BoundedBuffer
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if Length < 0 then error(`Expected size of "Value" to be larger than or equal to 0, got {Length} instead.`) end
 				if Length > 1000 then error(`Expected size of "Value" to be smaller than or equal to 1000, got {Length} instead.`) end
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -1300,8 +1439,6 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: BoundedBuffer
 				if typeof(Value) ~= "buffer" then
 					error(`Expected Value to be of type buffer, got {type(Value)} instead.`)
@@ -1310,7 +1447,7 @@ return {
 				if buffer.len(Value) > 1000 then error(`Expected size of "Value" to be smaller than or equal to 1000, got {buffer.len(Value)} instead.`) end
 				local Length = buffer.len(Value)
 				if not (Length <= 1000) then error(`Expected "Length" to be smaller than or equal to 1000, got {Length} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+				WriteVarLength(Length)
 				Allocate(Length)
 				buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
 				local Result = buffer.create(SendCursor)
@@ -1334,6 +1471,7 @@ return {
 			local Success, Result = pcall(function (): (PlainCFrame)
 				-- Read BLOCK: 24 bytes
 				local BLOCK_START = Read(24)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PlainCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -1392,6 +1530,7 @@ return {
 			local Success, Result = pcall(function (): (QuatCFrame)
 				-- Read BLOCK: 19 bytes
 				local BLOCK_START = Read(19)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -1451,6 +1590,7 @@ return {
 			local Success, Result = pcall(function (): (QuatHalfCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatHalfCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -1645,6 +1785,7 @@ return {
 			local Success, Result = pcall(function (): (QuatFirstCFrame)
 				-- Read BLOCK: 13 bytes
 				local BLOCK_START = Read(13)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatFirstCFrame
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local X
@@ -1837,11 +1978,10 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (QuatCFrames)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrames
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if Length * 19 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -1896,12 +2036,10 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: QuatCFrames
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 					-- Allocate BLOCK: 19 bytes
 				local ARRAY_START_1 = Allocate(19 * #Value)
 				for Index = 1, #Value do
@@ -1961,37 +2099,26 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (MultiDimensionalArray)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MultiDimensionalArray
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Value = table.create(Length)
-					-- Read BLOCK: 2 bytes
-				local ARRAY_START_1 = Read(2 * Length)
 				for Slot_1 = 1, Length do
 					-- Item_1: MultiDimensionalArray
 					-- START ARRAY
-					-- Read 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Item_1 = table.create(Length)
-						-- Read BLOCK: 2 bytes
-					local ARRAY_START_2 = Read(2 * Length)
 					for Slot_2 = 1, Length do
 						-- Item_2: MultiDimensionalArray
 						-- START ARRAY
-						-- Read 2
-						local OPERATION_OFFSET_0 = ARRAY_START_2
-						ARRAY_START_2 += 2
-						Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+						local Length = ReadVarLength()
 						if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -2027,34 +2154,22 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: MultiDimensionalArray
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
-					-- Allocate BLOCK: 2 bytes
-				local ARRAY_START_1 = Allocate(2 * #Value)
+				WriteVarLength(#Value)
 				for Index = 1, #Value do
 					local Item_1 = Value[Index]
 					-- Item_1: MultiDimensionalArray
 					-- START ARRAY
 					if not (#Item_1 <= 65535) then error(`Expected "#Item_1" to be smaller than or equal to 65535, got {#Item_1} instead.`) end
-					-- Allocate 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
-						-- Allocate BLOCK: 2 bytes
-					local ARRAY_START_2 = Allocate(2 * #Item_1)
+					WriteVarLength(#Item_1)
 					for Index = 1, #Item_1 do
 						local Item_2 = Item_1[Index]
 						-- Item_2: MultiDimensionalArray
 						-- START ARRAY
 						if not (#Item_2 <= 65535) then error(`Expected "#Item_2" to be smaller than or equal to 65535, got {#Item_2} instead.`) end
-						-- Allocate 2
-						local OPERATION_OFFSET_0 = ARRAY_START_2
-						ARRAY_START_2 += 2
-						buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_2)
+						WriteVarLength(#Item_2)
 							-- Allocate BLOCK: 1 bytes
 						local ARRAY_START_3 = Allocate(1 * #Item_2)
 						for Index = 1, #Item_2 do
@@ -2094,6 +2209,7 @@ return {
 			local Success, Result = pcall(function (): (SizeByte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeByte
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -2138,6 +2254,7 @@ return {
 			local Success, Result = pcall(function (): (SizeFixedString)
 				-- Read BLOCK: 8 bytes
 				local BLOCK_START = Read(8)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedString
 				local Value = buffer.readstring(RecieveBuffer, BLOCK_START + 0, 8)
 				if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
@@ -2184,6 +2301,7 @@ return {
 			local Success, Result = pcall(function (): (SizeBoundedString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedString
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if Length < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -2236,6 +2354,7 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (SizeFixedArray)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFixedArray
 				-- START ARRAY
 				local Length = 4
@@ -2303,6 +2422,7 @@ return {
 			local Success, Result = pcall(function (): (SizeBoundedArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeBoundedArray
 				-- START ARRAY
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2376,11 +2496,12 @@ return {
 			local Success, Result = pcall(function (): (SizeOptionalByte)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
-				local BITFIELD_0
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeOptionalByte
 				local Value
-				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				if bit32.btest(BITFIELD_1_0, 0x01) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value: SizeOptionalByte
@@ -2402,10 +2523,10 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
-				local BITFIELD_0
+				local BITFIELD_1_0
 				-- Value: SizeOptionalByte
-				BITFIELD_0 = 0
-				if Value ~= nil then BITFIELD_0 += 0x01 end
+				BITFIELD_1_0 = 0
+				if Value ~= nil then BITFIELD_1_0 += 0x01 end
 				if Value ~= nil then
 					-- Allocate BLOCK: 1 bytes
 					local BLOCK_START = Allocate(1)
@@ -2415,7 +2536,7 @@ return {
 					end
 					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
 				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -2437,6 +2558,7 @@ return {
 			local Success, Result = pcall(function (): (SizeVector)
 				-- Read BLOCK: 12 bytes
 				local BLOCK_START = Read(12)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeVector
 				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
@@ -2487,14 +2609,15 @@ return {
 			local Success, Result = pcall(function (): (SizeStruct)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
-				local BITFIELD_0
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeStruct
 				local Value = {A = false, B = false, C = false} :: any
 				-- Value.A: A
 				Value.A = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				-- Value.B: B
-				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				Value.B = bit32.btest(BITFIELD_0, 0x01)
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				Value.B = bit32.btest(BITFIELD_1_0, 0x01)
 				-- Value.C: C
 				Value.C = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
 				return Value
@@ -2513,7 +2636,7 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
-				local BITFIELD_0
+				local BITFIELD_1_0
 				-- Value: SizeStruct
 				-- Value.A: A
 				if typeof(Value.A) ~= "number" then
@@ -2524,14 +2647,14 @@ return {
 				if typeof(Value.B) ~= "boolean" then
 					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
 				end
-				BITFIELD_0 = 0
-				if Value.B then BITFIELD_0 += 0x01 end
+				BITFIELD_1_0 = 0
+				if Value.B then BITFIELD_1_0 += 0x01 end
 				-- Value.C: C
 				if typeof(Value.C) ~= "number" then
 					error(`Expected Value.C to be of type number, got {type(Value.C)} instead.`)
 				end
 				buffer.writeu16(SendBuffer, BLOCK_START + 2, Value.C)
-				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -2553,9 +2676,12 @@ return {
 			local Success, Result = pcall(function (): (SizeEnum)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeEnum
 				local Value = true :: any
-				local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Index = bit32.extract(BITFIELD_1_0, 0, 2)
 				if Index == 0 then
 					Value = "A"
 				elseif Index == 1 then
@@ -2581,16 +2707,18 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
+				local BITFIELD_1_0
 				-- Value: SizeEnum
+				BITFIELD_1_0 = 0
 				if Value == "A" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
 				elseif Value == "B" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+					BITFIELD_1_0 += 1
 				elseif Value == "C" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+					BITFIELD_1_0 += 2
 				else
 					error(`Unexpected enum: {Value}, expected one of "A" or "B" or "C".`)
 				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -2612,6 +2740,7 @@ return {
 			local Success, Result = pcall(function (): (SizeFlags)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeFlags
 				local Value = {}
 				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2661,6 +2790,7 @@ return {
 			local Success, Result = pcall(function (): (SizeMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
@@ -2729,6 +2859,7 @@ return {
 			local Success, Result = pcall(function (): (OffsetArray)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetArray
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2805,6 +2936,7 @@ return {
 			local Success, Result = pcall(function (): (OffsetString)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetString
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -2862,6 +2994,7 @@ return {
 			local Success, Result = pcall(function (): (OffsetBuffer)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OffsetBuffer
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Length = LengthOffset + 300
@@ -2920,12 +3053,13 @@ return {
 			local Success, Result = pcall(function (): (BitsOne)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
-				local BITFIELD_0
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsOne
 				local Value = {A = false} :: any
 				-- Value.A: A
-				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_0, 0x01)
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -2942,15 +3076,15 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
-				local BITFIELD_0
+				local BITFIELD_1_0
 				-- Value: BitsOne
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				BITFIELD_0 = 0
-				if Value.A then BITFIELD_0 += 0x01 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+				BITFIELD_1_0 = 0
+				if Value.A then BITFIELD_1_0 += 0x01 end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -2972,24 +3106,25 @@ return {
 			local Success, Result = pcall(function (): (BitsSeven)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
-				local BITFIELD_0
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeven
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false} :: any
 				-- Value.A: A
-				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_0, 0x01)
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
 				-- Value.B: B
-				Value.B = bit32.btest(BITFIELD_0, 0x02)
+				Value.B = bit32.btest(BITFIELD_1_0, 0x02)
 				-- Value.C: C
-				Value.C = bit32.btest(BITFIELD_0, 0x04)
+				Value.C = bit32.btest(BITFIELD_1_0, 0x04)
 				-- Value.D: D
-				Value.D = bit32.btest(BITFIELD_0, 0x08)
+				Value.D = bit32.btest(BITFIELD_1_0, 0x08)
 				-- Value.E: E
-				Value.E = bit32.btest(BITFIELD_0, 0x10)
+				Value.E = bit32.btest(BITFIELD_1_0, 0x10)
 				-- Value.F: F
-				Value.F = bit32.btest(BITFIELD_0, 0x20)
+				Value.F = bit32.btest(BITFIELD_1_0, 0x20)
 				-- Value.G: G
-				Value.G = bit32.btest(BITFIELD_0, 0x40)
+				Value.G = bit32.btest(BITFIELD_1_0, 0x40)
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -3006,45 +3141,45 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
-				local BITFIELD_0
+				local BITFIELD_1_0
 				-- Value: BitsSeven
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				BITFIELD_0 = 0
-				if Value.A then BITFIELD_0 += 0x01 end
+				BITFIELD_1_0 = 0
+				if Value.A then BITFIELD_1_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
 					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
 				end
-				if Value.B then BITFIELD_0 += 0x02 end
+				if Value.B then BITFIELD_1_0 += 0x02 end
 				-- Value.C: C
 				if typeof(Value.C) ~= "boolean" then
 					error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.`)
 				end
-				if Value.C then BITFIELD_0 += 0x04 end
+				if Value.C then BITFIELD_1_0 += 0x04 end
 				-- Value.D: D
 				if typeof(Value.D) ~= "boolean" then
 					error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.`)
 				end
-				if Value.D then BITFIELD_0 += 0x08 end
+				if Value.D then BITFIELD_1_0 += 0x08 end
 				-- Value.E: E
 				if typeof(Value.E) ~= "boolean" then
 					error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.`)
 				end
-				if Value.E then BITFIELD_0 += 0x10 end
+				if Value.E then BITFIELD_1_0 += 0x10 end
 				-- Value.F: F
 				if typeof(Value.F) ~= "boolean" then
 					error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.`)
 				end
-				if Value.F then BITFIELD_0 += 0x20 end
+				if Value.F then BITFIELD_1_0 += 0x20 end
 				-- Value.G: G
 				if typeof(Value.G) ~= "boolean" then
 					error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.`)
 				end
-				if Value.G then BITFIELD_0 += 0x40 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+				if Value.G then BITFIELD_1_0 += 0x40 end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -3066,26 +3201,27 @@ return {
 			local Success, Result = pcall(function (): (BitsEight)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
-				local BITFIELD_0
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsEight
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false} :: any
 				-- Value.A: A
-				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_0, 0x01)
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
 				-- Value.B: B
-				Value.B = bit32.btest(BITFIELD_0, 0x02)
+				Value.B = bit32.btest(BITFIELD_1_0, 0x02)
 				-- Value.C: C
-				Value.C = bit32.btest(BITFIELD_0, 0x04)
+				Value.C = bit32.btest(BITFIELD_1_0, 0x04)
 				-- Value.D: D
-				Value.D = bit32.btest(BITFIELD_0, 0x08)
+				Value.D = bit32.btest(BITFIELD_1_0, 0x08)
 				-- Value.E: E
-				Value.E = bit32.btest(BITFIELD_0, 0x10)
+				Value.E = bit32.btest(BITFIELD_1_0, 0x10)
 				-- Value.F: F
-				Value.F = bit32.btest(BITFIELD_0, 0x20)
+				Value.F = bit32.btest(BITFIELD_1_0, 0x20)
 				-- Value.G: G
-				Value.G = bit32.btest(BITFIELD_0, 0x40)
+				Value.G = bit32.btest(BITFIELD_1_0, 0x40)
 				-- Value.H: H
-				Value.H = bit32.btest(BITFIELD_0, 0x80)
+				Value.H = bit32.btest(BITFIELD_1_0, 0x80)
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -3102,50 +3238,50 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
-				local BITFIELD_0
+				local BITFIELD_1_0
 				-- Value: BitsEight
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				BITFIELD_0 = 0
-				if Value.A then BITFIELD_0 += 0x01 end
+				BITFIELD_1_0 = 0
+				if Value.A then BITFIELD_1_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
 					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
 				end
-				if Value.B then BITFIELD_0 += 0x02 end
+				if Value.B then BITFIELD_1_0 += 0x02 end
 				-- Value.C: C
 				if typeof(Value.C) ~= "boolean" then
 					error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.`)
 				end
-				if Value.C then BITFIELD_0 += 0x04 end
+				if Value.C then BITFIELD_1_0 += 0x04 end
 				-- Value.D: D
 				if typeof(Value.D) ~= "boolean" then
 					error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.`)
 				end
-				if Value.D then BITFIELD_0 += 0x08 end
+				if Value.D then BITFIELD_1_0 += 0x08 end
 				-- Value.E: E
 				if typeof(Value.E) ~= "boolean" then
 					error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.`)
 				end
-				if Value.E then BITFIELD_0 += 0x10 end
+				if Value.E then BITFIELD_1_0 += 0x10 end
 				-- Value.F: F
 				if typeof(Value.F) ~= "boolean" then
 					error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.`)
 				end
-				if Value.F then BITFIELD_0 += 0x20 end
+				if Value.F then BITFIELD_1_0 += 0x20 end
 				-- Value.G: G
 				if typeof(Value.G) ~= "boolean" then
 					error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.`)
 				end
-				if Value.G then BITFIELD_0 += 0x40 end
+				if Value.G then BITFIELD_1_0 += 0x40 end
 				-- Value.H: H
 				if typeof(Value.H) ~= "boolean" then
 					error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.`)
 				end
-				if Value.H then BITFIELD_0 += 0x80 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+				if Value.H then BITFIELD_1_0 += 0x80 end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -3167,30 +3303,31 @@ return {
 			local Success, Result = pcall(function (): (BitsNine)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
-				local BITFIELD_1
-				local BITFIELD_0
+				local BITFIELD_1_1
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsNine
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false} :: any
 				-- Value.A: A
-				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_0, 0x01)
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
 				-- Value.B: B
-				Value.B = bit32.btest(BITFIELD_0, 0x02)
+				Value.B = bit32.btest(BITFIELD_1_0, 0x02)
 				-- Value.C: C
-				Value.C = bit32.btest(BITFIELD_0, 0x04)
+				Value.C = bit32.btest(BITFIELD_1_0, 0x04)
 				-- Value.D: D
-				Value.D = bit32.btest(BITFIELD_0, 0x08)
+				Value.D = bit32.btest(BITFIELD_1_0, 0x08)
 				-- Value.E: E
-				Value.E = bit32.btest(BITFIELD_0, 0x10)
+				Value.E = bit32.btest(BITFIELD_1_0, 0x10)
 				-- Value.F: F
-				Value.F = bit32.btest(BITFIELD_0, 0x20)
+				Value.F = bit32.btest(BITFIELD_1_0, 0x20)
 				-- Value.G: G
-				Value.G = bit32.btest(BITFIELD_0, 0x40)
+				Value.G = bit32.btest(BITFIELD_1_0, 0x40)
 				-- Value.H: H
-				Value.H = bit32.btest(BITFIELD_0, 0x80)
+				Value.H = bit32.btest(BITFIELD_1_0, 0x80)
 				-- Value.I: I
-				BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				Value.I = bit32.btest(BITFIELD_1, 0x01)
+				BITFIELD_1_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				Value.I = bit32.btest(BITFIELD_1_1, 0x01)
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -3207,58 +3344,58 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 2 bytes
 				local BLOCK_START = Allocate(2)
-				local BITFIELD_1
-				local BITFIELD_0
+				local BITFIELD_1_1
+				local BITFIELD_1_0
 				-- Value: BitsNine
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				BITFIELD_0 = 0
-				if Value.A then BITFIELD_0 += 0x01 end
+				BITFIELD_1_0 = 0
+				if Value.A then BITFIELD_1_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
 					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
 				end
-				if Value.B then BITFIELD_0 += 0x02 end
+				if Value.B then BITFIELD_1_0 += 0x02 end
 				-- Value.C: C
 				if typeof(Value.C) ~= "boolean" then
 					error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.`)
 				end
-				if Value.C then BITFIELD_0 += 0x04 end
+				if Value.C then BITFIELD_1_0 += 0x04 end
 				-- Value.D: D
 				if typeof(Value.D) ~= "boolean" then
 					error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.`)
 				end
-				if Value.D then BITFIELD_0 += 0x08 end
+				if Value.D then BITFIELD_1_0 += 0x08 end
 				-- Value.E: E
 				if typeof(Value.E) ~= "boolean" then
 					error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.`)
 				end
-				if Value.E then BITFIELD_0 += 0x10 end
+				if Value.E then BITFIELD_1_0 += 0x10 end
 				-- Value.F: F
 				if typeof(Value.F) ~= "boolean" then
 					error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.`)
 				end
-				if Value.F then BITFIELD_0 += 0x20 end
+				if Value.F then BITFIELD_1_0 += 0x20 end
 				-- Value.G: G
 				if typeof(Value.G) ~= "boolean" then
 					error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.`)
 				end
-				if Value.G then BITFIELD_0 += 0x40 end
+				if Value.G then BITFIELD_1_0 += 0x40 end
 				-- Value.H: H
 				if typeof(Value.H) ~= "boolean" then
 					error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.`)
 				end
-				if Value.H then BITFIELD_0 += 0x80 end
+				if Value.H then BITFIELD_1_0 += 0x80 end
 				-- Value.I: I
 				if typeof(Value.I) ~= "boolean" then
 					error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.`)
 				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
-				BITFIELD_1 = 0
-				if Value.I then BITFIELD_1 += 0x01 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+				BITFIELD_1_1 = 0
+				if Value.I then BITFIELD_1_1 += 0x01 end
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_1)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -3280,48 +3417,49 @@ return {
 			local Success, Result = pcall(function (): (BitsSeventeen)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
-				local BITFIELD_2
-				local BITFIELD_1
-				local BITFIELD_0
+				local BITFIELD_1_2
+				local BITFIELD_1_1
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsSeventeen
 				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false, J = false, K = false, L = false, M = false, N = false, O = false, P = false, Q = false} :: any
 				-- Value.A: A
-				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_0, 0x01)
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
 				-- Value.B: B
-				Value.B = bit32.btest(BITFIELD_0, 0x02)
+				Value.B = bit32.btest(BITFIELD_1_0, 0x02)
 				-- Value.C: C
-				Value.C = bit32.btest(BITFIELD_0, 0x04)
+				Value.C = bit32.btest(BITFIELD_1_0, 0x04)
 				-- Value.D: D
-				Value.D = bit32.btest(BITFIELD_0, 0x08)
+				Value.D = bit32.btest(BITFIELD_1_0, 0x08)
 				-- Value.E: E
-				Value.E = bit32.btest(BITFIELD_0, 0x10)
+				Value.E = bit32.btest(BITFIELD_1_0, 0x10)
 				-- Value.F: F
-				Value.F = bit32.btest(BITFIELD_0, 0x20)
+				Value.F = bit32.btest(BITFIELD_1_0, 0x20)
 				-- Value.G: G
-				Value.G = bit32.btest(BITFIELD_0, 0x40)
+				Value.G = bit32.btest(BITFIELD_1_0, 0x40)
 				-- Value.H: H
-				Value.H = bit32.btest(BITFIELD_0, 0x80)
+				Value.H = bit32.btest(BITFIELD_1_0, 0x80)
 				-- Value.I: I
-				BITFIELD_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				Value.I = bit32.btest(BITFIELD_1, 0x01)
+				BITFIELD_1_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				Value.I = bit32.btest(BITFIELD_1_1, 0x01)
 				-- Value.J: J
-				Value.J = bit32.btest(BITFIELD_1, 0x02)
+				Value.J = bit32.btest(BITFIELD_1_1, 0x02)
 				-- Value.K: K
-				Value.K = bit32.btest(BITFIELD_1, 0x04)
+				Value.K = bit32.btest(BITFIELD_1_1, 0x04)
 				-- Value.L: L
-				Value.L = bit32.btest(BITFIELD_1, 0x08)
+				Value.L = bit32.btest(BITFIELD_1_1, 0x08)
 				-- Value.M: M
-				Value.M = bit32.btest(BITFIELD_1, 0x10)
+				Value.M = bit32.btest(BITFIELD_1_1, 0x10)
 				-- Value.N: N
-				Value.N = bit32.btest(BITFIELD_1, 0x20)
+				Value.N = bit32.btest(BITFIELD_1_1, 0x20)
 				-- Value.O: O
-				Value.O = bit32.btest(BITFIELD_1, 0x40)
+				Value.O = bit32.btest(BITFIELD_1_1, 0x40)
 				-- Value.P: P
-				Value.P = bit32.btest(BITFIELD_1, 0x80)
+				Value.P = bit32.btest(BITFIELD_1_1, 0x80)
 				-- Value.Q: Q
-				BITFIELD_2 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				Value.Q = bit32.btest(BITFIELD_2, 0x01)
+				BITFIELD_1_2 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+				Value.Q = bit32.btest(BITFIELD_1_2, 0x01)
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -3338,101 +3476,101 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 3 bytes
 				local BLOCK_START = Allocate(3)
-				local BITFIELD_2
-				local BITFIELD_1
-				local BITFIELD_0
+				local BITFIELD_1_2
+				local BITFIELD_1_1
+				local BITFIELD_1_0
 				-- Value: BitsSeventeen
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				BITFIELD_0 = 0
-				if Value.A then BITFIELD_0 += 0x01 end
+				BITFIELD_1_0 = 0
+				if Value.A then BITFIELD_1_0 += 0x01 end
 				-- Value.B: B
 				if typeof(Value.B) ~= "boolean" then
 					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
 				end
-				if Value.B then BITFIELD_0 += 0x02 end
+				if Value.B then BITFIELD_1_0 += 0x02 end
 				-- Value.C: C
 				if typeof(Value.C) ~= "boolean" then
 					error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.`)
 				end
-				if Value.C then BITFIELD_0 += 0x04 end
+				if Value.C then BITFIELD_1_0 += 0x04 end
 				-- Value.D: D
 				if typeof(Value.D) ~= "boolean" then
 					error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.`)
 				end
-				if Value.D then BITFIELD_0 += 0x08 end
+				if Value.D then BITFIELD_1_0 += 0x08 end
 				-- Value.E: E
 				if typeof(Value.E) ~= "boolean" then
 					error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.`)
 				end
-				if Value.E then BITFIELD_0 += 0x10 end
+				if Value.E then BITFIELD_1_0 += 0x10 end
 				-- Value.F: F
 				if typeof(Value.F) ~= "boolean" then
 					error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.`)
 				end
-				if Value.F then BITFIELD_0 += 0x20 end
+				if Value.F then BITFIELD_1_0 += 0x20 end
 				-- Value.G: G
 				if typeof(Value.G) ~= "boolean" then
 					error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.`)
 				end
-				if Value.G then BITFIELD_0 += 0x40 end
+				if Value.G then BITFIELD_1_0 += 0x40 end
 				-- Value.H: H
 				if typeof(Value.H) ~= "boolean" then
 					error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.`)
 				end
-				if Value.H then BITFIELD_0 += 0x80 end
+				if Value.H then BITFIELD_1_0 += 0x80 end
 				-- Value.I: I
 				if typeof(Value.I) ~= "boolean" then
 					error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.`)
 				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
-				BITFIELD_1 = 0
-				if Value.I then BITFIELD_1 += 0x01 end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+				BITFIELD_1_1 = 0
+				if Value.I then BITFIELD_1_1 += 0x01 end
 				-- Value.J: J
 				if typeof(Value.J) ~= "boolean" then
 					error(`Expected Value.J to be of type boolean, got {type(Value.J)} instead.`)
 				end
-				if Value.J then BITFIELD_1 += 0x02 end
+				if Value.J then BITFIELD_1_1 += 0x02 end
 				-- Value.K: K
 				if typeof(Value.K) ~= "boolean" then
 					error(`Expected Value.K to be of type boolean, got {type(Value.K)} instead.`)
 				end
-				if Value.K then BITFIELD_1 += 0x04 end
+				if Value.K then BITFIELD_1_1 += 0x04 end
 				-- Value.L: L
 				if typeof(Value.L) ~= "boolean" then
 					error(`Expected Value.L to be of type boolean, got {type(Value.L)} instead.`)
 				end
-				if Value.L then BITFIELD_1 += 0x08 end
+				if Value.L then BITFIELD_1_1 += 0x08 end
 				-- Value.M: M
 				if typeof(Value.M) ~= "boolean" then
 					error(`Expected Value.M to be of type boolean, got {type(Value.M)} instead.`)
 				end
-				if Value.M then BITFIELD_1 += 0x10 end
+				if Value.M then BITFIELD_1_1 += 0x10 end
 				-- Value.N: N
 				if typeof(Value.N) ~= "boolean" then
 					error(`Expected Value.N to be of type boolean, got {type(Value.N)} instead.`)
 				end
-				if Value.N then BITFIELD_1 += 0x20 end
+				if Value.N then BITFIELD_1_1 += 0x20 end
 				-- Value.O: O
 				if typeof(Value.O) ~= "boolean" then
 					error(`Expected Value.O to be of type boolean, got {type(Value.O)} instead.`)
 				end
-				if Value.O then BITFIELD_1 += 0x40 end
+				if Value.O then BITFIELD_1_1 += 0x40 end
 				-- Value.P: P
 				if typeof(Value.P) ~= "boolean" then
 					error(`Expected Value.P to be of type boolean, got {type(Value.P)} instead.`)
 				end
-				if Value.P then BITFIELD_1 += 0x80 end
+				if Value.P then BITFIELD_1_1 += 0x80 end
 				-- Value.Q: Q
 				if typeof(Value.Q) ~= "boolean" then
 					error(`Expected Value.Q to be of type boolean, got {type(Value.Q)} instead.`)
 				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1)
-				BITFIELD_2 = 0
-				if Value.Q then BITFIELD_2 += 0x01 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_2)
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_1)
+				BITFIELD_1_2 = 0
+				if Value.Q then BITFIELD_1_2 += 0x01 end
+				buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_1_2)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -3454,23 +3592,24 @@ return {
 			local Success, Result = pcall(function (): (BitsMixed)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
-				local BITFIELD_0
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: BitsMixed
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
-				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_0, 0x01)
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
 				-- Value.B: B
-				if bit32.btest(BITFIELD_0, 0x02) == true then
+				if bit32.btest(BITFIELD_1_0, 0x02) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
 					-- Value.B: B
 					Value.B = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				end
 				-- Value.C: C
-				Value.C = bit32.btest(BITFIELD_0, 0x04)
+				Value.C = bit32.btest(BITFIELD_1_0, 0x04)
 				-- Value.D: D
-				if bit32.btest(BITFIELD_0, 0x08) == true then
+				if bit32.btest(BITFIELD_1_0, 0x08) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.D: D
@@ -3492,16 +3631,16 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
-				local BITFIELD_0
+				local BITFIELD_1_0
 				-- Value: BitsMixed
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				BITFIELD_0 = 0
-				if Value.A then BITFIELD_0 += 0x01 end
+				BITFIELD_1_0 = 0
+				if Value.A then BITFIELD_1_0 += 0x01 end
 				-- Value.B: B
-				if Value.B ~= nil then BITFIELD_0 += 0x02 end
+				if Value.B ~= nil then BITFIELD_1_0 += 0x02 end
 				if Value.B ~= nil then
 					-- Allocate BLOCK: 1 bytes
 					local BLOCK_START = Allocate(1)
@@ -3515,9 +3654,9 @@ return {
 				if typeof(Value.C) ~= "boolean" then
 					error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.`)
 				end
-				if Value.C then BITFIELD_0 += 0x04 end
+				if Value.C then BITFIELD_1_0 += 0x04 end
 				-- Value.D: D
-				if Value.D ~= nil then BITFIELD_0 += 0x08 end
+				if Value.D ~= nil then BITFIELD_1_0 += 0x08 end
 				if Value.D ~= nil then
 					-- Allocate BLOCK: 2 bytes
 					local BLOCK_START = Allocate(2)
@@ -3527,7 +3666,7 @@ return {
 					end
 					buffer.writeu16(SendBuffer, BLOCK_START + 0, Value.D)
 				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -3547,11 +3686,10 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedBooleans)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBooleans
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -3594,12 +3732,10 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedBooleans
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 				do
 					local PACKED_LENGTH = #Value
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -3658,6 +3794,7 @@ return {
 			local Success, Result = pcall(function (): (PackedFixed)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedFixed
 				-- START ARRAY
 				local Length = 10
@@ -3763,6 +3900,7 @@ return {
 			local Success, Result = pcall(function (): (PackedRanged)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedRanged
 				-- START ARRAY
 				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -3873,24 +4011,18 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedNested)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedNested
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-				if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Value = table.create(Length)
-					-- Read BLOCK: 2 bytes
-				local ARRAY_START_1 = Read(2 * Length)
 				for Slot_1 = 1, Length do
 					-- Item_1: PackedNested
 					-- START ARRAY
-					-- Read 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					Length = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -3936,23 +4068,16 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedNested
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
-					-- Allocate BLOCK: 2 bytes
-				local ARRAY_START_1 = Allocate(2 * #Value)
+				WriteVarLength(#Value)
 				for Index = 1, #Value do
 					local Item_1 = Value[Index]
 					-- Item_1: PackedNested
 					-- START ARRAY
 					if not (#Item_1 <= 65535) then error(`Expected "#Item_1" to be smaller than or equal to 65535, got {#Item_1} instead.`) end
-					-- Allocate 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, #Item_1)
+					WriteVarLength(#Item_1)
 					do
 						local PACKED_LENGTH = #Item_1
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -4011,11 +4136,10 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedThroughAlias)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedThroughAlias
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -4058,12 +4182,10 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedThroughAlias
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 				do
 					local PACKED_LENGTH = #Value
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -4120,18 +4242,19 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedBeside)
-				-- Read BLOCK: 5 bytes
-				local BLOCK_START = Read(5)
-				local BITFIELD_0
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedBeside
 				local Value = {A = false, List = false, B = false, Fixed = false, C = false} :: any
 				-- Value.A: A
-				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_0, 0x01)
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
 				do
 					-- Value.List: List
 					-- START ARRAY
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -4162,14 +4285,14 @@ return {
 					-- END ARRAY
 				end
 				-- Value.B: B
-				Value.B = bit32.btest(BITFIELD_0, 0x02)
+				Value.B = bit32.btest(BITFIELD_1_0, 0x02)
 				do
 					-- Value.Fixed: Fixed
 					-- START ARRAY
 					local Length = 3
 					Value.Fixed = table.create(Length)
 					do
-						local PACKED_OFFSET = BLOCK_START + 3
+						local PACKED_OFFSET = BLOCK_START + 1
 						local PACKED_WHOLE = Length // 8
 						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
@@ -4194,7 +4317,7 @@ return {
 					-- END ARRAY
 				end
 				-- Value.C: C
-				Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 4)
+				Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -4209,20 +4332,20 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 5 bytes
-				local BLOCK_START = Allocate(5)
-				local BITFIELD_0
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				local BITFIELD_1_0
 				-- Value: PackedBeside
 				-- Value.A: A
 				if typeof(Value.A) ~= "boolean" then
 					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.`)
 				end
-				BITFIELD_0 = 0
-				if Value.A then BITFIELD_0 += 0x01 end
+				BITFIELD_1_0 = 0
+				if Value.A then BITFIELD_1_0 += 0x01 end
 				-- Value.List: List
 				-- START ARRAY
 				if not (#Value.List <= 65535) then error(`Expected "#Value.List" to be smaller than or equal to 65535, got {#Value.List} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 1, #Value.List)
+				WriteVarLength(#Value.List)
 				do
 					local PACKED_LENGTH = #Value.List
 					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -4264,13 +4387,13 @@ return {
 				if typeof(Value.B) ~= "boolean" then
 					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.`)
 				end
-				if Value.B then BITFIELD_0 += 0x02 end
+				if Value.B then BITFIELD_1_0 += 0x02 end
 				-- Value.Fixed: Fixed
 				-- START ARRAY
 				if #Value.Fixed ~= 3 then error(`Expected length of "Value.Fixed" to be equal to 3, got {#Value.Fixed} instead.`) end
 				do
 					local PACKED_LENGTH = 3
-					local PACKED_OFFSET = BLOCK_START + 3
+					local PACKED_OFFSET = BLOCK_START + 1
 					local PACKED_WHOLE = PACKED_LENGTH // 8
 					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
 						local PACKED_BASE = PACKED_BYTE * 8
@@ -4309,8 +4432,8 @@ return {
 				if typeof(Value.C) ~= "number" then
 					error(`Expected Value.C to be of type number, got {type(Value.C)} instead.`)
 				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 4, Value.C)
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.C)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -4332,19 +4455,18 @@ return {
 			local Success, Result = pcall(function (): (PackedMap)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				for _ = 1, Elements_1 do
 					-- Key_1: PackedMap
-					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_1: PackedMap
 					-- START ARRAY
-					local OFFSET_1 = Read(2)
-					Length = buffer.readu16(RecieveBuffer, OFFSET_1)
+					local Length = ReadVarLength()
 					if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
@@ -4401,15 +4523,13 @@ return {
 					end
 					local Length = #Key_1
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					local OFFSET_0 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_0, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 					-- Element_1: PackedMap
 					-- START ARRAY
 					if not (#Element_1 <= 65535) then error(`Expected "#Element_1" to be smaller than or equal to 65535, got {#Element_1} instead.`) end
-					local OFFSET_1 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_1, #Element_1)
+					WriteVarLength(#Element_1)
 					do
 						local PACKED_LENGTH = #Element_1
 						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
@@ -4469,32 +4589,31 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (PackedOptional)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedOptional
 				-- START ARRAY
-				local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				local Length = ReadVarLength()
 				if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 				local Value = table.create(Length)
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
-				local BITFIELD_0
+				local BITFIELD_2_0
 				for Slot_1 = 1, Length do
 					-- Item_1: PackedOptional
 					local Item_1
 					-- Read 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					BITFIELD_2_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+					if bit32.btest(BITFIELD_2_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
-						local BITFIELD_0
+						local BITFIELD_3_0
 						-- Item_1: PackedOptional
-						BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						Item_1 = bit32.btest(BITFIELD_0, 0x01)
+						BITFIELD_3_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+						Item_1 = bit32.btest(BITFIELD_3_0, 0x01)
 					end
 					Value[Slot_1] = Item_1
 				end
@@ -4513,38 +4632,36 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
 				-- Value: PackedOptional
 				-- START ARRAY
 				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, #Value)
+				WriteVarLength(#Value)
 					-- Allocate BLOCK: 1 bytes
 				local ARRAY_START_1 = Allocate(1 * #Value)
-				local BITFIELD_0_OFFSET
-				local BITFIELD_0
+				local BITFIELD_2_0_OFFSET
+				local BITFIELD_2_0
 				for Index = 1, #Value do
 					local Item_1 = Value[Index]
 					-- Item_1: PackedOptional
 					-- Allocate 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					BITFIELD_0 = 0
-					BITFIELD_0_OFFSET = OPERATION_OFFSET_0
-					if Item_1 ~= nil then BITFIELD_0 += 0x01 end
+					BITFIELD_2_0 = 0
+					BITFIELD_2_0_OFFSET = OPERATION_OFFSET_0
+					if Item_1 ~= nil then BITFIELD_2_0 += 0x01 end
 					if Item_1 ~= nil then
 						-- Allocate BLOCK: 1 bytes
 						local BLOCK_START = Allocate(1)
-						local BITFIELD_0
+						local BITFIELD_3_0
 						-- Item_1: PackedOptional
 						if typeof(Item_1) ~= "boolean" then
 							error(`Expected Item_1 to be of type boolean, got {type(Item_1)} instead.`)
 						end
-						BITFIELD_0 = 0
-						if Item_1 then BITFIELD_0 += 0x01 end
-						buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_0)
+						BITFIELD_3_0 = 0
+						if Item_1 then BITFIELD_3_0 += 0x01 end
+						buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_3_0)
 					end
-					buffer.writeu8(SendBuffer, BITFIELD_0_OFFSET, BITFIELD_0)
+					buffer.writeu8(SendBuffer, BITFIELD_2_0_OFFSET, BITFIELD_2_0)
 				end
 				-- END ARRAY
 				local Result = buffer.create(SendCursor)
@@ -4568,28 +4685,27 @@ return {
 			local Success, Result = pcall(function (): (MapNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MapNested
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				for _ = 1, Elements_1 do
 					-- Key_1: MapNested
-					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_1: MapNested
 					local Element_1 = {}
-					local OFFSET_1 = Read(2)
-					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
+					local OFFSET_0 = Read(2)
+					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
 					for _ = 1, Elements_2 do
 						-- Key_2: MapSimple
-						local OFFSET_0 = Read(2)
-						Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+						local Length = ReadVarLength()
 						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 						local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						-- Element_2: MapSimple
-						local OFFSET_1 = Read(1)
-						local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_1)
+						local OFFSET_0 = Read(1)
+						local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_0)
 						Element_1[Key_2] = Element_2
 					end
 					Value[Key_1] = Element_1
@@ -4620,12 +4736,11 @@ return {
 					end
 					local Length = #Key_1
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					local OFFSET_0 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_0, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 					-- Element_1: MapNested
-					local OFFSET_1 = Allocate(2)
+					local OFFSET_0 = Allocate(2)
 					local Elements_2 = 0
 					for Key_2, Element_2 in Element_1 do
 						Elements_2 += 1
@@ -4635,19 +4750,18 @@ return {
 						end
 						local Length = #Key_2
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						local OFFSET_0 = Allocate(2)
-						buffer.writeu16(SendBuffer, OFFSET_0, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
 						-- Element_2: MapSimple
 						if typeof(Element_2) ~= "number" then
 							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
 						end
-						local OFFSET_1 = Allocate(1)
-						buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
+						local OFFSET_0 = Allocate(1)
+						buffer.writeu8(SendBuffer, OFFSET_0, Element_2)
 					end
 					if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
-					buffer.writeu16(SendBuffer, OFFSET_1, Elements_2)
+					buffer.writeu16(SendBuffer, OFFSET_0, Elements_2)
 				end
 				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
@@ -4670,8 +4784,10 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (Standalone)
-				-- Read BLOCK: 8 bytes
-				local BLOCK_START = Read(8)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
@@ -4682,32 +4798,33 @@ return {
 				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 				do
 					-- Value.Event: Event
-					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					local Tag = bit32.extract(BITFIELD_1_0, 0, 2)
 					Value.Event = true :: any
 					if Tag == 0 then
-						-- Read BLOCK: 10 bytes
-						local BLOCK_START = Read(10)
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
 						-- Value.Event: Join
 						Value.Event = {Name = false, UserId = false} :: any
 						do
 							-- Value.Event.Name: Name
-							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+							local Length = ReadVarLength()
 							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 							Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						end
 						-- Value.Event.UserId: UserId
-						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 						Value.Event.Type = "Join"
 					elseif Tag == 1 then
-						-- Read BLOCK: 10 bytes
-						local BLOCK_START = Read(10)
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
 						-- Value.Event: Chat
 						Value.Event = {UserId = false, Message = false} :: any
 						-- Value.Event.UserId: UserId
 						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 						do
 							-- Value.Event.Message: Message
-							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+							local Length = ReadVarLength()
 							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 							Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						end
@@ -4728,13 +4845,13 @@ return {
 				Value.Nested = {Four = false, Five = false} :: any
 				do
 					-- Value.Nested.Four: Four
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				end
 				do
 					-- Value.Nested.Five: Five
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				end
@@ -4752,8 +4869,9 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 8 bytes
-				local BLOCK_START = Allocate(8)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				local BITFIELD_1_0
 				-- Value: Standalone
 				-- Value.One: One
 				if typeof(Value.One) ~= "number" then
@@ -4771,10 +4889,10 @@ return {
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
 				-- Value.Event: Event
+				BITFIELD_1_0 = 0
 				if Value.Event.Type == "Join" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
-					-- Allocate BLOCK: 10 bytes
-					local BLOCK_START = Allocate(10)
+					-- Allocate BLOCK: 8 bytes
+					local BLOCK_START = Allocate(8)
 					-- Value.Event: Join
 					do
 						-- Value.Event.Name: Name
@@ -4783,7 +4901,7 @@ return {
 						end
 						local Length = #Value.Event.Name
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					end
@@ -4791,11 +4909,11 @@ return {
 					if typeof(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
 					end
-					buffer.writef64(SendBuffer, BLOCK_START + 2, Value.Event.UserId)
+					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				elseif Value.Event.Type == "Chat" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
-					-- Allocate BLOCK: 10 bytes
-					local BLOCK_START = Allocate(10)
+					-- Allocate BLOCK: 8 bytes
+					local BLOCK_START = Allocate(8)
+					BITFIELD_1_0 += 1
 					-- Value.Event: Chat
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -4809,14 +4927,14 @@ return {
 						end
 						local Length = #Value.Event.Message
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
 				elseif Value.Event.Type == "Leave" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
 					-- Allocate BLOCK: 8 bytes
 					local BLOCK_START = Allocate(8)
+					BITFIELD_1_0 += 2
 					-- Value.Event: Leave
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -4834,7 +4952,7 @@ return {
 					end
 					local Length = #Value.Nested.Four
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
 				end
@@ -4845,10 +4963,11 @@ return {
 					end
 					local Length = #Value.Nested.Five
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -4876,21 +4995,22 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (OptionalHoles)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: OptionalHoles
 				-- START ARRAY
 				local Length = 3
 				local Value = table.create(Length)
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
-				local BITFIELD_0
+				local BITFIELD_2_0
 				for Slot_1 = 1, Length do
 					-- Item_1: OptionalHoles
 					local Item_1
 					-- Read 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					BITFIELD_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_0, 0x01) == true then
+					BITFIELD_2_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+					if bit32.btest(BITFIELD_2_0, 0x01) then
 						-- Read BLOCK: 1 bytes
 						local BLOCK_START = Read(1)
 						-- Item_1: OptionalHoles
@@ -4918,17 +5038,17 @@ return {
 				for Key in Value do if type(Key) == "number" and Key > 3 then error(`Expected "Value" to hold at most 3 elements, got one at index {Key} instead.`) end end
 					-- Allocate BLOCK: 1 bytes
 				local ARRAY_START_1 = Allocate(1 * 3)
-				local BITFIELD_0_OFFSET
-				local BITFIELD_0
+				local BITFIELD_2_0_OFFSET
+				local BITFIELD_2_0
 				for Index = 1, 3 do
 					local Item_1 = Value[Index]
 					-- Item_1: OptionalHoles
 					-- Allocate 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					BITFIELD_0 = 0
-					BITFIELD_0_OFFSET = OPERATION_OFFSET_0
-					if Item_1 ~= nil then BITFIELD_0 += 0x01 end
+					BITFIELD_2_0 = 0
+					BITFIELD_2_0_OFFSET = OPERATION_OFFSET_0
+					if Item_1 ~= nil then BITFIELD_2_0 += 0x01 end
 					if Item_1 ~= nil then
 						-- Allocate BLOCK: 1 bytes
 						local BLOCK_START = Allocate(1)
@@ -4938,7 +5058,7 @@ return {
 						end
 						buffer.writeu8(SendBuffer, BLOCK_START + 0, Item_1)
 					end
-					buffer.writeu8(SendBuffer, BITFIELD_0_OFFSET, BITFIELD_0)
+					buffer.writeu8(SendBuffer, BITFIELD_2_0_OFFSET, BITFIELD_2_0)
 				end
 				-- END ARRAY
 				local Result = buffer.create(SendCursor)
@@ -4962,6 +5082,7 @@ return {
 			local Success, Result = pcall(function (): (HalfFloat)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: HalfFloat
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -5051,6 +5172,7 @@ return {
 			local Success, Result = pcall(function (): (Float24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Float24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local Value
@@ -5127,6 +5249,7 @@ return {
 			local Success, Result = pcall(function (): (Unsigned24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Unsigned24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -5172,6 +5295,7 @@ return {
 			local Success, Result = pcall(function (): (Signed24)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Signed24
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				return Value
@@ -5217,6 +5341,7 @@ return {
 			local Success, Result = pcall(function (): (Vector24)
 				-- Read BLOCK: 9 bytes
 				local BLOCK_START = Read(9)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Vector24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -5363,6 +5488,7 @@ return {
 			local Success, Result = pcall(function (): (QuatCFrame24)
 				-- Read BLOCK: 16 bytes
 				local BLOCK_START = Read(16)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: QuatCFrame24
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				local X
@@ -5516,8 +5642,10 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (FlagCarrier)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FlagCarrier
 				local Value = {Flags = false, Text = false, Kind = false} :: any
 				do
@@ -5529,14 +5657,15 @@ return {
 				end
 				do
 					-- Value.Text: Text
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Text" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					Value.Text = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				end
 				do
 					-- Value.Kind: Kind
 					Value.Kind = true :: any
-					local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+					local Index = bit32.extract(BITFIELD_1_0, 0, 1)
 					if Index == 0 then
 						Value.Kind = "A"
 					elseif Index == 1 then
@@ -5559,8 +5688,9 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				local BITFIELD_1_0
 				-- Value: FlagCarrier
 				do
 					-- Value.Flags: Flags
@@ -5576,18 +5706,19 @@ return {
 					end
 					local Length = #Value.Text
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 1, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Text, Length)
 				end
 				-- Value.Kind: Kind
+				BITFIELD_1_0 = 0
 				if Value.Kind == "A" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
 				elseif Value.Kind == "B" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
+					BITFIELD_1_0 += 1
 				else
 					error(`Unexpected enum: {Value.Kind}, expected one of "A" or "B".`)
 				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -5609,6 +5740,7 @@ return {
 			local Success, Result = pcall(function (): (FixedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				Value = Value / 10
@@ -5657,6 +5789,7 @@ return {
 			local Success, Result = pcall(function (): (FixedRanged)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedRanged
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -5707,6 +5840,7 @@ return {
 			local Success, Result = pcall(function (): (FixedSigned)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedSigned
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -400) then error(`Expected "Value" to be larger than or equal to -400, got {Value} instead.`) end
@@ -5757,6 +5891,7 @@ return {
 			local Success, Result = pcall(function (): (FixedCoarse)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedCoarse
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				Value = Value * 2.5
@@ -5805,6 +5940,7 @@ return {
 			local Success, Result = pcall(function (): (FixedTriple)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedTriple
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
 				Value = Value / 1000
@@ -5854,6 +5990,7 @@ return {
 			local Success, Result = pcall(function (): (FixedWide)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWide
 				local Value = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -5904,6 +6041,7 @@ return {
 			local Success, Result = pcall(function (): (FixedWhole)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWhole
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				return Value
@@ -5951,6 +6089,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedCount)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedCount
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 1) then error(`Expected "Value" to be larger than or equal to 1, got {Value} instead.`) end
@@ -5999,6 +6138,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedSigned)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedSigned
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -6047,6 +6187,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedNegative)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedNegative
 				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -10) then error(`Expected "Value" to be larger than or equal to -10, got {Value} instead.`) end
@@ -6095,6 +6236,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedTenths)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -6144,6 +6286,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedHalf)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedHalf
 				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				local Value
@@ -6235,6 +6378,7 @@ return {
 			local Success, Result = pcall(function (): (SaturatedUnit)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedUnit
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
@@ -6283,15 +6427,16 @@ return {
 			local Success, Result = pcall(function (): (FixedStruct)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
-				local BITFIELD_0
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedStruct
 				local Value = {A = false, C = false} :: any
 				-- Value.A: A
 				Value.A = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				Value.A = Value.A / 10
 				-- Value.B: B
-				BITFIELD_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				if bit32.btest(BITFIELD_0, 0x01) == true then
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+				if bit32.btest(BITFIELD_1_0, 0x01) then
 					-- Read BLOCK: 2 bytes
 					local BLOCK_START = Read(2)
 					-- Value.B: B
@@ -6336,7 +6481,7 @@ return {
 			local Success, Result = pcall(function (): (buffer)
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
-				local BITFIELD_0
+				local BITFIELD_1_0
 				-- Value: FixedStruct
 				do
 					-- Value.A: A
@@ -6348,8 +6493,8 @@ return {
 					buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
 				end
 				-- Value.B: B
-				BITFIELD_0 = 0
-				if Value.B ~= nil then BITFIELD_0 += 0x01 end
+				BITFIELD_1_0 = 0
+				if Value.B ~= nil then BITFIELD_1_0 += 0x01 end
 				if Value.B ~= nil then
 					-- Allocate BLOCK: 2 bytes
 					local BLOCK_START = Allocate(2)
@@ -6385,7 +6530,7 @@ return {
 					end
 					-- END ARRAY
 				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result

@@ -37,8 +37,9 @@ event Heads {
 ```
 
 It is an event and not a declaration of its own so that it keeps everything an event has: its index on
-the unreliable channel, its per-player sequence number, `Call`, the size analysis and the schema
-signature.
+the unreliable channel, `Call`, the size analysis and the schema signature. It is ordered by the stamp
+every packet carries rather than by a sequence number: a state that arrives after a newer one is
+dropped.
 
 A stream must be `From: Server` and `Type: OrderedUnreliable` -- a stream is a current state, so a
 lost packet is replaced by the next and a late one must not overwrite a newer one. Its `Data` is one
@@ -108,8 +109,9 @@ went out.
 | `Urgent` | `() -> ()` | Sends at the next step. |
 | `SetFast` | `(Fast: boolean) -> ()` | Switches between `Rate` and `Fast`. |
 
-A stream has no `Fire`, `FireAll`, `FireList` or `FireExcept`: every player is sent every state, each
-with their own sequence number -- unless it is [held per player](#one-state-per-player). Between two steps the last call wins: a `Set` then a `Clear` clears
+A stream has no `Fire`, `FireAll`, `FireList` or `FireExcept`: every player is sent every state, in one
+`FireAllClients` -- unless it is [held per player](#one-state-per-player). The streams to everyone due
+in a frame share their packets: a frame's states go out in as few as the unreliable limit allows. Between two steps the last call wins: a `Set` then a `Clear` clears
 (and sends nothing if the clients never saw a state), a `Clear` then a `Set` sends the new state.
 
 A state that fails to send -- an array past its bound, say -- is reported on a thread of its own, as
@@ -170,8 +172,10 @@ decisions. Drawing about one interval in the past, `ServerTime` of the two state
 ## On the wire
 
 A stream's packet is an `OrderedUnreliable` event whose data is `(Value: Data?, ServerTime: u16)`:
-the index and sequence number (3 bytes), a byte of presence bits, the two-byte stamp, then the state.
-That is 6 bytes of header, and a cleared stream's packet is those 6 bytes alone.
+the index, a byte of presence bits, the two-byte stamp, then the state. That is 4 bytes of header, and a
+cleared stream's packet is those 4 bytes alone. Until 0.40.0 a stream also carried an
+`OrderedUnreliable` event's two-byte sequence number, one per player, so every player was sent their own
+copy; the stamp orders a stream just as well, and the same packet now goes to everyone.
 
 The [size analysis](/BlinkBlox/language/options/#maxunreliablesize) counts the state in full rather
 than as the optional it travels as, since every packet but the clear carries it: a state that can

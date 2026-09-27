@@ -22,6 +22,9 @@ sourcemap.json
 /benchmark/src/shared/blink
 /benchmark/src/shared/zap
 /benchmark/src/shared/upstream
+/benchmark/runtime/rivals/blink
+/benchmark/runtime/rivals/zap
+/benchmark/runtime/rivals/upstream
 /benchmark/roblox
 
 /site

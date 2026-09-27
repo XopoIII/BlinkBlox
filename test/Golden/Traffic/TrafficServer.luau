@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "Traffic_BLINK"
-local SCHEMA_SIGNATURE = "f51ac07221d76432"
+local SCHEMA_SIGNATURE = "2a747b6f3eaebf53"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -115,6 +115,57 @@ local function Load(Save: BLINK_BUFFER_SAVE?)
     SendInstances = {}
 end
 
+--> A buffer for writes that are copied out as soon as they are made: an unreliable send, and a
+--> broadcast before it is appended to each player's batch. Each used to write into a fresh 64-byte
+--> buffer and a fresh table, and to regrow the buffer on the way to the event's size. This one is
+--> kept at whatever size a write grew it to, up to SCRATCH_LIMIT, so a burst is not held for good.
+--> Nothing keeps a reference past the copy: a remote serialises its arguments when it is fired.
+local SCRATCH_LIMIT = 65536
+local ScratchSize = 64
+local ScratchBuffer = buffer.create(64)
+local ScratchInstances = {}
+
+local function LoadScratch()
+    SendSize = ScratchSize
+    SendCursor = 0
+    SendOffset = 0
+    SendBuffer = ScratchBuffer
+    table.clear(ScratchInstances)
+    SendInstances = ScratchInstances
+end
+
+--> Called once the scratch write is done, before anything else is loaded.
+local function KeepScratch()
+    if SendBuffer ~= ScratchBuffer and SendSize <= SCRATCH_LIMIT then
+        ScratchSize = SendSize
+        ScratchBuffer = SendBuffer
+    end
+end
+
+--> The client's batch, set aside while an unreliable Fire writes into the scratch buffer. A Save
+--> table did the same, and a Fire allocated one.
+local HeldSize = 0
+local HeldCursor = 0
+local HeldBuffer = SendBuffer
+local HeldInstances = SendInstances
+
+local function Hold()
+    HeldSize = SendSize
+    HeldCursor = SendCursor
+    HeldBuffer = SendBuffer
+    HeldInstances = SendInstances
+    LoadScratch()
+end
+
+local function Release()
+    KeepScratch()
+    SendSize = HeldSize
+    SendCursor = HeldCursor
+    SendOffset = HeldCursor
+    SendBuffer = HeldBuffer
+    SendInstances = HeldInstances
+end
+
 --> Undoes a write that threw part way through.
 -->
 --> Every serialiser writes straight into SendBuffer through Allocate, and an assert can fire in the
@@ -126,10 +177,6 @@ end
 --> Only the cursor and the instance count are restored. A buffer that Allocate grew on the way is
 --> kept deliberately: growing copied the earlier bytes across, so the larger buffer is just as
 --> valid, and discarding it would only make the next write grow it again.
-local function Mark(): (number, number)
-    return SendCursor, #SendInstances
-end
-
 local function Rollback(Cursor: number, Instances: number)
     SendCursor = Cursor
     SendOffset = Cursor
@@ -139,23 +186,110 @@ local function Rollback(Cursor: number, Instances: number)
     end
 end
 
-local function Allocate(Bytes: number)
-    local InUse = (SendCursor + Bytes)
-    if InUse > SendSize then
-        --> Avoid resizing the buffer for every write
-        while InUse > SendSize do
-            SendSize *= 1.5
-        end
+--> The same undo without a pcall, for the client's reliable Fire, where a pcall cost more than a
+--> small event's whole write. `Begin` records where the batch stands and a write that returns clears
+--> the record; a write that threw leaves it behind, and whatever touches the batch next -- the next
+--> write, or the flush -- undoes the half-written event first, through `Settle`. The server needs
+--> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
+--> reaches the save.
+local PendingCursor = -1
+local PendingInstances = 0
 
-        local Buffer = buffer.create(SendSize)
-        buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-        SendBuffer = Buffer
+--> How many Instances the client's batch held after the last write into it that returned. Every write
+--> into the batch starts from there, so Begin takes it from here rather than counting the list, and
+--> only a write that can add Instances counts it again; see the commits in the client template.
+local CommittedInstances = 0
+
+local function Settle()
+    if PendingCursor >= 0 then
+        Rollback(PendingCursor, PendingInstances)
+        PendingCursor = -1
+    end
+end
+
+local function Begin()
+    --> Checked here rather than left to Settle, so a Fire pays for no call when there is nothing to
+    --> undo, which is always but after a throw.
+    if PendingCursor >= 0 then
+        Settle()
+    end
+    PendingCursor = SendCursor
+    PendingInstances = CommittedInstances
+end
+
+local function Mark(): (number, number)
+    Settle()
+    return SendCursor, #SendInstances
+end
+
+--> Grows SendBuffer to hold `InUse` bytes, by half again at a time so a steady writer does not
+--> regrow it on every write. Kept out of Allocate, which runs for every event and every string: a
+--> function with a loop in it is not inlined, and Allocate without one is.
+local function Grow(InUse: number)
+    while InUse > SendSize do
+        SendSize *= 1.5
     end
 
-    SendOffset = SendCursor
-    SendCursor += Bytes
-    
-    return SendOffset
+    local Buffer = buffer.create(SendSize)
+    buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+    SendBuffer = Buffer
+end
+
+local function Allocate(Bytes: number)
+    local Offset = SendCursor
+    local InUse = Offset + Bytes
+    if InUse > SendSize then
+        Grow(InUse)
+    end
+
+    SendOffset = Offset
+    SendCursor = InUse
+    return Offset
+end
+
+--> A length as a varint, 0 to 65535 in one to three bytes: seven bits a byte, the lowest first, the top
+--> bit saying another byte follows. Size.LengthPrefix in the compiler decides which lengths travel
+--> this way.
+local function WriteVarLength(Length: number)
+    --> Allocate first, on a line of its own: it may replace SendBuffer, which an argument list would
+    --> already have read.
+    if Length < 0x80 then
+        local At = Allocate(1)
+        buffer.writeu8(SendBuffer, At, Length)
+    elseif Length < 0x4000 then
+        local At = Allocate(2)
+        buffer.writeu8(SendBuffer, At, Length % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 1, Length // 0x80)
+    else
+        local At = Allocate(3)
+        buffer.writeu8(SendBuffer, At, Length % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 1, Length // 0x80 % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 2, Length // 0x4000)
+    end
+end
+
+--> Refuses what WriteVarLength never writes, so each length has one encoding and none can claim more
+--> than 65535: a byte that ends the number but adds nothing to it, and a third byte past 3 -- which
+--> is also every third byte that asks for a fourth. Checked before anything is read for the length.
+local function ReadVarLength(): number
+    local First = buffer.readu8(RecieveBuffer, Read(1))
+    if First < 0x80 then
+        return First
+    end
+
+    local Second = buffer.readu8(RecieveBuffer, Read(1))
+    if Second < 0x80 then
+        if Second == 0 then
+            error("Expected a length in its shortest form.")
+        end
+        return First - 0x80 + Second * 0x80
+    end
+
+    local Third = buffer.readu8(RecieveBuffer, Read(1))
+    if Third == 0 or Third > 3 then
+        error(`Expected a length of at most 65535, in its shortest form, got a last byte of {Third}.`)
+    end
+    return First - 0x80 + (Second - 0x80) * 0x80 + Third * 0x4000
 end
 
 local function CreateQueue(): BLINK_QUEUE
@@ -507,6 +641,7 @@ EventNames.Reliable[4] = "Poll"
 function SerdesFunctions.ReadEVENT_Byte(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Byte
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -533,6 +668,7 @@ end
 function SerdesFunctions.ReadEVENT_Ping(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Ping
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -551,6 +687,7 @@ end
 function SerdesFunctions.ReadEVENT_Note(): (string)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Note
 	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if Length < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {Length} instead.`) end
@@ -586,6 +723,7 @@ end
 function SerdesFunctions.ReadFUNCTION_DATA_Ask(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Ask
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -605,6 +743,7 @@ end
 function SerdesFunctions.Inner_ReadEVENT_Poll(): (number)
 	-- Read BLOCK: 1 bytes
 	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
 	-- Value: Poll
 	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	return Value
@@ -704,6 +843,23 @@ assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a R
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
 
 local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
+
+--> THE BROADCAST BATCH. A reliable FireAll is written once, here, and sent at the flush in one
+--> FireAllClients, where it used to be copied into every player's batch: fifty players made a FireAll
+--> fifty copies and the flush fifty remote calls.
+-->
+--> A player's own writes still go to their own batch, and the order they and the broadcasts were
+--> made in has to survive. A player's first write of their own since a broadcast DIVERGES them: their
+--> batch takes a copy of the broadcast batch so far, then their write, and every later broadcast is
+--> appended to it as well. At the flush a diverged player is sent their batch alone; everyone else is
+--> sent the broadcast batch, after anything of their own that came before the first broadcast. With
+--> nobody diverged, that is one FireAllClients.
+local SharedSize = 64
+local SharedCursor = 0
+local SharedBuffer = buffer.create(64)
+local SharedInstances: {Instance} = {}
+local SharedUnderused = 0
+local Diverged: {[Player]: true} = {}
 
 --> How many rows a polled event's queue holds on the server before it stops taking more. Clients fill
 --> it, and a game that polls an event rarely, or has not got round to polling it at all, would let
@@ -915,6 +1071,10 @@ end
 --> lookup rather than a decode. The burst is a whole second of budget because the clock here is the
 --> server's: after a hitch Roblox delivers the queued packets together, and a refused reliable packet
 --> takes every event in it along. Reported on the same once-a-second schedule as RateAccept.
+--> When the packet being decoded arrived. Every event in a packet arrived at the same moment, so the
+--> rate buckets refill once a packet, at this, rather than asking the clock once an event.
+local PacketClock = 0
+
 local function InboundAccept(Player: Player, Length: number, Floor: number, Rate: number, Burst: number): boolean
     local Cost = math.max(Length, Floor)
     if Player.Parent == nil then
@@ -923,6 +1083,7 @@ local function InboundAccept(Player: Player, Length: number, Floor: number, Rate
     end
 
     local Now = os.clock()
+    PacketClock = Now
     local Budget = InboundBudgets[Player]
     if not Budget then
         --> The report clock starts at minus infinity so the first refusal is always reported.
@@ -974,21 +1135,17 @@ end
 --> the packet would decode as garbage. So this bounds listener dispatch and the game logic behind
 --> it, while MaxEventsPerPacket bounds the decoding of one packet and InboundAccept how many packets
 --> a second get decoded at all. The three limits are different axes.
+--> Called only from the decode loop, which stops before any event once the player has left, and
+--> no game code runs between that check and this call: a player still here when the loop checked
+--> is still here now, so a bucket made below is one PlayerRemoving will clear.
 local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: number, Name: string): boolean
-    --> Same PlayerRemoving race the buffer save guards against, handled the same way: the entry is
-    --> dropped here rather than left for a sweep that does not exist.
-    if Player.Parent == nil then
-        RateBuckets[Player] = nil
-        return false
-    end
-
     local Bucket = RateBuckets[Player]
     if not Bucket then
         Bucket = table.clone(RATE_TEMPLATE)
         RateBuckets[Player] = Bucket
     end
 
-    local Now = os.clock()
+    local Now = PacketClock
     local Tokens = math.min(Burst, Bucket[Slot] + ((Now - Bucket[Slot + 1]) * Rate))
     Bucket[Slot + 1] = Now
 
@@ -1136,6 +1293,7 @@ end
 
 Players.PlayerRemoving:Connect(function(Player)
     PlayersMap[Player] = nil
+    Diverged[Player] = nil
     RateBuckets[Player] = nil
     InboundBudgets[Player] = nil
     Reports[Player] = nil
@@ -1170,17 +1328,26 @@ end)
 --> then, so a plain `PlayersMap[Player] = Save()` puts back an entry that nothing will ever remove
 --> again: StepReplication would allocate a buffer and fire a remote at a player who is gone, on
 --> every Heartbeat, for the lifetime of the server.
+-->
+--> Only a new entry needs the check. An entry that exists has not been through PlayerRemoving yet,
+--> and one written in its narrow window is dropped by StepReplication; asking the DataModel on every
+--> send cost a reflected call per player per event, which is most of what a FireAll cost.
 local function SavePlayerBuffer(Player: Player)
-    if not Player:IsDescendantOf(Players) then
-        return
-    end
-
     --> Written into the entry the player already has, rather than a new one each time: this runs on
     --> every reliable send to a player, and the entry also carries its shrink count.
     local Entry = PlayersMap[Player]
     if Entry == nil then
-        PlayersMap[Player] = Save()
+        if Player:IsDescendantOf(Players) then
+            PlayersMap[Player] = Save()
+            if SharedCursor > 0 then
+                Diverged[Player] = true
+            end
+        end
         return
+    end
+
+    if SharedCursor > 0 then
+        Diverged[Player] = true
     end
 
     Entry.Size = SendSize
@@ -1189,7 +1356,83 @@ local function SavePlayerBuffer(Player: Player)
     Entry.Instances = SendInstances
 end
 
+--> Loads `Player`'s batch for a write of their own, diverging them first when a broadcast is pending;
+--> see the broadcast batch above. The SavePlayerBuffer that follows marks them diverged.
+local function LoadPlayer(Player: Player)
+    Load(PlayersMap[Player])
+    if SharedCursor > 0 and not Diverged[Player] then
+        local Position = Allocate(SharedCursor)
+        buffer.copy(SendBuffer, Position, SharedBuffer, 0, SharedCursor)
+        table.move(SharedInstances, 1, #SharedInstances, #SendInstances + 1, SendInstances)
+    end
+end
+
+--> Appends an event written elsewhere to one player's batch: a FireList or FireExcept, and a
+--> broadcast to a player who has diverged. A player with a batch of their own and nothing to catch up
+--> on gets it straight into it; any other goes the long way, through LoadPlayer and SavePlayerBuffer.
+local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instances: {Instance})
+    local Entry = PlayersMap[Player]
+    if Entry == nil or (SharedCursor > 0 and not Diverged[Player]) then
+        LoadPlayer(Player)
+        local Position = Allocate(Size)
+        buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+        table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+        SavePlayerBuffer(Player)
+        return
+    end
+
+    local Cursor = Entry.Cursor
+    local InUse = Cursor + Size
+    local Target = Entry.Buffer
+    if InUse > Entry.Size then
+        local Grown = Entry.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Target, 0, Cursor)
+        Target = Resized
+        Entry.Buffer = Resized
+        Entry.Size = Grown
+    end
+
+    buffer.copy(Target, Cursor, Buffer, 0, Size)
+    Entry.Cursor = InUse
+
+    local Count = #Instances
+    if Count > 0 then
+        local List = Entry.Instances
+        table.move(Instances, 1, Count, #List + 1, List)
+    end
+end
+
+--> Appends a broadcast to the broadcast batch, and to the batch of every player who has diverged.
+local function AppendShared(Buffer: buffer, Size: number, Instances: {Instance})
+    local InUse = SharedCursor + Size
+    if InUse > SharedSize then
+        while InUse > SharedSize do
+            SharedSize *= 1.5
+        end
+
+        local Resized = buffer.create(SharedSize)
+        buffer.copy(Resized, 0, SharedBuffer, 0, SharedCursor)
+        SharedBuffer = Resized
+    end
+
+    buffer.copy(SharedBuffer, SharedCursor, Buffer, 0, Size)
+    SharedCursor = InUse
+    if #Instances > 0 then
+        table.move(Instances, 1, #Instances, #SharedInstances + 1, SharedInstances)
+    end
+
+    for Player in Diverged do
+        AppendPlayer(Player, Buffer, Size, Instances)
+    end
+end
+
 local function StepReplication()
+    local Shared = SharedCursor
     for Player, Send in PlayersMap do
         --> Second line of defence. An entry can still be stale if it was written inside the narrow
         --> window of PlayerRemoving itself, before the player was detached; dropping it here makes
@@ -1197,6 +1440,19 @@ local function StepReplication()
         if not Player:IsDescendantOf(Players) then
             PlayersMap[Player] = nil
             continue
+        end
+
+        --> Everything of this player's own came before the first broadcast, so the broadcast batch
+        --> follows it in their packet rather than going in one of its own.
+        if Shared > 0 and Send.Cursor > 0 and not Diverged[Player] then
+            Load(Send)
+            local Position = Allocate(Shared)
+            buffer.copy(SendBuffer, Position, SharedBuffer, 0, Shared)
+            table.move(SharedInstances, 1, #SharedInstances, #SendInstances + 1, SendInstances)
+            Send.Size = SendSize
+            Send.Cursor = SendCursor
+            Send.Buffer = SendBuffer
+            Diverged[Player] = true
         end
 
         local Used = Send.Cursor
@@ -1223,6 +1479,42 @@ local function StepReplication()
             Send.Buffer = buffer.create(64)
         end
     end
+
+    if Shared > 0 then
+        local Buffer = buffer.create(Shared)
+        buffer.copy(Buffer, 0, SharedBuffer, 0, Shared)
+        if next(Diverged) == nil then
+            Reliable:FireAllClients(Buffer, SharedInstances)
+        else
+            for _, Player in Players:GetPlayers() do
+                if not Diverged[Player] then
+                    Reliable:FireClient(Player, Buffer, SharedInstances)
+                end
+            end
+        end
+
+        SharedCursor = 0
+        table.clear(SharedInstances)
+        table.clear(Diverged)
+    end
+
+    local Shrink
+    Shrink, SharedUnderused = ShouldShrink(SharedSize, Shared, SharedUnderused)
+    if Shrink then
+        SharedSize = 64
+        SharedBuffer = buffer.create(64)
+    end
+end
+local function DecodeLoop(DecodeEvent: () -> (), Player: Player, Size: number)
+	local DecodedEvents = 0
+	while RecieveCursor < Size and Player.Parent ~= nil do
+		DecodedEvents += 1
+		if DecodedEvents > 64 then
+			ReportDrop(Player, "Events", 64)
+			break
+		end
+		DecodeEvent()
+	end
 end
 RunService.Heartbeat:Connect(StepReplication)
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -1253,11 +1545,11 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local DecodedEvents = 0
 	local Decoding = -1
 	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
@@ -1303,7 +1595,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 				Spawn(Events.Reliable[3], Player, Value, InvocationIdentifier)
 			else
 				if #Queue.Reliable[3] >= 256 then
-					Load(PlayersMap[Player])
+					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 3)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
@@ -1323,18 +1615,9 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
-		DecodedEvents += 1
-		if DecodedEvents > 64 then
-			ReportDrop(Player, "Events", 64)
-			break
-		end
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
-			break
-		end
+	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
+	if not Parsed then
+		ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
 	end
 end)
 Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -1365,11 +1648,11 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local DecodedEvents = 0
 	local Decoding = -1
 	local function DecodeEvent()
 		-- Read BLOCK: 1 bytes
 		local BLOCK_START = Read(1)
+		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 1 then
@@ -1386,18 +1669,9 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	while (RecieveCursor < Size and Player.Parent ~= nil) do
-		DecodedEvents += 1
-		if DecodedEvents > 64 then
-			ReportDrop(Player, "Events", 64)
-			break
-		end
-		Decoding = -1
-		local Parsed: boolean, Failure: any = pcall(DecodeEvent)
-		if not Parsed then
-			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
-			break
-		end
+	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
+	if not Parsed then
+		ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
 	end
 end)
 
@@ -1443,77 +1717,65 @@ local Returns = table.freeze({
 	},
 	Push = {
 		Fire = function(Player: Player, Value: number): ()
-			Load(PlayersMap[Player])
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Push, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
+			LoadPlayer(Player)
+			local Cursor = SendCursor
+			SerdesFunctions.WriteEVENT_Push(Value)
 			TrafficCounters[14] += 1
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Push(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			for _, Player in Players:GetPlayers() do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
-				TrafficCounters[14] += 1
-			end
+			KeepScratch()
+			AppendShared(Buffer, Size, Instances)
+			local Reached = #Players:GetPlayers()
+			TrafficCounters[14] += Reached
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Push(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in List do
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 				TrafficCounters[14] += 1
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Push(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
 				end
-				Load(PlayersMap[Player])
-				local Position = Allocate(Size)
-				buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-				table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
-				SavePlayerBuffer(Player)
+				AppendPlayer(Player, Buffer, Size, Instances)
 				TrafficCounters[14] += 1
 			end
 		end,
 	},
 	Blip = {
 		Fire = function(Player: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Blip(Value)
 			if not CheckUnreliableSize("Blip") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 			TrafficCounters[18] += 1
 			TrafficCounters[5] += SendCursor
 			TrafficCounters[6] += 1
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Blip(Value)
 			if not CheckUnreliableSize("Blip") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			Unreliable:FireAllClients(Buffer, SendInstances)
 			local Reached = #Players:GetPlayers()
 			TrafficCounters[18] += Reached
@@ -1521,11 +1783,12 @@ local Returns = table.freeze({
 			TrafficCounters[6] += Reached
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Blip(Value)
 			if not CheckUnreliableSize("Blip") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
 				TrafficCounters[18] += 1
@@ -1534,11 +1797,12 @@ local Returns = table.freeze({
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Blip(Value)
 			if not CheckUnreliableSize("Blip") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -1568,11 +1832,12 @@ local Returns = table.freeze({
 	},
 	Seq = {
 		Fire = function(Player: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Seq(Value)
 			if not CheckUnreliableSize("Seq") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 			TrafficCounters[26] += 1
@@ -1580,11 +1845,12 @@ local Returns = table.freeze({
 			TrafficCounters[6] += 1
 		end,
 		FireAll = function(Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Seq(Value)
 			if not CheckUnreliableSize("Seq") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
 				Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -1594,11 +1860,12 @@ local Returns = table.freeze({
 			end
 		end,
 		FireList = function(List: {Player}, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Seq(Value)
 			if not CheckUnreliableSize("Seq") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
 				Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -1608,11 +1875,12 @@ local Returns = table.freeze({
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Seq(Value)
 			if not CheckUnreliableSize("Seq") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -1649,11 +1917,12 @@ local Returns = table.freeze({
 	},
 	Trail = {
 		Fire = function(Player: Player, Value: { number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Trail(Value)
 			if not CheckUnreliableSize("Trail") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 			TrafficCounters[33] += SendCursor
@@ -1662,11 +1931,12 @@ local Returns = table.freeze({
 			TrafficCounters[6] += 1
 		end,
 		FireAll = function(Value: { number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Trail(Value)
 			if not CheckUnreliableSize("Trail") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
 				Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -1677,11 +1947,12 @@ local Returns = table.freeze({
 			end
 		end,
 		FireList = function(List: {Player}, Value: { number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Trail(Value)
 			if not CheckUnreliableSize("Trail") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in List do
 				buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
 				Unreliable:FireClient(Player, Buffer, SendInstances)
@@ -1692,11 +1963,12 @@ local Returns = table.freeze({
 			end
 		end,
 		FireExcept = function(Except: Player, Value: { number }): ()
-			Load()
+			LoadScratch()
 			SerdesFunctions.WriteEVENT_Trail(Value)
 			if not CheckUnreliableSize("Trail") then return end
 			local Buffer = buffer.create(SendCursor)
 			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
 			for _, Player in Players:GetPlayers() do
 				if Player == Except then
 					continue
@@ -1717,7 +1989,7 @@ local Returns = table.freeze({
 				local Success, Error = pcall(function ()
 					ReturnValue = Listener(Player, Value)
 				end)
-				Load(PlayersMap[Player])
+				LoadPlayer(Player)
 				if Success == true then
 					local Cursor, Instances = Mark()
 					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Ask, ReturnValue, InvocationIdentifier)

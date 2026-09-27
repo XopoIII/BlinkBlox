@@ -225,14 +225,17 @@ RunClosure("Packed boolean arrays", function()
 		return Values
 	end
 
-	--> The length prefix is a u16, then one byte per eight elements, rounded up.
+	--> The length prefix is a varint -- one byte under 128 elements, two under 16384 -- then one byte
+	--> per eight elements, rounded up.
 	local Cases = {
-		{ Count = 0, Bytes = 2 },
-		{ Count = 1, Bytes = 3 },
-		{ Count = 7, Bytes = 3 },
-		{ Count = 8, Bytes = 3 },
-		{ Count = 9, Bytes = 4 },
-		{ Count = 17, Bytes = 5 },
+		{ Count = 0, Bytes = 1 },
+		{ Count = 1, Bytes = 2 },
+		{ Count = 7, Bytes = 2 },
+		{ Count = 8, Bytes = 2 },
+		{ Count = 9, Bytes = 3 },
+		{ Count = 17, Bytes = 4 },
+		{ Count = 127, Bytes = 17 },
+		{ Count = 128, Bytes = 18 },
 		{ Count = 1000, Bytes = 127 },
 	}
 
@@ -254,7 +257,8 @@ RunClosure("Packed boolean arrays", function()
 
 	--> Bit order is part of the format: element one is the least significant bit, like `Block.Bit`.
 	local Ordered = Client.PackedBooleans.Write({ true, false, false, false, false, false, false, false, true })
-	if buffer.readu8(Ordered, 2) ~= 0x01 or buffer.readu8(Ordered, 3) ~= 0x01 then
+	--> After the one-byte length.
+	if buffer.readu8(Ordered, 1) ~= 0x01 or buffer.readu8(Ordered, 2) ~= 0x01 then
 		ErrorPrint(`Failed "Packed boolean arrays": the first element is not the least significant bit.`)
 	end
 
@@ -264,13 +268,13 @@ RunClosure("Packed boolean arrays", function()
 		{ Name = "PackedFixed", Value = Pattern(10), Bytes = 2 },
 		{ Name = "PackedRanged", Value = Pattern(3), Bytes = 2 },
 		{ Name = "PackedRanged", Value = Pattern(20), Bytes = 4 },
-		{ Name = "PackedThroughAlias", Value = Pattern(12), Bytes = 4 },
+		{ Name = "PackedThroughAlias", Value = Pattern(12), Bytes = 3 },
 		{ Name = "PackedNested", Value = { Pattern(3), {}, Pattern(9) } },
 		{
 			Name = "PackedBeside",
 			Value = { A = true, List = Pattern(11), B = false, Fixed = { true, false, true }, C = 200 },
-			--> Bitfield, u16 length, the fixed run and the u8, then the variable run's two bytes.
-			Bytes = 7,
+			--> Bitfield, one-byte length, the fixed run and the u8, then the variable run's two bytes.
+			Bytes = 6,
 		},
 		{ Name = "PackedMap", Value = { First = Pattern(5), Second = {}, Third = Pattern(16) } },
 	}

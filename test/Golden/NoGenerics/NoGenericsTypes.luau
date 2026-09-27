@@ -102,6 +102,57 @@ local function Load(Save: BLINK_BUFFER_SAVE?)
     SendInstances = {}
 end
 
+--> A buffer for writes that are copied out as soon as they are made: an unreliable send, and a
+--> broadcast before it is appended to each player's batch. Each used to write into a fresh 64-byte
+--> buffer and a fresh table, and to regrow the buffer on the way to the event's size. This one is
+--> kept at whatever size a write grew it to, up to SCRATCH_LIMIT, so a burst is not held for good.
+--> Nothing keeps a reference past the copy: a remote serialises its arguments when it is fired.
+local SCRATCH_LIMIT = 65536
+local ScratchSize = 64
+local ScratchBuffer = buffer.create(64)
+local ScratchInstances = {}
+
+local function LoadScratch()
+    SendSize = ScratchSize
+    SendCursor = 0
+    SendOffset = 0
+    SendBuffer = ScratchBuffer
+    table.clear(ScratchInstances)
+    SendInstances = ScratchInstances
+end
+
+--> Called once the scratch write is done, before anything else is loaded.
+local function KeepScratch()
+    if SendBuffer ~= ScratchBuffer and SendSize <= SCRATCH_LIMIT then
+        ScratchSize = SendSize
+        ScratchBuffer = SendBuffer
+    end
+end
+
+--> The client's batch, set aside while an unreliable Fire writes into the scratch buffer. A Save
+--> table did the same, and a Fire allocated one.
+local HeldSize = 0
+local HeldCursor = 0
+local HeldBuffer = SendBuffer
+local HeldInstances = SendInstances
+
+local function Hold()
+    HeldSize = SendSize
+    HeldCursor = SendCursor
+    HeldBuffer = SendBuffer
+    HeldInstances = SendInstances
+    LoadScratch()
+end
+
+local function Release()
+    KeepScratch()
+    SendSize = HeldSize
+    SendCursor = HeldCursor
+    SendOffset = HeldCursor
+    SendBuffer = HeldBuffer
+    SendInstances = HeldInstances
+end
+
 --> Undoes a write that threw part way through.
 -->
 --> Every serialiser writes straight into SendBuffer through Allocate, and an assert can fire in the
@@ -113,10 +164,6 @@ end
 --> Only the cursor and the instance count are restored. A buffer that Allocate grew on the way is
 --> kept deliberately: growing copied the earlier bytes across, so the larger buffer is just as
 --> valid, and discarding it would only make the next write grow it again.
-local function Mark(): (number, number)
-    return SendCursor, #SendInstances
-end
-
 local function Rollback(Cursor: number, Instances: number)
     SendCursor = Cursor
     SendOffset = Cursor
@@ -126,23 +173,110 @@ local function Rollback(Cursor: number, Instances: number)
     end
 end
 
-local function Allocate(Bytes: number)
-    local InUse = (SendCursor + Bytes)
-    if InUse > SendSize then
-        --> Avoid resizing the buffer for every write
-        while InUse > SendSize do
-            SendSize *= 1.5
-        end
+--> The same undo without a pcall, for the client's reliable Fire, where a pcall cost more than a
+--> small event's whole write. `Begin` records where the batch stands and a write that returns clears
+--> the record; a write that threw leaves it behind, and whatever touches the batch next -- the next
+--> write, or the flush -- undoes the half-written event first, through `Settle`. The server needs
+--> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
+--> reaches the save.
+local PendingCursor = -1
+local PendingInstances = 0
 
-        local Buffer = buffer.create(SendSize)
-        buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-        SendBuffer = Buffer
+--> How many Instances the client's batch held after the last write into it that returned. Every write
+--> into the batch starts from there, so Begin takes it from here rather than counting the list, and
+--> only a write that can add Instances counts it again; see the commits in the client template.
+local CommittedInstances = 0
+
+local function Settle()
+    if PendingCursor >= 0 then
+        Rollback(PendingCursor, PendingInstances)
+        PendingCursor = -1
+    end
+end
+
+local function Begin()
+    --> Checked here rather than left to Settle, so a Fire pays for no call when there is nothing to
+    --> undo, which is always but after a throw.
+    if PendingCursor >= 0 then
+        Settle()
+    end
+    PendingCursor = SendCursor
+    PendingInstances = CommittedInstances
+end
+
+local function Mark(): (number, number)
+    Settle()
+    return SendCursor, #SendInstances
+end
+
+--> Grows SendBuffer to hold `InUse` bytes, by half again at a time so a steady writer does not
+--> regrow it on every write. Kept out of Allocate, which runs for every event and every string: a
+--> function with a loop in it is not inlined, and Allocate without one is.
+local function Grow(InUse: number)
+    while InUse > SendSize do
+        SendSize *= 1.5
     end
 
-    SendOffset = SendCursor
-    SendCursor += Bytes
-    
-    return SendOffset
+    local Buffer = buffer.create(SendSize)
+    buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+    SendBuffer = Buffer
+end
+
+local function Allocate(Bytes: number)
+    local Offset = SendCursor
+    local InUse = Offset + Bytes
+    if InUse > SendSize then
+        Grow(InUse)
+    end
+
+    SendOffset = Offset
+    SendCursor = InUse
+    return Offset
+end
+
+--> A length as a varint, 0 to 65535 in one to three bytes: seven bits a byte, the lowest first, the top
+--> bit saying another byte follows. Size.LengthPrefix in the compiler decides which lengths travel
+--> this way.
+local function WriteVarLength(Length: number)
+    --> Allocate first, on a line of its own: it may replace SendBuffer, which an argument list would
+    --> already have read.
+    if Length < 0x80 then
+        local At = Allocate(1)
+        buffer.writeu8(SendBuffer, At, Length)
+    elseif Length < 0x4000 then
+        local At = Allocate(2)
+        buffer.writeu8(SendBuffer, At, Length % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 1, Length // 0x80)
+    else
+        local At = Allocate(3)
+        buffer.writeu8(SendBuffer, At, Length % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 1, Length // 0x80 % 0x80 + 0x80)
+        buffer.writeu8(SendBuffer, At + 2, Length // 0x4000)
+    end
+end
+
+--> Refuses what WriteVarLength never writes, so each length has one encoding and none can claim more
+--> than 65535: a byte that ends the number but adds nothing to it, and a third byte past 3 -- which
+--> is also every third byte that asks for a fourth. Checked before anything is read for the length.
+local function ReadVarLength(): number
+    local First = buffer.readu8(RecieveBuffer, Read(1))
+    if First < 0x80 then
+        return First
+    end
+
+    local Second = buffer.readu8(RecieveBuffer, Read(1))
+    if Second < 0x80 then
+        if Second == 0 then
+            error("Expected a length in its shortest form.")
+        end
+        return First - 0x80 + Second * 0x80
+    end
+
+    local Third = buffer.readu8(RecieveBuffer, Read(1))
+    if Third == 0 or Third > 3 then
+        error(`Expected a length of at most 65535, in its shortest form, got a last byte of {Third}.`)
+    end
+    return First - 0x80 + (Second - 0x80) * 0x80 + Third * 0x4000
 end
 
 local function CreateQueue(): BLINK_QUEUE
@@ -437,6 +571,7 @@ return {
 			local Success, Result = pcall(function (): (Color)
 				-- Read BLOCK: 3 bytes
 				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Color
 				local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
 				return Value
@@ -484,6 +619,7 @@ return {
 			local Success, Result = pcall(function (): (ExactRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: ExactRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
@@ -530,6 +666,7 @@ return {
 			local Success, Result = pcall(function (): (DecimalRange)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: DecimalRange
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
@@ -578,6 +715,7 @@ return {
 			local Success, Result = pcall(function (): (NegativeRange)
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: NegativeRange
 				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -626,6 +764,7 @@ return {
 			local Success, Result = pcall(function (): (UnboundUpper)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundUpper
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
@@ -672,6 +811,7 @@ return {
 			local Success, Result = pcall(function (): (UnboundLower)
 				-- Read BLOCK: 4 bytes
 				local BLOCK_START = Read(4)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: UnboundLower
 				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
 				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
@@ -718,28 +858,27 @@ return {
 			local Success, Result = pcall(function (): (MapNested)
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
+				local RecieveBuffer = RecieveBuffer
 				-- Value: MapNested
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				for _ = 1, Elements_1 do
 					-- Key_1: MapNested
-					local OFFSET_0 = Read(2)
-					local Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_1: MapNested
 					local Element_1 = {}
-					local OFFSET_1 = Read(2)
-					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_1)
+					local OFFSET_0 = Read(2)
+					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
 					for _ = 1, Elements_2 do
 						-- Key_2: MapSimple
-						local OFFSET_0 = Read(2)
-						Length = buffer.readu16(RecieveBuffer, OFFSET_0)
+						local Length = ReadVarLength()
 						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 						local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						-- Element_2: MapSimple
-						local OFFSET_1 = Read(1)
-						local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_1)
+						local OFFSET_0 = Read(1)
+						local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_0)
 						Element_1[Key_2] = Element_2
 					end
 					Value[Key_1] = Element_1
@@ -770,12 +909,11 @@ return {
 					end
 					local Length = #Key_1
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					local OFFSET_0 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_0, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 					-- Element_1: MapNested
-					local OFFSET_1 = Allocate(2)
+					local OFFSET_0 = Allocate(2)
 					local Elements_2 = 0
 					for Key_2, Element_2 in Element_1 do
 						Elements_2 += 1
@@ -785,19 +923,18 @@ return {
 						end
 						local Length = #Key_2
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						local OFFSET_0 = Allocate(2)
-						buffer.writeu16(SendBuffer, OFFSET_0, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
 						-- Element_2: MapSimple
 						if typeof(Element_2) ~= "number" then
 							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
 						end
-						local OFFSET_1 = Allocate(1)
-						buffer.writeu8(SendBuffer, OFFSET_1, Element_2)
+						local OFFSET_0 = Allocate(1)
+						buffer.writeu8(SendBuffer, OFFSET_0, Element_2)
 					end
 					if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
-					buffer.writeu16(SendBuffer, OFFSET_1, Elements_2)
+					buffer.writeu16(SendBuffer, OFFSET_0, Elements_2)
 				end
 				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
@@ -820,8 +957,10 @@ return {
 			RecieveCursor = 0
 			RecieveBuffer = Buffer
 			local Success, Result = pcall(function (): (Standalone)
-				-- Read BLOCK: 8 bytes
-				local BLOCK_START = Read(8)
+				-- Read BLOCK: 4 bytes
+				local BLOCK_START = Read(4)
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
 				-- Value: Standalone
 				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
 				-- Value.One: One
@@ -832,32 +971,33 @@ return {
 				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
 				do
 					-- Value.Event: Event
-					local Tag = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+					local Tag = bit32.extract(BITFIELD_1_0, 0, 2)
 					Value.Event = true :: any
 					if Tag == 0 then
-						-- Read BLOCK: 10 bytes
-						local BLOCK_START = Read(10)
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
 						-- Value.Event: Join
 						Value.Event = {Name = false, UserId = false} :: any
 						do
 							-- Value.Event.Name: Name
-							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+							local Length = ReadVarLength()
 							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 							Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						end
 						-- Value.Event.UserId: UserId
-						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 2)
+						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 						Value.Event.Type = "Join"
 					elseif Tag == 1 then
-						-- Read BLOCK: 10 bytes
-						local BLOCK_START = Read(10)
+						-- Read BLOCK: 8 bytes
+						local BLOCK_START = Read(8)
 						-- Value.Event: Chat
 						Value.Event = {UserId = false, Message = false} :: any
 						-- Value.Event.UserId: UserId
 						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 						do
 							-- Value.Event.Message: Message
-							local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 8)
+							local Length = ReadVarLength()
 							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 							Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
 						end
@@ -878,13 +1018,13 @@ return {
 				Value.Nested = {Four = false, Five = false} :: any
 				do
 					-- Value.Nested.Four: Four
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				end
 				do
 					-- Value.Nested.Five: Five
-					local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 6)
+					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
 				end
@@ -902,8 +1042,9 @@ return {
 			local Previous = Save()
 			Load()
 			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 8 bytes
-				local BLOCK_START = Allocate(8)
+				-- Allocate BLOCK: 4 bytes
+				local BLOCK_START = Allocate(4)
+				local BITFIELD_1_0
 				-- Value: Standalone
 				-- Value.One: One
 				if typeof(Value.One) ~= "number" then
@@ -921,10 +1062,10 @@ return {
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
 				-- Value.Event: Event
+				BITFIELD_1_0 = 0
 				if Value.Event.Type == "Join" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 0)
-					-- Allocate BLOCK: 10 bytes
-					local BLOCK_START = Allocate(10)
+					-- Allocate BLOCK: 8 bytes
+					local BLOCK_START = Allocate(8)
 					-- Value.Event: Join
 					do
 						-- Value.Event.Name: Name
@@ -933,7 +1074,7 @@ return {
 						end
 						local Length = #Value.Event.Name
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						buffer.writeu16(SendBuffer, BLOCK_START + 0, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					end
@@ -941,11 +1082,11 @@ return {
 					if typeof(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
 					end
-					buffer.writef64(SendBuffer, BLOCK_START + 2, Value.Event.UserId)
+					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				elseif Value.Event.Type == "Chat" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 1)
-					-- Allocate BLOCK: 10 bytes
-					local BLOCK_START = Allocate(10)
+					-- Allocate BLOCK: 8 bytes
+					local BLOCK_START = Allocate(8)
+					BITFIELD_1_0 += 1
 					-- Value.Event: Chat
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -959,14 +1100,14 @@ return {
 						end
 						local Length = #Value.Event.Message
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						buffer.writeu16(SendBuffer, BLOCK_START + 8, Length)
+						WriteVarLength(Length)
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
 					end
 				elseif Value.Event.Type == "Leave" then
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, 2)
 					-- Allocate BLOCK: 8 bytes
 					local BLOCK_START = Allocate(8)
+					BITFIELD_1_0 += 2
 					-- Value.Event: Leave
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
@@ -984,7 +1125,7 @@ return {
 					end
 					local Length = #Value.Nested.Four
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
 				end
@@ -995,10 +1136,11 @@ return {
 					end
 					local Length = #Value.Nested.Five
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 6, Length)
+					WriteVarLength(Length)
 					Allocate(Length)
 					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
 				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result

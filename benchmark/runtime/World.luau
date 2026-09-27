@@ -65,46 +65,54 @@ local function Create(ClassName: string, Name: string?): any
 		Changed = Signal(),
 	}
 
-	local Object = setmetatable({}, {
-		__index = function(Self, Key)
-			local Method = Methods[Key]
-			if Method then
-				return Method
-			end
-			if Key == "AttributeChanged" or Key == "Changed" then
-				return State[Key]
-			end
-			local Value = State.Properties[Key]
-			if Value ~= nil then
-				return Value
-			end
-			for _, Child in State.Children do
-				if Child.Name == Key then
-					return Child
+	--> A userdata, as in Environment.Instance: a table would send every function that annotates a
+	--> parameter `Player` or `Instance` back to the interpreter.
+	local Object = newproxy(true)
+	local Metatable = getmetatable(Object)
+	for Key, Value in
+		{
+			__index = function(Self, Key)
+				local Method = Methods[Key]
+				if Method then
+					return Method
 				end
-			end
-			return nil
-		end,
-		__newindex = function(Self, Key, Value)
-			if Key == "Parent" then
-				local Previous = State.Properties.Parent
-				if Previous then
-					local Siblings = Hidden[Previous].Children
-					table.remove(Siblings, table.find(Siblings, Self))
+				if Key == "AttributeChanged" or Key == "Changed" then
+					return State[Key]
 				end
-				if Value then
-					table.insert(Hidden[Value].Children, Self)
+				local Value = State.Properties[Key]
+				if Value ~= nil then
+					return Value
 				end
-			end
-			State.Properties[Key] = Value
-			if Key == "Value" then
-				State.Changed:Fire(Value)
-			end
-		end,
-		__tostring = function()
-			return State.Properties.Name
-		end,
-	})
+				for _, Child in State.Children do
+					if Child.Name == Key then
+						return Child
+					end
+				end
+				return nil
+			end,
+			__newindex = function(Self, Key, Value)
+				if Key == "Parent" then
+					local Previous = State.Properties.Parent
+					if Previous then
+						local Siblings = Hidden[Previous].Children
+						table.remove(Siblings, table.find(Siblings, Self))
+					end
+					if Value then
+						table.insert(Hidden[Value].Children, Self)
+					end
+				end
+				State.Properties[Key] = Value
+				if Key == "Value" then
+					State.Changed:Fire(Value)
+				end
+			end,
+			__tostring = function()
+				return State.Properties.Name
+			end,
+		} :: { [string]: any }
+	do
+		Metatable[Key] = Value
+	end
 
 	Hidden[Object] = State
 	return Object
@@ -157,8 +165,18 @@ export type Universe = {
 	ReplicatedStorage: any,
 	Players: any,
 	Player: any,
+	--> Every player on the server. The first is `Player`, the one whose client is loaded.
+	Crowd: { any },
 	--> Every packet a client fired since the benchmark last took them.
 	Outbox: { Sent },
+	--> Every packet the server sent the loaded client since the benchmark last took them.
+	Inbox: { Sent },
+	--> Remote calls made either way, and the bytes they delivered summed over every recipient.
+	Calls: number,
+	Bytes: number,
+	--> Whether modules see `typeof` answer "Instance" for the mock instances. Off unless a scenario
+	--> sends Instances: a replaced builtin is no longer a fastcall.
+	Instances: boolean,
 	--> What a module's path is as an instance, for `require(script.X)` and for `script` itself.
 	Modules: { [string]: any },
 	Deferred: { { any } },
@@ -169,12 +187,34 @@ local function Remote(Universe: Universe, ClassName: string)
 	local State = Hidden[Object]
 	State.Properties.OnServerEvent = Signal()
 	State.Properties.OnClientEvent = Signal()
-	State.Properties.FireServer = function(_self, Buffer: buffer, Instances: { any }?)
-		table.insert(Universe.Outbox, { Buffer = Buffer, Instances = Instances, Remote = Object } :: any)
+	--> A remote serialises its arguments when it is fired, and the tools reuse what they fired, so what
+	--> is kept of a packet with Instances is a copy. Buffers are copied where the server sends: some
+	--> tools rewrite one buffer for each player.
+	local function Keep(Instances: { any }?): { any }?
+		return if Instances and #Instances > 0 then table.clone(Instances) else Instances
 	end
-	--> The benchmark times a client sending to the server. What a server sends back goes nowhere.
-	State.Properties.FireClient = function() end
-	State.Properties.FireAllClients = function() end
+
+	State.Properties.FireServer = function(_self, Buffer: buffer, Instances: { any }?)
+		Universe.Calls += 1
+		Universe.Bytes += buffer.len(Buffer)
+		table.insert(Universe.Outbox, { Buffer = Buffer, Instances = Keep(Instances), Remote = Object } :: any)
+	end
+	State.Properties.FireClient = function(_self, Player: any, Buffer: buffer, Instances: { any }?)
+		Universe.Calls += 1
+		Universe.Bytes += buffer.len(Buffer)
+		if Player == Universe.Player then
+			local Copy = buffer.create(buffer.len(Buffer))
+			buffer.copy(Copy, 0, Buffer)
+			table.insert(Universe.Inbox, { Buffer = Copy, Instances = Keep(Instances), Remote = Object } :: any)
+		end
+	end
+	State.Properties.FireAllClients = function(_self, Buffer: buffer, Instances: { any }?)
+		Universe.Calls += 1
+		Universe.Bytes += buffer.len(Buffer) * #Universe.Crowd
+		local Copy = buffer.create(buffer.len(Buffer))
+		buffer.copy(Copy, 0, Buffer)
+		table.insert(Universe.Inbox, { Buffer = Copy, Instances = Keep(Instances), Remote = Object } :: any)
+	end
 	return Object
 end
 
@@ -204,8 +244,9 @@ local function Mount(Universe: Universe, Path: string, Parent: any): any
 	return Object
 end
 
---- A fresh universe. `Mounts` are the directories required from, relative to the benchmark.
-function World.Universe(Native: boolean, Mounts: { string }): Universe
+--- A fresh universe. `Mounts` are the directories required from, relative to the benchmark. `Count`
+--- is how many players the server has, one unless given; `Instances` is Universe.Instances.
+function World.Universe(Native: boolean, Mounts: { string }, Count: number?, Instances: boolean?): Universe
 	local Root = Create("DataModel", "game")
 	local ReplicatedStorage = Create("ReplicatedStorage")
 	ReplicatedStorage.Parent = Root
@@ -217,8 +258,18 @@ function World.Universe(Native: boolean, Mounts: { string }): Universe
 	Hidden[Players].Properties.PlayerAdded = Signal()
 	Hidden[Players].Properties.PlayerRemoving = Signal()
 	Hidden[Players].Properties.LocalPlayer = Player
+	local Crowd = { Player }
+	for Index = 2, Count or 1 do
+		local Other = Create("Player", `Player{Index}`)
+		Hidden[Other].Properties.UserId = Index
+		Other.Parent = Players
+		Crowd[Index] = Other
+	end
+
+	Hidden[Players].Properties.MaxPlayers = #Crowd
 	Hidden[Players].Properties.GetPlayers = function()
-		return { Player }
+		--> Roblox hands out a new table on every call, and the tools pay for it.
+		return table.clone(Crowd)
 	end
 
 	local Universe: Universe = {
@@ -227,7 +278,12 @@ function World.Universe(Native: boolean, Mounts: { string }): Universe
 		ReplicatedStorage = ReplicatedStorage,
 		Players = Players,
 		Player = Player,
+		Crowd = Crowd,
 		Outbox = {},
+		Inbox = {},
+		Calls = 0,
+		Bytes = 0,
+		Instances = Instances == true,
 		Modules = {},
 		Deferred = {},
 	}
@@ -319,8 +375,25 @@ local function Constructor(Kind: string)
 	}
 end
 
+--> `print` goes nowhere, as `warn` does: ByteNet's release prints its whole instance list on every
+--> Instance it writes, and a terminal is far slower to print to than Roblox's output.
 local PRELUDE =
-	"local game, script, require, task, warn, _G, Instance, CFrame, Vector3, Vector2, Color3, Enum, workspace = ...\n"
+	"local game, script, require, task, warn, print, _G, Instance, CFrame, Vector3, Vector2, Color3, Enum, workspace = ...\n"
+local PRELUDE_TYPEOF =
+	"local game, script, require, task, warn, print, _G, Instance, CFrame, Vector3, Vector2, Color3, Enum, workspace, typeof = ...\n"
+
+--> What `typeof` says with Universe.Instances on: a mock instance is an "Instance".
+local function MockTypeof(Value: any): string
+	if Hidden[Value] then
+		return "Instance"
+	end
+	return typeof(Value)
+end
+
+--- A part the scenarios send, for a universe with Instances on.
+function World.Part(Name: string): any
+	return Create("Part", Name)
+end
 
 --> The prelude goes after the directives, which count only above the first line of code, and never
 --> inside a block comment, whose lines would not start with `--`.
@@ -328,7 +401,7 @@ local PRELUDE =
 --> that do, where Lune's `codegenEnabled` compiles everything: left alone, a tool that never declares
 --> `--!native` -- Packet does not, and ByteNet does in 7 of its 35 files -- would be timed natively
 --> here and interpreted in a game.
-local function Prepare(Source: string, Native: boolean): (string, boolean)
+local function Prepare(Source: string, Native: boolean, Prelude: string): (string, boolean)
 	local Lines = string.split(Source, "\n")
 	local Index = 1
 	local Declared = false
@@ -348,7 +421,7 @@ local function Prepare(Source: string, Native: boolean): (string, boolean)
 		Index += 1
 	end
 
-	table.insert(Lines, Index, PRELUDE)
+	table.insert(Lines, Index, Prelude)
 	return table.concat(Lines, "\n"), Declared
 end
 
@@ -396,6 +469,11 @@ function World.new(Universe: Universe, IsServer: boolean): World
 		RunService = RunService,
 		ReplicatedStorage = Universe.ReplicatedStorage,
 		Players = Universe.Players,
+		Workspace = {
+			GetServerTimeNow = function(_self)
+				return os.clock()
+			end,
+		},
 		HttpService = {
 			JSONEncode = function(_self, Value: any)
 				return serde.encode("json", Value)
@@ -439,7 +517,8 @@ function World.new(Universe: Universe, IsServer: boolean): World
 		assert(not Loading[Path], `{Path} requires itself`)
 		Loading[Path] = true
 
-		local Source, Declared = Prepare(fs.readFile(Path), Universe.Native)
+		local Source, Declared =
+			Prepare(fs.readFile(Path), Universe.Native, if Universe.Instances then PRELUDE_TYPEOF else PRELUDE)
 		local Bytecode = luau.compile(Source, {
 			optimizationLevel = 2,
 			debugLevel = 1,
@@ -460,6 +539,7 @@ function World.new(Universe: Universe, IsServer: boolean): World
 			LocalRequire,
 			Task,
 			Warn,
+			Warn,
 			Globals,
 			Instance,
 			CFrame,
@@ -467,7 +547,8 @@ function World.new(Universe: Universe, IsServer: boolean): World
 			Constructor("Vector2"),
 			Constructor("Color3"),
 			Enum,
-			Universe.Root
+			Universe.Root,
+			MockTypeof
 		)
 		Cache[Path] = Result
 		Loading[Path] = nil

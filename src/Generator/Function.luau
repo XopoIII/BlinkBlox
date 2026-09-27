@@ -184,7 +184,12 @@ function Declarations.Function(Declaration: Parser.Function)
 			:Lines(Serialize.Content, 1)
 
 		if OnServer then
-			TrueListener:Line("Load(PlayersMap[Player])")
+			TrueListener:Line("LoadPlayer(Player)")
+		else
+			--> The failure reply below writes without Mark, and has to land after a Fire that threw
+			--> has been undone rather than behind it.
+			TrueListener:Line("Settle()")
+			TrueListener:Line("local ReplyStart, ReplyInstances = SendCursor, #SendInstances")
 		end
 
 		--> Serialising the reply is protected for the same reason calling the listener is.
@@ -229,6 +234,8 @@ function Declarations.Function(Declaration: Parser.Function)
 
 		if OnServer then
 			TrueListener:Line("SavePlayerBuffer(Player)")
+		else
+			TrueListener:Line("Close(ReplyStart, ReplyInstances)")
 		end
 
 		TrueListener:End()
@@ -284,7 +291,7 @@ function Declarations.Function(Declaration: Parser.Function)
 		local function SendCall(Target: Blocks.Block): Blocks.Block
 			Target:Line(`local InvocationIdentifier = {ClaimSlot}`)
 			if ServerCalls then
-				Target:Line("Load(PlayersMap[Player])")
+				Target:Line("LoadPlayer(Player)")
 			end
 
 			--> Releasing the slot when the ARGUMENTS fail to serialise.
@@ -306,6 +313,8 @@ function Declarations.Function(Declaration: Parser.Function)
 
 			if ServerCalls then
 				Target:Line("SavePlayerBuffer(Player)")
+			else
+				Target:Line("Close(Cursor, Instances)")
 			end
 
 			return Target

@@ -43,6 +43,23 @@ assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable rem
 
 local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
 
+--> THE BROADCAST BATCH. A reliable FireAll is written once, here, and sent at the flush in one
+--> FireAllClients, where it used to be copied into every player's batch: fifty players made a FireAll
+--> fifty copies and the flush fifty remote calls.
+-->
+--> A player's own writes still go to their own batch, and the order they and the broadcasts were
+--> made in has to survive. A player's first write of their own since a broadcast DIVERGES them: their
+--> batch takes a copy of the broadcast batch so far, then their write, and every later broadcast is
+--> appended to it as well. At the flush a diverged player is sent their batch alone; everyone else is
+--> sent the broadcast batch, after anything of their own that came before the first broadcast. With
+--> nobody diverged, that is one FireAllClients.
+local SharedSize = 64
+local SharedCursor = 0
+local SharedBuffer = buffer.create(64)
+local SharedInstances: {Instance} = {}
+local SharedUnderused = 0
+local Diverged: {[Player]: true} = {}
+
 --> How many rows a polled event's queue holds on the server before it stops taking more. Clients fill
 --> it, and a game that polls an event rarely, or has not got round to polling it at all, would let
 --> them grow it without end -- each row pinning its Player. A game that drains its queues every
@@ -104,6 +121,7 @@ end
 
 Players.PlayerRemoving:Connect(function(Player)
     PlayersMap[Player] = nil
+    Diverged[Player] = nil
     RateBuckets[Player] = nil
     InboundBudgets[Player] = nil
     Reports[Player] = nil
@@ -138,18 +156,27 @@ end)
 --> then, so a plain `PlayersMap[Player] = Save()` puts back an entry that nothing will ever remove
 --> again: StepReplication would allocate a buffer and fire a remote at a player who is gone, on
 --> every Heartbeat, for the lifetime of the server.
+-->
+--> Only a new entry needs the check. An entry that exists has not been through PlayerRemoving yet,
+--> and one written in its narrow window is dropped by StepReplication; asking the DataModel on every
+--> send cost a reflected call per player per event, which is most of what a FireAll cost.
 local function SavePlayerBuffer(Player: Player)
 -- STARTED --
-    if not Player:IsDescendantOf(Players) then
-        return
-    end
-
     --> Written into the entry the player already has, rather than a new one each time: this runs on
     --> every reliable send to a player, and the entry also carries its shrink count.
     local Entry = PlayersMap[Player]
     if Entry == nil then
-        PlayersMap[Player] = Save()
+        if Player:IsDescendantOf(Players) then
+            PlayersMap[Player] = Save()
+            if SharedCursor > 0 then
+                Diverged[Player] = true
+            end
+        end
         return
+    end
+
+    if SharedCursor > 0 then
+        Diverged[Player] = true
     end
 
     Entry.Size = SendSize
@@ -158,7 +185,84 @@ local function SavePlayerBuffer(Player: Player)
     Entry.Instances = SendInstances
 end
 
+--> Loads `Player`'s batch for a write of their own, diverging them first when a broadcast is pending;
+--> see the broadcast batch above. The SavePlayerBuffer that follows marks them diverged.
+local function LoadPlayer(Player: Player)
+    Load(PlayersMap[Player])
+    if SharedCursor > 0 and not Diverged[Player] then
+        local Position = Allocate(SharedCursor)
+        buffer.copy(SendBuffer, Position, SharedBuffer, 0, SharedCursor)
+        table.move(SharedInstances, 1, #SharedInstances, #SendInstances + 1, SendInstances)
+    end
+end
+
+--> Appends an event written elsewhere to one player's batch: a FireList or FireExcept, and a
+--> broadcast to a player who has diverged. A player with a batch of their own and nothing to catch up
+--> on gets it straight into it; any other goes the long way, through LoadPlayer and SavePlayerBuffer.
+local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instances: {Instance})
+    local Entry = PlayersMap[Player]
+    if Entry == nil or (SharedCursor > 0 and not Diverged[Player]) then
+        LoadPlayer(Player)
+        local Position = Allocate(Size)
+        buffer.copy(SendBuffer, Position, Buffer, 0, Size)
+        table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+        SavePlayerBuffer(Player)
+        return
+    end
+
+    local Cursor = Entry.Cursor
+    local InUse = Cursor + Size
+    local Target = Entry.Buffer
+    if InUse > Entry.Size then
+        local Grown = Entry.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Target, 0, Cursor)
+        Target = Resized
+        Entry.Buffer = Resized
+        Entry.Size = Grown
+    end
+
+    buffer.copy(Target, Cursor, Buffer, 0, Size)
+    Entry.Cursor = InUse
+
+    local Count = #Instances
+    if Count > 0 then
+        local List = Entry.Instances
+        table.move(Instances, 1, Count, #List + 1, List)
+    end
+end
+
+--> Appends a broadcast to the broadcast batch, and to the batch of every player who has diverged.
+local function AppendShared(Buffer: buffer, Size: number, Instances: {Instance})
+-- STARTED --
+    local InUse = SharedCursor + Size
+    if InUse > SharedSize then
+        while InUse > SharedSize do
+            SharedSize *= 1.5
+        end
+
+        local Resized = buffer.create(SharedSize)
+        buffer.copy(Resized, 0, SharedBuffer, 0, SharedCursor)
+        SharedBuffer = Resized
+    end
+
+    buffer.copy(SharedBuffer, SharedCursor, Buffer, 0, Size)
+    SharedCursor = InUse
+    if #Instances > 0 then
+        table.move(Instances, 1, #Instances, #SharedInstances + 1, SharedInstances)
+    end
+
+    for Player in Diverged do
+        AppendPlayer(Player, Buffer, Size, Instances)
+    end
+end
+
 local function StepReplication()
+    local Shared = SharedCursor
     for Player, Send in PlayersMap do
         --> Second line of defence. An entry can still be stale if it was written inside the narrow
         --> window of PlayerRemoving itself, before the player was detached; dropping it here makes
@@ -166,6 +270,19 @@ local function StepReplication()
         if not Player:IsDescendantOf(Players) then
             PlayersMap[Player] = nil
             continue
+        end
+
+        --> Everything of this player's own came before the first broadcast, so the broadcast batch
+        --> follows it in their packet rather than going in one of its own.
+        if Shared > 0 and Send.Cursor > 0 and not Diverged[Player] then
+            Load(Send)
+            local Position = Allocate(Shared)
+            buffer.copy(SendBuffer, Position, SharedBuffer, 0, Shared)
+            table.move(SharedInstances, 1, #SharedInstances, #SendInstances + 1, SendInstances)
+            Send.Size = SendSize
+            Send.Cursor = SendCursor
+            Send.Buffer = SendBuffer
+            Diverged[Player] = true
         end
 
         local Used = Send.Cursor
@@ -189,6 +306,31 @@ local function StepReplication()
             Send.Size = 64
             Send.Buffer = buffer.create(64)
         end
+    end
+
+    if Shared > 0 then
+        local Buffer = buffer.create(Shared)
+        buffer.copy(Buffer, 0, SharedBuffer, 0, Shared)
+        if next(Diverged) == nil then
+            Reliable:FireAllClients(Buffer, SharedInstances)
+        else
+            for _, Player in Players:GetPlayers() do
+                if not Diverged[Player] then
+                    Reliable:FireClient(Player, Buffer, SharedInstances)
+                end
+            end
+        end
+
+        SharedCursor = 0
+        table.clear(SharedInstances)
+        table.clear(Diverged)
+    end
+
+    local Shrink
+    Shrink, SharedUnderused = ShouldShrink(SharedSize, Shared, SharedUnderused)
+    if Shrink then
+        SharedSize = 64
+        SharedBuffer = buffer.create(64)
     end
 end
 ]]

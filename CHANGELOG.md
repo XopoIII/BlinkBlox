@@ -7,6 +7,71 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.40.0 — 2026-09-27
+
+A release about speed and bytes, and **a wire-format change: `WIRE_VERSION` is 3. Recompile both
+modules.** A 0.40.0 module refuses one built by an earlier release at startup, through the schema
+signature. Every figure below is 0.40.0 against 0.39.0, the medians of three to five runs of each
+interleaved on one machine, with the benchmark's own mocks the same for both.
+
+The benchmark gained the paths it had never run -- `benchmark/Scenarios.luau` times a server sending
+to fifty players, small unreliable events, streams and Instances, and `benchmark/Rivals.luau` runs the
+same scenarios on upstream Blink, zap, ByteNet and Packet -- and it had been timing interpreted code in
+its native rows: a mock player or Instance was a table, and native code sends a function whose
+parameter is annotated `Player` or `Instance` back to the interpreter when a table arrives. They are
+userdata now, as in a game.
+
+### Faster
+
+- A reliable `FireAll` is written once into a broadcast batch and sent in one `FireAllClients`, where
+  it was copied into every player's batch and flushed as a remote call each: with fifty players, 100
+  FireAlls a frame went from 3.8 ms to 0.035 ms, and the flush from 50 remote calls to 1. A player's
+  own events keep their order against the broadcasts around them.
+- One `pcall` a packet on receipt rather than one an event, and none on a client's reliable `Fire`: a
+  write that throws is undone lazily, by whatever touches the batch next. A one-byte event fires 42%
+  and decodes 37% faster natively, 11% and 21% interpreted.
+- Readers hold the packet in a local, `Allocate` keeps its growth out of line, a Single listener is
+  read once, the decode loop is made once a module, and the rate buckets refill once a packet. An
+  array of structs decodes 6 to 12% faster, `boolean[]` fires 6% faster natively.
+- An unreliable send writes into a scratch buffer kept between sends; an unreliable `Fire` is 18 to
+  40% faster.
+- A `Fire` carrying an Instance counts the batch's Instances only where it can add one: 40% faster
+  natively, level interpreted.
+
+### Changed on the wire
+
+- A length nobody bounded, or one whose span needs two bytes, is a varint: one byte under 128, two
+  under 16384, three to 65535. A span past two bytes takes three bytes where it took four. The reader
+  refuses a varint in more bytes than it needs and one past 65535, before anything is read for it.
+- An enum's index and a tagged enum's tag are bits in the bitfield -- as few as tell the values
+  apart, at least one -- where each took a byte.
+- A stream carries no sequence number: it is ordered by the stamp every packet already carries, so a
+  stream to everyone goes out in one `FireAllClients`, two bytes shorter. The streams to everyone due
+  in a frame share their packets: fifty players' stream flush makes 1 remote call where it made 50.
+
+### Added
+
+- `option BatchUnreliable` gathers a side's unreliable events into as few packets as
+  `MaxUnreliableSize` allows, sent at the flush: eight small inputs a frame are one remote call
+  instead of eight and decode 55 to 60% faster. An event waits up to a frame. It pays where a
+  recipient gets several unreliable events a frame; where each gets one there is nothing to gather.
+
+### Fixed
+
+- A client sent a frame's reliable events as one packet whatever the server's limits, so an honest
+  player who fired more than `MaxEventsPerPacket`, `MaxPacketSize` or `MaxInstancesPerPacket` in one
+  frame -- after a hitch, from a busy interface -- was refused and reported to the packet-drop handler.
+  The batch is now cut at event boundaries into packets the server takes.
+- A stream state too large for one packet was counted as sent and warned about at every step; it is
+  reported once and stops the stream until the next `Set`.
+- `Builder.PushLines` dropped the line before a trailing empty one instead of the empty one.
+
+### Downstream
+
+- Grabby Pit: rebuild both modules. Honest players no longer reach `SetPacketDropHandler` with
+  `Events` or `Oversized` for a frame of many events, so strikes on those reasons now mean a client
+  that wrote its own packets. Nothing else a handler receives changes.
+
 ## 0.39.0 — 2026-09-27
 
 A client's event can say when it was sent, and a stream can hold a state for each player. Both came

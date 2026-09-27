@@ -82,7 +82,8 @@ hashes `WIRE_VERSION`, a number the compiler bumps by hand whenever a type's byt
 | `WIRE_VERSION` | Releases | Change |
 |---|---|---|
 | 1 | 0.23.0 to 0.26.x | The first version, introduced with the signature. |
-| 2 | 0.27.0 onward | `boolean[]` packed eight elements to a byte. |
+| 2 | 0.27.0 to 0.39.x | `boolean[]` packed eight elements to a byte. |
+| 3 | 0.40.0 onward | Varint lengths; enums and tags in the bitfield; streams without a sequence number. |
 
 ## Releases that changed the wire
 
@@ -90,24 +91,25 @@ hashes `WIRE_VERSION`, a number the compiler bumps by hand whenever a type's byt
 |---|---|---|
 | 0.21.0 | Booleans and optional flags share a bitfield; lengths are encoded relative to their minimum; `OrderedUnreliable` added. The fork's first wire-format change. | 0.21.0 and 0.22.x. Neither carries a signature, so a mismatch between them is silent. |
 | 0.23.0 | Schema signature added, at `WIRE_VERSION` 1. No byte of a payload changed, but a client now refuses a server without a signature. | 0.23.0 to 0.26.x. |
-| 0.27.0 | `boolean[]` packed eight to a byte; `WIRE_VERSION` 2. `CFrame<quat>` added (opt-in, so only schemas that use it are affected). | 0.27.0 onward. |
-| 0.28.0 | Renamed from Blink to BlinkBlox. The remotes keep their names -- `BLINK_RELIABLE_REMOTE`, `BLINK_UNRELIABLE_REMOTE` -- as do `_G._BLINK` and the `SchemaSignature` attribute, so builds either side of the rename still find each other. | 0.27.0 onward. |
-| 0.29.0 | No change to the format. | 0.27.0 onward. |
-| 0.30.0 | No change to the format. | 0.27.0 onward. |
-| 0.31.0 | `f16` writes -0 as `0x8000` instead of `0x0000`. An older reader decodes it as 0, so builds either side agree on everything but the sign of a zero. | 0.27.0 onward. |
-| 0.32.0 | No change to the format. | 0.27.0 onward. |
-| 0.33.0 | No change to the format. | 0.27.0 onward. |
-| 0.34.0 | `u24`, `i24` and `f24` added. No existing type's encoding changed, so only schemas that use them are affected. | 0.27.0 onward. |
-| 0.35.0 | No change to the format. The generated code is faster; the bytes it writes are the same. | 0.27.0 onward. |
-| 0.36.0 | No change to the format. `MaxUnreliableSize` defaults to 980 and counts 6 bytes per Instance, which decides what a sender refuses to send, not how anything is encoded. | 0.27.0 onward. |
-| 0.36.1 | No change to the format. | 0.27.0 onward. |
-| 0.36.2 | No change to the format. `boolean[]` is written faster, into the same bytes. | 0.27.0 onward. |
-| 0.37.0 | No change to the format. `SetPacketDropHandler` decides who hears about a refused packet, not how anything is encoded. | 0.27.0 onward. |
-| 0.37.1 | No change to the format. | 0.27.0 onward. |
-| 0.38.0 | Fixed-point numbers (`u16<0.1>`) and [streams](/BlinkBlox/language/streams/) added. Both are opt-in and part of the schema signature, so only schemas that use them are affected. | 0.27.0 onward. |
-| 0.38.1 | No change to the format. | 0.27.0 onward. |
-| 0.38.2 | No change to the format. | 0.27.0 onward. |
-| 0.39.0 | [Stamps](/BlinkBlox/language/stamps/) added: a stamped event carries two bytes after its values, and the stamp is part of the schema signature. `Per: Player` changes which player a stream is sent to, not what a client receives. Schemas that use neither compile to the same bytes. | 0.27.0 onward. |
+| 0.27.0 | `boolean[]` packed eight to a byte; `WIRE_VERSION` 2. `CFrame<quat>` added (opt-in, so only schemas that use it are affected). | 0.27.0 to 0.39.x. |
+| 0.28.0 | Renamed from Blink to BlinkBlox. The remotes keep their names -- `BLINK_RELIABLE_REMOTE`, `BLINK_UNRELIABLE_REMOTE` -- as do `_G._BLINK` and the `SchemaSignature` attribute, so builds either side of the rename still find each other. | 0.27.0 to 0.39.x. |
+| 0.29.0 | No change to the format. | 0.27.0 to 0.39.x. |
+| 0.30.0 | No change to the format. | 0.27.0 to 0.39.x. |
+| 0.31.0 | `f16` writes -0 as `0x8000` instead of `0x0000`. An older reader decodes it as 0, so builds either side agree on everything but the sign of a zero. | 0.27.0 to 0.39.x. |
+| 0.32.0 | No change to the format. | 0.27.0 to 0.39.x. |
+| 0.33.0 | No change to the format. | 0.27.0 to 0.39.x. |
+| 0.34.0 | `u24`, `i24` and `f24` added. No existing type's encoding changed, so only schemas that use them are affected. | 0.27.0 to 0.39.x. |
+| 0.35.0 | No change to the format. The generated code is faster; the bytes it writes are the same. | 0.27.0 to 0.39.x. |
+| 0.36.0 | No change to the format. `MaxUnreliableSize` defaults to 980 and counts 6 bytes per Instance, which decides what a sender refuses to send, not how anything is encoded. | 0.27.0 to 0.39.x. |
+| 0.36.1 | No change to the format. | 0.27.0 to 0.39.x. |
+| 0.36.2 | No change to the format. `boolean[]` is written faster, into the same bytes. | 0.27.0 to 0.39.x. |
+| 0.37.0 | No change to the format. `SetPacketDropHandler` decides who hears about a refused packet, not how anything is encoded. | 0.27.0 to 0.39.x. |
+| 0.37.1 | No change to the format. | 0.27.0 to 0.39.x. |
+| 0.38.0 | Fixed-point numbers (`u16<0.1>`) and [streams](/BlinkBlox/language/streams/) added. Both are opt-in and part of the schema signature, so only schemas that use them are affected. | 0.27.0 to 0.39.x. |
+| 0.38.1 | No change to the format. | 0.27.0 to 0.39.x. |
+| 0.38.2 | No change to the format. | 0.27.0 to 0.39.x. |
+| 0.39.0 | [Stamps](/BlinkBlox/language/stamps/) added: a stamped event carries two bytes after its values, and the stamp is part of the schema signature. `Per: Player` changes which player a stream is sent to, not what a client receives. Schemas that use neither compile to the same bytes. | 0.27.0 to 0.39.x. |
+| 0.40.0 | `WIRE_VERSION` 3. A length nobody bounded, or one whose span needs two bytes, is a varint; a span past two bytes takes three where it took four. An enum's index and a tagged enum's tag are bits in the bitfield rather than a byte each. A stream carries no sequence number, and is ordered by its stamp. Unreliable events may share a packet -- streams always, other events under `BatchUnreliable` -- which every receiver since 0.21.0 decodes. | 0.40.0 onward. |
 
 Modules from different releases with the same `WIRE_VERSION` interoperate, but a fix to how a value is
 read or handled applies only on the side built by the release that has it. Ship both sides from one

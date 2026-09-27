@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: What BlinkBlox's generated code costs to fire, flush and decode against Blink, zap, ByteNet and Packet, measured on Lune, and its frame rate, fire time and bandwidth against them and plain remotes in Studio.
+description: What BlinkBlox's generated code costs to fire, flush and decode against Blink, zap, ByteNet and Packet, measured on Lune -- a thousand events a frame, and a server sending to fifty players, unreliable events and Instances -- and its frame rate, fire time and bandwidth against them and plain remotes in Studio.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -28,49 +28,51 @@ thousand different payloads a frame instead of one payload a thousand times, and
 
 Natively compiled, as a Roblox server runs the module:
 
-| Bench | Fire 0.34.0 | Fire 0.35.0 | Fire 0.38.1 | Decode 0.34.0 | Decode 0.35.0 | Decode 0.38.1 | Bytes |
+| Bench | Fire 0.34.0 | Fire 0.39.0 | Fire 0.40.0 | Decode 0.34.0 | Decode 0.39.0 | Decode 0.40.0 | Bytes |
 |---|---|---|---|---|---|---|---|
-| Booleans | 8.97 | 6.10 | **3.84** | 15.16 | **4.37** | 4.54 | 128 |
-| Entities | 3.57 | **3.19** | 3.20 | 72.95 | **11.31** | 13.33 | 603 |
-| BooleansRandom | 20.14 | 17.39 | **8.62** | 15.40 | 5.40 | **4.83** | 128 |
-| EntitiesRandom | 4.07 | **3.66** | 3.72 | 75.96 | 15.81 | **12.83** | 603 |
-| Tiny | 0.13 | 0.13 | 0.14 | 0.54 | **0.36** | 0.39 | 2 |
+| Booleans | 8.97 | 3.77 | **3.56** | 15.16 | 4.42 | **4.16** | 128 |
+| Entities | 3.57 | **3.20** | 3.23 | 72.95 | 11.72 | **10.78** | 602 |
+| BooleansRandom | 20.14 | 8.48 | **8.38** | 15.40 | 5.31 | **5.14** | 128 |
+| EntitiesRandom | 4.07 | **3.65** | **3.65** | 75.96 | 15.48 | **14.49** | 602 |
+| Tiny | 0.13 | 0.135 | **0.078** | 0.54 | 0.347 | **0.217** | 2 |
 
 Interpreted, as most Roblox clients run it:
 
-| Bench | Fire 0.34.0 | Fire 0.35.0 | Fire 0.38.1 | Decode 0.34.0 | Decode 0.35.0 | Decode 0.38.1 |
+| Bench | Fire 0.34.0 | Fire 0.39.0 | Fire 0.40.0 | Decode 0.34.0 | Decode 0.39.0 | Decode 0.40.0 |
 |---|---|---|---|---|---|---|
-| Booleans | 92.12 | **36.98** | 38.24 | 107.64 | 45.13 | **45.11** |
-| Entities | 34.13 | 33.52 | **33.46** | 103.77 | **54.04** | 54.97 |
-| BooleansRandom | 82.66 | 41.83 | **40.44** | 108.28 | **46.19** | 46.28 |
-| EntitiesRandom | 33.89 | **33.60** | 33.67 | 107.44 | 57.65 | **55.69** |
-| Tiny | 0.35 | 0.35 | 0.35 | 0.78 | **0.62** | 0.64 |
+| Booleans | 92.12 | 37.71 | **37.70** | 107.64 | 45.35 | **43.53** |
+| Entities | 34.13 | 33.48 | **33.43** | 103.77 | 54.14 | **48.22** |
+| BooleansRandom | 82.66 | 40.43 | **40.37** | 108.28 | 46.23 | **45.34** |
+| EntitiesRandom | 33.89 | 33.59 | **33.57** | 107.44 | 57.66 | **50.88** |
+| Tiny | 0.35 | 0.346 | **0.307** | 0.78 | 0.670 | **0.531** |
 
-0.34.0 and 0.35.0 were run back to back on 2026-09-25, with Lune 0.10.5 on an Apple M1 with 16 GB
-of memory, by the same harness: 0.34.0's compiler with 0.35.0's `benchmark/Runtime.luau`. The 0.38.1
-columns are BlinkBlox's rows of the run in
-[`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md),
-made on 2026-09-26 on the same machine, each the median of three runs. 0.36.2 writes a `boolean[]`
-faster, which is what moved the fire times after 0.35.0. The code a packet runs through has not
-changed since 0.36.2: loaded side by side into one process, 0.36.2's and 0.38.1's modules decode at
-the same speed.
+0.34.0 was run on 2026-09-25 with Lune 0.10.5 on an Apple M1 with 16 GB of memory. The 0.39.0 and
+0.40.0 columns were run on 2026-09-27 on the same machine, three runs of each taken alternately --
+one of 0.39.0, one of 0.40.0, and again -- so the two see the same machine, and each figure is the
+median of the three. Both use 0.40.0's harness, whose mock players and Instances are userdata as in a
+game: before it they were tables, which native code sends back to the interpreter wherever a
+parameter is annotated `Player` or `Instance`. An Entities event is a byte shorter in 0.40.0: an
+array's length that needs two bytes of span is a varint, one byte under 128.
+
+What 0.40.0 changed is framing and dispatch rather than the fields: one `pcall` a packet rather than
+one an event, none on a reliable `Fire`, and a reader that keeps the packet in a local. That is most
+of a one-byte event's cost, and a part of a struct's decode. See
+[What's new in 0.40](/BlinkBlox/guides/whats-new/).
 
 Columns taken on different days differ by more than the code does. Between single runs this machine
-moves a decode figure by up to a fifth -- the earlier single run of 0.36.2 read 10.81 on
-EntitiesRandom, the same modules read 12.8 to 17.9 today -- so compare within a column, or run both
-versions yourself, before reading a gap under a fifth as a change. A difference of a few hundredths
-of a millisecond is noise. The flush, which copies the batch into an
-exact-size buffer, took under 0.035 ms in every case. The [changelog](/BlinkBlox/changelog/) says
-what changed in each release.
+moves a decode figure by up to a fifth, so compare within a column, or run both versions yourself,
+before reading a gap under a fifth as a change. A difference of a few hundredths of a millisecond is
+noise. The flush, which copies the batch into an exact-size buffer, took under 0.03 ms in every case.
+The [changelog](/BlinkBlox/changelog/) says what changed in each release.
 
 Entities' fire time barely moves, natively or not, because there is nothing left to take out of it:
 each element is six `buffer.writeu8` calls into a block allocated once for the whole array.
 
 ## Against other tools, on Lune
 
-The same harness runs every tool on the same payloads. The run was made on 2026-09-26 on an Apple M1
+The same harness runs every tool on the same payloads. The run was made on 2026-09-27 on an Apple M1
 with 16 GB of memory, with Lune 0.10.5, and every figure is the median of three runs. The versions
-were BlinkBlox 0.38.1, Blink 0.18.9, zap 0.6.29, ByteNet 0.4.3 and Packet 1.7.0. "Fire" is
+were BlinkBlox 0.40.0, Blink 0.18.9, zap 0.6.29, ByteNet 0.4.3 and Packet 1.7.0. "Fire" is
 a frame's thousand fires interpreted, as most players' clients run them. "Decode" is the server
 decoding those events and calling its listener, natively compiled, as a Roblox server runs it.
 "Bytes" is one event as the encoder wrote it, before compression. Packet declares `--!native`
@@ -79,31 +81,61 @@ in [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/be
 
 | Bench | Tool | Fire | Decode | Bytes |
 |---|---|---|---|---|
-| Booleans | **BlinkBlox** | **38.24** | **4.54** | **128** |
-| | Blink | 68.76 | 12.12 | 1003 |
-| | zap | 173.87 | 13.38 | 1003 |
-| | ByteNet | 126.53 | 122.22 | 1003 |
-| | Packet | 125.14 | 116.66 | 1003 |
-| Entities | **BlinkBlox** | **33.46** | **13.33** | 603 |
-| | Blink | **33.46** | 73.31 | 603 |
-| | zap | 84.14 | 73.88 | 603 |
-| | ByteNet | 109.17 | 112.40 | 603 |
-| | Packet | 100.62 | 164.01 | 603 |
-| BooleansRandom | **BlinkBlox** | **40.44** | **4.83** | **128** |
-| | Blink | 73.63 | 12.28 | 1003 |
-| | zap | 171.32 | 13.38 | 1003 |
-| | ByteNet | 134.38 | 128.93 | 1003 |
-| | Packet | 132.44 | 125.37 | 1003 |
-| EntitiesRandom | **BlinkBlox** | 33.67 | **12.83** | 603 |
-| | Blink | **33.61** | 73.68 | 603 |
-| | zap | 84.14 | 73.92 | 603 |
-| | ByteNet | 109.60 | 111.61 | 603 |
-| | Packet | 100.93 | 164.89 | 603 |
+| Booleans | **BlinkBlox** | **37.70** | **4.17** | **128** |
+| | Blink | 68.79 | 11.89 | 1003 |
+| | zap | 173.97 | 13.35 | 1003 |
+| | ByteNet | 126.58 | 122.42 | 1003 |
+| | Packet | 124.27 | 116.67 | 1003 |
+| Entities | **BlinkBlox** | **33.45** | **12.22** | **602** |
+| | Blink | 33.46 | 73.17 | 603 |
+| | zap | 83.89 | 74.10 | 603 |
+| | ByteNet | 109.11 | 110.58 | 603 |
+| | Packet | 100.55 | 162.54 | 603 |
+| BooleansRandom | **BlinkBlox** | **40.43** | **4.50** | **128** |
+| | Blink | 73.63 | 11.76 | 1003 |
+| | zap | 171.82 | 13.13 | 1003 |
+| | ByteNet | 134.54 | 129.18 | 1003 |
+| | Packet | 132.34 | 125.17 | 1003 |
+| EntitiesRandom | **BlinkBlox** | **33.57** | **11.38** | **602** |
+| | Blink | **33.57** | 73.74 | 603 |
+| | zap | 84.10 | 74.38 | 603 |
+| | ByteNet | 109.58 | 109.84 | 603 |
+| | Packet | 101.19 | 164.49 | 603 |
 
 Firing Entities costs BlinkBlox what it cost Blink: both write six `u8` fields into a block
-allocated once for the array. Decoding them is where 0.35.0's work shows, under a fifth of Blink's
-time on the server. A `boolean[]` is packed eight to a byte, which makes its event an eighth the size and
+allocated once for the array. Decoding them is where BlinkBlox's work shows, a sixth of Blink's time
+on the server. A `boolean[]` is packed eight to a byte, which makes its event an eighth the size and
 its fires and decodes cheaper with it.
+
+## Sending to a crowd, unreliable events and Instances
+
+The benchmark above sends in one direction, a thousand reliable events a frame from a client. A game
+also has the server sending to a crowd, small unreliable events every frame, and events carrying
+Instances. `lune run Rivals` runs those on every tool, from the same run and machine as the table
+above; the figures are milliseconds a frame, natively compiled, with the remote calls and bytes a
+frame summed over every player reached.
+
+| Scenario | BlinkBlox | Blink | zap | ByteNet | Packet |
+|---|---|---|---|---|---|
+| **Broadcast**: 100 structs a frame to 50 players, `FireAll` | **0.037** fire, **0.024** decode, **1 call** | 2.10, 0.081, 50 calls | 2.46, 0.077, 50 calls | 0.099, 0.268, 1 call | 0.209, 0.452, 1 call |
+| **UnreliableInput**: 8 small inputs a frame, client to server | 0.006, 0.010, 8 calls | 0.009, 0.009, 8 calls | **0.006**, **0.006**, 8 calls | **0.006**, 0.019, **1 call** | no unreliable channel |
+| ... with `BatchUnreliable` | **0.004**, **0.004**, **1 call** | | | | |
+| **Instances**: 100 events a frame carrying a part | **0.012**, 0.037 | **0.011**, **0.014** | 0.023, 0.042 | 0.064, 0.219 | 0.094, 0.333 |
+| **WorldState**: 16 units a frame to 50 players, unreliable | **0.003**, **0.002** | 0.008, 0.016 | 0.013, 0.017 | 0.017, 0.023 | no unreliable channel |
+| **SelfState**: each of 50 players their own unit, unreliable | 0.045, 0.001 | 0.043, 0.001 | **0.039**, 0.001 | 0.065, 0.004 | no unreliable channel |
+
+A reliable `FireAll` in BlinkBlox is written once into a broadcast batch and sent in one
+`FireAllClients`; Blink and zap copy it into every player's batch and send each one. ByteNet and Packet
+share a buffer too, and BlinkBlox decodes its packet in a tenth of their time. `BatchUnreliable`
+gathers a client's inputs into one remote call, as ByteNet does, and decodes them faster than any of
+them. On Instances BlinkBlox spends more than Blink on the server, for the checks it makes before a
+listener sees one: the class of each Instance, and a `pcall` around the listener. Both columns for
+every scenario, interpreted included, are in
+[`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
+
+Streams have no counterpart in the other tools. `lune run Scenarios` times them for BlinkBlox: a
+stream of 16 units to 50 players takes one `FireAllClients` a frame and 0.016 ms to flush natively,
+and a stream held per player 0.084 ms for all fifty.
 
 ## Against other tools, in Studio
 
@@ -239,6 +271,9 @@ runs on Windows, macOS and Linux.
   whose name contains `Entities`, `lune run Runtime -- --frames 50` makes the run shorter, and
   `lune run Runtime -- --tools blink,zap` runs only the tools listed. The harness knows BlinkBlox as
   `blink` and Blink as `upstream`; the others by their lower-case names.
+- `lune run Scenarios` and `lune run Rivals` time a server sending to a crowd, unreliable events,
+  streams and Instances: BlinkBlox alone, and every tool. `--batch` builds BlinkBlox with
+  `BatchUnreliable`; `Rivals` takes `--tools` as `Runtime` does.
 - `lune run Performance` times the compiler itself: lexing, parsing and generating the test schema.
 - `lune run build --download --run` fetches zap, BlinkBlox, ByteNet and Packet for the machine it
   runs on, and the source of Blink, the original project, builds the Studio place, runs it with `run-in-roblox`, and

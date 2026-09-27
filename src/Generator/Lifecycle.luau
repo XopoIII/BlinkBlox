@@ -78,6 +78,7 @@ function Lifecycle.Sources(Context: string, Options: Parser.Options): { string }
 	for Index = 2, #Rest do
 		local Before = Rest[Index - 1]
 		local Guard = if string.find(Before, "local function SavePlayerBuffer%(Player: Player%)\n$")
+				or string.find(Before, "local function AppendShared%(.-%)\n$")
 			then Start.Guard.SavePlayerBuffer
 			else Start.Guard.InvokePlayer
 		table.insert(Guarded, if Deferred then Guard .. Rest[Index] else Rest[Index])

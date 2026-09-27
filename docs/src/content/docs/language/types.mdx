@@ -26,14 +26,14 @@ unreliable event that cannot fit in
 | `boolean` | 1 **bit**, [shared](#booleans-and-optionals-share-a-bitfield) with neighbouring booleans |
 | `T?` | 1 bit, plus `T` when present. `Instance?` costs nothing extra |
 | `string(N)`, `buffer(N)` | `N` -- an exact length has no prefix |
-| `string`, `buffer` | [length prefix](#lengths-are-offset-encoded) (1, 2 or 4) + the bytes |
+| `string`, `buffer` | [length prefix](#lengths-are-offset-encoded) (1 to 4) + the bytes |
 | `T[N]` | `N` elements -- no prefix |
 | `T[]`, `T[A..B]` | length prefix + each element |
 | `boolean[]` | length prefix + one byte per eight elements |
 | `map` | 2 (the entry count) + each key and value |
 | `set` | 1 for up to 8 flags, 2 for up to 16, 4 for up to 32; another group per further 32 |
-| `enum` | 1 |
-| tagged `enum` | 1 + the variant's fields |
+| `enum` | the bits that tell its values apart -- 2 for four -- [shared](#booleans-and-optionals-share-a-bitfield) like a boolean's |
+| tagged `enum` | the bits that tell its variants apart, shared the same way, + the variant's fields |
 | `struct`, type pack | the sum of the fields |
 | `vector` | 3 components: 12 as `f32` (the default) |
 | `CFrame` | 3 position + 3 rotation components: 24 by default |
@@ -43,7 +43,8 @@ unreliable event that cannot fit in
 | `DateTime`, `DateTimeMillis` | 8 |
 | `Instance`, `unknown` | 0, and one slot in the instance list |
 
-Each event adds one byte for its id, and an `OrderedUnreliable` event two more for its sequence number.
+Each event adds one byte for its id, and an `OrderedUnreliable` event other than a stream two more for
+its sequence number.
 A function call adds the same id byte and one more naming the call; its answer carries both and a
 success flag.
 The [bandwidth guide](/BlinkBlox/guides/bandwidth/) covers how to spend fewer of them.
@@ -53,7 +54,9 @@ The [bandwidth guide](/BlinkBlox/guides/bandwidth/) covers how to spend fewer of
 A `boolean`, and the presence flag of an optional (`T?`), cost one **bit**. Consecutive ones in the
 same block share a byte, eight to a byte: a struct with eight boolean fields costs one byte, and an
 event whose type pack is `(boolean, u8?, boolean)` spends one byte on its three bits, followed by the
-`u8` when it is present.
+`u8` when it is present. An enum's index and a tagged enum's tag take their bits from the same byte:
+as few as tell the values apart, and at least one, so a four-value enum beside six booleans costs one
+byte between them.
 
 A block here is one run of generated code. The fields of a struct share the block they sit in, as do
 the elements of a type pack. A new block begins inside each array element, each map entry, each
@@ -71,20 +74,26 @@ unsigned integer that holds the **span** of its range, and **relative to its min
 |---|---|
 | 0 (an exact length) | none |
 | up to 255 | 1 byte |
+| up to 16383 | a varint: 1 byte under 128, 2 from there |
 | up to 65535 | 2 bytes |
+| up to 16777215 | 3 bytes |
 | more | 4 bytes |
 
-So `string(300..400)` spends one byte on its hundred possible lengths rather than the two that 400
-alone would need, and a length below the minimum cannot be written at all. An unbounded `string`,
-`buffer` or array is treated as `0..65535`: a 2-byte prefix, and a value longer than 65535 is
-refused on send. A map's entry count is always a 2-byte `u16`.
+A varint is seven bits a byte, the lowest first, the top bit saying another byte follows, so a span
+that needs two bytes never takes more than it would have and a short length takes one. So
+`string(300..400)` spends one byte on its hundred possible lengths rather than the two that 400 alone
+would need, and a length below the minimum cannot be written at all. An unbounded `string`, `buffer`
+or array is treated as `0..65535` and always takes a varint: one byte under 128, two under 16384,
+three to 65535, and a value longer than 65535 is refused on send. A map's entry count is always a
+2-byte `u16`.
 
 A half-open length runs to the limit of the type. For an array that is 65535, but for a string or a
-buffer it is 4294967295, so `string(1..)` takes a 4-byte prefix where a bare `string` takes two. Give
-lengths an upper bound.
+buffer it is 4294967295, so `string(1..)` takes a 4-byte prefix where a bare `string` usually takes
+one. Give lengths an upper bound.
 
 On receipt, a length is checked against its range, and against the bytes left in the packet, before
-anything is read or allocated for it -- so a hostile length prefix buys neither.
+anything is read or allocated for it -- so a hostile length prefix buys neither. A varint in more
+bytes than its value needs, or past 65535, is refused as it is read.
 
 ## Ranges
 Ranges can be used with [numbers](#numbers), [strings](#strings), [buffers](#buffers),

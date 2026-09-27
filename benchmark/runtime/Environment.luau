@@ -76,14 +76,30 @@ local Players = {
 	PlayerAdded = Signal(),
 }
 
+--- A userdata standing for a Roblox Instance, reading and writing `Fields`.
+---
+--- Not a table: a parameter the modules annotate `Player` or `Instance` is native code's promise that
+--- a userdata arrives, and a table there sends the whole function back to the interpreter on every
+--- call. In a game these are userdata, so a table would time the bench's mock rather than the module.
+function Environment.Instance(Fields: { [string]: any }): any
+	local Object = newproxy(true)
+	local Metatable = getmetatable(Object)
+	Metatable.__index = Fields
+	Metatable.__newindex = Fields
+	Metatable.__tostring = function()
+		return tostring(Fields.Name)
+	end
+	return Object
+end
+
 --> One player, whose `Parent` never changes: the server asks for it on every event it decodes.
-local Player = {
+local Player = Environment.Instance({
 	Name = "Player",
 	Parent = Players,
 	IsDescendantOf = function(_self, _Ancestor)
 		return true
 	end,
-}
+})
 
 function Players.GetPlayers(_self)
 	return { Player }
@@ -125,7 +141,7 @@ end
 --> after the directives: `--!native` and `--!optimize` count only above the first line of code.
 local PRELUDE = "local game, task, warn, _G, Instance = ...\n"
 
-local function Prepare(Source: string, Native: boolean): string
+local function Prepare(Source: string, Native: boolean, Prelude: string?): string
 	local Lines = string.split(Source, "\n")
 	local Index = 1
 	while Lines[Index] and string.sub(Lines[Index], 1, 2) == "--" do
@@ -136,21 +152,25 @@ local function Prepare(Source: string, Native: boolean): string
 		Index += 1
 	end
 
-	table.insert(Lines, Index, PRELUDE)
+	table.insert(Lines, Index, Prelude or PRELUDE)
 	return table.concat(Lines, "\n")
 end
 
-local function Load(Name: string, Source: string, Native: boolean, IsServer: boolean, Remotes: { [string]: any })
-	local Bytecode = luau.compile(Prepare(Source, Native), {
+--- `Source` compiled as Roblox would run it, and called with the globals the prelude names.
+function Environment.Chunk(Name: string, Source: string, Native: boolean, Prelude: string?): (...any) -> any
+	local Bytecode = luau.compile(Prepare(Source, Native, Prelude), {
 		optimizationLevel = 2,
 		debugLevel = 1,
 	})
 
-	local Chunk = luau.load(Bytecode, {
+	return luau.load(Bytecode, {
 		debugName = Name,
 		codegenEnabled = Native,
 	})
+end
 
+local function Load(Name: string, Source: string, Native: boolean, IsServer: boolean, Remotes: { [string]: any })
+	local Chunk = Environment.Chunk(Name, Source, Native)
 	local Instance = {
 		new = function(ClassName: string)
 			error(`The benchmark provides no {ClassName}`)

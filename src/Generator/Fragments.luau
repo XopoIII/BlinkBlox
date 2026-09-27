@@ -90,19 +90,21 @@ local EVENT_SYNC_VALIDATION = {
 }
 
 local RELIABLE_BODY = {
-	Header = "local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances",
-	Body = {
-		"Load(PlayersMap[Player])\n",
-		"local Position = Allocate(Size)\n",
-		"buffer.copy(SendBuffer, Position, Buffer, 0, Size)\n",
-		"table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)\n",
-		"SavePlayerBuffer(Player)\n",
+	Header = {
+		"local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances\n",
+		"KeepScratch()\n",
 	},
+	Body = {
+		"AppendPlayer(Player, Buffer, Size, Instances)\n",
+	},
+	--> A FireAll's, which goes to the broadcast batch rather than to each player's.
+	Shared = "AppendShared(Buffer, Size, Instances)",
 }
 
 local UNRELIABLE_BODY = {
 	"local Buffer = buffer.create(SendCursor)\n",
 	"buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)\n",
+	"KeepScratch()\n",
 }
 
 local IGNORED_TYPES_IN_SHARED = {

@@ -208,6 +208,10 @@ end
 --> lookup rather than a decode. The burst is a whole second of budget because the clock here is the
 --> server's: after a hitch Roblox delivers the queued packets together, and a refused reliable packet
 --> takes every event in it along. Reported on the same once-a-second schedule as RateAccept.
+--> When the packet being decoded arrived. Every event in a packet arrived at the same moment, so the
+--> rate buckets refill once a packet, at this, rather than asking the clock once an event.
+local PacketClock = 0
+
 local function InboundAccept(Player: Player, Length: number, Floor: number, Rate: number, Burst: number): boolean
     local Cost = math.max(Length, Floor)
     if Player.Parent == nil then
@@ -216,6 +220,7 @@ local function InboundAccept(Player: Player, Length: number, Floor: number, Rate
     end
 
     local Now = os.clock()
+    PacketClock = Now
     local Budget = InboundBudgets[Player]
     if not Budget then
         --> The report clock starts at minus infinity so the first refusal is always reported.
@@ -267,21 +272,17 @@ end
 --> the packet would decode as garbage. So this bounds listener dispatch and the game logic behind
 --> it, while MaxEventsPerPacket bounds the decoding of one packet and InboundAccept how many packets
 --> a second get decoded at all. The three limits are different axes.
+--> Called only from the decode loop, which stops before any event once the player has left, and
+--> no game code runs between that check and this call: a player still here when the loop checked
+--> is still here now, so a bucket made below is one PlayerRemoving will clear.
 local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: number, Name: string): boolean
-    --> Same PlayerRemoving race the buffer save guards against, handled the same way: the entry is
-    --> dropped here rather than left for a sweep that does not exist.
-    if Player.Parent == nil then
-        RateBuckets[Player] = nil
-        return false
-    end
-
     local Bucket = RateBuckets[Player]
     if not Bucket then
         Bucket = table.clone(RATE_TEMPLATE)
         RateBuckets[Player] = Bucket
     end
 
-    local Now = os.clock()
+    local Now = PacketClock
     local Tokens = math.min(Burst, Bucket[Slot] + ((Now - Bucket[Slot + 1]) * Rate))
     Bucket[Slot + 1] = Now
 

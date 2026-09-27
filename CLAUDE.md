@@ -310,6 +310,23 @@ the types follow; the unwrap moved to `src/Templates/Stamp.luau`, shared by a st
 stamped event's server. `Per: Player` holds a stream's state for each player -- the server's own
 per-player state, one scheduler entry per player per declared stream, dropped at PlayerRemoving.
 
+0.40.0 was about speed and bytes, and it began with the benchmark again: it had never run a server
+sending to a crowd, small unreliable events, streams or Instances (`benchmark/Scenarios.luau`, and
+`benchmark/Rivals.luau` for the same against the other tools), and its mock players were tables, which
+native code sends back to the interpreter wherever a parameter says `Player` or `Instance`. What it then
+found: a reliable `FireAll` copied into every player's batch and flushed as fifty remote calls, now one
+broadcast batch and one `FireAllClients`, with a player's own events kept in order around it
+(`LoadPlayer` diverges them); a `pcall` per decoded event and per `Fire`, now one per packet and none,
+a failed client write undone lazily (`Begin`, `Settle`). And the thesis again: a client sent a frame's
+events as one packet whatever the server's limits, so an honest player could be struck for `Events` or
+`Oversized`; the batch is now cut to fit. The wire changed, `WIRE_VERSION` 3: varint lengths
+(`Size.LengthPrefix` is the one rule), enums and tags as bits in the bitfield (`Generator/Bits.luau`),
+streams ordered by their stamp rather than a sequence number, and unreliable batches
+(`Generator/Batches.luau`) -- streams to everyone always, events under `option BatchUnreliable`, a
+per-player stream only then, since one state a player gathers nothing. Packing array elements' bits
+into one run was weighed and left: a byte an element in some arrays, against dynamic bit addressing in
+every decode.
+
 Still deferred, and deliberately: delta compression. It would require BlinkBlox to hold per-player state
 on the server and a mirror on the client, and it fights `OrderedUnreliable` — a packet discarded as
 stale takes its delta with it and the two caches diverge for good. That is a change of

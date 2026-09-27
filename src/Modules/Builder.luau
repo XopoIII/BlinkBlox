@@ -22,13 +22,15 @@ function Builder.new(): Builder
 
 		local Indentation = string.rep("\t", TabCount)
 
+		--> A trailing empty line, as `string.split` leaves after a final newline, is not emitted. It used
+		--> to be dropped by writing nil into the caller's list after the count was lowered, which erased
+		--> the line before it instead and left the empty one in place.
 		if Last == "" then
 			Size -= 1
-			Lines[Size] = nil
 		end
 
-		for Index, Line in Lines do
-			table.insert(Strings, `{Indentation}{Line}{Index == Size and string.rep("\n", ReturnCount) or ""}`)
+		for Index = 1, Size do
+			table.insert(Strings, `{Indentation}{Lines[Index]}{Index == Size and string.rep("\n", ReturnCount) or ""}`)
 		end
 	end
 

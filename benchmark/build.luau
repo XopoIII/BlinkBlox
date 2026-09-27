@@ -43,16 +43,26 @@ if Download then
 end
 
 print("Compiling definitions")
-for _, Directory in { "./src/shared/zap", "./src/shared/blink", "./src/shared/upstream" } do
+for _, Directory in
+	{
+		"./src/shared/zap",
+		"./src/shared/blink",
+		"./src/shared/upstream",
+		"./runtime/rivals/zap",
+		"./runtime/rivals/upstream",
+	}
+do
 	if not fs.isDir(Directory) then
 		fs.writeDir(Directory)
 	end
 end
 Step(`./tools/zap{EXECUTABLE}`, { "./definitions/Definition.zap" })
+--> Rivals.luau's scenarios; BlinkBlox's own it compiles itself, from this checkout.
+Step(`./tools/zap{EXECUTABLE}`, { "./definitions/Scenarios.zap" })
 
---> Upstream Blink compiles its own definition with its own compiler, run from source on Lune.
-do
-	local Definition = `{process.cwd}definitions/Definition.upstream.blink`
+--> Upstream Blink compiles its own definitions with its own compiler, run from source on Lune.
+for _, Name in { "Definition", "Scenarios" } do
+	local Definition = `{process.cwd}definitions/{Name}.upstream.blink`
 	print(`> lune run init {Definition} -- --yes (in ./tools/upstream/src/CLI)`)
 	local Result = process.exec("lune", { "run", "init", Definition, "--", "--yes" }, {
 		cwd = "./tools/upstream/src/CLI",

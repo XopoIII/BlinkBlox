@@ -13,17 +13,19 @@ local Generators = require("./Generators")
 local Parser = require("../Parser")
 local Sends = require("./Send")
 local State = require("./State")
+local Writes = require("./Writes")
 
 local Streams = {}
 
 --- The stamp is the last of the positional values the receive branch decoded; the listener gets it as
 --- the server time in seconds, the one nearest the client's own server clock (UnwrapStamp in
 --- Templates/Stream.luau).
-function Streams.Unwrap(Block: Blocks.Block, InnerArguments: string)
+function Streams.Unwrap(Block: Blocks.Block, InnerArguments: string): string
 	State.UsesStreams = true
 	local Positional = string.split(InnerArguments, ", ")
 	local Stamp = Positional[#Positional]
 	Block:Line(`{Stamp} = UnwrapStamp({Stamp})`)
+	return Stamp
 end
 
 --- A number as the generated code writes it: Luau's shortest spelling that reads back the same.
@@ -51,10 +53,18 @@ function Streams.Server(
 
 	State.UsesStreams = true
 
-	--> Every player, each with their own sequence number: a stream is always OrderedUnreliable. A
-	--> `Per: Player` stream sends each player's own state to that player alone.
-	local Outgoing: Sends.Send =
-		{ IsReliable = false, WriteEvent = WriteEvent, Name = Name, Ordered = Index, Traffic = Counters }
+	--> Every player the same packet, in one FireAllClients: a stream is ordered by the server time it
+	--> carries, not by a sequence number per player. A `Per: Player` stream sends each player's own
+	--> state to that player alone.
+	local Outgoing: Sends.Send = {
+		IsReliable = false,
+		WriteEvent = WriteEvent,
+		Name = Name,
+		Traffic = Counters,
+		Stream = true,
+		PerPlayer = Settings.PerPlayer == true,
+		Instances = Writes.CarriesInstances(Declaration.Value.Data),
+	}
 	local PerPlayer = Settings.PerPlayer
 	local Send = if PerPlayer
 		then Sends.One(Blocks.Function(`Send{Stream}`, `Player: Player, {Values}`, "()", false, true), Outgoing):End()
@@ -62,7 +72,7 @@ function Streams.Server(
 			Blocks.Function(`Send{Stream}`, Values, "()", false, true),
 			Outgoing,
 			"Players:GetPlayers()",
-			{}
+			{ AllClients = true }
 		)
 
 	--> The intervals stay written as the rates they come from, `1 / 10` rather than 0.1.

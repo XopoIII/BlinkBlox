@@ -6,6 +6,7 @@
 --- `On`, `Iter` or `Fire` and its variants, depending on which side this is and which side sends.
 ---
 --- Adds `Event` to the Serde table, which the declaration walk in Generators.luau dispatches through.
+local Batches = require("./Batches")
 local Blocks = require("./Blocks")
 local Builder = require("../Modules/Builder")
 local Decode = require("./Decode")
@@ -21,6 +22,7 @@ local State = require("./State")
 local Streams = require("./Stream")
 local Traffic = require("./Traffic")
 local Util = require("./Util")
+local Writes = require("./Writes")
 
 type Type = Parser.TypeNode
 
@@ -39,8 +41,11 @@ function Declarations.Event(Declaration: Parser.Event)
 	--> Ordered events travel the unreliable channel; the ordering is a sequence number on top of it.
 	local IsOrdered = (Reliability == "OrderedUnreliable")
 	local IsUnreliable = (Reliability == "Unreliable" or IsOrdered)
+	--> Whether a sequence number travels with the event. A stream is OrderedUnreliable too, but it is
+	--> ordered by the server time its every packet already carries; see StreamAccept.
+	local IsSequenced = IsOrdered and not Value.Stream
 
-	if IsOrdered then
+	if IsSequenced then
 		State.UsesOrdering = true
 	end
 	--> A stream or a stamped event always has a listener: it hands the game the stamp unwrapped, which
@@ -49,7 +54,7 @@ function Declarations.Event(Declaration: Parser.Event)
 	local IsSameContext = Value.From == State.Context
 
 	local Channel = IsUnreliable and State.Channels.Unreliable or State.Channels.Reliable
-	local Counters = Traffic.Register(Declaration.Name, Value.Data, IsOrdered)
+	local Counters = Traffic.Register(Declaration.Name, Value.Data, IsSequenced)
 
 	local Index = Channel.Count
 	--> Ordered events ride the unreliable channel, so they share its queue and listener tables --
@@ -63,7 +68,7 @@ function Declarations.Event(Declaration: Parser.Event)
 	--> for the decode branch, where a name like `Player` or `Index` would shadow the loop's own.
 	local DataTypes, Values, Arguments, _ = "nil", "Value: nil", "Value", nil
 	local InnerValues, InnerArguments = "Value: nil", "Value"
-	local Read, Write = Generators.Event(Value.Data, Index, Identifier, nil, IsOrdered)
+	local Read, Write = Generators.Event(Value.Data, Index, Identifier, nil, IsSequenced)
 
 	if Value.Data then
 		DataTypes, Values, _, Arguments = Generators.LuauType(Value.Data :: Type, true)
@@ -86,19 +91,11 @@ function Declarations.Event(Declaration: Parser.Event)
 	local Body = Builder.new()
 	local Indent = Util.GetScopeIndent(State.Scope)
 	local WriteEvent = `{Util.GetPath(Identifier, true, State.Scope)}({WriteArguments})`
-	--> The same call, protected, for every write into a batch that outlives it: the client's own, and
-	--> the one the server keeps per player. `Load(PlayersMap[Player])` installs that player's saved
-	--> instance list itself rather than a copy, so an Instance appended before a later field threw
-	--> stayed in it even though the cursor was never saved -- and every instance after it in that
-	--> flush reached the client one place out. A broadcast writes into a fresh buffer and needs none.
+	--> The same call, protected: an unreliable Fire writes into the scratch buffer under it, so the
+	--> batch is put back whatever happens. How a Fire writes into a batch that outlives it is
+	--> Writes.luau's.
 	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, State.Scope)}, {WriteArguments})`
-
-	--> Writes into a batch that is kept, undoing whatever a write that throws had already added.
-	local function WriteKept(Target: Blocks.Block)
-		Target:Line("local Cursor, Instances = Mark()")
-		Target:Line(`local Sent: boolean, Failure: any = {TryWriteEvent}`)
-		Target:Compare("Sent", "true", "Not"):Line("Rollback(Cursor, Instances)"):Line("error(Failure, 0)"):End()
-	end
+	local Writer = Writes.new(Identifier, WriteArguments, WriteEvent, Value.Data, Counters)
 
 	Body.Push(`{Declaration.Name} = \{`, 0, Indent)
 	State.Noop.Push(`{Declaration.Name} = \{`, 0, Indent)
@@ -158,15 +155,16 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> Read before the payload, because that is the order it was written in. The DECISION comes
 		--> after the payload is decoded, for the same reason the rate limit's does: a variable-length
 		--> payload cannot be skipped without reading it.
-		if IsOrdered then
+		if IsSequenced then
 			Types.u16.Read("OrderIdentifier", Block)
 		end
 
-		Traffic.Start(Block, Counters, IsOrdered)
+		Traffic.Start(Block, Counters, IsSequenced)
 		Block:Line(`local {InnerValues} = {Util.GetPath(Identifier, false, State.Scope)}()`)
 		Traffic.Received(Block, Counters)
+		local StreamStamp: string? = nil
 		if Value.Stream then
-			Streams.Unwrap(Block, InnerArguments)
+			StreamStamp = Streams.Unwrap(Block, InnerArguments)
 		elseif Value.Stamp then
 			Stamps.Unwrap(Block, InnerArguments, Value.Stamp)
 		end
@@ -179,7 +177,9 @@ function Declarations.Event(Declaration: Parser.Event)
 			Block = Block:Compare(RateGuard, "true", "Equals")
 		end
 
-		local OrderGuard = OrderGuardExpression(IsOrdered, Index)
+		local OrderGuard = if StreamStamp
+			then Decode.StreamGuardExpression(Index, StreamStamp)
+			else OrderGuardExpression(IsSequenced, Index)
 		if OrderGuard then
 			Block = Block:Compare(OrderGuard, "true", "Equals")
 		end
@@ -202,12 +202,18 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> Hands the event to its listeners, or -- for a reliable event with none bound -- queues it for
 		--> the listener to come. The receive branch and Predict both go through this, so an event
 		--> predicted locally is delivered exactly as one received from the network would be.
+		--> A Single event's listener is read once, into a local, rather than looked up through two tables
+		--> for the check and again for the call.
 		local function Deliver(Target: Blocks.Block, Payload: string)
 			local ListenerArguments = `{Sender}{Payload}`
-			local Call = Listeners.Call(Event, Connection, ListenerArguments, "Player", true)
+			local Call = Listeners.Call(Event, "BOUND_LISTENER", ListenerArguments, "Player", true)
+			if IsSingle then
+				Target:Line(`local BOUND_LISTENER = {Connection}`)
+			end
+
 			if not IsReliable then
 				if IsSingle then
-					Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent):End()
+					Target:Compare("BOUND_LISTENER", "nil", "Not"):Lines(Call.Content, Target.Indent):End()
 				else
 					Listeners.Each(Target, Event, ListenerArguments)
 				end
@@ -217,7 +223,7 @@ function Declarations.Event(Declaration: Parser.Event)
 
 			local Bound: Blocks.Block
 			if IsSingle then
-				Bound = Target:Compare(Connection, "nil", "Not"):Lines(Call.Content, Target.Indent)
+				Bound = Target:Compare("BOUND_LISTENER", "nil", "Not"):Lines(Call.Content, Target.Indent)
 			else
 				Bound = Listeners.Each(Target:Compare(`#{Connection}`, "0", "Greater"), Event, ListenerArguments)
 			end
@@ -277,7 +283,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		State.Events.Push(`EventNames.{ChannelName}[{Index}] = "{Declaration.Name}"`)
 		local Block = Decode.Open(IsUnreliable, Index)
 
-		if IsOrdered then
+		if IsSequenced then
 			Types.u16.Read("OrderIdentifier", Block)
 		end
 
@@ -286,7 +292,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			false,
 			State.Scope
 		)}())`
-		local PollOrderGuard = OrderGuardExpression(IsOrdered, Index)
+		local PollOrderGuard = OrderGuardExpression(IsSequenced, Index)
 		local PollRateGuard = RateGuardExpression(Value, Declaration.Name)
 
 		--> On the server the queue is filled by clients, so it stops at a cap; see MAX_POLLED in the
@@ -306,7 +312,7 @@ function Declarations.Event(Declaration: Parser.Event)
 
 		PollRateGuard = if #Checks > 0 then table.concat(Checks, " and ") else nil
 
-		Traffic.Start(Block, Counters, IsOrdered)
+		Traffic.Start(Block, Counters, IsSequenced)
 		if PollRateGuard then
 			--> Split because the one-liner decodes and enqueues at once, and only the enqueue may be
 			--> skipped.
@@ -355,25 +361,30 @@ function Declarations.Event(Declaration: Parser.Event)
 			--> Rolled back rather than left, because this write lands in the batch every other event
 			--> is queued in. Half an event in there is not one bad send: the receiver reads the
 			--> truncated event and then decodes the REST of the batch from the wrong offset.
-			WriteKept(Fire)
+			Writer.Begun(Fire)
 			Traffic.Sent(Fire, Counters, "SendCursor - Cursor", false)
 		else
-			Fire:Line(`local Previous = Save()`)
-			Fire:Line(`Load()`)
+			Fire:Line("Hold()")
 			Fire:Line(`local Sent: boolean, Failure: any = {TryWriteEvent}`)
 			--> Wrapped rather than returned out of: the saved buffer has to be restored either way,
 			--> and an early return here would leave the caller's outgoing state swapped out.
 			-->
-			--> Which is exactly why the write is protected. A throw used to skip `Load(Previous)`
+			--> Which is exactly why the write is protected. A throw used to skip restoring the batch
 			--> entirely, leaving this temporary buffer installed as the outgoing one -- so the next
 			--> RELIABLE flush sent the scratch buffer and dropped everything already batched.
 			Fire:Line(`if Sent and CheckUnreliableSize("{Declaration.Name}") then`)
-			Fire:Line("\tlocal Buffer = buffer.create(SendCursor)")
-			Fire:Line("\tbuffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)")
-			Fire:Line("\tUnreliable:FireServer(Buffer, SendInstances)")
+			if Batches.Events() then
+				--> Gathered with the frame's other unreliable events; see Batches.luau.
+				State.UsesBatches = true
+				Fire:Line("\tAppendUnreliable()")
+			else
+				Fire:Line("\tlocal Buffer = buffer.create(SendCursor)")
+				Fire:Line("\tbuffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)")
+				Fire:Line("\tUnreliable:FireServer(Buffer, SendInstances)")
+			end
 			Traffic.Sent(Fire, Counters, "SendCursor", true, nil, "\t")
 			Fire:Line("end")
-			Fire:Line("Load(Previous)")
+			Fire:Line("Release()")
 			Fire:Compare("Sent", "true", "Not"):Line("error(Failure, 0)"):End()
 		end
 		Fire:End()
@@ -389,13 +400,14 @@ function Declarations.Event(Declaration: Parser.Event)
 			IsReliable = IsReliable,
 			WriteEvent = WriteEvent,
 			Name = Declaration.Name,
-			Ordered = if IsOrdered then Index else nil,
+			Ordered = if IsSequenced then Index else nil,
+			Instances = Writes.CarriesInstances(Value.Data),
 			Traffic = Counters,
 		}
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 		if IsReliable then
-			Fire:Line("Load(PlayersMap[Player])")
-			WriteKept(Fire)
+			Fire:Line("LoadPlayer(Player)")
+			Writer.Player(Fire)
 			Traffic.Sent(Fire, Counters, "SendCursor - Cursor", false)
 			Fire:Line("SavePlayerBuffer(Player)")
 		else
