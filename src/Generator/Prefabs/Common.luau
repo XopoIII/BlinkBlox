@@ -140,21 +140,26 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 
 			if WireRange then
 				local Min, Max = WireRange.Min, WireRange.Max
+				--> A side the value can reach. An open side of a float range is infinite, and every
+				--> value passes it; on receipt, a side an unmodified integer's read already meets passes
+				--> too. Either line is left out rather than emitted -- `inf` would read as a nil global --
+				--> and NaN is still refused, because a float's remaining side is `not (x >= Min)`.
+				local Floor, Ceiling = -math.huge, math.huge
 				if Block == Read then
 					Min, Max = Narrow.Bounds(Primitive, Min, Max)
+					if not Modified then
+						Floor, Ceiling = Narrow.Readable(Primitive)
+					end
 				end
 
 				local Assert = AssertGenerator(TargetVariable, Min, Max)
 				if not IsVariableSize and Assert.Exact then
 					Block:Line(Assert.Exact)
 				else
-					--> An open side of a float range is infinite, and every value passes it. Its line is
-					--> left out rather than emitted, since `inf` would read as a nil global. NaN is still
-					--> refused, because the side that remains is written `not (x >= Min)`.
-					if WireRange.Min ~= -math.huge then
+					if WireRange.Min > Floor then
 						Block:Line(Assert.Lower)
 					end
-					if WireRange.Max ~= math.huge then
+					if WireRange.Max < Ceiling then
 						Block:Line(Assert.Upper)
 					end
 				end

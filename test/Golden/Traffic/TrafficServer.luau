@@ -690,7 +690,6 @@ function SerdesFunctions.ReadEVENT_Note(): (string)
 	local RecieveBuffer = RecieveBuffer
 	-- Value: Note
 	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Length < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {Length} instead.`) end
 	if Length > 32 then error(`Expected length of "Value" to be smaller than or equal to 32, got {Length} instead.`) end
 	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 	local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)

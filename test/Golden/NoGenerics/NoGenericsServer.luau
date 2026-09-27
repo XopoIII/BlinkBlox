@@ -1374,8 +1374,6 @@ function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
 	-- Value: Booleans
 	-- START ARRAY
 	local Length = ReadVarLength()
-	if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
-	if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 	if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 	local Value = table.create(Length)
 	do

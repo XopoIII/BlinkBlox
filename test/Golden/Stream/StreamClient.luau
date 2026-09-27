@@ -577,7 +577,6 @@ function SerdesFunctions.ReadEVENT_Heads(): ({ { Id: number, Head: Vector3, Back
 		-- Value1: Heads
 		-- START ARRAY
 		local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 		if not (Length <= 16) then error(`Expected "Length" to be smaller than or equal to 16, got {Length} instead.`) end
 		if Length * 11 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		Value1 = table.create(Length)
