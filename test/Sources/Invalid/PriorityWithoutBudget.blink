@@ -1,0 +1,13 @@
+-- expect W3035
+-- A low priority is left out only while a player's outbound budget is spent, and without the option
+-- there is no budget: every send goes, as if the field were not there.
+option ClientOutput = "../../Network/PriorityWithoutBudgetClient.luau"
+option ServerOutput = "../../Network/PriorityWithoutBudgetServer.luau"
+
+event Chatter {
+    From: Server,
+    Type: Unreliable,
+    Call: SingleSync,
+    Priority: Low,
+    Data: u16
+}

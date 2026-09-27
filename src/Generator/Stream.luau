@@ -10,6 +10,7 @@
 local Blocks = require("./Blocks")
 local Builder = require("../Modules/Builder")
 local Generators = require("./Generators")
+local Outbound = require("./Outbound")
 local Parser = require("../Parser")
 local Sends = require("./Send")
 local State = require("./State")
@@ -64,6 +65,7 @@ function Streams.Server(
 		Stream = true,
 		PerPlayer = Settings.PerPlayer == true,
 		Instances = Writes.CarriesInstances(Declaration.Value.Data),
+		Low = Outbound.Low(Declaration.Value.Priority),
 	}
 	local PerPlayer = Settings.PerPlayer
 	local Send = if PerPlayer
@@ -88,6 +90,9 @@ function Streams.Server(
 			Settings.Keepalive
 		)}, {Literal(Settings.Epsilon)}, Send{Stream})`
 	)
+	if PerPlayer and Outgoing.Low then
+		State.Streams.Push(`OutboundLow[{Stream}] = true`)
+	end
 
 	local Type = Generators.LuauType(Settings.Value, true)
 	local Members: { string } = if PerPlayer

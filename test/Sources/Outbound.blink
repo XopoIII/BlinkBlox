@@ -1,0 +1,49 @@
+-- The outbound budget in a module that has one: every server send charged, and each shape of low
+-- send -- an event to one player, a broadcast, a stream to everyone and one held per player -- left
+-- out for a player whose budget is spent. Batched, so the unreliable batches are charged as well.
+option ClientOutput = "../../Network/OutboundClient.luau"
+option ServerOutput = "../../Network/OutboundServer.luau"
+option OutboundBytesPerSecond = 20000
+option OutboundBurst = 40000
+option BatchUnreliable = true
+
+event Chatter {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Priority: Low,
+	Data: buffer(0..500)
+}
+
+event Hit {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Priority: Normal,
+	Data: u8
+}
+
+event Score {
+	From: Server,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: u16
+}
+
+event Crowd {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Priority: Low,
+	Stream: { Rate: 20 },
+	Data: u16
+}
+
+event Mine {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Priority: Low,
+	Stream: { Rate: 20, Per: Player },
+	Data: u16
+}

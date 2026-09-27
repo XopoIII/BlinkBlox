@@ -171,6 +171,9 @@ export type Event = Node<
 		Stream: StreamSettings?,
 		--> Set on a stamped event: the listener also receives when the client sent it.
 		Stamp: StampSettings?,
+		--> Set to "Low" on a server's unreliable event or stream that may be left out of a send to a
+		--> player whose outbound budget is spent.
+		Priority: ("Low" | "Normal")?,
 	},
 	{
 		Identifier: Token,

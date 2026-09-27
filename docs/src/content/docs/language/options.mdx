@@ -52,6 +52,8 @@ A few rules hold for all of them:
 | `MaxInstancesPerPacket` | instances | `256` | [Inbound limits](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) |
 | `InboundBytesPerSecond` | bytes | `8 * MaxPacketSize` | [Inbound limits](#inboundbytespersecond-inboundburst) |
 | `InboundBurst` | bytes | the larger of the above and `MaxPacketSize` | [Inbound limits](#inboundbytespersecond-inboundburst) |
+| `OutboundBytesPerSecond` | bytes | none | [Outbound budget](#outboundbytespersecond-outboundburst) |
+| `OutboundBurst` | bytes | one second of the above | [Outbound budget](#outboundbytespersecond-outboundburst) |
 | `DefaultRate` | events a second | none | [Rate limits](#defaultrate-requirerates) |
 | `RequireRates` | boolean | `false` | [Rate limits](#defaultrate-requirerates) |
 | `InvocationTimeout` | seconds | `10` | [Invocations](#invocationtimeout) |
@@ -562,6 +564,31 @@ Refusals are reported at most once per player per second. With a
 with the reason `Budget` and the refused packet's length. Without one they are reported the way
 refused events are: a warning, and a call to
 [`SetRateLimitHandler`](/BlinkBlox/language/events/#rate-burst)'s handler with `Event` set to `nil`.
+
+## Outbound budget
+
+### `OutboundBytesPerSecond`, `OutboundBurst`
+Defaults: none, and a burst of one second of the rate
+
+Bound how many bytes a second the server sends each player, by leaving out what the schema marked as
+expendable.
+
+```blink
+option OutboundBytesPerSecond = 20000
+option OutboundBurst = 40000
+```
+
+Every byte the server sends a player is charged to that player's bucket: the reliable batch, the
+unreliable batches, every unreliable send, and each player's share of a send to everyone. Nothing is
+refused for it but a [`Priority: Low`](/BlinkBlox/language/events/#priority) event or stream, which is
+left out while the player's bucket is empty. Everything else still goes, and still spends: a frame of
+reliable traffic that overdraws the bucket keeps the low sends out until it has been paid back.
+
+This is for a game that sends more than a slow connection takes. Roblox queues reliable traffic a
+player cannot keep up with, and their ping climbs with it; the budget gives the bytes to the events
+that matter first. A server that stays under what its players can take never notices it.
+
+Without the option the module carries no budget at all, and a send costs what it always did.
 
 ## Rate limits
 

@@ -7,6 +7,33 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+The wire does not change, and neither does a module built without the new option.
+
+### Faster
+
+- A channel's events are dispatched by halving the index range rather than one `elseif` after another,
+  so an interpreted client no longer makes a hundred comparisons to reach the hundredth event. A
+  hundred sends over 128 events decode in 0.053 ms a frame, from 0.086. A channel of up to four
+  declarations emits exactly what it did; the first event of a large one pays a few comparisons more
+  (index 0 of 133: 0.088 to 0.094 ms).
+- A received length is no longer checked against a bound its prefix already meets: never below its
+  minimum, and not above 65535 when it is a varint, which refuses past that itself. Every unbounded
+  string and array carried both checks on every packet. An integer skips a side its read type meets.
+- A ranged number decoded into a struct field or an array slot is checked in a local before it is
+  stored, where each bound read the field back out of its table: 30% off decoding a struct of three
+  ranged numbers.
+
+### Added
+
+- `option OutboundBytesPerSecond` and `OutboundBurst`, a per-player budget for what the server sends,
+  and `Priority: Low` on a server's unreliable event or stream. Every send is charged to the players it
+  reaches, a broadcast as one addition rather than one per player; only a low send is ever left out,
+  while its player's budget is spent. A low stream held per player waits for the budget and then sends
+  the state it holds by then. `E3035` refuses a priority on anything else, and `W3035` reports one in a
+  schema with no budget.
+
 ## 0.40.0 — 2026-09-27
 
 A release about speed and bytes, and **a wire-format change: `WIRE_VERSION` is 3. Recompile both

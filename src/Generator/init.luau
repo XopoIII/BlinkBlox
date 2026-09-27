@@ -16,6 +16,7 @@ local Fragments = require("@self/Fragments")
 local GenerateTypescript = require("@self/Typescript")
 local Lifecycle = require("@self/Lifecycle")
 local Limits = require("@self/Limits")
+local Outbound = require("@self/Outbound")
 local Prefabs = require("@self/Prefabs")
 local Serde = require("@self/Serde")
 --> `option TrafficStats`; every call below emits nothing when it is off.
@@ -313,6 +314,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Bodies.Ordering(),
 		Bodies.UnreliableGuard(),
 		Bodies.PacketLimits(),
+		Outbound.Body(),
 		(if State.Options.SyncValidation then SYNC_VALIDATION_BODY else {}),
 		State.Events.DumpLines(),
 		State.LuauTypes.DumpLines(),
@@ -320,10 +322,14 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Limits.Body(AbstractSyntaxTree),
 		Preamble,
 		State.Noop.DumpLines(),
-		string.split(Traffic.Template(Source[2]), "\r"),
+		string.split(Outbound.Flush(Traffic.Template(Source[2])), "\r"),
 		Batches.Body(),
 		Stamps.Runtime(),
-		(if State.UsesStreams then { StreamParts[if State.Context == "Server" then 1 else 2] } else {}),
+		(
+			if State.UsesStreams
+				then { if State.Context == "Server" then Outbound.Streams(StreamParts[1]) else StreamParts[2] }
+				else {}
+		),
 		State.Streams.DumpLines(),
 		Lifecycle.Connections(
 			State.Context,

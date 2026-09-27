@@ -22,7 +22,8 @@ event MyEvent {
 }
 ```
 
-`From`, `Type` and `Call` are required; `Data`, `Rate`, `Burst`, `Stream` and `Stamp` are optional.
+`From`, `Type` and `Call` are required; `Data`, `Rate`, `Burst`, `Priority`, `Stream` and `Stamp` are
+optional.
 `Stream` makes the event a [stream](/BlinkBlox/language/streams/), which the server sends on a schedule
 rather than on `Fire`. `Stamp` makes a client's event carry when it was sent, as the listener's
 [`SentAt`](/BlinkBlox/language/stamps/).
@@ -176,6 +177,33 @@ caller's `Invoke` raises promptly rather than hanging.
 
 See [`DefaultRate` and `RequireRates`](/BlinkBlox/language/options/#defaultrate-requirerates) for
 applying a limit across a whole schema, and for making a missing one a compile error.
+
+### `Priority`
+`Low` or `Normal`, the default. A low event is one the server may leave out of a send to a player whose
+[outbound budget](/BlinkBlox/language/options/#outboundbytespersecond-outboundburst) is spent: chatter,
+cosmetic effects, the state of something far away.
+
+```blink
+option OutboundBytesPerSecond = 20000
+
+event Footstep {
+    From: Server,
+    Type: Unreliable,
+    Call: SingleSync,
+    Priority: Low,
+    Data: vector
+}
+```
+
+Only what the server sends unreliably can be low -- an unreliable or ordered event `From: Server`, or a
+[stream](/BlinkBlox/language/streams/). A send left out is lost, and a reliable event promises that it
+is not (`E3035`). Without `option OutboundBytesPerSecond` there is no budget and a low event is sent
+like any other, which is reported as a warning (`W3035`).
+
+A low `FireAll` goes player by player rather than in one `FireAllClients`, since some players may be
+left out of it. A low stream held [per player](/BlinkBlox/language/streams/) waits for that player
+instead: nothing is sent or counted as sent, and once the budget refills the player gets the state the
+stream holds by then.
 
 ### `Data`
 The data the event carries: any [type](/BlinkBlox/language/types/), written inline or by name. Omit
