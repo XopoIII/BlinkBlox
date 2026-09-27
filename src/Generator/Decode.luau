@@ -58,25 +58,78 @@ function Decode.StreamGuardExpression(Index: number, Stamp: string): string
 	return `StreamAccept({Index}, {Stamp})`
 end
 
---- Opens the branch of a channel's decode loop that receives declaration `Index`, and makes it the
---- block the channel's next declaration branches from. The first one on a channel is an `if`; each
---- after it is an `elseif` on the one before.
+--- Opens the branch of a channel's decode loop that receives declaration `Index`. The branch is a
+--- block of its own, kept until `Close` arranges the channel's branches into the dispatch.
 function Decode.Open(Unreliable: boolean, Index: number): Blocks.Block
 	local Channel = if Unreliable then State.Channels.Unreliable else State.Channels.Reliable
-	local Previous = if Unreliable then State.Unreliables else State.Reliables
+	local Decoder = if Unreliable then State.Unreliables else State.Reliables
 
-	local Block = if Channel.Listening
-		then Previous:Branch("Conditional", "Index", Index, "Equals")
-		else Previous:Compare("Index", Index, "Equals")
+	local Block = Blocks.Block(Decoder)
+	table.insert(Channel.Branches, { Index = Index, Block = Block })
+	return Block
+end
 
-	if Unreliable then
-		State.Unreliables = Block
-	else
-		State.Reliables = Block
+--> A run of at most this many branches is tested one index after another; a longer one is split in
+--> two by a comparison. Four keeps a schema of up to four declarations a channel emitting the chain
+--> it always did, and costs a branch at most one comparison more than a tree cut down to single
+--> leaves would.
+local LEAF = 4
+
+--- Appends a branch's lines to `Decoder`, `Depth` tabs deeper than the branch was built at.
+local function Nest(Decoder: Blocks.Block, Lines: { string }, Depth: number)
+	if Depth == 0 then
+		Decoder:Lines(Lines)
+		return
 	end
 
-	Channel.Listening = true
-	return Block
+	local Indentation = string.rep("\t", Depth)
+	for _, Line in Lines do
+		local Nested = string.gsub(Line, "\n(.)", `\n{Indentation}%1`)
+		table.insert(Decoder.Content, `{Indentation}{Nested}`)
+	end
+end
+
+--- Emits a channel's dispatch into `Decoder`: which branch the index just read selects, and
+--- `Unknown` for an index no branch claims.
+---
+--- It was one `if Index == 0 ... elseif` chain, and an interpreted client walked it one comparison
+--- at a time -- a hundred to reach the hundredth event, on every event it received. The branches
+--- are now halved by `Index < Middle` until a run of `LEAF` is left, so reaching any of 256 takes
+--- at most eight comparisons. Each run ends in `Unknown`, and every index outside the declared ones
+--- lands in some run, so an unclaimed index is refused exactly as before.
+function Decode.Close(Decoder: Blocks.Block, Branches: { State.Branch }, Unknown: string): Blocks.Block
+	table.sort(Branches, function(Left: State.Branch, Right: State.Branch): boolean
+		return Left.Index < Right.Index
+	end)
+
+	local Base = Decoder.Indent
+	local function Emit(From: number, To: number, Depth: number)
+		local Indent = Base + Depth
+		if To - From < LEAF then
+			for Position = From, To do
+				local Branch = Branches[Position]
+				local Keyword = if Position == From then "if" else "elseif"
+				Decoder:Line(`{Keyword} Index == {Branch.Index} then`, Indent)
+				Branch.Block:_appendOperations()
+				Nest(Decoder, Branch.Block.Content, Depth)
+			end
+
+			Decoder:Line("else", Indent)
+			Decoder:Line(Unknown, Indent + 1)
+			Decoder:Line("end", Indent)
+			return
+		end
+
+		local Middle = (From + To + 1) // 2
+		Decoder:Line(`if Index < {Branches[Middle].Index} then`, Indent)
+		Emit(From, Middle - 1, Depth + 1)
+		Decoder:Line("else", Indent)
+		Emit(Middle, To, Depth + 1)
+		Decoder:Line("end", Indent)
+	end
+
+	Emit(1, #Branches, 0)
+	return Decoder
 end
 
 return Decode

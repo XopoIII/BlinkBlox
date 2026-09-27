@@ -9,7 +9,8 @@
 --- Runtime.luau times a client firing a thousand reliable events a frame at the server, which is one
 --- path of several, and the one the tools compare on. A game also has the server sending to a crowd,
 --- small unreliable events every frame, streams, and events carrying Instances; this times those,
---- from definitions/Scenarios.blink, for BlinkBlox alone.
+--- from definitions/Scenarios.blink, for BlinkBlox alone -- and a game with many events, where the
+--- client has to find each one it receives among a hundred and twenty-eight.
 ---
 --- Each scenario times three things a frame: the game's calls (Fire, FireAll, Set), the flush that
 --- turns them into remote calls, and the observed receiver decoding what it was sent. It also counts
@@ -116,6 +117,8 @@ local BROADCASTS = 100
 local INPUTS = 8
 local TOUCHES = 100
 local WORLD_UNITS = 16
+local MANY = 128
+local MANY_SENDS = 100
 
 local PARTS = {}
 for Index = 1, 16 do
@@ -123,6 +126,30 @@ for Index = 1, 16 do
 end
 
 local SCENARIOS: { Scenario } = {
+	{
+		Name = "ManyEvents",
+		Players = 1,
+		Expected = MANY_SENDS,
+		Setup = function(Pair, Received)
+			for Index = 0, MANY - 1 do
+				Pair.Client[string.format("Many%03d", Index)].On(function(_Value)
+					Received()
+				end)
+			end
+		end,
+		Fire = function(Pair, Frame)
+			local Player = Pair.Players[1]
+			for Send = 1, MANY_SENDS do
+				--> 37 is prime to 128, so a frame's sends land on events all over the channel.
+				local Index = (Frame * 7 + Send * 37) % MANY
+				Pair.Server[string.format("Many%03d", Index)].Fire(Player, Send % 256)
+			end
+		end,
+		Flush = function(Pair)
+			Pair.Server.StepReplication()
+		end,
+		Deliver = ToClient,
+	},
 	{
 		Name = "Broadcast",
 		Players = CROWD,

@@ -4047,109 +4047,115 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
-		if Index == 0 then
-			local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientPollEvent())
-			if Queue.Reliable[0].count < MAX_POLLED then
-				Push(Queue.Reliable[0], Arguments)
-			end
-		elseif Index == 1 then
-			local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyPollEvent())
-			if Queue.Reliable[1].count < MAX_POLLED then
-				Push(Queue.Reliable[1], Arguments)
-			end
-		elseif Index == 4 then
-			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyEvent()
-			local BOUND_LISTENER = Events.Reliable[4]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "ClientEmptyEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "ClientEmptyEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[4] < 256 then
-					table.insert(Queue.Reliable[4], table.pack(Player, Value))
+		if Index < 14 then
+			if Index == 0 then
+				local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientPollEvent())
+				if Queue.Reliable[0].count < MAX_POLLED then
+					Push(Queue.Reliable[0], Arguments)
 				end
-			end
-		elseif Index == 6 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
-			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			local Value: nil = SerdesFunctions.ReadFUNCTION_DATA_EmptyFunction()
-			if Events.Reliable[6] ~= nil then
-				Spawn(Events.Reliable[6], Player, Value, InvocationIdentifier)
-			else
-				if #Queue.Reliable[6] >= 256 then
-					LoadPlayer(Player)
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 6)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					SavePlayerBuffer(Player)
-					return
+			elseif Index == 1 then
+				local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyPollEvent())
+				if Queue.Reliable[1].count < MAX_POLLED then
+					Push(Queue.Reliable[1], Arguments)
 				end
-				table.insert(Queue.Reliable[6], table.pack(Player, Value, InvocationIdentifier))
-			end
-		elseif Index == 14 then
-			local Value: { boolean } = SerdesFunctions.ReadEVENT_Booleans()
-			local BOUND_LISTENER = Events.Reliable[14]
-			if BOUND_LISTENER ~= nil then
-				Spawn(RunListener, "Booleans", BOUND_LISTENER, Player, Value)
-			else
-				if #Queue.Reliable[14] < 256 then
-					table.insert(Queue.Reliable[14], table.pack(Player, Value))
+			elseif Index == 4 then
+				local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyEvent()
+				local BOUND_LISTENER = Events.Reliable[4]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "ClientEmptyEvent"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+					if not ListenerRan and not ListenerFailed(Player, "ClientEmptyEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+				else
+					if #Queue.Reliable[4] < 256 then
+						table.insert(Queue.Reliable[4], table.pack(Player, Value))
+					end
 				end
-			end
-		elseif Index == 24 then
-			local Value: number = SerdesFunctions.ReadEVENT_ReliableClient()
-			local BOUND_LISTENER = Events.Reliable[24]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "ReliableClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "ReliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[24] < 256 then
-					table.insert(Queue.Reliable[24], table.pack(Player, Value))
+			elseif Index == 6 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: nil = SerdesFunctions.ReadFUNCTION_DATA_EmptyFunction()
+				if Events.Reliable[6] ~= nil then
+					Spawn(Events.Reliable[6], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[6] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 6)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[6], table.pack(Player, Value, InvocationIdentifier))
 				end
-			end
-		elseif Index == 31 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
-			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			local Value: number = SerdesFunctions.ReadFUNCTION_DATA_RemoteFunction()
-			if Events.Reliable[31] ~= nil then
-				Spawn(Events.Reliable[31], Player, Value, InvocationIdentifier)
 			else
-				if #Queue.Reliable[31] >= 256 then
-					LoadPlayer(Player)
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 31)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					SavePlayerBuffer(Player)
-					return
-				end
-				table.insert(Queue.Reliable[31], table.pack(Player, Value, InvocationIdentifier))
-			end
-		elseif Index == 33 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
-			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadFUNCTION_DATA_TupleFunction()
-			if Events.Reliable[33] ~= nil then
-				Spawn(Events.Reliable[33], Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
-			else
-				if #Queue.Reliable[33] >= 256 then
-					LoadPlayer(Player)
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 33)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					SavePlayerBuffer(Player)
-					return
-				end
-				table.insert(Queue.Reliable[33], table.pack(Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier))
+				error("[BlinkBlox]: Unknown event index.")
 			end
 		else
-			error("[BlinkBlox]: Unknown event index.")
+			if Index == 14 then
+				local Value: { boolean } = SerdesFunctions.ReadEVENT_Booleans()
+				local BOUND_LISTENER = Events.Reliable[14]
+				if BOUND_LISTENER ~= nil then
+					Spawn(RunListener, "Booleans", BOUND_LISTENER, Player, Value)
+				else
+					if #Queue.Reliable[14] < 256 then
+						table.insert(Queue.Reliable[14], table.pack(Player, Value))
+					end
+				end
+			elseif Index == 24 then
+				local Value: number = SerdesFunctions.ReadEVENT_ReliableClient()
+				local BOUND_LISTENER = Events.Reliable[24]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "ReliableClient"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+					if not ListenerRan and not ListenerFailed(Player, "ReliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+				else
+					if #Queue.Reliable[24] < 256 then
+						table.insert(Queue.Reliable[24], table.pack(Player, Value))
+					end
+				end
+			elseif Index == 31 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: number = SerdesFunctions.ReadFUNCTION_DATA_RemoteFunction()
+				if Events.Reliable[31] ~= nil then
+					Spawn(Events.Reliable[31], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[31] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 31)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[31], table.pack(Player, Value, InvocationIdentifier))
+				end
+			elseif Index == 33 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadFUNCTION_DATA_TupleFunction()
+				if Events.Reliable[33] ~= nil then
+					Spawn(Events.Reliable[33], Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
+				else
+					if #Queue.Reliable[33] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 33)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[33], table.pack(Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier))
+				end
+			else
+				error("[BlinkBlox]: Unknown event index.")
+			end
 		end
 	end
 	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
