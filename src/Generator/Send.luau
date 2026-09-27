@@ -73,18 +73,48 @@ local function AppendTo(Target: Blocks.Block, Event: Send)
 	end
 end
 
+--- A batched send to one batch -- `Recipient`'s, or everyone's when it is `nil` -- written straight
+--- into it rather than into the scratch buffer and copied. The event alone is held to the unreliable
+--- limit, as a send of its own would be. `Reached` counts a broadcast's traffic per player.
+local function WriteBatched(Fire: Blocks.Block, Event: Send, Recipient: string, Reached: boolean)
+	Fire:Line(`local BATCH = LoadBatch({Recipient})`)
+	Fire:Line(Event.WriteEvent)
+	Fire:Line(
+		"local EVENT_BYTES = SendCursor - BatchStart + (#SendInstances - BatchInstances) * UNRELIABLE_INSTANCE_BYTES"
+	)
+	if Event.Stream then
+		Fire:Line(
+			`if EVENT_BYTES > MAX_UNRELIABLE_SIZE then error(\`\{EVENT_BYTES} bytes exceeds the \{MAX_UNRELIABLE_SIZE} byte limit.\`) end`
+		)
+	else
+		Fire:Line("if EVENT_BYTES > MAX_UNRELIABLE_SIZE then")
+		Fire:Line(
+			`\twarn(\`[BlinkBlox]: Dropped unreliable event "{Event.Name}", \{EVENT_BYTES} bytes exceeds the \{MAX_UNRELIABLE_SIZE} byte limit.\`)`
+		)
+		Fire:Line("\treturn")
+		Fire:Line("end")
+	end
+
+	if Reached and Event.Traffic then
+		Fire:Line("local Reached = #Players:GetPlayers()")
+		Traffic.Sent(Fire, Event.Traffic, "(SendCursor - BatchStart)", true, "Reached")
+	else
+		Traffic.Sent(Fire, Event.Traffic, "(SendCursor - BatchStart)", true)
+	end
+	Fire:Line(`CommitBatch(BATCH, {Recipient}, {if Event.Ordered then Event.Ordered else "nil"})`)
+end
+
 --- An unreliable server send to one player, `Player`: the unreliable `Fire`, and a `Per: Player`
 --- stream's send. Leaves the function open for the caller to end.
 function Send.One(Fire: Blocks.Block, Event: Send): Blocks.Block
+	if Batched(Event) then
+		WriteBatched(Fire, Event, "Player", false)
+		return Fire
+	end
+
 	Fire:Line("LoadScratch()")
 	Fire:Line(Event.WriteEvent)
 	CheckSize(Fire, Event)
-	if Batched(Event) then
-		AppendTo(Fire, Event)
-		Fire:Line("KeepScratch()")
-		Traffic.Sent(Fire, Event.Traffic, "SendCursor", true)
-		return Fire
-	end
 
 	Fire:Lines(UNRELIABLE_BODY, 1)
 	Send.StampOrder(Fire, Event)
@@ -115,6 +145,12 @@ function Send.Broadcast(
 	Recipients: string,
 	Options: { AllClients: boolean?, SkipExcept: boolean? }
 ): Blocks.Block
+	--> An unordered event to everyone goes into the batch everyone shares, written there directly.
+	if not Event.IsReliable and Options.AllClients and not Event.Ordered and Batched(Event) then
+		WriteBatched(Fire, Event, "nil", true)
+		return Fire:End()
+	end
+
 	Fire:Line("LoadScratch()")
 	Fire:Line(Event.WriteEvent)
 
@@ -134,20 +170,12 @@ function Send.Broadcast(
 	elseif Batched(Event) then
 		CheckSize(Fire, Event)
 
-		--> An ordered event's sequence is each player's own, so only an unordered one to everyone
-		--> goes to the batch everyone shares.
-		if Options.AllClients and not Event.Ordered then
-			Fire:Line("AppendUnreliable(nil)")
-			if Event.Traffic then
-				Fire:Line("local Reached = #Players:GetPlayers()")
-				Traffic.Sent(Fire, Event.Traffic, "SendCursor", true, "Reached")
-			end
-		else
-			local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept)
-			AppendTo(Loop, Event)
-			Traffic.Sent(Loop, Event.Traffic, "SendCursor", true)
-			Loop:End()
-		end
+		--> Written once, into the scratch buffer, and copied into each player's batch: an ordered
+		--> event's sequence is each player's own.
+		local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept)
+		AppendTo(Loop, Event)
+		Traffic.Sent(Loop, Event.Traffic, "SendCursor", true)
+		Loop:End()
 		Fire:Line("KeepScratch()")
 	else
 		CheckSize(Fire, Event)

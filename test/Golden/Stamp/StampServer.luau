@@ -1410,10 +1410,19 @@ local function StepReplication()
 end
 
 --> UNRELIABLE BATCHES; see Generator/Batches.luau.
-type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Events: number }
+--> `Committed` counts the Instances of the events kept: one written straight into the batch that then
+--> threw has left its own behind, and they are dropped before the batch is used again.
+type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Committed: number, Events: number }
 
 local function NewUnreliable(): BLINK_UNRELIABLE
-    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Events = 0 }
+    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Committed = 0, Events = 0 }
+end
+
+local function Clean(Batch: BLINK_UNRELIABLE)
+    local Instances = Batch.Instances
+    for Index = #Instances, Batch.Committed + 1, -1 do
+        Instances[Index] = nil
+    end
 end
 
 --> Appends what the scratch buffer holds -- one event, written there by the send -- to `Batch`.
@@ -1439,7 +1448,8 @@ local function CopyUnreliable(Batch: BLINK_UNRELIABLE): number
 
     local Count = #SendInstances
     if Count > 0 then
-        table.move(SendInstances, 1, Count, #Batch.Instances + 1, Batch.Instances)
+        table.move(SendInstances, 1, Count, Batch.Committed + 1, Batch.Instances)
+        Batch.Committed += Count
     end
 
     return Cursor
@@ -1447,7 +1457,7 @@ end
 
 --> Whether the event in the scratch buffer would take `Batch` past the unreliable limit.
 local function Overflows(Batch: BLINK_UNRELIABLE): boolean
-    return Batch.Cursor + SendCursor + (#Batch.Instances + #SendInstances) * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE
+    return Batch.Cursor + SendCursor + (Batch.Committed + #SendInstances) * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE
 end
 
 local SharedUnreliable = NewUnreliable()
@@ -1463,6 +1473,7 @@ local function SendUnreliable(Batch: BLINK_UNRELIABLE, Player: Player?)
         return
     end
 
+    Clean(Batch)
     local Packet = buffer.create(Used)
     buffer.copy(Packet, 0, Batch.Buffer, 0, Used)
     if Player then
@@ -1472,6 +1483,7 @@ local function SendUnreliable(Batch: BLINK_UNRELIABLE, Player: Player?)
     end
 
     Batch.Cursor = 0
+    Batch.Committed = 0
     Batch.Events = 0
     table.clear(Batch.Instances)
 end
@@ -1499,10 +1511,84 @@ local function AppendUnreliable(Player: Player?)
         return
     end
 
+    Clean(Batch)
     if Overflows(Batch) then
         SendUnreliable(Batch, Player)
     end
     CopyUnreliable(Batch)
+end
+
+--> Where the event being written straight into a batch began: its first byte, and the Instances ahead
+--> of it.
+local BatchStart = 0
+local BatchInstances = 0
+
+--> Installs everyone's batch, or `Player`'s, as the send buffer, so a send to one batch writes its event
+--> there and copies nothing. None for a player who has left, who is written into the scratch buffer
+--> and sent nothing.
+local function LoadBatch(Player: Player?): BLINK_UNRELIABLE?
+    local Batch = if Player then PlayerBatch(Player) else SharedUnreliable
+    if Batch == nil then
+        LoadScratch()
+        BatchStart = 0
+        BatchInstances = 0
+        return nil
+    end
+
+    Clean(Batch)
+    SendSize = Batch.Size
+    SendCursor = Batch.Cursor
+    SendOffset = Batch.Cursor
+    SendBuffer = Batch.Buffer
+    SendInstances = Batch.Instances
+    BatchStart = Batch.Cursor
+    BatchInstances = Batch.Committed
+    return Batch
+end
+
+--> Keeps the event just written into `Batch`, stamping an ordered one's sequence at `Slot`. When the
+--> event does not fit one packet beside what the batch already held, that goes first, on its own, and
+--> the event moves to the front.
+local function CommitBatch(Batch: BLINK_UNRELIABLE?, Player: Player?, Slot: number?)
+    if Batch == nil then
+        return
+    end
+
+    local Buffer = SendBuffer
+    local Start = BatchStart
+    local Count = #SendInstances
+    if Start > 0 and SendCursor + Count * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE then
+        local Packet = buffer.create(Start)
+        buffer.copy(Packet, 0, Buffer, 0, Start)
+        local Before = table.move(SendInstances, 1, BatchInstances, 1, {})
+        if Player then
+            Unreliable:FireClient(Player, Packet, Before)
+        else
+            Unreliable:FireAllClients(Packet, Before)
+        end
+
+        local Size = SendCursor - Start
+        buffer.copy(Buffer, 0, Buffer, Start, Size)
+        table.move(SendInstances, BatchInstances + 1, Count, 1, SendInstances)
+        for Index = Count, Count - BatchInstances + 1, -1 do
+            SendInstances[Index] = nil
+        end
+
+        SendCursor = Size
+        Count -= BatchInstances
+        Start = 0
+        Batch.Events = 0
+    end
+
+    if Player and Slot then
+        buffer.writeu16(Buffer, Start + 1, NextOrder(Player, Slot))
+    end
+
+    Batch.Buffer = Buffer
+    Batch.Size = SendSize
+    Batch.Cursor = SendCursor
+    Batch.Committed = Count
+    Batch.Events += 1
 end
 
 local function AppendOrdered(Player: Player, Slot: number)
@@ -1511,6 +1597,7 @@ local function AppendOrdered(Player: Player, Slot: number)
         return
     end
 
+    Clean(Batch)
     if Overflows(Batch) then
         SendUnreliable(Batch, Player)
     end
@@ -1863,12 +1950,11 @@ end
 
 -- Trust: 10 a second, 20 fast, each player
 local function SendSTREAM_1(Player: Player, Value: { Gap: number, Bucket: number }?, ServerTime: number): ()
-	LoadScratch()
+	local BATCH = LoadBatch(Player)
 	SerdesFunctions.WriteEVENT_Trust(Value, ServerTime)
-	local Bytes = SendCursor + #SendInstances * UNRELIABLE_INSTANCE_BYTES
-	if Bytes > MAX_UNRELIABLE_SIZE then error(`{Bytes} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`) end
-	AppendUnreliable(Player)
-	KeepScratch()
+	local EVENT_BYTES = SendCursor - BatchStart + (#SendInstances - BatchInstances) * UNRELIABLE_INSTANCE_BYTES
+	if EVENT_BYTES > MAX_UNRELIABLE_SIZE then error(`{EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`) end
+	CommitBatch(BATCH, Player, nil)
 end
 local STREAM_1 = CreatePlayerStream("Trust", 1 / 10, 1 / 20, 2, 0.01, SendSTREAM_1)
 local function DecodeLoop(DecodeEvent: () -> (), Player: Player, Size: number)

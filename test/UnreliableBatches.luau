@@ -156,4 +156,64 @@ RunClosure("An ordered event in a batch carries the player's own sequence", func
 	Expect("heard", Heard, { 3 })
 end)
 
+--> A mock Instance the generated code accepts: `typeof` reads `__typeof` in the test environment.
+local function MockInstance(Name: string): any
+	return {
+		__typeof = "Instance",
+		Name = Name,
+		IsA = function()
+			return true
+		end,
+	}
+end
+
+local DIRECT = [[
+option BatchUnreliable = true
+
+event Big { From: Server, Type: Unreliable, Call: ManySync, Data: string(..600) }
+event Touch { From: Server, Type: Unreliable, Call: ManySync, Data: (Instance, string(..4)) }
+]]
+
+RunClosure("An event that would overflow its player's batch sends what came before it first", function()
+	local Pair = Build(DIRECT)
+	local Heard: { number } = {}
+	Pair.Client.Big.On(function(Value)
+		table.insert(Heard, #Value)
+	end)
+
+	--> An index, a two-byte varint length and 500 bytes: 503 each, and two do not fit under 980.
+	Pair.Server.Big.Fire(Shared.Player, string.rep("a", 500))
+	Pair.Server.Big.Fire(Shared.Player, string.rep("b", 500))
+	assert(#Pair.Outbound == 1, `{#Pair.Outbound} packets went out before the flush, expected the first`)
+	Pair.Server.StepReplication()
+
+	local Sizes = {}
+	for _, Packet in Pair.Outbound do
+		table.insert(Sizes, buffer.len(Packet.Buffer))
+		Pair.Deliver(Packet)
+	end
+	Expect("packet sizes", Sizes, { 503, 503 })
+	Expect("heard", Heard, { 500, 500 })
+end)
+
+RunClosure("A send that throws leaves no Instance behind in the batch it was written into", function()
+	local Pair = Build(DIRECT)
+	local Heard: { string } = {}
+	Pair.Client.Touch.On(function(Part, Label)
+		table.insert(Heard, `{Part.Name} {Label}`)
+	end)
+
+	--> The Instance goes into the batch before the string is refused for its length.
+	local Kept, Dropped = MockInstance("Kept"), MockInstance("Dropped")
+	assert(not pcall(Pair.Server.Touch.Fire, Shared.Player, Dropped, "too long"), "a string past its bound was sent")
+	Pair.Server.Touch.Fire(Shared.Player, Kept, "ok")
+	Pair.Server.StepReplication()
+
+	assert(#Pair.Outbound == 1, `sent {#Pair.Outbound} packets, expected one`)
+	local Packet = Pair.Outbound[1]
+	assert(#Packet.Instances == 1 and Packet.Instances[1] == Kept, "the refused event's Instance was sent")
+	Pair.Deliver(Packet)
+	Expect("heard", Heard, { "Kept ok" })
+end)
+
 return {}
