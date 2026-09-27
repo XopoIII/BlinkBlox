@@ -1,0 +1,234 @@
+---
+title: What's new in 0.40
+description: Everything 0.40.0 changed -- a FireAll sent once to everyone, cheaper fires and decodes, packets cut to the server's limits, varint lengths, enums in the bitfield, streams ordered by their stamp, and option BatchUnreliable -- with what each costs and how to upgrade.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+0.40.0 is a release about speed and bytes. Most of it needs nothing from you but a rebuild: the
+generated modules do the same work in less time and fewer bytes. One option is new, and one change
+in behaviour protects your players.
+
+<Aside type="caution" title="Rebuild both modules">
+The wire format changed: `WIRE_VERSION` is 3. A client and a server must both be built by 0.40.0. A
+module from an earlier release refuses a 0.40.0 one at startup through the
+[schema signature](/BlinkBlox/reference/wire-compatibility/), so a mismatch is an error you see, not
+packets decoded wrong. Nothing in your schema needs to change.
+</Aside>
+
+## Upgrading
+
+1. Update the compiler to 0.40.0 (the rokit pin, the release binary or the Studio plugin).
+2. Regenerate the server and the client module from the same schema, and ship them together.
+3. Nothing in the game's code changes: every member and every handler keeps its name and signature.
+
+If you strike or ban on [`SetPacketDropHandler`](/BlinkBlox/guides/securing-the-server/), read
+[packets cut to the server's limits](#packets-cut-to-the-servers-limits): the reasons `Events` and
+`Oversized` now mean what you meant them to.
+
+## Faster
+
+Every figure is 0.40.0 against 0.39.0 on the [runtime benchmark](/BlinkBlox/guides/benchmarks/), the
+median of three to five runs of each, taken alternately on one machine.
+
+### A reliable FireAll is sent once
+
+A reliable `FireAll` used to be copied into every player's batch, and the flush sent each player's
+batch in a remote call of its own. Now it is written once into a **broadcast batch**, and the flush
+sends that in one `FireAllClients`.
+
+| 100 FireAlls a frame, 50 players | 0.39.0 | 0.40.0 |
+|---|---|---|
+| Fire, native | 3.8 ms | 0.035 ms |
+| Flush | 0.035 ms | 0.001 ms |
+| Remote calls a frame | 50 | 1 |
+
+The order your events arrive in does not change. When a player is sent something of their own --
+`Fire`, `FireList`, a function's reply -- after a broadcast, that player's batch takes a copy of the
+broadcasts so far and follows them from then on, so the player receives everything in the order it
+was sent. Only the players you send to individually cost a copy; everyone else shares one packet.
+
+### Cheaper fires and decodes
+
+- **One `pcall` a packet, not one an event.** The decode loop used to protect every event on its
+  own; it now protects the packet. A malformed event still stops the packet at the same place and is
+  still reported through `SetDecodeErrorHandler`. A listener's own error was never part of it.
+- **No `pcall` on a client's reliable `Fire`.** A write that throws -- a value out of its range, say
+  -- used to be undone under a `pcall`. It is now undone lazily, by whatever touches the batch next:
+  the next `Fire`, or the flush. The half-written event never reaches the wire, as before.
+- **Smaller things everywhere**: a reader keeps the packet in a local, the buffer grows out of line,
+  a `Single` listener is looked up once, the decode loop is made once a module rather than once a
+  packet, and the rate buckets read the clock once a packet rather than once an event.
+
+| Event | 0.39.0 | 0.40.0 |
+|---|---|---|
+| A one-byte event, fire, native | 0.135 ms / 1000 | 0.078 ms (-42%) |
+| A one-byte event, decode, native | 0.347 ms / 1000 | 0.217 ms (-37%) |
+| 100 structs, decode, interpreted | 54.1 ms / 1000 | 48.2 ms (-11%) |
+| An unreliable `Fire` | | 18 to 40% faster |
+| A `Fire` carrying an Instance, native | | 40% faster |
+
+## Packets cut to the server's limits
+
+The server refuses a packet with more than
+[`MaxEventsPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket)
+events, more than `MaxPacketSize` bytes or more than `MaxInstancesPerPacket` Instances, and reports
+the player to `SetPacketDropHandler` as `Events`, `Oversized` or `Instances`.
+
+Before 0.40.0 the client sent everything fired in a frame as one packet, whatever those limits were.
+A player whose game hitched for a moment, or whose interface fired a burst, could send 65 events in
+one frame and be reported as though they had modified their client -- and a game that strikes on
+those reasons struck an honest player.
+
+The client now cuts its batch into packets the server accepts, each at an event's boundary. Most
+frames fit in one packet and pay a comparison or two an event for the check. An event too large to
+fit a packet on its own still goes out alone and is still refused, since no honest client can send
+it.
+
+## Fewer bytes
+
+### Lengths as varints
+
+A string, a buffer or an array whose length the schema does not bound used to spend two bytes on its
+length. It now spends one below 128, two below 16384 and three up to 65535. A bounded length whose
+span needs two bytes takes the same varint, so it never costs more than before and a short value
+costs one byte less:
+
+```blink
+struct Chat {
+	Author: string(1..20),
+	-- unbounded: 1 byte of length for a message under 128 characters
+	Text: string,
+	-- span 0..1000: 1 byte of length under 128 entries, 2 above
+	Recent: u16[..1000]
+}
+
+event Say {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Rate: 2,
+	Data: Chat
+}
+```
+
+A span wider than two bytes takes three where it took four. The receiver refuses a length written in
+more bytes than it needs, and one past 65535, before it reads or allocates anything for it -- a
+hostile length still buys nothing. [Lengths are offset-encoded](/BlinkBlox/language/types/#lengths-are-offset-encoded)
+has the whole table.
+
+### Enums in the bitfield
+
+An enum's value and a tagged enum's tag each took a byte. They now take the bits that tell their
+values apart -- one for two values, two for four, eight for 256 -- in the same
+[bitfield](/BlinkBlox/language/types/#booleans-and-optionals-share-a-bitfield) as the booleans and
+optional flags beside them:
+
+```blink
+struct Unit {
+	Id: u16,
+	-- 2 bits
+	Stance: enum { Standing, Crouching, Prone, Swimming },
+	-- 1 bit each
+	Moving: boolean,
+	Aiming: boolean,
+	-- 1 bit for the flag
+	Target: u16?
+}
+
+event Units {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: Unit[..32]
+}
+```
+
+`Stance`, `Moving`, `Aiming` and the flag of `Target` share one byte, where the enum used to take a
+byte of its own. Writing the value costs one addition worked out at compile time; reading it, one
+`bit32.extract`.
+
+### Streams without a sequence number
+
+A [stream](/BlinkBlox/language/streams/) already stamps every packet with the server's time. It no
+longer carries an `OrderedUnreliable` sequence number beside it: the client keeps the newest stamp
+it took and drops a state older than that. A stream packet is two bytes shorter, and because the
+sequence was the only part that differed from player to player, a stream to everyone is written once
+and sent in one `FireAllClients`, where it was a remote call per player.
+
+The streams to everyone that are due in the same frame also share their packets. With fifty players,
+a frame of streams that was fifty remote calls is one.
+
+## BatchUnreliable
+
+Every unreliable `Fire` goes out at once, in a remote call and a packet of its own. The new
+[`option BatchUnreliable`](/BlinkBlox/language/options/#batchunreliable) gathers a frame's unreliable
+events instead, into as few packets as
+[`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) allows, and sends them at the
+flush with the reliable batch:
+
+```blink
+option BatchUnreliable = true
+
+event Input {
+	From: Client,
+	Type: Unreliable,
+	Call: SingleSync,
+	Rate: 120,
+	Data: struct { Move: u8, Turn: i16, Jump: boolean, Sprint: boolean }
+}
+
+event Hit {
+	From: Server,
+	Type: Unreliable,
+	Call: ManySync,
+	Data: struct { Target: u16, Damage: u8 }
+}
+```
+
+| Eight inputs a frame, client to server | Without | With |
+|---|---|---|
+| Remote calls a frame | 8 | 1 |
+| Decode, native | 0.010 ms | 0.004 ms |
+| Decode, interpreted | 0.022 ms | 0.010 ms |
+
+On the server an event to everyone goes into one packet sent in one `FireAllClients`, and an event
+to one player into that player's; an `OrderedUnreliable` event still carries each player's own
+sequence number. A client's batch is also cut at the server's `MaxEventsPerPacket`, like its reliable
+one. A frame of small events stays further inside the server's
+[inbound budget](/BlinkBlox/language/options/#inboundbytespersecond-inboundburst) too, since that
+charges every packet at least 128 bytes.
+
+<Aside type="tip" title="When to turn it on">
+It pays when a player gets several unreliable events a frame: a client's input, a server's hits or
+effects. An event then waits for the flush, up to a frame, as a reliable one always has. Where each
+player gets one unreliable event a frame there is nothing to gather: the number of remote calls stays
+the same, and the batch costs an interpreted client a little more than sending at once. It is off by
+default.
+</Aside>
+
+A [stream](/BlinkBlox/language/streams/) to everyone is batched whatever the option says, since it
+is sent at the flush anyway. A stream [held per player](/BlinkBlox/language/streams/#one-state-per-player)
+sends each player one state a step, so it joins the player's batch only under this option.
+
+## Fixed
+
+- **A stream whose state could not fit a packet** was counted as sent and warned about at every step.
+  It is now reported once, as `Stream "Name" could not send its state`, and the stream stops until the
+  next `Set` -- as it does for any state that fails to send.
+- **The compiler's line builder** dropped the line before a trailing empty one instead of the empty
+  one. No shipped template hit it.
+
+## Measuring it yourself
+
+The runtime benchmark gained the paths it had never run, and a way to run them on the other tools:
+
+- `lune run Scenarios` times a server sending `FireAll` to fifty players, small unreliable events,
+  streams to everyone and per player, and events carrying Instances, counting remote calls and bytes
+  as well as time. `--batch` builds with `BatchUnreliable`.
+- `lune run Rivals` runs the same scenarios on BlinkBlox, Blink, zap, ByteNet and Packet.
+
+Its mock players and Instances are now userdata, as they are in a game. They had been tables, and
+native code sends a function whose parameter is annotated `Player` or `Instance` back to the
+interpreter when a table arrives, so some native figures before 0.40.0 were interpreted ones. The
+[benchmarks page](/BlinkBlox/guides/benchmarks/) has the numbers.

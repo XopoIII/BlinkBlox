@@ -56,10 +56,14 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
   before it are delivered, and the failure goes to a handler you provide.
 - **Mismatched builds refuse each other.** A client and a server built from different schemas stop
   at startup instead of decoding one event as another.
-- **Small on the wire.** Booleans and optional flags share a bitfield, and `boolean[]` packs eight
-  to a byte. A length is sent relative to its range, `CFrame<quat>` fits a rotation in 7 bytes, and
+- **Small on the wire.** Booleans, optional flags, enum values and tags share a bitfield, and
+  `boolean[]` packs eight to a byte. A length is sent relative to its range, a short one in a single
+  varint byte, `CFrame<quat>` fits a rotation in 7 bytes, and
   `u24`, `i24` and `f24` fill the gap between 16 and 32 bits, so `vector<f24>` is 9 bytes instead of
   12. An unreliable event that cannot fit is refused at compile time.
+- **Few remote calls.** A `FireAll` goes to every player in one `FireAllClients`, streams to
+  everyone share one packet a frame, and `BatchUnreliable` gathers a frame's unreliable events the
+  same way. A client cuts its batch to fit the server's limits, so an honest player is never refused.
 - **Tooling.** The CLI has watch mode and `@profile` builds that keep debug remotes out of release,
   `--check --json` reports every diagnostic as JSON for editors and AI assistants, and `--verify`
   fails a pre-commit hook or CI step when the committed modules no longer match the schema. The generated
@@ -70,7 +74,7 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 
 Each tool fires 1000 events a frame from client to server. Blink is the original project BlinkBlox
 forked from, at its last release, 0.18.9. The runs were made on an Apple M1: in Studio on BlinkBlox
-0.36.2, on Lune on 0.38.1. The code a packet runs through has not changed between the two.
+0.36.2, on Lune on 0.40.0.
 
 In Studio, the numbers are the median frame rate and the milliseconds a frame's thousand fires took.
 
@@ -89,12 +93,21 @@ them natively, and the bytes one event takes before compression. Each is the med
 
 | Payload | BlinkBlox | Blink | zap | ByteNet | Packet |
 |---|---|---|---|---|---|
-| 1000 booleans | **38.2 / 4.5 ms, 128 B** | 68.8 / 12.1 ms, 1003 B | 173.9 / 13.4 ms, 1003 B | 126.5 / 122.2 ms, 1003 B | 125.1 / 116.7 ms, 1003 B |
-| 100 entities | **33.5** / **13.3 ms**, 603 B | **33.5** / 73.3 ms, 603 B | 84.1 / 73.9 ms, 603 B | 109.2 / 112.4 ms, 603 B | 100.6 / 164.0 ms, 603 B |
+| 1000 booleans | **37.7 / 4.2 ms, 128 B** | 68.8 / 11.9 ms, 1003 B | 174.0 / 13.3 ms, 1003 B | 126.6 / 122.4 ms, 1003 B | 124.3 / 116.7 ms, 1003 B |
+| 100 entities | **33.5** / **12.2 ms**, **602 B** | **33.5** / 73.2 ms, 603 B | 83.9 / 74.1 ms, 603 B | 109.1 / 110.6 ms, 603 B | 100.6 / 162.5 ms, 603 B |
 
-The methodology, the bandwidth, the random payloads and the full percentiles are in
+A game also sends the other way. Natively, on the same run, with fifty players:
+
+| Scenario | BlinkBlox | Blink | zap | ByteNet | Packet |
+|---|---|---|---|---|---|
+| 100 structs a frame to everyone, `FireAll` | **0.037 ms, 1 remote call** | 2.10 ms, 50 calls | 2.46 ms, 50 calls | 0.099 ms, 1 call | 0.209 ms, 1 call |
+| Decoding them on a client | **0.024 ms** | 0.081 ms | 0.077 ms | 0.268 ms | 0.452 ms |
+| 8 unreliable inputs a frame, with [`BatchUnreliable`](https://xopoiii.github.io/BlinkBlox/language/options/#batchunreliable) | **0.004 ms, 1 remote call** | 0.009 ms, 8 calls | 0.006 ms, 8 calls | 0.006 ms, 1 call | none |
+
+The methodology, the bandwidth, the random payloads, streams and the full percentiles are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
-[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md).
+[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What 0.40.0 changed is in
+[What's new in 0.40](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
 
 ## Where it comes from
 

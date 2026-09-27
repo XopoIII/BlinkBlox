@@ -32,86 +32,239 @@ generated modules, ByteNet and Packet from the same files Studio runs (after `lu
 enough of Roblox mocked around them, and times a frame's thousand fires, the flush into packets, and the server decoding those packets
 and calling its listener. `Bytes/event` is the encoder's output; `zstd` is that output compressed as Roblox would.
 
-The run below was made on 2026-09-26 on an Apple M1 with 16 GB of memory, Lune 0.10.5, with this repository's
-compiler (0.38.1). Each figure is the median of three runs, and each run's figure is itself a median or 99th percentile over
-200 frames, in milliseconds per frame of 1000 events. `native` is what a Roblox server runs; `interpreted` is what most clients run.
-Packet declares `--!native` nowhere, so both its rows are interpreted. `Tiny` is BlinkBlox's alone.
+The runs below were made on 2026-09-27 on an Apple M1 with 16 GB of memory, Lune 0.10.5, with this repository's
+compiler (0.40.0). Each figure is the median of three runs, and each run's figure is itself a median or 99th percentile over
+200 frames, in milliseconds per frame. `native` is what a Roblox server runs; `interpreted` is what most clients run.
+Packet declares `--!native` nowhere, so both its rows are interpreted. `Tiny` is BlinkBlox's alone, and runs after the
+other tools in the same process, so its interpreted row reads higher here than when BlinkBlox runs alone.
 
-The code these modules run for a packet has not changed since 0.36.2: loaded side by side into one process, 0.36.2's and
-0.38.1's modules decode at the same speed. The previous table, a single run of 0.36.2, read lower on some rows (EntitiesRandom
-decode 10.81); that is this machine's spread between single runs, which is why this one takes three.
+The mock players and Instances are userdata, as they are in a game. Before 0.40.0 they were tables, and native code
+sends a function whose parameter is annotated `Player` or `Instance` back to the interpreter when a table arrives, so
+some native figures in earlier tables were interpreted ones.
 
 #### Booleans
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|3.840|4.289|0.011|4.539|5.080|128.00|0.02|
-|Blink|native|6.673|7.288|0.051|12.116|12.767|1003.00|0.10|
-|zap|native|34.990|72.794|0.056|13.375|25.022|1003.00|0.10|
-|ByteNet|native|53.060|115.938|0.055|122.218|220.249|1003.00|0.10|
-|Packet|native|124.344|245.250|0.080|116.657|224.886|1003.00|0.10|
-|BlinkBlox|interpreted|38.244|78.837|0.013|45.105|80.002|128.00|0.02|
-|Blink|interpreted|68.758|121.615|0.056|82.838|147.142|1003.00|0.10|
-|zap|interpreted|173.871|333.277|0.064|105.967|188.211|1003.00|0.10|
-|ByteNet|interpreted|126.532|219.912|0.058|121.730|235.561|1003.00|0.10|
-|Packet|interpreted|125.137|252.592|0.081|116.287|323.154|1003.00|0.10|
+|BlinkBlox|native|3.558|4.021|0.008|4.166|4.708|128.00|0.02|
+|Blink|native|6.620|10.189|0.050|11.887|18.335|1003.00|0.10|
+|zap|native|34.745|39.460|0.055|13.346|15.384|1003.00|0.10|
+|ByteNet|native|53.436|74.573|0.051|122.417|146.657|1003.00|0.10|
+|Packet|native|124.123|148.786|0.070|116.672|135.316|1003.00|0.10|
+|BlinkBlox|interpreted|37.696|42.720|0.013|45.127|49.471|128.00|0.02|
+|Blink|interpreted|68.794|77.950|0.056|83.351|92.631|1003.00|0.10|
+|zap|interpreted|173.968|196.971|0.068|106.564|119.743|1003.00|0.10|
+|ByteNet|interpreted|126.579|201.131|0.058|122.590|158.512|1003.00|0.10|
+|Packet|interpreted|124.271|167.957|0.071|116.165|200.369|1003.00|0.10|
 
 #### Entities
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|3.200|10.213|0.026|13.334|34.081|603.00|0.67|
-|Blink|native|3.175|5.877|0.033|73.307|147.730|603.00|0.67|
-|zap|native|21.042|40.367|0.036|73.879|133.658|603.00|0.67|
-|ByteNet|native|66.149|135.870|0.045|112.403|200.982|603.00|0.67|
-|Packet|native|100.662|185.885|0.064|164.005|296.540|603.00|0.67|
-|BlinkBlox|interpreted|33.463|61.670|0.031|54.971|97.933|603.00|0.67|
-|Blink|interpreted|33.460|62.036|0.041|105.689|199.101|603.00|0.67|
-|zap|interpreted|84.141|167.023|0.042|116.991|241.090|603.00|0.67|
-|ByteNet|interpreted|109.171|207.828|0.044|110.594|198.959|603.00|0.67|
-|Packet|interpreted|100.624|191.662|0.057|164.209|303.354|603.00|0.67|
+|BlinkBlox|native|3.229|4.209|0.025|12.224|16.376|602.00|0.67|
+|Blink|native|3.185|4.807|0.035|73.173|91.495|603.00|0.67|
+|zap|native|20.878|32.865|0.036|74.100|104.082|603.00|0.67|
+|ByteNet|native|65.691|124.152|0.041|110.577|151.041|603.00|0.67|
+|Packet|native|100.602|141.483|0.049|162.540|254.092|603.00|0.67|
+|BlinkBlox|interpreted|33.450|39.278|0.029|48.810|64.699|602.00|0.67|
+|Blink|interpreted|33.455|53.714|0.037|105.289|160.694|603.00|0.67|
+|zap|interpreted|83.890|131.810|0.039|116.861|187.896|603.00|0.67|
+|ByteNet|interpreted|109.107|158.808|0.045|109.690|154.120|603.00|0.67|
+|Packet|interpreted|100.554|148.502|0.049|162.515|237.073|603.00|0.67|
 
 #### BooleansRandom
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|8.615|10.452|0.012|4.832|6.412|128.00|125.82|
-|Blink|native|17.609|32.376|0.058|12.284|27.555|1003.00|135.63|
-|zap|native|45.475|75.268|0.057|13.380|25.480|1003.00|135.63|
-|ByteNet|native|56.489|121.296|0.056|128.925|230.152|1003.00|135.63|
-|Packet|native|132.202|245.129|0.082|125.370|281.905|1003.00|135.63|
-|BlinkBlox|interpreted|40.436|84.849|0.015|46.280|89.162|128.00|125.82|
-|Blink|interpreted|73.626|107.104|0.061|90.009|119.339|1003.00|135.63|
-|zap|interpreted|171.321|324.150|0.064|105.940|199.698|1003.00|135.63|
-|ByteNet|interpreted|134.375|223.618|0.062|128.666|222.122|1003.00|135.63|
-|Packet|interpreted|132.443|211.694|0.080|124.625|233.307|1003.00|135.63|
+|BlinkBlox|native|8.481|9.559|0.013|4.497|6.309|128.00|125.82|
+|Blink|native|17.576|20.070|0.053|11.757|15.180|1003.00|135.63|
+|zap|native|43.955|60.062|0.053|13.127|19.927|1003.00|135.63|
+|ByteNet|native|56.454|105.225|0.054|129.176|179.562|1003.00|135.63|
+|Packet|native|132.177|137.990|0.068|125.168|138.998|1003.00|135.63|
+|BlinkBlox|interpreted|40.426|52.608|0.015|45.283|51.050|128.00|125.82|
+|Blink|interpreted|73.634|85.004|0.057|90.711|104.875|1003.00|135.63|
+|zap|interpreted|171.818|244.678|0.060|106.388|170.900|1003.00|135.63|
+|ByteNet|interpreted|134.535|208.345|0.056|129.693|211.734|1003.00|135.63|
+|Packet|interpreted|132.342|237.232|0.071|125.336|173.295|1003.00|135.63|
 
 #### EntitiesRandom
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|3.721|4.524|0.028|12.827|33.613|603.00|603.02|
-|Blink|native|3.716|4.772|0.035|73.678|99.006|603.00|603.02|
-|zap|native|21.981|44.740|0.037|73.918|150.363|603.00|603.02|
-|ByteNet|native|66.675|138.657|0.054|111.605|225.458|603.00|603.02|
-|Packet|native|101.054|179.028|0.065|164.893|298.385|603.00|603.02|
-|BlinkBlox|interpreted|33.666|64.730|0.034|55.687|107.297|603.00|603.02|
-|Blink|interpreted|33.609|55.034|0.039|107.329|160.484|603.00|603.02|
-|zap|interpreted|84.138|178.186|0.041|119.161|239.545|603.00|603.02|
-|ByteNet|interpreted|109.596|217.641|0.073|110.356|221.320|603.00|603.02|
-|Packet|interpreted|100.934|197.721|0.059|162.204|301.232|603.00|603.02|
+|BlinkBlox|native|3.710|8.043|0.026|11.384|32.439|602.00|602.02|
+|Blink|native|3.670|6.469|0.033|73.739|119.722|603.00|603.02|
+|zap|native|21.228|28.344|0.034|74.379|98.161|603.00|603.02|
+|ByteNet|native|66.354|129.417|0.044|109.842|180.579|603.00|603.02|
+|Packet|native|100.958|178.551|0.054|164.494|250.082|603.00|603.02|
+|BlinkBlox|interpreted|33.566|43.057|0.030|46.799|72.016|602.00|602.02|
+|Blink|interpreted|33.572|46.553|0.036|104.513|140.276|603.00|603.02|
+|zap|interpreted|84.095|117.433|0.038|116.580|163.320|603.00|603.02|
+|ByteNet|interpreted|109.575|151.287|0.046|110.153|188.604|603.00|603.02|
+|Packet|interpreted|101.190|158.409|0.053|162.931|256.776|603.00|603.02|
 
 #### Tiny
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|0.135|0.157|0.001|0.385|0.437|2.00|0.02|
-|BlinkBlox|interpreted|0.346|0.370|0.001|0.636|0.682|2.00|0.02|
+|BlinkBlox|native|0.088|0.120|0.001|0.245|0.333|2.00|0.02|
+|BlinkBlox|interpreted|0.409|0.747|0.002|0.699|1.295|2.00|0.02|
 
-Source code can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src).  
-Data used for benchmarks can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches).   
-Definition files used for benchmarks can be found [here](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/definitions).  
- 
+## Sending to a crowd, unreliable events and Instances
+
+`lune run Rivals` runs the paths the benchmark above never does, on every tool, all loaded the same way so each pays for
+the same mocks, each flushing on its own Heartbeat. The events are in `definitions/Scenarios.blink`, declared for each tool
+in `definitions/Scenarios.zap`, `definitions/Scenarios.upstream.blink` and `runtime/rivals/modes`. Times are
+milliseconds a frame; `Remote calls/frame` and `Bytes/frame` are summed over every player a frame reached.
+
+- `Broadcast`: the server fires 100 reliable structs a frame to 50 players with `FireAll`.
+- `UnreliableInput`: a client fires 8 small unreliable inputs a frame.
+- `Instances`: a client fires 100 reliable events a frame, each carrying a part.
+- `WorldState`: the server sends 16 units a frame to 50 players, unreliable, to everyone at once.
+- `SelfState`: the server sends each of 50 players their own unit a frame, unreliable.
+
+Packet has no unreliable channel, so it runs only the reliable scenarios. ByteNet's release prints its instance list
+on every Instance it writes; the harness sends `print` nowhere, so the terminal is not what is timed.
+
+#### Broadcast
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.037|0.002|0.024|1.0|85000.0|
+|Blink|native|2.097|0.028|0.081|50.0|90000.0|
+|zap|native|2.455|0.027|0.077|50.0|85000.0|
+|ByteNet|native|0.099|0.005|0.268|1.0|90000.0|
+|Packet|native|0.209|0.004|0.452|1.0|90000.0|
+|BlinkBlox|interpreted|0.099|0.002|0.092|1.0|85000.0|
+|Blink|interpreted|4.402|0.046|0.145|50.0|90000.0|
+|zap|interpreted|5.621|0.069|0.153|50.0|85000.0|
+|ByteNet|interpreted|0.210|0.011|0.290|1.0|90000.0|
+|Packet|interpreted|0.212|0.004|0.454|1.0|90000.0|
+
+#### UnreliableInput
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.006|0.000|0.010|8.0|40.0|
+|Blink|native|0.009|0.000|0.009|8.0|48.0|
+|zap|native|0.006|0.000|0.006|8.0|32.0|
+|ByteNet|native|0.006|0.001|0.019|1.0|48.0|
+|BlinkBlox|interpreted|0.013|0.000|0.022|8.0|40.0|
+|Blink|interpreted|0.011|0.000|0.013|8.0|48.0|
+|zap|interpreted|0.013|0.000|0.009|8.0|32.0|
+|ByteNet|interpreted|0.012|0.001|0.022|1.0|48.0|
+
+#### Instances
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.012|0.001|0.037|1.0|200.0|
+|Blink|native|0.011|0.001|0.014|1.0|200.0|
+|zap|native|0.023|0.002|0.042|1.0|200.0|
+|ByteNet|native|0.064|0.002|0.219|1.0|300.0|
+|Packet|native|0.094|0.003|0.333|1.0|200.0|
+|BlinkBlox|interpreted|0.042|0.001|0.073|1.0|200.0|
+|Blink|interpreted|0.031|0.003|0.048|1.0|200.0|
+|zap|interpreted|0.039|0.001|0.061|1.0|200.0|
+|ByteNet|interpreted|0.130|0.002|0.248|1.0|300.0|
+|Packet|interpreted|0.095|0.003|0.335|1.0|200.0|
+
+#### WorldState
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.003|0.001|0.002|1.0|12900.0|
+|Blink|native|0.008|0.000|0.016|1.0|13700.0|
+|zap|native|0.013|0.000|0.017|1.0|12850.0|
+|ByteNet|native|0.017|0.004|0.023|1.0|13750.0|
+|BlinkBlox|interpreted|0.009|0.001|0.010|1.0|12900.0|
+|Blink|interpreted|0.016|0.000|0.024|1.0|13700.0|
+|zap|interpreted|0.025|0.000|0.024|1.0|12850.0|
+|ByteNet|interpreted|0.023|0.010|0.023|1.0|13750.0|
+
+#### SelfState
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.045|0.001|0.001|50.0|850.0|
+|Blink|native|0.043|0.000|0.001|50.0|900.0|
+|zap|native|0.039|0.000|0.001|50.0|800.0|
+|ByteNet|native|0.065|0.026|0.004|50.0|900.0|
+|BlinkBlox|interpreted|0.075|0.001|0.002|50.0|850.0|
+|Blink|interpreted|0.058|0.000|0.002|50.0|900.0|
+|zap|interpreted|0.110|0.000|0.002|50.0|800.0|
+|ByteNet|interpreted|0.104|0.040|0.004|50.0|900.0|
+
+BlinkBlox with `option BatchUnreliable`, which gathers a frame's unreliable events into as few packets as fit:
+
+#### Broadcast
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.037|0.002|0.025|1.0|85000.0|
+|BlinkBlox|interpreted|0.094|0.002|0.086|1.0|85000.0|
+
+#### UnreliableInput
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.004|0.001|0.004|1.0|40.0|
+|BlinkBlox|interpreted|0.011|0.001|0.009|1.0|40.0|
+
+#### Instances
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.012|0.001|0.034|1.0|200.0|
+|BlinkBlox|interpreted|0.042|0.001|0.071|1.0|200.0|
+
+#### WorldState
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.005|0.001|0.005|1.0|12900.0|
+|BlinkBlox|interpreted|0.010|0.002|0.012|1.0|12900.0|
+
+#### SelfState
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.021|0.020|0.001|50.0|850.0|
+|BlinkBlox|interpreted|0.060|0.031|0.002|50.0|850.0|
+
+## Streams
+
+`lune run Scenarios` runs the same paths for BlinkBlox alone, with streams in place of the unreliable events: a stream
+of 16 units to 50 players (`StreamWorld`), and one held per player (`StreamPerPlayer`). The streams to everyone due in
+a frame share one `FireAllClients`.
+
+|Scenario|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|Broadcast|native|0.036|0.002|0.025|1.0|85000.0|
+|UnreliableInput|native|0.006|0.000|0.007|8.0|40.0|
+|Instances|native|0.011|0.001|0.027|1.0|200.0|
+|StreamWorld|native|0.001|0.016|0.002|1.0|13050.0|
+|StreamPerPlayer|native|0.008|0.084|0.001|50.0|1000.0|
+|Broadcast|interpreted|0.094|0.002|0.088|1.0|85000.0|
+|UnreliableInput|interpreted|0.010|0.000|0.016|8.0|40.0|
+|Instances|interpreted|0.042|0.001|0.065|1.0|200.0|
+|StreamWorld|interpreted|0.001|0.034|0.010|1.0|13050.0|
+|StreamPerPlayer|interpreted|0.019|0.197|0.002|50.0|1000.0|
+
+With `--batch`:
+
+|Scenario|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|Broadcast|native|0.035|0.002|0.025|1.0|85000.0|
+|UnreliableInput|native|0.004|0.001|0.003|1.0|40.0|
+|Instances|native|0.011|0.001|0.027|1.0|200.0|
+|StreamWorld|native|0.001|0.016|0.002|1.0|13050.0|
+|StreamPerPlayer|native|0.008|0.090|0.001|50.0|1000.0|
+|Broadcast|interpreted|0.094|0.002|0.088|1.0|85000.0|
+|UnreliableInput|interpreted|0.010|0.001|0.008|1.0|40.0|
+|Instances|interpreted|0.042|0.001|0.066|1.0|200.0|
+|StreamWorld|interpreted|0.001|0.034|0.010|1.0|13050.0|
+|StreamPerPlayer|interpreted|0.019|0.219|0.002|50.0|1000.0|
+
 ## Results
 
 `P[NUMBER]` = [NUMBER] Percentile  
