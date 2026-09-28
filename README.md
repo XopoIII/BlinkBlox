@@ -94,42 +94,42 @@ so only its frame rate is shown.
 \* Studio caps the frame rate at 60.
 
 On [LuneBlox](https://github.com/XopoIII/LuneBlox), without Roblox -- the Luau version and flags
-Roblox runs -- on an Intel Core i7-13700K with BlinkBlox 0.41.2, each figure the median of three
-runs. "Send" is a frame's thousand fires and the flush into a packet, interpreted, as most players'
-clients run it; "decode" is the server decoding them, natively compiled, as a Roblox server runs
-it; bytes are one event before compression.
+Roblox runs -- on an Intel Core i7-13700K with BlinkBlox 0.42.0, each figure the median of three
+runs, every tool in a process of its own. "Send" is a frame's thousand fires and the flush into a
+packet, interpreted, as most players' clients run it; "decode" is the server decoding them, natively
+compiled, as a Roblox server runs it; bytes are one event before compression.
 
 | Tool | 1000 booleans: send / decode | 100 entities: send / decode | Bytes, booleans / entities |
 |---|---|---|---|
-| **BlinkBlox** | **17.2** / 6.5 ms | **12.9** / **7.3 ms** | **128** / **602** |
-| Blink | 30.9 / 11.0 ms | 13.1 / 25.4 ms | 1003 / 603 |
-| zap | 70.4 / 8.6 ms | 35.6 / 25.6 ms | 1003 / 603 |
-| ByteNet | 58.6 / 51.1 ms | 45.5 / 46.3 ms | 1003 / 603 |
-| Packet | 58.2 / 51.6 ms | 43.1 / 58.5 ms | 1003 / 603 |
-| QuickNet | 18.2 / **4.1 ms** | 23.7 / 12.6 ms | **128** / 603 |
-| Warp | 41.4 / 9.0 ms | 71.1 / 29.8 ms | **128** / **602** |
+| **BlinkBlox** | **16.3** / **6.7 ms** | **12.1** / **3.6 ms** | **128** / **602** |
+| Blink | 29.3 / 10.7 ms | 12.8 / 21.8 ms | 1003 / 603 |
+| zap | 65.5 / 11.5 ms | 33.4 / 21.2 ms | 1003 / 603 |
+| ByteNet | 54.2 / 51.0 ms | 42.7 / 42.5 ms | 1003 / 603 |
+| Packet | 54.0 / 51.0 ms | 39.9 / 52.7 ms | 1003 / 603 |
+| QuickNet | 16.8 / 7.5 ms | 21.7 / 11.4 ms | **128** / 603 |
+| Warp | 38.5 / 11.5 ms | 65.7 / 26.9 ms | **128** / **602** |
 
-A game also sends the other way. Natively, with fifty players, send then decode, medians of five
-runs:
+A game also sends the other way. Send then decode, natively, medians of five runs; the broadcast
+reaches fifty players, and the inputs go from one client to the server:
 
 | Tool | 100 structs a frame to everyone, `FireAll` | 8 unreliable inputs a frame |
 |---|---|---|
-| **BlinkBlox** | **0.020 / 0.016 ms, 1 remote call** | **0.002 / 0.002 ms, 1 remote call** with [`BatchUnreliable`](https://xopoiii.github.io/BlinkBlox/language/options/#batchunreliable) |
-| Blink | 0.955 / 0.027 ms, 50 calls | 0.002 / 0.003 ms, 8 calls |
-| zap | 1.010 / 0.026 ms, 50 calls | 0.003 / 0.002 ms, 8 calls |
-| ByteNet | 0.049 / 0.108 ms, 1 call | 0.003 / 0.008 ms, 1 call |
-| Packet | 0.089 / 0.185 ms, 1 call | no unreliable channel |
-| QuickNet | 0.334 / 0.040 ms, 50 calls | 0.002 / 0.003 ms, 1 call |
-| Warp | 2.569 / 0.125 ms, 50 calls | 0.004 / 0.008 ms, 1 call |
+| **BlinkBlox** | **0.020 / 0.012 ms, 1 remote call** | 0.002 / 0.003 ms, 8 calls; **0.002 / 0.001 ms, 1 call** with [`BatchUnreliable`](https://xopoiii.github.io/BlinkBlox/language/options/#batchunreliable) |
+| Blink | 0.711 / 0.026 ms, 50 calls | 0.002 / 0.003 ms, 8 calls |
+| zap | 0.734 / 0.025 ms, 50 calls | 0.003 / 0.002 ms, 8 calls |
+| ByteNet | 0.044 / 0.109 ms, 1 call | 0.003 / 0.008 ms, 1 call |
+| Packet | 0.084 / 0.170 ms, 1 call | no unreliable channel |
+| QuickNet | 0.306 / 0.034 ms, 50 calls | 0.002 / 0.003 ms, 1 call |
+| Warp | 2.350 / 0.113 ms, 50 calls | 0.004 / 0.009 ms, 1 call |
 
-A client receiving 100 events a frame spread over 128 declarations decodes them in 0.013 ms
-natively and 0.025 ms interpreted: the event an index names is found by halving the range rather
+A client receiving 100 events a frame spread over 128 declarations decodes them in 0.008 ms
+natively and 0.020 ms interpreted: the event an index names is found by halving the range rather
 than one comparison after another.
 
 The methodology, the bandwidth, the random payloads, streams and the full percentiles are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
-[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What 0.41.0 changed is in
-[What's new in 0.41](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
+[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What 0.42.0 changed is in
+[What's new in 0.42](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
 
 ## Where it comes from
 

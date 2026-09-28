@@ -1,9 +1,33 @@
 ---
-title: What's new in 0.41
-description: Everything 0.41.0 changed -- quantized floats, a per-player outbound budget with Priority Low, a client that sends at most 60 times a second, faster dispatch in schemas with many events -- with what each costs and how to upgrade.
+title: What's new in 0.42
+description: What 0.42.0 changed -- a decode that allocates nothing a packet, a client that reuses its packet buffer, a boolean array read the faster way where the module runs -- and what 0.41 brought before it, with how to upgrade.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+
+## 0.42.0
+
+A release about speed, measured against every library this fork is compared with -- QuickNet and Warp
+joined the [benchmarks](/BlinkBlox/guides/benchmarks/) -- and against 0.41.2 in one harness. The wire
+does not change: modules from 0.40.0 on still talk to these, so either side can be updated first.
+
+- **A packet decodes without allocating.** A channel's decoder is a function of the module, and a
+  Single Sync listener is called without a pcall of its own: when it throws, the packet's pcall sees
+  the listener was running, reports it as before, and decoding goes on with the next event. A hundred
+  events carrying a part decode in 0.011 ms, from 0.021, where Blink's take 0.013.
+- **The client refills the last frame's packet** when the next is the same size: a thousand booleans
+  flush in 0.005 ms, from 0.042.
+- **A `boolean[]` is read the faster way where the module runs**, measured as it loads: bits natively,
+  rows of eight interpreted, about 30% faster there.
+  [`PackedBooleanReader`](/BlinkBlox/language/options/#packedbooleanreader) fixes the choice.
+
+<Aside type="note" title="Two changes in behaviour, on the server">
+A Single Sync listener that throws is reported as before, and the rest of its packet is still decoded.
+A packet whose listener removes its own player goes on to its end, as a packet already queued when a
+player leaves always has; one from a player already gone is refused before any of it is read.
+</Aside>
+
+## 0.41.0
 
 0.41.0 is a release about bytes and speed again, and every part of it but one waits for your schema to
 ask for it. The wire format does not change: a schema that compiled under 0.40.0 sends the same bytes.

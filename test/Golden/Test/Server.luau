@@ -10825,7 +10825,7 @@ end
 
 --> Reports a listener's error, or returns false when no handler is installed and the caller should
 --> surface it the way it did before the handler existed. Never throws or yields: it runs inside the
---> decode loop's per-event pcall.
+--> decode loop's pcall, or in the connection itself after a listener threw, before the decode goes on.
 local function ListenerFailed(Player: Player, Event: string, Failure: unknown): boolean
     local Handler = ListenerHandler
     if not Handler then
@@ -10972,7 +10972,7 @@ local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: num
 
         local Handler = RateHandler
         if Handler then
-            --> Spawned, not called. This runs inside the per-event pcall that contains a truncated
+            --> Spawned, not called. This runs inside the decode loop's pcall that contains a truncated
             --> packet, so a throwing handler would abort the rest of the packet; and a handler that
             --> yields -- an analytics write, a datastore call -- would stall decoding.
             Spawn(Handler, Player, Name, Refused)
@@ -11027,7 +11027,7 @@ local function ConcurrencyAccept(Player: Player, Index: number, Limit: number, N
 
     local Handler = RateHandler
     if Handler then
-        --> Spawned for RateAccept's reason: this runs inside the per-event pcall of the decode loop.
+        --> Spawned for RateAccept's reason: this runs inside the decode loop's pcall.
         Spawn(Handler, Player, Name, Refused)
     end
 

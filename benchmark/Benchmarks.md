@@ -33,26 +33,28 @@ generated modules, ByteNet, Packet, QuickNet and Warp from the same files Studio
 the flush into packets, and the server decoding those packets and calling its listener. `Bytes/event` is the
 encoder's output; `zstd` is that output compressed as Roblox would.
 
-The runs below were made on 2026-09-28 on an Intel Core i7-13700K with 64 GB of memory, Windows 11, LuneBlox 0.10.9
-(Luau 0.740), with this repository's compiler (0.41.2). Every run was the only one on the machine, pinned to one
+The runs below were made on 2026-09-29 on an Intel Core i7-13700K with 64 GB of memory, Windows 11, LuneBlox 0.10.9
+(Luau 0.740), with this repository's compiler (0.42.0). Every run was the only one on the machine, pinned to one
 performance core at high priority: the 13700K's efficiency cores run the same code several times slower, and runs
 side by side on neighbouring cores moved an allocating decode by about 8%. Each figure is the median of three runs,
 and each run's figure is itself a median or 99th percentile over 200 frames, in milliseconds per frame. `native` is
 what a Roblox server runs; `interpreted` is what most clients run. Packet declares `--!native` nowhere, so both its
 rows are interpreted. `Tiny` is BlinkBlox's alone.
 
-Each measurement starts with a full garbage collection (`luau.collect()`, LuneBlox 0.10.9). Without it every tool
-inherited the heap the one before it left, and an allocating decode moved by up to 40% with its place in the order.
-Compare tools within a bench: the benches' payload pools stay loaded after they run, and a larger live heap makes the
-collector run less often during a later bench, so the same decode reads lower in `BooleansRandom` than in a process
-that runs it first.
+Every row is timed in a process of its own (`Runtime` starts one for each bench, mode and tool), which holds 64 MB
+from before the tool loads and runs a full garbage collection (`luau.collect()`, LuneBlox 0.10.9) before it measures.
+In one process each tool inherited the heap and the allocator's state the tools before it left, and the first paid for
+growing them: BlinkBlox, always first, decoded Booleans natively in 6.5 ms, and in 2.9 when it ran last, where QuickNet
+took 3.6 in sixth place and 7.4 in first. The 64 MB stands for a game server's heap, next to which a tool's own
+buffers are small: Luau's collector paces itself on the heap's size, and QuickNet keeps about 12 MB alive.
 
 QuickNet and Warp keep their own limits in a game; here they are lifted as Packet's is. QuickNet's rate limit is set
 to `math.huge` for every event, as QuickNet's own benchmark does, and Warp's server refuses a packet over 8000 bytes,
 so `download.luau` raises that check to `math.huge`. Warp encodes nothing when an event is fired: it queues the value
 and serialises the whole queue at its flush, which is why its fire column is near zero and its flush column is not.
 It also sends each reliable packet as its XOR against the one before it, which is why its `zstd` column for the
-repeated payloads is the lowest: two identical frames XOR to zeros.
+repeated payloads is the lowest or tied here, where each frame is compressed on its own: two identical frames XOR to
+zeros. In Studio it is the reverse (see Results below).
 
 The mock players and Instances are userdata, as they are in a game. Before 0.40.0 they were tables, and native code
 sends a function whose parameter is annotated `Player` or `Instance` back to the interpreter when a table arrives, so
@@ -62,112 +64,119 @@ some native figures in earlier tables were interpreted ones.
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|1.998|2.280|0.042|6.532|7.566|128.00|0.02|
-|Blink|native|4.112|4.695|0.228|11.000|12.688|1003.00|0.10|
-|zap|native|12.194|13.009|0.109|8.628|12.532|1003.00|0.10|
-|ByteNet|native|26.574|27.665|0.132|51.124|55.289|1003.00|0.10|
-|Packet|native|57.886|60.117|0.145|51.573|56.603|1003.00|0.10|
-|QuickNet|native|1.984|2.705|0.009|4.129|5.188|128.00|0.03|
-|Warp|native|0.177|2.313|4.209|8.983|15.311|128.00|0.02|
-|BlinkBlox|interpreted|17.214|18.135|0.023|18.095|20.071|128.00|0.02|
-|Blink|interpreted|30.735|32.351|0.114|36.006|38.136|1003.00|0.10|
-|zap|interpreted|70.298|72.580|0.128|37.605|39.657|1003.00|0.10|
-|ByteNet|interpreted|58.487|60.761|0.133|51.261|53.385|1003.00|0.10|
-|Packet|interpreted|58.020|61.053|0.151|50.659|56.824|1003.00|0.10|
-|QuickNet|interpreted|18.152|19.714|0.017|14.860|19.131|128.00|0.03|
-|Warp|interpreted|0.164|3.171|41.201|43.196|49.021|128.00|0.02|
+|BlinkBlox|native|1.832|2.070|0.005|6.717|11.268|128.00|0.02|
+|Blink|native|3.929|4.773|0.222|10.665|16.037|1003.00|0.10|
+|zap|native|11.681|13.934|0.225|11.489|15.692|1003.00|0.10|
+|ByteNet|native|24.324|28.019|0.231|50.986|59.555|1003.00|0.10|
+|Packet|native|53.553|59.849|0.244|50.948|59.304|1003.00|0.10|
+|QuickNet|native|1.799|6.853|0.007|7.477|12.612|128.00|0.03|
+|Warp|native|0.182|0.432|4.033|11.467|18.314|128.00|0.02|
+|BlinkBlox|interpreted|16.256|22.302|0.007|14.280|18.864|128.00|0.02|
+|Blink|interpreted|29.107|33.968|0.231|37.917|44.154|1003.00|0.10|
+|zap|interpreted|65.284|72.720|0.238|38.840|46.682|1003.00|0.10|
+|ByteNet|interpreted|53.917|58.489|0.237|51.254|61.866|1003.00|0.10|
+|Packet|interpreted|53.745|60.656|0.246|51.158|57.952|1003.00|0.10|
+|QuickNet|interpreted|16.773|22.177|0.009|17.655|23.528|128.00|0.03|
+|Warp|interpreted|0.181|0.418|38.287|43.676|51.098|128.00|0.02|
 
 #### Entities
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|2.103|2.581|0.059|7.282|9.440|602.00|0.67|
-|Blink|native|2.289|2.651|0.056|25.361|27.935|603.00|0.67|
-|zap|native|7.408|8.075|0.065|25.616|28.131|603.00|0.67|
-|ByteNet|native|27.777|29.297|0.098|46.322|50.742|603.00|0.67|
-|Packet|native|42.951|44.512|0.123|58.539|69.685|603.00|0.67|
-|QuickNet|native|7.251|12.087|0.039|12.556|18.949|603.00|0.67|
-|Warp|native|0.165|0.526|19.335|29.818|45.043|602.00|0.03|
-|BlinkBlox|interpreted|12.850|13.744|0.081|14.493|20.696|602.00|0.67|
-|Blink|interpreted|13.051|13.886|0.068|32.056|38.528|603.00|0.67|
-|zap|interpreted|35.514|37.089|0.081|35.306|41.671|603.00|0.67|
-|ByteNet|interpreted|45.328|47.381|0.123|46.231|52.182|603.00|0.67|
-|Packet|interpreted|42.935|44.677|0.138|57.414|71.740|603.00|0.67|
-|QuickNet|interpreted|23.640|29.789|0.049|32.006|38.587|603.00|0.67|
-|Warp|interpreted|0.163|0.483|70.943|61.344|78.054|602.00|0.03|
+|BlinkBlox|native|1.942|2.348|0.025|3.577|10.407|602.00|0.67|
+|Blink|native|2.449|2.999|0.139|21.826|29.010|603.00|0.67|
+|zap|native|6.946|7.685|0.061|21.160|25.971|603.00|0.67|
+|ByteNet|native|25.948|30.081|0.066|42.488|48.746|603.00|0.67|
+|Packet|native|39.542|45.273|0.083|52.698|68.826|603.00|0.67|
+|QuickNet|native|6.437|17.814|0.023|11.372|21.350|603.00|0.67|
+|Warp|native|0.153|0.391|18.697|26.907|42.176|602.00|0.03|
+|BlinkBlox|interpreted|12.067|13.552|0.026|12.263|16.503|602.00|0.67|
+|Blink|interpreted|12.611|15.190|0.134|29.482|35.703|603.00|0.67|
+|zap|interpreted|33.332|39.585|0.061|32.852|37.717|603.00|0.67|
+|ByteNet|interpreted|42.613|49.880|0.073|43.014|52.684|603.00|0.67|
+|Packet|interpreted|39.820|43.340|0.079|52.457|68.629|603.00|0.67|
+|QuickNet|interpreted|21.663|30.054|0.031|29.053|40.631|603.00|0.67|
+|Warp|interpreted|0.154|0.420|65.568|56.351|71.883|602.00|0.03|
 
 #### BooleansRandom
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|5.004|5.644|0.034|4.061|7.537|128.00|125.81|
-|Blink|native|9.575|10.373|0.128|8.312|12.109|1003.00|135.61|
-|zap|native|18.444|19.549|0.146|8.957|11.237|1003.00|135.61|
-|ByteNet|native|30.237|31.858|0.184|55.472|57.847|1003.00|135.60|
-|Packet|native|61.388|65.198|0.196|54.212|61.570|1003.00|135.61|
-|QuickNet|native|7.602|10.564|0.016|4.297|8.212|128.00|125.82|
-|Warp|native|0.169|4.686|11.405|8.059|15.146|128.00|125.83|
-|BlinkBlox|interpreted|18.106|19.244|0.043|18.447|23.283|128.00|125.81|
-|Blink|interpreted|31.900|33.286|0.157|37.498|40.618|1003.00|135.61|
-|zap|interpreted|73.018|75.970|0.180|37.860|42.132|1003.00|135.61|
-|ByteNet|interpreted|61.130|63.012|0.192|55.330|58.317|1003.00|135.60|
-|Packet|interpreted|61.243|63.817|0.197|54.216|60.855|1003.00|135.61|
-|QuickNet|interpreted|23.657|25.848|0.021|14.777|20.136|128.00|125.82|
-|Warp|interpreted|0.170|5.056|41.470|48.312|55.724|128.00|125.83|
+|BlinkBlox|native|4.575|5.284|0.009|6.833|13.833|128.00|125.81|
+|Blink|native|9.262|10.364|0.232|11.301|17.902|1003.00|135.61|
+|zap|native|17.130|21.256|0.236|11.844|18.132|1003.00|135.61|
+|ByteNet|native|28.032|31.642|0.249|56.351|65.995|1003.00|135.60|
+|Packet|native|56.577|62.753|0.264|54.947|62.554|1003.00|135.61|
+|QuickNet|native|6.874|13.431|0.010|7.861|15.705|128.00|125.82|
+|Warp|native|0.174|0.621|10.546|11.453|20.323|128.00|125.83|
+|BlinkBlox|interpreted|16.848|21.184|0.010|14.310|20.891|128.00|125.81|
+|Blink|interpreted|30.195|36.447|0.238|38.786|46.646|1003.00|135.61|
+|zap|interpreted|68.154|74.394|0.241|39.048|46.685|1003.00|135.61|
+|ByteNet|interpreted|57.167|64.624|0.251|55.694|63.213|1003.00|135.60|
+|Packet|interpreted|57.064|63.422|0.263|55.371|65.066|1003.00|135.61|
+|QuickNet|interpreted|21.704|28.086|0.013|17.772|25.944|128.00|125.82|
+|Warp|interpreted|0.177|0.434|39.077|48.642|57.524|128.00|125.83|
 
 #### EntitiesRandom
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|2.639|3.163|0.114|3.905|23.940|602.00|602.02|
-|Blink|native|2.999|3.527|0.092|21.739|41.484|603.00|603.02|
-|zap|native|7.998|8.606|0.114|22.080|42.953|603.00|603.02|
-|ByteNet|native|29.343|30.631|0.171|46.065|56.243|603.00|603.02|
-|Packet|native|43.711|45.467|0.174|56.217|78.899|603.00|603.02|
-|QuickNet|native|7.907|13.833|0.047|12.740|26.047|603.00|603.02|
-|Warp|native|0.275|0.545|20.793|28.306|53.055|602.00|602.02|
-|BlinkBlox|interpreted|13.610|15.033|0.138|13.025|33.788|602.00|602.02|
-|Blink|interpreted|14.074|15.044|0.113|30.309|51.374|603.00|603.02|
-|zap|interpreted|36.822|38.269|0.132|33.545|54.615|603.00|603.02|
-|ByteNet|interpreted|46.297|48.166|0.218|45.922|56.235|603.00|603.02|
-|Packet|interpreted|43.759|45.680|0.188|56.128|79.083|603.00|603.02|
-|QuickNet|interpreted|24.700|30.103|0.053|31.711|45.729|603.00|603.02|
-|Warp|interpreted|0.274|0.540|71.819|59.954|86.551|602.00|602.02|
+|BlinkBlox|native|2.256|3.172|0.030|3.594|18.365|602.00|602.02|
+|Blink|native|2.615|3.203|0.068|20.927|34.601|603.00|603.02|
+|zap|native|7.376|8.710|0.067|21.305|36.069|603.00|603.02|
+|ByteNet|native|26.755|31.558|0.090|42.383|51.102|603.00|603.02|
+|Packet|native|41.175|47.726|0.115|53.088|71.740|603.00|603.02|
+|QuickNet|native|7.133|14.676|0.036|11.567|20.940|603.00|603.02|
+|Warp|native|0.222|0.521|19.808|27.054|46.447|602.00|602.02|
+|BlinkBlox|interpreted|12.778|14.585|0.034|12.390|26.651|602.00|602.02|
+|Blink|interpreted|13.118|16.291|0.088|29.066|41.672|603.00|603.02|
+|zap|interpreted|34.305|38.534|0.072|31.951|44.909|603.00|603.02|
+|ByteNet|interpreted|42.961|47.886|0.092|42.416|51.251|603.00|603.02|
+|Packet|interpreted|41.177|47.583|0.120|53.331|71.332|603.00|603.02|
+|QuickNet|interpreted|22.698|28.487|0.043|29.497|39.954|603.00|603.02|
+|Warp|interpreted|0.240|0.545|67.425|56.683|75.631|602.00|602.02|
 
 #### Tiny
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|0.026|0.056|0.001|0.098|0.227|2.00|0.02|
-|BlinkBlox|interpreted|0.125|0.253|0.001|0.245|0.392|2.00|0.02|
+|BlinkBlox|native|0.025|0.029|0.000|0.047|0.066|2.00|0.02|
+|BlinkBlox|interpreted|0.117|0.131|0.001|0.169|0.270|2.00|0.02|
 
 ### BlinkBlox across releases
 
 `luneblox run Runtime -- --tools blink --sources <dir>` times the modules in a directory instead of generating them.
 Here each release compiled `definitions/Definition.blink` with `option ManualReplication = true` -- 0.40.0 and 0.41.2
-with their release executables, 0.34.0 with its source at the commit that released it -- and the three were run in
-turn, five runs each, on the same core. Each figure is the median of the five.
+with their release executables, 0.34.0 with its source at the commit that released it, 0.42.0 with this checkout --
+and the four were run in turn, five runs each, on the same core. Each figure is the median of the five.
 
 0.34.0:
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|4.253|4.868|0.041|10.452|12.226|128.00|0.02|
-|BlinkBlox|interpreted|37.275|39.199|0.048|42.404|44.342|128.00|0.02|
+|BlinkBlox|native|3.790|5.789|0.042|10.845|15.770|128.00|0.02|
+|BlinkBlox|interpreted|34.610|40.972|0.044|41.998|49.061|128.00|0.02|
 
 0.40.0:
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|1.978|2.399|0.042|6.675|7.994|128.00|0.02|
-|BlinkBlox|interpreted|17.109|18.233|0.052|20.560|22.637|128.00|0.02|
+|BlinkBlox|native|1.826|2.097|0.042|6.737|11.186|128.00|0.02|
+|BlinkBlox|interpreted|16.033|19.495|0.046|20.246|25.880|128.00|0.02|
 
 0.41.2:
 
 |Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
 |---|---|---|---|---|---|---|---|---|
-|BlinkBlox|native|1.985|2.357|0.041|6.623|7.735|128.00|0.02|
-|BlinkBlox|interpreted|17.115|18.414|0.051|19.887|21.993|128.00|0.02|
+|BlinkBlox|native|1.829|2.384|0.043|6.814|11.378|128.00|0.02|
+|BlinkBlox|interpreted|16.047|19.450|0.045|20.220|26.911|128.00|0.02|
+
+0.42.0:
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|1.833|2.227|0.005|6.748|11.368|128.00|0.02|
+|BlinkBlox|interpreted|16.102|18.960|0.007|14.154|19.076|128.00|0.02|
 
 ## Sending to a crowd, unreliable events and Instances
 
@@ -191,34 +200,34 @@ each send to everyone with their own call, and batch a frame per player: a send 
 
 |Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
 |---|---|---|---|---|---|---|
-|BlinkBlox|native|0.019|0.001|0.016|1.0|85000.0|
-|Blink|native|0.918|0.037|0.027|50.0|90000.0|
-|zap|native|0.993|0.017|0.026|50.0|85000.0|
-|ByteNet|native|0.047|0.002|0.108|1.0|90000.0|
-|Packet|native|0.087|0.002|0.185|1.0|90000.0|
-|QuickNet|native|0.324|0.010|0.040|50.0|90100.0|
-|Warp|native|1.116|1.453|0.125|50.0|90050.0|
-|BlinkBlox|interpreted|0.040|0.001|0.033|1.0|85000.0|
-|Blink|interpreted|1.753|0.027|0.050|50.0|90000.0|
-|zap|interpreted|1.862|0.027|0.044|50.0|85000.0|
-|ByteNet|interpreted|0.078|0.004|0.119|1.0|90000.0|
-|Packet|interpreted|0.083|0.002|0.170|1.0|90000.0|
-|QuickNet|interpreted|0.811|0.019|0.090|50.0|90100.0|
-|Warp|interpreted|1.068|5.208|0.174|50.0|90050.0|
+|BlinkBlox|native|0.019|0.001|0.012|1.0|85000.0|
+|Blink|native|0.693|0.018|0.026|50.0|90000.0|
+|zap|native|0.716|0.018|0.025|50.0|85000.0|
+|ByteNet|native|0.042|0.002|0.109|1.0|90000.0|
+|Packet|native|0.082|0.002|0.170|1.0|90000.0|
+|QuickNet|native|0.297|0.009|0.034|50.0|90100.0|
+|Warp|native|1.043|1.307|0.113|50.0|90050.0|
+|BlinkBlox|interpreted|0.039|0.001|0.027|1.0|85000.0|
+|Blink|interpreted|1.758|0.024|0.051|50.0|90000.0|
+|zap|interpreted|1.712|0.024|0.043|50.0|85000.0|
+|ByteNet|interpreted|0.078|0.003|0.120|1.0|90000.0|
+|Packet|interpreted|0.082|0.002|0.170|1.0|90000.0|
+|QuickNet|interpreted|0.769|0.018|0.088|50.0|90100.0|
+|Warp|interpreted|1.049|4.747|0.166|50.0|90050.0|
 
 #### UnreliableInput
 
 |Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
 |---|---|---|---|---|---|---|
-|BlinkBlox|native|0.002|0.000|0.004|8.0|40.0|
+|BlinkBlox|native|0.002|0.000|0.003|8.0|40.0|
 |Blink|native|0.002|0.000|0.003|8.0|48.0|
 |zap|native|0.003|0.000|0.002|8.0|32.0|
 |ByteNet|native|0.003|0.000|0.008|1.0|48.0|
 |QuickNet|native|0.002|0.000|0.003|1.0|50.0|
-|Warp|native|0.002|0.002|0.008|1.0|49.0|
-|BlinkBlox|interpreted|0.005|0.000|0.008|8.0|40.0|
+|Warp|native|0.002|0.002|0.009|1.0|49.0|
+|BlinkBlox|interpreted|0.005|0.000|0.007|8.0|40.0|
 |Blink|interpreted|0.005|0.000|0.005|8.0|48.0|
-|zap|interpreted|0.006|0.000|0.003|8.0|32.0|
+|zap|interpreted|0.005|0.000|0.003|8.0|32.0|
 |ByteNet|interpreted|0.005|0.000|0.009|1.0|48.0|
 |QuickNet|interpreted|0.005|0.001|0.007|1.0|50.0|
 |Warp|interpreted|0.002|0.005|0.011|1.0|49.0|
@@ -227,20 +236,20 @@ each send to everyone with their own call, and batch a frame per player: a send 
 
 |Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
 |---|---|---|---|---|---|---|
-|BlinkBlox|native|0.004|0.001|0.021|1.0|200.0|
+|BlinkBlox|native|0.004|0.001|0.011|1.0|200.0|
 |Blink|native|0.004|0.001|0.013|1.0|200.0|
 |zap|native|0.005|0.001|0.009|1.0|200.0|
-|ByteNet|native|0.030|0.001|0.091|1.0|300.0|
-|Packet|native|0.037|0.002|0.124|1.0|200.0|
+|ByteNet|native|0.030|0.001|0.093|1.0|300.0|
+|Packet|native|0.037|0.001|0.126|1.0|200.0|
 |QuickNet|native|0.013|0.001|0.027|1.0|202.0|
-|Warp|native|0.018|0.013|0.089|1.0|301.0|
-|BlinkBlox|interpreted|0.018|0.001|0.031|1.0|200.0|
+|Warp|native|0.018|0.013|0.091|1.0|301.0|
+|BlinkBlox|interpreted|0.017|0.001|0.020|1.0|200.0|
 |Blink|interpreted|0.013|0.001|0.017|1.0|200.0|
 |zap|interpreted|0.015|0.001|0.021|1.0|200.0|
-|ByteNet|interpreted|0.048|0.001|0.103|1.0|300.0|
-|Packet|interpreted|0.037|0.002|0.127|1.0|200.0|
+|ByteNet|interpreted|0.048|0.001|0.105|1.0|300.0|
+|Packet|interpreted|0.037|0.001|0.127|1.0|200.0|
 |QuickNet|interpreted|0.032|0.001|0.062|1.0|202.0|
-|Warp|interpreted|0.018|0.041|0.116|1.0|301.0|
+|Warp|interpreted|0.018|0.041|0.118|1.0|301.0|
 
 #### WorldState
 
@@ -251,30 +260,30 @@ each send to everyone with their own call, and batch a frame per player: a send 
 |zap|native|0.003|0.000|0.004|1.0|12850.0|
 |ByteNet|native|0.006|0.002|0.009|1.0|13750.0|
 |QuickNet|native|0.006|0.008|0.003|50.0|13850.0|
-|Warp|native|0.010|0.194|0.006|50.0|13750.0|
+|Warp|native|0.010|0.188|0.006|50.0|13750.0|
 |BlinkBlox|interpreted|0.004|0.000|0.003|1.0|12900.0|
 |Blink|interpreted|0.004|0.000|0.006|1.0|13700.0|
 |zap|interpreted|0.008|0.000|0.006|1.0|12850.0|
 |ByteNet|interpreted|0.009|0.003|0.009|1.0|13750.0|
 |QuickNet|interpreted|0.016|0.017|0.009|50.0|13850.0|
-|Warp|interpreted|0.010|0.648|0.013|50.0|13750.0|
+|Warp|interpreted|0.010|0.619|0.012|50.0|13750.0|
 
 #### SelfState
 
 |Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
 |---|---|---|---|---|---|---|
-|BlinkBlox|native|0.012|0.000|0.001|50.0|850.0|
+|BlinkBlox|native|0.012|0.000|0.000|50.0|850.0|
 |Blink|native|0.013|0.000|0.001|50.0|900.0|
 |zap|native|0.016|0.000|0.001|50.0|800.0|
 |ByteNet|native|0.023|0.010|0.002|50.0|900.0|
 |QuickNet|native|0.017|0.008|0.001|50.0|1000.0|
-|Warp|native|0.012|0.035|0.002|50.0|950.0|
+|Warp|native|0.012|0.034|0.002|50.0|950.0|
 |BlinkBlox|interpreted|0.025|0.000|0.001|50.0|850.0|
 |Blink|interpreted|0.025|0.000|0.001|50.0|900.0|
 |zap|interpreted|0.035|0.000|0.001|50.0|800.0|
 |ByteNet|interpreted|0.041|0.016|0.002|50.0|900.0|
-|QuickNet|interpreted|0.043|0.017|0.001|50.0|1000.0|
-|Warp|interpreted|0.012|0.072|0.002|50.0|950.0|
+|QuickNet|interpreted|0.042|0.017|0.001|50.0|1000.0|
+|Warp|interpreted|0.012|0.071|0.002|50.0|950.0|
 
 BlinkBlox with `option BatchUnreliable`, which gathers a frame's unreliable events into as few packets as fit:
 
@@ -282,35 +291,35 @@ BlinkBlox with `option BatchUnreliable`, which gathers a frame's unreliable even
 
 |Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
 |---|---|---|---|---|---|---|
-|BlinkBlox|native|0.018|0.001|0.016|1.0|85000.0|
-|BlinkBlox|interpreted|0.044|0.001|0.037|1.0|85000.0|
+|BlinkBlox|native|0.019|0.001|0.012|1.0|85000.0|
+|BlinkBlox|interpreted|0.044|0.001|0.032|1.0|85000.0|
 
 #### UnreliableInput
 
 |Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
 |---|---|---|---|---|---|---|
-|BlinkBlox|native|0.002|0.000|0.002|1.0|40.0|
+|BlinkBlox|native|0.002|0.000|0.001|1.0|40.0|
 |BlinkBlox|interpreted|0.004|0.001|0.003|1.0|40.0|
 
 #### Instances
 
 |Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
 |---|---|---|---|---|---|---|
-|BlinkBlox|native|0.004|0.001|0.021|1.0|200.0|
-|BlinkBlox|interpreted|0.018|0.001|0.032|1.0|200.0|
+|BlinkBlox|native|0.004|0.001|0.011|1.0|200.0|
+|BlinkBlox|interpreted|0.017|0.001|0.020|1.0|200.0|
 
 #### WorldState
 
 |Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
 |---|---|---|---|---|---|---|
-|BlinkBlox|native|0.002|0.001|0.002|1.0|12900.0|
+|BlinkBlox|native|0.001|0.001|0.001|1.0|12900.0|
 |BlinkBlox|interpreted|0.003|0.001|0.003|1.0|12900.0|
 
 #### SelfState
 
 |Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
 |---|---|---|---|---|---|---|
-|BlinkBlox|native|0.006|0.007|0.001|50.0|850.0|
+|BlinkBlox|native|0.006|0.007|0.000|50.0|850.0|
 |BlinkBlox|interpreted|0.020|0.013|0.001|50.0|850.0|
 
 ## Streams
@@ -321,35 +330,35 @@ a frame share one `FireAllClients`. `ManyEvents` is described below. Medians of 
 
 |Scenario|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
 |---|---|---|---|---|---|---|
-|ManyEvents|native|0.024|0.001|0.013|1.0|200.0|
-|Broadcast|native|0.018|0.001|0.016|1.0|85000.0|
-|UnreliableInput|native|0.003|0.000|0.003|8.0|40.0|
-|Instances|native|0.004|0.001|0.018|1.0|200.0|
+|ManyEvents|native|0.023|0.001|0.008|1.0|200.0|
+|Broadcast|native|0.019|0.001|0.012|1.0|85000.0|
+|UnreliableInput|native|0.003|0.000|0.002|8.0|40.0|
+|Instances|native|0.004|0.000|0.012|1.0|200.0|
 |StreamWorld|native|0.001|0.006|0.001|1.0|13050.0|
-|StreamPerPlayer|native|0.004|0.036|0.001|50.0|1000.0|
-|ManyEvents|interpreted|0.034|0.001|0.025|1.0|200.0|
-|Broadcast|interpreted|0.043|0.001|0.037|1.0|85000.0|
+|StreamPerPlayer|native|0.004|0.036|0.000|50.0|1000.0|
+|ManyEvents|interpreted|0.034|0.001|0.020|1.0|200.0|
+|Broadcast|interpreted|0.044|0.001|0.033|1.0|85000.0|
 |UnreliableInput|interpreted|0.004|0.000|0.006|8.0|40.0|
-|Instances|interpreted|0.017|0.001|0.029|1.0|200.0|
+|Instances|interpreted|0.016|0.001|0.021|1.0|200.0|
 |StreamWorld|interpreted|0.001|0.013|0.003|1.0|13050.0|
-|StreamPerPlayer|interpreted|0.008|0.080|0.001|50.0|1000.0|
+|StreamPerPlayer|interpreted|0.008|0.079|0.001|50.0|1000.0|
 
 With `--batch`:
 
 |Scenario|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
 |---|---|---|---|---|---|---|
-|ManyEvents|native|0.024|0.001|0.012|1.0|200.0|
-|Broadcast|native|0.018|0.001|0.016|1.0|85000.0|
+|ManyEvents|native|0.024|0.001|0.008|1.0|200.0|
+|Broadcast|native|0.019|0.001|0.012|1.0|85000.0|
 |UnreliableInput|native|0.001|0.000|0.001|1.0|40.0|
-|Instances|native|0.004|0.001|0.018|1.0|200.0|
+|Instances|native|0.004|0.000|0.012|1.0|200.0|
 |StreamWorld|native|0.001|0.006|0.001|1.0|13050.0|
-|StreamPerPlayer|native|0.004|0.038|0.001|50.0|1000.0|
-|ManyEvents|interpreted|0.034|0.001|0.025|1.0|200.0|
-|Broadcast|interpreted|0.043|0.001|0.036|1.0|85000.0|
-|UnreliableInput|interpreted|0.004|0.000|0.003|1.0|40.0|
-|Instances|interpreted|0.017|0.001|0.029|1.0|200.0|
+|StreamPerPlayer|native|0.004|0.038|0.000|50.0|1000.0|
+|ManyEvents|interpreted|0.035|0.001|0.020|1.0|200.0|
+|Broadcast|interpreted|0.044|0.001|0.033|1.0|85000.0|
+|UnreliableInput|interpreted|0.004|0.000|0.002|1.0|40.0|
+|Instances|interpreted|0.016|0.001|0.021|1.0|200.0|
 |StreamWorld|interpreted|0.001|0.013|0.003|1.0|13050.0|
-|StreamPerPlayer|interpreted|0.008|0.088|0.001|50.0|1000.0|
+|StreamPerPlayer|interpreted|0.008|0.087|0.001|50.0|1000.0|
 
 ## Many events
 
@@ -366,7 +375,7 @@ modules loaded from files:
 Both native rows there equal the interpreted ones: Lune 0.10.5's Luau leaves a whole module interpreted once one
 function is too large, and a module's top-level function grows with every declaration -- about 70 events on the
 server, 85 on the client. Luau 0.740 leaves only that function interpreted, and on the i7 above the same decode takes
-0.013 ms natively and 0.025 ms interpreted (the `ManyEvents` rows under Streams).
+0.008 ms natively and 0.020 ms interpreted in 0.42.0 (the `ManyEvents` rows under Streams).
 
 ## Results
 
