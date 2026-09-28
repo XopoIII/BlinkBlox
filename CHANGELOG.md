@@ -7,6 +7,22 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.41.2 — 2026-09-28
+
+Neither the wire nor the generated modules change.
+
+### Changed
+
+- The toolchain runs on LuneBlox 0.10.8, which keeps Luau 0.740 and Roblox's flags; the benchmark
+  figures stay comparable. Its typedefs declare `--!strict`, and the type gate failed on a
+  `pcall(stdio.prompt, ...)` that no longer resolved the overload: every prompt is called inside a
+  closure instead.
+- The Studio benchmark says how many events the server heard. The server always counted them, but
+  the client showed `Recieve = 0` until every bench had run, and the Loss column was floored to a
+  whole percent, so up to one event in a hundred could go missing behind "0%". Each tool's count is
+  now asked for once it has drained and printed in the Output -- a warning when it falls short of
+  what was sent -- and only an exact count reads "0%".
+
 ## 0.41.1 — 2026-09-28
 
 Neither the wire nor the generated modules change.
