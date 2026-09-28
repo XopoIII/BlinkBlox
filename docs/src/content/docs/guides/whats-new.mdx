@@ -14,6 +14,14 @@ at 60 frames a second or fewer notices nothing. See [a client sends at most 60 t
 second](#a-client-sends-at-most-60-times-a-second).
 </Aside>
 
+## 0.41.2
+
+A toolchain release: the compiler emits exactly what 0.41.1 did, so nothing needs regenerating.
+
+- The toolchain runs on LuneBlox 0.10.8, on the same Luau and flags as before.
+- The Studio benchmark prints how many events the server heard after each tool, and warns when it
+  is fewer than were sent. Its Loss column is exact: only a full count reads 0%.
+
 ## 0.41.1
 
 A toolchain release: the compiler emits exactly what 0.41.0 did, byte for byte, so nothing needs

@@ -10,7 +10,6 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local stdio = require("@lune/stdio")
-local task = require("@lune/task")
 
 local runtime = require("../.lune/libs/runtime")
 
@@ -76,7 +75,9 @@ local function ShouldCompile(): boolean
 		end
 	end
 
-	local Success, Answer = pcall(stdio.prompt, "confirm" :: "confirm", "Compile files?")
+	local Success, Answer = pcall(function(): boolean
+		return stdio.prompt("confirm", "Compile files?")
+	end)
 	return if Success then Answer else true
 end
 

@@ -86,7 +86,9 @@ local function CreateDirectoryIfNotFound(Path: string, Options: CompileOptions)
 	--> directory is the answer the user already gave by naming that output path in the schema.
 	local Result = Options.YesToEverything
 	if not Result then
-		local Asked, Answer = pcall(stdio.prompt, "confirm", `Directory {Directory} doesn't exist, create directory?`)
+		local Asked, Answer = pcall(function(): boolean
+			return stdio.prompt("confirm", `Directory {Directory} doesn't exist, create directory?`)
+		end)
 		Result = if Asked then Answer else true
 	end
 
