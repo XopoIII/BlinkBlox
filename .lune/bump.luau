@@ -32,8 +32,9 @@ local curr_version = darklua_version.read_from(DARKLUA_CONFIGS[1])
 local new_version: string? = process.args[1]
 
 if not new_version then
-	local Asked, Answer =
-		pcall(stdio.prompt, "text" :: "text", `What version is being built? (Current version is {curr_version})`)
+	local Asked, Answer = pcall(function(): string
+		return stdio.prompt("text", `What version is being built? (Current version is {curr_version})`)
+	end)
 
 	if not Asked then
 		stdio.ewrite("bump: no version given, and no terminal to ask on.\n")
