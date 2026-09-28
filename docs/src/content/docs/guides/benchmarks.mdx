@@ -28,7 +28,7 @@ thousand different payloads a frame instead of one payload a thousand times, and
 
 Natively compiled, as a Roblox server runs the module:
 
-| Bench | Fire 0.34.0 | Fire 0.40.0 | Fire next | Decode 0.34.0 | Decode 0.40.0 | Decode next | Bytes |
+| Bench | Fire 0.34.0 | Fire 0.40.0 | Fire 0.41.0 | Decode 0.34.0 | Decode 0.40.0 | Decode 0.41.0 | Bytes |
 |---|---|---|---|---|---|---|---|
 | Booleans | 8.97 | 3.558 | **3.553** | 15.16 | 4.141 | **4.134** | 128 |
 | Entities | 3.57 | 3.224 | **3.222** | 72.95 | 10.762 | **10.761** | 602 |
@@ -38,7 +38,7 @@ Natively compiled, as a Roblox server runs the module:
 
 Interpreted, as most Roblox clients run it:
 
-| Bench | Fire 0.34.0 | Fire 0.40.0 | Fire next | Decode 0.34.0 | Decode 0.40.0 | Decode next |
+| Bench | Fire 0.34.0 | Fire 0.40.0 | Fire 0.41.0 | Decode 0.34.0 | Decode 0.40.0 | Decode 0.41.0 |
 |---|---|---|---|---|---|---|
 | Booleans | 92.12 | 38.02 | **37.70** | 107.64 | 43.63 | **43.58** |
 | Entities | 34.13 | **33.43** | **33.43** | 103.77 | **48.60** | 48.61 |
@@ -47,7 +47,7 @@ Interpreted, as most Roblox clients run it:
 | Tiny | 0.35 | 0.308 | **0.307** | 0.78 | 0.531 | **0.530** |
 
 0.34.0 was run on 2026-09-25 with Lune 0.10.5 on an Apple M1 with 16 GB of memory. The 0.40.0 and
-"next" columns -- main after 0.40.0, not yet released -- were run on 2026-09-28 on the same machine:
+0.41.0 columns were run on 2026-09-28 on the same machine:
 both versions' modules generated to files first and loaded into one harness, five runs of each taken
 alternately, each figure the median of the five. Generating in the process being timed moves the
 heap, and that alone shows a few percent that is not in the code. On this schema the two versions'
@@ -60,7 +60,7 @@ array's length that needs two bytes of span is a varint, one byte under 128.
 What 0.40.0 changed is framing and dispatch rather than the fields: one `pcall` a packet rather than
 one an event, none on a reliable `Fire`, and a reader that keeps the packet in a local. That is most
 of a one-byte event's cost, and a part of a struct's decode. See
-[What's new in 0.40](/BlinkBlox/guides/whats-new/).
+the [changelog](/BlinkBlox/changelog/).
 
 Columns taken on different days differ by more than the code does. Between single runs this machine
 moves a decode figure by up to a fifth, so compare within a column, or run both versions yourself,
@@ -144,7 +144,7 @@ event an index names used to be found by comparing it with every declaration bef
 found by halving the range, down to runs of eight. Interpreted, as most clients run it -- medians of
 three runs taken alternately, both versions' modules loaded from files:
 
-| Scenario | 0.40.0 | next |
+| Scenario | 0.40.0 | 0.41.0 |
 |---|---|---|
 | **ManyEvents**: 100 events over 128 declarations, decode | 0.086 ms | **0.053 ms** |
 | **Broadcast**, same schema: every event is the first declaration | **0.090 ms** | 0.093 ms |

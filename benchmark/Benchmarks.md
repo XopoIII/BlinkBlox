@@ -271,7 +271,7 @@ With `--batch`:
 `definitions/Scenarios.blink`, and times the client decoding them. Run 2026-09-28, interpreted, medians of three runs
 taken alternately with both versions' modules loaded from files:
 
-|Scenario|0.40.0 decode|next decode|
+|Scenario|0.40.0 decode|0.41.0 decode|
 |---|---|---|
 |ManyEvents|0.086|**0.053**|
 |Broadcast, index 0 of the same channel|**0.090**|0.093|

@@ -105,13 +105,13 @@ A game also sends the other way. Natively, on the same run, with fifty players:
 | 8 unreliable inputs a frame, with [`BatchUnreliable`](https://xopoiii.github.io/BlinkBlox/language/options/#batchunreliable) | **0.004 ms, 1 remote call** | 0.009 ms, 8 calls | 0.006 ms, 8 calls | 0.006 ms, 1 call | none |
 
 A client receiving 100 events a frame spread over 128 declarations decodes them in 0.053 ms
-interpreted, from 0.086 ms in 0.40.0: the event an index names is found by halving the range rather than one comparison
+interpreted in 0.41.0, from 0.086 ms in 0.40.0: the event an index names is found by halving the range rather than one comparison
 after another.
 
 The methodology, the bandwidth, the random payloads, streams and the full percentiles are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
-[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What 0.40.0 changed is in
-[What's new in 0.40](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
+[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What 0.41.0 changed is in
+[What's new in 0.41](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
 
 ## Where it comes from
 
