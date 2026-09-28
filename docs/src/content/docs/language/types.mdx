@@ -226,7 +226,8 @@ number the literal `12.3` is, since a step whose reciprocal is a whole number is
 `round(v * 10)` and read as `n / 10`. Any other step, like `2.5`, multiplies and divides by the step.
 
 - **Every integer takes a scale**: `u8`, `u16`, `u24`, `u32`, `i8`, `i16`, `i24` and `i32`. A float
-  carries its own fraction and refuses one (`E3032`), and so does a scale of zero or less.
+  takes one only with a closed range, and is [quantized](#quantized-floats). A scale of zero or less is
+  refused (`E3032`).
 - **Rounding is to nearest**, a tie away from zero, where a bare integer truncates. `u16<1>` is the
   way to round an integer rather than truncate it.
 - **The range is written in real units**, and each bound must be a whole number of steps that fits
@@ -240,6 +241,34 @@ number the literal `12.3` is, since a step whose reciprocal is a whole number is
 - **It costs the integer's size** in the size analysis, and is a `number` in Luau and TypeScript.
 - **The scale is part of the [schema signature](/BlinkBlox/reference/wire-compatibility/)**, since
   the same bytes mean something else at another scale.
+
+### Quantized floats
+
+A float with a scale and a closed range is sent as whole steps above its minimum, in the narrowest
+unsigned integer that holds the span. You say how precise the value is and where it can be; BlinkBlox
+picks the bytes.
+
+```blink
+type Aim = f32<0.01>(-1..1)
+type Height = f32<0.25>(100..200)
+type Distance = f64<0.001>(0..2048)
+```
+
+| Type | Steps | Sent as | Bytes, where the float took |
+|---|---|---|---|
+| `f32<0.01>(-1..1)` | 200 | `u8` | 1 of 4 |
+| `f32<0.25>(100..200)` | 400 | `u16` | 2 of 4 |
+| `f64<0.001>(0..2048)` | 2 048 000 | `u24` | 3 of 8 |
+
+Everything above holds for them too: rounding to nearest, bounds that are whole steps, the check in
+whole steps on receipt, [`saturate`](#saturating-on-send) -- which sends NaN as the value nearest zero
+in the schema's units, so `f32<0.5, saturate>(10..20)` sends it as `10`. The offset from the minimum is
+what makes a range far from zero cheap: `f32<0.25>(100..200)` is two bytes where `u16<0.25>` could not
+reach 200 at all.
+
+Both bounds are required (`E3032` otherwise), since the span is what sizes the integer, and a span of
+more than 4 294 967 295 steps is refused. A float without a scale is unchanged: its range is a check,
+and it travels at its own width.
 
 ### Saturating on send
 

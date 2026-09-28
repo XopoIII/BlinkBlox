@@ -9,7 +9,8 @@ startup instead of misreading packets.
 
 ## Unreleased
 
-The wire does not change, and neither does a module built without the new option.
+The wire does not change for any schema that compiled before. A client module now sends at most 60
+times a second by default; see Changed.
 
 ### Faster
 
@@ -25,6 +26,20 @@ The wire does not change, and neither does a module built without the new option
   stored, where each bound read the field back out of its table: 30% off decoding a struct of three
   ranged numbers.
 
+### Added
+
+- **Quantized floats.** A float takes a scale when it has a closed range, and is sent as whole steps
+  above its minimum in the narrowest unsigned integer that holds the span: `f32<0.01>(-1..1)` is one
+  byte where it was four, `f32<0.25>(100..200)` two, `f64<0.001>(0..2048)` three of eight. A float with
+  a scale and no closed range was refused before and still is (`E3032`), so no schema that compiled
+  changes its wire.
+- `option OutboundBytesPerSecond` and `OutboundBurst`, a per-player budget for what the server sends,
+  and `Priority: Low` on a server's unreliable event or stream. Every send is charged to the players it
+  reaches, a broadcast as one addition rather than one per player; only a low send is ever left out,
+  while its player's budget is spent. A low stream held per player waits for the budget and then sends
+  the state it holds by then. `E3035` refuses a priority on anything else, and `W3035` reports one in a
+  schema with no budget.
+
 ### Changed
 
 - A client sends at most `option ClientFlushRate` times a second, 60 unless the schema says, where it
@@ -34,15 +49,6 @@ The wire does not change, and neither does a module built without the new option
   the whole default budget on floors. At 60 frames or fewer nothing changes, and a `StepReplication`
   the game calls still sends at once. The same run found no loss, no warning and no ping rise from 60
   to 480 packets a second on either remote, so there is no cap Roblox enforces to stay under.
-
-### Added
-
-- `option OutboundBytesPerSecond` and `OutboundBurst`, a per-player budget for what the server sends,
-  and `Priority: Low` on a server's unreliable event or stream. Every send is charged to the players it
-  reaches, a broadcast as one addition rather than one per player; only a low send is ever left out,
-  while its player's budget is spent. A low stream held per player waits for the budget and then sends
-  the state it holds by then. `E3035` refuses a priority on anything else, and `W3035` reports one in a
-  schema with no budget.
 
 ## 0.40.0 — 2026-09-27
 

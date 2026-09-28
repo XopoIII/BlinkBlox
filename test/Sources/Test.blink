@@ -56,6 +56,17 @@ export struct RangedFields {
 }
 export type RangedList = i8(-3..3)[..8]
 
+-- Quantized floats: whole steps from the minimum, in the narrowest integer the span fits -- a byte for
+-- 200 hundredths, three for two million thousandths -- and a saturated one whose range leaves out zero,
+-- so NaN goes to its minimum.
+export type Quantized = f32<0.01>(-1..1)
+export type QuantizedWide = f64<0.001>(0..2048)
+export type QuantizedSaturated = f32<0.5, saturate>(10..20)
+export struct QuantizedFields {
+	Aim: f32<0.01>(-1..1),
+	Height: f32<0.25>(100..200)
+}
+
 export type Buffer = buffer
 export type ExactBuffer = buffer(9)
 export type BoundedBuffer = buffer(0..1000)

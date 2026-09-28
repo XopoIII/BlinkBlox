@@ -55,6 +55,9 @@ export type Attributes = {
 	--> `saturate` clamps a value into its range on send. See Modules/FixedPoint and Parser/Scales.
 	Scale: number?,
 	Saturate: boolean?,
+	--> A quantized float's minimum in steps: `f32<0.01>(-1..1)` is sent as a u8 of steps above -100.
+	--> Set with the node rewritten to that integer; see Parser/Scales.
+	Offset: number?,
 }
 
 export type AttributesTokens = {

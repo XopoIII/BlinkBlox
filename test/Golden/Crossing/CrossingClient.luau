@@ -617,7 +617,6 @@ function SerdesFunctions.ReadEVENT_Crawls(): ({ { Id: number, Speed: number, Hea
 				local OPERATION_OFFSET_1 = ARRAY_START_2
 				ARRAY_START_2 += 2
 				Item_2.Speed = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_1)
-				if not (Item_2.Speed >= 0) then error(`Expected "Item_2.Speed" to be larger than or equal to 0, got {Item_2.Speed} instead.`) end
 				if not (Item_2.Speed <= 1000) then error(`Expected "Item_2.Speed" to be smaller than or equal to 1000, got {Item_2.Speed} instead.`) end
 				Item_2.Speed = Item_2.Speed / 10
 			end

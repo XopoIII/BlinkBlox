@@ -585,6 +585,10 @@ export type UnboundLower = number
 export type RangedVector = Vector3
 export type RangedFields = { Health: number, Angle: number, Level: number, Weight: number, Seven: number, Full: number }
 export type RangedList = { number }
+export type Quantized = number
+export type QuantizedWide = number
+export type QuantizedSaturated = number
+export type QuantizedFields = { Aim: number, Height: number }
 export type Buffer = buffer
 export type ExactBuffer = buffer
 export type BoundedBuffer = buffer
@@ -1541,6 +1545,225 @@ return {
 					buffer.writei8(SendBuffer, OPERATION_OFFSET_0, Item_1)
 				end
 				-- END ARRAY
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	Quantized = {
+		Read = function(Buffer: buffer): (Quantized)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Quantized)
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: Quantized
+				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				if not (Value <= 200) then error(`Expected "Value" to be smaller than or equal to 200, got {Value} instead.`) end
+				Value = (Value - 100) / 100
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Quantized
+		end,
+		Write = function(Value: Quantized): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: Quantized
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 100) + 100
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to -1 in steps of 0.01, got {Value} instead.`) end
+				if not (Fixed <= 200) then error(`Expected "Value" to be smaller than or equal to 1 in steps of 0.01, got {Value} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	QuantizedWide = {
+		Read = function(Buffer: buffer): (QuantizedWide)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (QuantizedWide)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: QuantizedWide
+				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+				if not (Value <= 2048000) then error(`Expected "Value" to be smaller than or equal to 2048000, got {Value} instead.`) end
+				Value = Value / 1000
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: QuantizedWide
+		end,
+		Write = function(Value: QuantizedWide): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				-- Value: QuantizedWide
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 1000)
+				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.001, got {Value} instead.`) end
+				if not (Fixed <= 2048000) then error(`Expected "Value" to be smaller than or equal to 2048 in steps of 0.001, got {Value} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Fixed, 16))
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	QuantizedSaturated = {
+		Read = function(Buffer: buffer): (QuantizedSaturated)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (QuantizedSaturated)
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: QuantizedSaturated
+				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				if not (Value <= 20) then error(`Expected "Value" to be smaller than or equal to 20, got {Value} instead.`) end
+				Value = (Value + 20) / 2
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: QuantizedSaturated
+		end,
+		Write = function(Value: QuantizedSaturated): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value: QuantizedSaturated
+				if typeof(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+				end
+				local Fixed = math.round(Value * 2) - 20
+				if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 20 then Fixed = 20 end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	QuantizedFields = {
+		Read = function(Buffer: buffer): (QuantizedFields)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (QuantizedFields)
+				-- Read BLOCK: 3 bytes
+				local BLOCK_START = Read(3)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: QuantizedFields
+				local Value = {Aim = false, Height = false} :: any
+				-- Value.Aim: Aim
+				Value.Aim = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				if not (Value.Aim <= 200) then error(`Expected "Value.Aim" to be smaller than or equal to 200, got {Value.Aim} instead.`) end
+				Value.Aim = (Value.Aim - 100) / 100
+				-- Value.Height: Height
+				Value.Height = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+				if not (Value.Height <= 400) then error(`Expected "Value.Height" to be smaller than or equal to 400, got {Value.Height} instead.`) end
+				Value.Height = (Value.Height + 400) / 4
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: QuantizedFields
+		end,
+		Write = function(Value: QuantizedFields): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 3 bytes
+				local BLOCK_START = Allocate(3)
+				-- Value: QuantizedFields
+				do
+					-- Value.Aim: Aim
+					if typeof(Value.Aim) ~= "number" then
+						error(`Expected Value.Aim to be of type number, got {type(Value.Aim)} instead.`)
+					end
+					local Fixed = math.round(Value.Aim * 100) + 100
+					if not (Fixed >= 0) then error(`Expected "Value.Aim" to be larger than or equal to -1 in steps of 0.01, got {Value.Aim} instead.`) end
+					if not (Fixed <= 200) then error(`Expected "Value.Aim" to be smaller than or equal to 1 in steps of 0.01, got {Value.Aim} instead.`) end
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+				end
+				do
+					-- Value.Height: Height
+					if typeof(Value.Height) ~= "number" then
+						error(`Expected Value.Height to be of type number, got {type(Value.Height)} instead.`)
+					end
+					local Fixed = math.round(Value.Height * 4) - 400
+					if not (Fixed >= 0) then error(`Expected "Value.Height" to be larger than or equal to 100 in steps of 0.25, got {Value.Height} instead.`) end
+					if not (Fixed <= 400) then error(`Expected "Value.Height" to be smaller than or equal to 200 in steps of 0.25, got {Value.Height} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 1, Fixed)
+				end
 				local Result = buffer.create(SendCursor)
 				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
@@ -6002,8 +6225,6 @@ return {
 				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedRanged
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
-				if not (Value <= 65535) then error(`Expected "Value" to be smaller than or equal to 65535, got {Value} instead.`) end
 				Value = Value / 10
 				return Value
 			end)
@@ -6203,7 +6424,6 @@ return {
 				local RecieveBuffer = RecieveBuffer
 				-- Value: FixedWide
 				local Value = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
 				if not (Value <= 100000) then error(`Expected "Value" to be smaller than or equal to 100000, got {Value} instead.`) end
 				Value = Value / 100
 				return Value
@@ -6303,7 +6523,6 @@ return {
 				-- Value: SaturatedCount
 				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if not (Value >= 1) then error(`Expected "Value" to be larger than or equal to 1, got {Value} instead.`) end
-				if not (Value <= 255) then error(`Expected "Value" to be smaller than or equal to 255, got {Value} instead.`) end
 				return Value
 			end)
 			RecieveCursor = PreviousCursor
@@ -6449,7 +6668,6 @@ return {
 				local RecieveBuffer = RecieveBuffer
 				-- Value: SaturatedTenths
 				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
 				if not (Value <= 1000) then error(`Expected "Value" to be smaller than or equal to 1000, got {Value} instead.`) end
 				Value = Value / 10
 				return Value

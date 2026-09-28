@@ -33,7 +33,11 @@ function Fixed.WireBounds(Declaration: Parser.Primitive): NumberRange
 	local Bounds = Range or Value.Primitive.Bounds :: NumberRange
 
 	if Scale and Range then
-		return { Min = FixedPoint.Encode(Range.Min, Scale), Max = FixedPoint.Encode(Range.Max, Scale) }
+		local Offset = Value.Offset or 0
+		return {
+			Min = FixedPoint.Encode(Range.Min, Scale) - Offset,
+			Max = FixedPoint.Encode(Range.Max, Scale) - Offset,
+		}
 	end
 
 	return { Min = Bounds.Min, Max = Bounds.Max }
@@ -41,8 +45,11 @@ end
 
 --- Emits the clamp of a saturated value. NaN goes to the value in range nearest zero; see
 --- `FixedPoint.NaNTarget`. An open float side is left out, as the range checks leave it out.
-local function Clamp(Block: Block, Min: number, Max: number)
-	local Target = FixedPoint.NaNTarget(Min, Max)
+---
+--- `Offset` is a quantized float's minimum in steps: NaN goes to the value nearest zero in the schema's
+--- own units, which on the wire is that many steps lower.
+local function Clamp(Block: Block, Min: number, Max: number, Offset: number)
+	local Target = FixedPoint.NaNTarget(Min + Offset, Max + Offset) - Offset
 	local Line: string
 	if Target == Min and Min ~= -math.huge then
 		Line = `if not ({VARIABLE} >= {Min}) then {VARIABLE} = {Min}`
@@ -64,7 +71,8 @@ end
 --- to must fit the range, and the message speaks in the schema's own units.
 local function Check(Block: Block, Target: string, Declaration: Parser.Primitive, Bounds: NumberRange)
 	local Scale = Declaration.Value.Scale :: number
-	local Min, Max = FixedPoint.Decode(Bounds.Min, Scale), FixedPoint.Decode(Bounds.Max, Scale)
+	local Offset = Declaration.Value.Offset or 0
+	local Min, Max = FixedPoint.Decode(Bounds.Min + Offset, Scale), FixedPoint.Decode(Bounds.Max + Offset, Scale)
 	local Units = `in steps of {Scale}`
 
 	if Bounds.Min == Bounds.Max then
@@ -102,15 +110,21 @@ function Fixed.Write(
 			:End()
 	end
 
+	local Offset = Value.Offset or 0
 	local Expression = if Scale
 		then FixedPoint.EncodeExpression(Target, Scale)
 		elseif Integer then `math.round({Target})`
 		else Target
+	if Offset > 0 then
+		Expression ..= ` - {Offset}`
+	elseif Offset < 0 then
+		Expression ..= ` + {-Offset}`
+	end
 	Block:Line(`{Block:Declare(VARIABLE)} = {Expression}`)
 
 	local Bounds = Fixed.WireBounds(Declaration)
 	if Value.Saturate then
-		Clamp(Block, Bounds.Min, Bounds.Max)
+		Clamp(Block, Bounds.Min, Bounds.Max, Offset)
 	elseif WriteValidations and Scale then
 		Check(Block, Target, Declaration, Bounds)
 	end
@@ -121,7 +135,9 @@ end
 --- Emits the scaling of a value just read, after its range has been checked in whole steps.
 function Fixed.Read(Declaration: Parser.Primitive, Target: string, Block: Block)
 	local Scale = Declaration.Value.Scale
-	local Expression = Scale and FixedPoint.DecodeExpression(Target, Scale)
+	local Offset = Declaration.Value.Offset or 0
+	local Steps = if Offset > 0 then `({Target} + {Offset})` elseif Offset < 0 then `({Target} - {-Offset})` else Target
+	local Expression = Scale and (FixedPoint.DecodeExpression(Steps, Scale) or (if Steps ~= Target then Steps else nil))
 	if Expression then
 		Block:Line(`{Target} = {Expression}`)
 	end
