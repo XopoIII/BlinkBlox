@@ -89,6 +89,10 @@ easy to break without noticing.
   hitch Roblox delivers the backlog at once, and a refused reliable packet takes its events along.
 - Luau allows 200 locals a function. Each struct field is scoped (`src/Generator/Scope.luau`), or a
   struct of fifty CFrames fails to load.
+- Lune 0.10.5's Luau leaves a whole module interpreted once one function is too large to compile, and
+  a module's top-level function grows with its declarations: past about 70 events on the server and 85
+  on the client, Lune's "native" rows are interpreted. Current Luau (the 0.738 CLI with `--codegen`)
+  leaves only the top-level function interpreted, so games are unaffected; benchmarks are not.
 - Studio caps the frame rate at 60 and compiles LocalScripts natively where most clients do not, and
   Roblox's zstd squeezes a repeated payload to nothing: `benchmark/Runtime.luau` times on Lune, native
   and interpreted, with random payloads.

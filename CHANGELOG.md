@@ -16,9 +16,9 @@ times a second by default; see Changed.
 
 - A channel's events are dispatched by halving the index range rather than one `elseif` after another,
   so an interpreted client no longer makes a hundred comparisons to reach the hundredth event. A
-  hundred sends over 128 events decode in 0.053 ms a frame, from 0.086. A channel of up to eight
+  hundred sends over 128 events decode in 0.053 ms a frame interpreted, from 0.086. A channel of up to eight
   declarations emits exactly what it did; the first event of a larger one pays a few comparisons more
-  (index 0 of 133: 0.089 to 0.093 ms).
+  (index 0 of 133: 0.090 to 0.093 ms).
 - A received length is no longer checked against a bound its prefix already meets: never below its
   minimum, and not above 65535 when it is a varint, which refuses past that itself. Every unbounded
   string and array carried both checks on every packet. An integer skips a side its read type meets.

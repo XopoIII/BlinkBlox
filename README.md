@@ -56,10 +56,14 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
   `boolean[]` packs eight to a byte. A length is sent relative to its range, a short one in a single
   varint byte, `CFrame<quat>` fits a rotation in 7 bytes, and
   `u24`, `i24` and `f24` fill the gap between 16 and 32 bits, so `vector<f24>` is 9 bytes instead of
-  12. An unreliable event that cannot fit is refused at compile time.
+  12. A float with a step and a range is quantized: `f32<0.01>(-1..1)` is one byte. An unreliable event
+  that cannot fit is refused at compile time.
 - **Few remote calls.** A `FireAll` goes to every player in one `FireAllClients`, streams to
   everyone share one packet a frame, and `BatchUnreliable` gathers a frame's unreliable events the
-  same way. A client cuts its batch to fit the server's limits, so an honest player is never refused.
+  same way. A client cuts its batch to fit the server's limits, so an honest player is never refused,
+  and sends at most 60 times a second, since every remote call costs about 11 bytes of its own.
+- **An outbound budget.** Give each player a byte budget for what the server sends, and mark the
+  events and streams that may wait with `Priority: Low`; nothing else is ever held back.
 - **Tooling.** The CLI has watch mode and `@profile` builds that keep debug remotes out of release,
   `--check --json` reports every diagnostic as JSON for editors and AI assistants, and `--verify`
   fails a pre-commit hook or CI step when the committed modules no longer match the schema. The generated
@@ -99,6 +103,10 @@ A game also sends the other way. Natively, on the same run, with fifty players:
 | 100 structs a frame to everyone, `FireAll` | **0.037 ms, 1 remote call** | 2.10 ms, 50 calls | 2.46 ms, 50 calls | 0.099 ms, 1 call | 0.209 ms, 1 call |
 | Decoding them on a client | **0.024 ms** | 0.081 ms | 0.077 ms | 0.268 ms | 0.452 ms |
 | 8 unreliable inputs a frame, with [`BatchUnreliable`](https://xopoiii.github.io/BlinkBlox/language/options/#batchunreliable) | **0.004 ms, 1 remote call** | 0.009 ms, 8 calls | 0.006 ms, 8 calls | 0.006 ms, 1 call | none |
+
+A client receiving 100 events a frame spread over 128 declarations decodes them in 0.053 ms
+interpreted, from 0.086 ms in 0.40.0: the event an index names is found by halving the range rather than one comparison
+after another.
 
 The methodology, the bandwidth, the random payloads, streams and the full percentiles are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
