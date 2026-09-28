@@ -844,6 +844,8 @@ local function StreamAccept(Index: number, Time: number): boolean
     StreamTimes[Index] = Time
     return true
 end
+local Decoding = -1
+local DecodeListening: string? = nil
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -859,6 +861,82 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
+local function DecodeReliable()
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	Decoding = Index
+	if Index == 0 then
+		local Value: number = SerdesFunctions.ReadEVENT_Score()
+		local BOUND_LISTENER = Events.Reliable[0]
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "Score"
+			DecodeListening = "Score"
+			BOUND_LISTENER(Value)
+			DecodeListening = nil
+		else
+			if #Queue.Reliable[0] > 256 then
+				warn("[BlinkBlox]: Event queue of \"Score\" exceeded 256, did you forget to implement a listener?")
+			end
+			table.insert(Queue.Reliable[0], table.pack(Value))
+		end
+	else
+		error("[BlinkBlox]: Unknown event index.")
+	end
+end
+local function DecodeUnreliable()
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	Decoding = Index
+	if Index == 0 then
+		local Value: buffer = SerdesFunctions.ReadEVENT_Chatter()
+		local BOUND_LISTENER = Events.Unreliable[0]
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "Chatter"
+			DecodeListening = "Chatter"
+			BOUND_LISTENER(Value)
+			DecodeListening = nil
+		end
+	elseif Index == 1 then
+		local Value: number = SerdesFunctions.ReadEVENT_Hit()
+		local BOUND_LISTENER = Events.Unreliable[1]
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "Hit"
+			DecodeListening = "Hit"
+			BOUND_LISTENER(Value)
+			DecodeListening = nil
+		end
+	elseif Index == 2 then
+		local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Crowd()
+		Value2 = UnwrapStamp(Value2)
+		if StreamAccept(2, Value2) == true then
+			local BOUND_LISTENER = Events.Unreliable[2]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Crowd"
+				DecodeListening = "Crowd"
+				BOUND_LISTENER(Value1, Value2)
+				DecodeListening = nil
+			end
+		end
+	elseif Index == 3 then
+		local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Mine()
+		Value2 = UnwrapStamp(Value2)
+		if StreamAccept(3, Value2) == true then
+			local BOUND_LISTENER = Events.Unreliable[3]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Mine"
+				DecodeListening = "Mine"
+				BOUND_LISTENER(Value1, Value2)
+				DecodeListening = nil
+			end
+		end
+	else
+		error("[BlinkBlox]: Unknown event index.")
+	end
+end
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
 	RecieveBuffer = Buffer
@@ -870,33 +948,20 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		if Index == 0 then
-			local Value: number = SerdesFunctions.ReadEVENT_Score()
-			local BOUND_LISTENER = Events.Reliable[0]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Score"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[0] > 256 then
-					warn("[BlinkBlox]: Event queue of \"Score\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[0], table.pack(Value))
-			end
-		else
-			error("[BlinkBlox]: Unknown event index.")
+	Decoding = -1
+	DecodeListening = nil
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
+		if Parsed then
+			break
 		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
-	if not Parsed then
-		ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
+		local Listening = DecodeListening
+		if not Listening then
+			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
+			break
+		end
+		DecodeListening = nil
+		task.spawn(error, Failure, 0)
 	end
 end)
 Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -910,58 +975,20 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		if Index == 0 then
-			local Value: buffer = SerdesFunctions.ReadEVENT_Chatter()
-			local BOUND_LISTENER = Events.Unreliable[0]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Chatter"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-		elseif Index == 1 then
-			local Value: number = SerdesFunctions.ReadEVENT_Hit()
-			local BOUND_LISTENER = Events.Unreliable[1]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Hit"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-		elseif Index == 2 then
-			local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Crowd()
-			Value2 = UnwrapStamp(Value2)
-			if StreamAccept(2, Value2) == true then
-				local BOUND_LISTENER = Events.Unreliable[2]
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "Crowd"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			end
-		elseif Index == 3 then
-			local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Mine()
-			Value2 = UnwrapStamp(Value2)
-			if StreamAccept(3, Value2) == true then
-				local BOUND_LISTENER = Events.Unreliable[3]
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "Mine"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			end
-		else
-			error("[BlinkBlox]: Unknown event index.")
+	Decoding = -1
+	DecodeListening = nil
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
+		if Parsed then
+			break
 		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
-	if not Parsed then
-		ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
+		local Listening = DecodeListening
+		if not Listening then
+			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
+			break
+		end
+		DecodeListening = nil
+		task.spawn(error, Failure, 0)
 	end
 end)
 

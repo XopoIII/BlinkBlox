@@ -717,6 +717,8 @@ local function StepReplication()
         SendBuffer = buffer.create(64)
     end
 end
+local Decoding = -1
+local DecodeListening: string? = nil
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -732,6 +734,38 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
+local function DecodeReliable()
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	Decoding = Index
+	if Index == 0 then
+		local Value: number = SerdesFunctions.ReadEVENT_Alpha()
+		local BOUND_LISTENER = Events.Reliable[0]
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "Alpha"
+			DecodeListening = "Alpha"
+			BOUND_LISTENER(Value)
+			DecodeListening = nil
+		else
+			if #Queue.Reliable[0] > 256 then
+				warn("[BlinkBlox]: Event queue of \"Alpha\" exceeded 256, did you forget to implement a listener?")
+			end
+			table.insert(Queue.Reliable[0], table.pack(Value))
+		end
+	else
+		error("[BlinkBlox]: Unknown event index.")
+	end
+end
+local function DecodeUnreliable()
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	Decoding = Index
+	error("[BlinkBlox]: This channel receives no events.")
+end
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
 	RecieveBuffer = Buffer
@@ -743,33 +777,20 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		if Index == 0 then
-			local Value: number = SerdesFunctions.ReadEVENT_Alpha()
-			local BOUND_LISTENER = Events.Reliable[0]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Alpha"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[0] > 256 then
-					warn("[BlinkBlox]: Event queue of \"Alpha\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[0], table.pack(Value))
-			end
-		else
-			error("[BlinkBlox]: Unknown event index.")
+	Decoding = -1
+	DecodeListening = nil
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
+		if Parsed then
+			break
 		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
-	if not Parsed then
-		ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
+		local Listening = DecodeListening
+		if not Listening then
+			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
+			break
+		end
+		DecodeListening = nil
+		task.spawn(error, Failure, 0)
 	end
 end)
 Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -783,18 +804,20 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
-	if not Parsed then
-		ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
+	Decoding = -1
+	DecodeListening = nil
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
+		if Parsed then
+			break
+		end
+		local Listening = DecodeListening
+		if not Listening then
+			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
+			break
+		end
+		DecodeListening = nil
+		task.spawn(error, Failure, 0)
 	end
 end)
 

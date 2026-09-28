@@ -930,6 +930,8 @@ local function StreamAccept(Index: number, Time: number): boolean
     StreamTimes[Index] = Time
     return true
 end
+local Decoding = -1
+local DecodeListening: string? = nil
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -945,6 +947,54 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
+local function DecodeReliable()
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	Decoding = Index
+	error("[BlinkBlox]: This channel receives no events.")
+end
+local function DecodeUnreliable()
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	Decoding = Index
+	if Index == 0 then
+		local Value1: { { Id: number, Head: Vector3, Back: boolean } }?, Value2: number = SerdesFunctions.ReadEVENT_Heads()
+		Value2 = UnwrapStamp(Value2)
+		if StreamAccept(0, Value2) == true then
+			local BOUND_LISTENER = Events.Unreliable[0]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Heads"
+				DecodeListening = "Heads"
+				BOUND_LISTENER(Value1, Value2)
+				DecodeListening = nil
+			end
+		end
+	elseif Index == 1 then
+		-- Read BLOCK: 2 bytes
+		local BLOCK_START = Read(2)
+		local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		local Arguments = table.pack(SerdesFunctions.ReadEVENT_Aim())
+		if OrderAccept(1, OrderIdentifier) then
+			Push(Queue.Unreliable[1], Arguments)
+		end
+	elseif Index == 2 then
+		local Value1: number?, Value2: number = SerdesFunctions.World_ReadEVENT_Clock()
+		Value2 = UnwrapStamp(Value2)
+		if StreamAccept(2, Value2) == true then
+			local Epoch = ListenerEpoch
+			for _, Listener in Events.Unreliable[2] do
+				if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[2], Listener) == nil then continue end
+				Spawn(Listener, Value1, Value2)
+			end
+		end
+	else
+		error("[BlinkBlox]: Unknown event index.")
+	end
+end
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
 	RecieveBuffer = Buffer
@@ -956,18 +1006,20 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
-	if not Parsed then
-		ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
+	Decoding = -1
+	DecodeListening = nil
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
+		if Parsed then
+			break
+		end
+		local Listening = DecodeListening
+		if not Listening then
+			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
+			break
+		end
+		DecodeListening = nil
+		task.spawn(error, Failure, 0)
 	end
 end)
 Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -981,49 +1033,20 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		if Index == 0 then
-			local Value1: { { Id: number, Head: Vector3, Back: boolean } }?, Value2: number = SerdesFunctions.ReadEVENT_Heads()
-			Value2 = UnwrapStamp(Value2)
-			if StreamAccept(0, Value2) == true then
-				local BOUND_LISTENER = Events.Unreliable[0]
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "Heads"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			end
-		elseif Index == 1 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-			local Arguments = table.pack(SerdesFunctions.ReadEVENT_Aim())
-			if OrderAccept(1, OrderIdentifier) then
-				Push(Queue.Unreliable[1], Arguments)
-			end
-		elseif Index == 2 then
-			local Value1: number?, Value2: number = SerdesFunctions.World_ReadEVENT_Clock()
-			Value2 = UnwrapStamp(Value2)
-			if StreamAccept(2, Value2) == true then
-				local Epoch = ListenerEpoch
-				for _, Listener in Events.Unreliable[2] do
-					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[2], Listener) == nil then continue end
-					Spawn(Listener, Value1, Value2)
-				end
-			end
-		else
-			error("[BlinkBlox]: Unknown event index.")
+	Decoding = -1
+	DecodeListening = nil
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
+		if Parsed then
+			break
 		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
-	if not Parsed then
-		ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
+		local Listening = DecodeListening
+		if not Listening then
+			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
+			break
+		end
+		DecodeListening = nil
+		task.spawn(error, Failure, 0)
 	end
 end)
 

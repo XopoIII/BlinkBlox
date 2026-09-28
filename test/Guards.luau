@@ -146,13 +146,15 @@ RunClosure("Inbound packets are bounded", function()
 		local Source = fs.readFile("../Network/Server.luau")
 		local Required = {
 			["argument type check"] = `if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then`,
-			["departed player stops the loop"] = "Player.Parent ~= nil",
+			["a departed player's packet is refused before decoding"] = "if not InboundAccept(Player,",
+			["a player removed by a throwing listener stops the packet"] = "\tif Player.Parent == nil then\n\t\t\tbreak",
 			["reliable remote class check"] = `assert(Reliable:IsA("RemoteEvent")`,
 			["unreliable remote class check"] = `assert(Unreliable:IsA("UnreliableRemoteEvent")`,
 			["oversized packet check"] = "if buffer.len(Buffer) >",
 			["instance count check"] = "if #Instances >",
-			["decoded event counter"] = "DecodedEvents += 1",
-			["decode pcall"] = "local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)",
+			["decoded event counter"] = "DecodeRemaining -= 1",
+			["decode pcall"] = "local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Player, Size)",
+			["a listener's error goes on to the next event"] = "if not ListenerFailed(Player, Listening, Failure) then",
 			["decode failure is reported"] = `ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)`,
 			["unknown event id stops the packet"] = `error("[BlinkBlox]: Unknown event index.")`,
 		}
@@ -455,7 +457,7 @@ end)
 RunClosure("Decoding stops when the player leaves", function()
 	--> Every listener that runs past this point is handed a Player already detached from the
 	--> DataModel, and anything it does with them -- a leaderstats write, a save -- is work aimed at
-	--> nobody. The loop condition now checks, so the rest of that packet is not decoded.
+	--> nobody. InboundAccept refuses the packet of a player who has left before any of it is decoded.
 	local Received = 0
 	local Disconnect = Server.ReliableClient.On(function()
 		Received += 1

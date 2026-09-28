@@ -205,9 +205,12 @@ function Declarations.Event(Declaration: Parser.Event)
 		--> predicted locally is delivered exactly as one received from the network would be.
 		--> A Single event's listener is read once, into a local, rather than looked up through two tables
 		--> for the check and again for the call.
-		local function Deliver(Target: Blocks.Block, Payload: string)
+		--> `Received` is the decode loop's delivery, whose Single listener goes without a pcall of its own;
+		--> see Listeners.Call.
+		local function Deliver(Target: Blocks.Block, Payload: string, Received: boolean)
 			local ListenerArguments = `{Sender}{Payload}`
-			local Call = Listeners.Call(Event, "BOUND_LISTENER", ListenerArguments, "Player", true)
+			local Call =
+				Listeners.Call(Event, "BOUND_LISTENER", ListenerArguments, "Player", true, Received and IsSingle)
 			if IsSingle then
 				Target:Line(`local BOUND_LISTENER = {Connection}`)
 			end
@@ -232,7 +235,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Queues.Enqueue(Bound:Branch("Default"), State.Context, Queue, ListenerArguments, Declaration.Name):End()
 		end
 
-		Deliver(Block, InnerArguments)
+		Deliver(Block, InnerArguments, true)
 
 		if IsReliable then
 			Listener = Listeners.Replay(
@@ -268,7 +271,7 @@ function Declarations.Event(Declaration: Parser.Event)
 
 			--> A Many event with no listener used to be dropped here while the network queued it, and a
 			--> Single one was queued past the cap the network stops at. Both now share the receive path.
-			Deliver(Predict, Arguments)
+			Deliver(Predict, Arguments, false)
 			Predict:End()
 
 			State.Noop.Push(`{State.Casing.On} = NOOP_RETURNING,`, 0, Indent + 1)

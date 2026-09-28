@@ -32,7 +32,20 @@ export type Event = {
 --- handler, or raised on a thread of its own, which is where an Async listener's error has always
 --- surfaced. The two locals are typed because a listener declared to return nothing gives `pcall` one
 --- result under `--!strict`.
-local function Call(Event: Event, Path: string, Arguments: string, Sender: string, Receiving: boolean): Block
+---
+--- `Direct`, for the one listener of a Single Sync event received in the decode loop, calls it without
+--- a pcall of its own: the loop's pcall catches its error, sees `DecodeListening` naming the event, and
+--- reports it the same way and goes on with the next event (Generator/init.luau, CloseDecode). A pcall
+--- an event cost more than the decode of a small one. Predict, replay and a Many event's listeners,
+--- which the next listener of the same event must survive, keep theirs.
+local function Call(
+	Event: Event,
+	Path: string,
+	Arguments: string,
+	Sender: string,
+	Receiving: boolean,
+	Direct: boolean?
+): Block
 	local Target = Blocks.Block()
 	local OnServer = Event.Context == "Server"
 
@@ -46,6 +59,12 @@ local function Call(Event: Event, Path: string, Arguments: string, Sender: strin
 
 	if Receiving and Event.Validating then
 		Target:Line(`SerdesEvent = "{Event.Name}"`)
+	end
+
+	if Direct then
+		Target:Line(`DecodeListening = "{Event.Name}"`)
+		Target:Line(`{Path}({Arguments})`)
+		return Target:Line("DecodeListening = nil")
 	end
 
 	local Raise = "task.spawn(error, ListenerFailure, 0)"
