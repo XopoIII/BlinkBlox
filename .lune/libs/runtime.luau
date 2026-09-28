@@ -33,7 +33,7 @@ local runtime = {
 	matches = isLuneBlox and (expected == nil or expected == version),
 	--> The command that runs a script on this same runtime, for anything a script shells out to.
 	command = if isLuneBlox then "luneblox" else "lune",
-	--> What to record beside a result, e.g. "LuneBlox 0.10.8 (Luau 0.740)".
+	--> What to record beside a result, e.g. "LuneBlox 0.10.9 (Luau 0.740)".
 	description = if name then `{name} {version} (Luau 0.{luau})` else _VERSION,
 	expected = expected,
 }
@@ -79,6 +79,16 @@ function runtime.collect()
 	if collect then
 		collect()
 	end
+end
+
+--> Memory held for the rest of the process, before any tool loads. Luau's collector paces itself on the
+--> heap's size, so a tool that keeps a few megabytes of its own buffers alive was collected less often
+--> than one that keeps none, and decoded faster for it: QuickNet holds about 12 MB. A game server's heap
+--> is hundreds of megabytes, next to which any tool's own share is small; this makes the same true here.
+local BALLAST_BYTES = 64 * 1024 * 1024
+local held: buffer? = nil
+function runtime.ballast()
+	held = held or buffer.create(BALLAST_BYTES)
 end
 
 --> Refuses to go on unless this is LuneBlox at the pinned version.

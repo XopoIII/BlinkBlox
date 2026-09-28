@@ -1,10 +1,10 @@
 --!strict
 --- What BlinkBlox's modules cost on the paths Runtime.luau never runs. Run from this directory:
 ---
----     lune run Scenarios                  every scenario, natively compiled and interpreted
----     lune run Scenarios -- Stream        only the scenarios whose name contains "Stream"
----     lune run Scenarios -- --frames 50   fewer frames, for a quick look
----     lune run Scenarios -- --batch       with option BatchUnreliable
+---     luneblox run Scenarios                  every scenario, natively compiled and interpreted
+---     luneblox run Scenarios -- Stream        only the scenarios whose name contains "Stream"
+---     luneblox run Scenarios -- --frames 50   fewer frames, for a quick look
+---     luneblox run Scenarios -- --batch       with option BatchUnreliable
 ---
 --- Runtime.luau times a client firing a thousand reliable events a frame at the server, which is one
 --- path of several, and the one the tools compare on. A game also has the server sending to a crowd,
@@ -20,6 +20,7 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local runtime = require("../.lune/libs/runtime")
+runtime.ballast()
 
 local Attributes = require("../src/Modules/Attributes")
 local Crowd = require("./runtime/Crowd")
@@ -38,7 +39,7 @@ do
 	while Index <= #process.args do
 		local Argument = process.args[Index]
 		if Argument == "--" then
-			--> What `lune run Scenarios -- ...` passes through ahead of the arguments.
+			--> What `luneblox run Scenarios -- ...` passes through ahead of the arguments.
 		elseif Argument == "--batch" then
 			Batch = true
 		elseif Argument == "--frames" then

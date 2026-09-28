@@ -169,7 +169,10 @@ local function Remote(Universe: Universe, ClassName: string)
 		return if Instances and #Instances > 0 then table.clone(Instances) else Instances
 	end
 
-	--> Warp's client asks for the server's event ids with a call that carries nothing.
+	--> Warp's client asks for the server's event ids with a call that carries nothing. The client's buffer is
+	--> kept as it is, not copied as Roblox does: the harness decodes it in the same frame, before the tool
+	--> flushes again, so a tool that reuses its buffer is still read right, and the flush it is timed on
+	--> carries no copy that is the harness's rather than the tool's.
 	State.Properties.FireServer = function(_self, Buffer: buffer?, Instances: { any }?)
 		Universe.Calls += 1
 		Universe.Bytes += if Buffer then buffer.len(Buffer) else 0

@@ -1,12 +1,12 @@
 --!strict
 --- Scenarios.luau's paths, run on every tool the benchmark compares. Run from this directory, after
---- `lune run build --download` has fetched the tools and packages:
+--- `luneblox run build --download` has fetched the tools and packages:
 ---
----     lune run Rivals                      every scenario and tool, natively compiled and interpreted
----     lune run Rivals -- Broadcast         only the scenarios whose name contains "Broadcast"
----     lune run Rivals -- --frames 50       fewer frames
----     lune run Rivals -- --tools blink,zap only these tools
----     lune run Rivals -- --batch           BlinkBlox with option BatchUnreliable
+---     luneblox run Rivals                      every scenario and tool, natively compiled and interpreted
+---     luneblox run Rivals -- Broadcast         only the scenarios whose name contains "Broadcast"
+---     luneblox run Rivals -- --frames 50       fewer frames
+---     luneblox run Rivals -- --tools blink,zap only these tools
+---     luneblox run Rivals -- --batch           BlinkBlox with option BatchUnreliable
 ---
 --- Every tool loads through World.luau here, BlinkBlox included, so each pays for the same mocks: a
 --- remote call costs the same whoever makes it. Each flushes on its own Heartbeat, as it would in a
@@ -20,6 +20,7 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local runtime = require("../.lune/libs/runtime")
+runtime.ballast()
 
 local Apis = require("./runtime/rivals/Apis")
 local Attributes = require("../src/Modules/Attributes")
@@ -53,7 +54,7 @@ do
 	while Index <= #process.args do
 		local Argument = process.args[Index]
 		if Argument == "--" then
-			--> What `lune run Rivals -- ...` passes through ahead of the arguments.
+			--> What `luneblox run Rivals -- ...` passes through ahead of the arguments.
 		elseif Argument == "--batch" then
 			Batch = true
 		elseif Argument == "--frames" then
@@ -82,7 +83,7 @@ end
 local function Missing(Name: string): string?
 	for _, Path in REQUIRES[Name] or {} do
 		if not fs.isFile(Path) then
-			return `{Path} is missing; run \`lune run build --download\` first`
+			return `{Path} is missing; run \`luneblox run build --download\` first`
 		end
 	end
 	return nil

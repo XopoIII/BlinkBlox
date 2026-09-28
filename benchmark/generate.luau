@@ -116,6 +116,11 @@ local Metrics = {
 	},
 }
 
+--> Tools whose Fire only queues the value, encoding it later in the frame on a signal of their own that
+--> the bench cannot time. Their fire time would read as nearly nothing while their frame rate shows the
+--> cost, so it is left out; `luneblox run Runtime` times their fire and flush together.
+local DEFERRED = { warp = true }
+
 --> The share of a run's events the server never heard, as the table prints it. Only an exact count
 --> reads "0%": it used to be floored to a whole percent, so up to one event in a hundred could go
 --> missing behind a zero, and a server that heard more than was sent read as zero too.
@@ -147,7 +152,7 @@ local function WriteBenchResults(Name: string, Results: { [string]: Benchmark })
 			end
 
 			local Numbers = Result[Metric.Samples]
-			if Numbers == nil then
+			if Numbers == nil or (Metric.Samples == "FireTime" and DEFERRED[Tool]) then
 				Output ..= `\n|{Names.Display(Tool)}|-|-|-|-|-|-|{LossText}|`
 				continue
 			end

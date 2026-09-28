@@ -1,11 +1,11 @@
 --!strict
 --- What each tool's modules cost, measured without Roblox. Run from this directory:
 ---
----     lune run Runtime                   every bench, natively compiled and interpreted
----     lune run Runtime -- Entities       only the benches whose name contains "Entities"
----     lune run Runtime -- --frames 50    fewer frames, for a quick look
----     lune run Runtime -- --tools blink,zap  only these tools
----     lune run Runtime -- --traffic      BlinkBlox built with option TrafficStats, to price it
+---     luneblox run Runtime                   every bench, natively compiled and interpreted
+---     luneblox run Runtime -- Entities       only the benches whose name contains "Entities"
+---     luneblox run Runtime -- --frames 50    fewer frames, for a quick look
+---     luneblox run Runtime -- --tools blink,zap  only these tools
+---     luneblox run Runtime -- --traffic      BlinkBlox built with option TrafficStats, to price it
 ---
 --- Studio's own benchmark (run.luau, generate.luau) reports frame rate and bandwidth, and neither
 --- isolates a tool's own work: Studio caps the frame rate at 60, and Roblox compresses each packet
@@ -24,6 +24,7 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local runtime = require("../.lune/libs/runtime")
+runtime.ballast()
 local serde = require("@lune/serde")
 
 local Attributes = require("../src/Modules/Attributes")
@@ -48,7 +49,7 @@ do
 	while Index <= #process.args do
 		local Argument = process.args[Index]
 		if Argument == "--" then
-			--> What `lune run Runtime -- ...` passes through ahead of the arguments.
+			--> What `luneblox run Runtime -- ...` passes through ahead of the arguments.
 		elseif Argument == "--frames" then
 			Frames = assert(tonumber(process.args[Index + 1]), "--frames takes a number")
 			Index += 1
