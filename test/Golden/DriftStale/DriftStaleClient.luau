@@ -679,12 +679,25 @@ local function SendPacket(From: number, To: number, FromInstances: number, ToIns
     Reliable:FireServer(Buffer, table.move(SendInstances, FromInstances + 1, ToInstances, 1, {}))
 end
 
+--> The last frame's packet, filled again when the next is the same size. A remote serialises what it
+--> is fired with as it is called, so nothing still reads it; a new buffer every frame was an
+--> allocation, zero-filled, the size of the frame's traffic, and a flush of a thousand events cost
+--> several times QuickNet's, which keeps its buffers.
+local LastPacket: buffer? = nil
+
 local function StepReplication()
     Settle()
     local Used = SendCursor
     if Used > 0 then
         if #Cuts == 0 then
-            local Buffer = buffer.create(Used)
+            local Buffer: buffer
+            local Last = LastPacket
+            if Last ~= nil and buffer.len(Last) == Used then
+                Buffer = Last
+            else
+                Buffer = buffer.create(Used)
+                LastPacket = Buffer
+            end
             buffer.copy(Buffer, 0, SendBuffer, 0, Used)
             Reliable:FireServer(Buffer, SendInstances)
         else
@@ -715,6 +728,7 @@ local function StepReplication()
     if Shrink then
         SendSize = 64
         SendBuffer = buffer.create(64)
+        LastPacket = nil
     end
 end
 local Decoding = -1
