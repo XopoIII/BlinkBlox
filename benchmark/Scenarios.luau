@@ -284,6 +284,7 @@ local function Run(Scenario: Scenario, Server: string, Client: string, Native: b
 	local FireTimes, FlushTimes, DecodeTimes = {}, {}, {}
 	local Calls, Bytes = 0, 0
 
+	runtime.collect()
 	for Frame = 1, WARMUP_FRAMES + Frames do
 		Pair.Reset()
 		Received = 0

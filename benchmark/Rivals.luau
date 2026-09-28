@@ -119,6 +119,7 @@ local function Run(Tool: string, Scenario: any, Api: Apis.Api, Native: boolean):
 	local Calls, Bytes = 0, 0
 	local Sender = if Scenario.FromServer then ServerWorld else ClientWorld
 
+	runtime.collect()
 	for Frame = 1, WARMUP_FRAMES + Frames do
 		table.clear(Universe.Outbox)
 		table.clear(Universe.Inbox)

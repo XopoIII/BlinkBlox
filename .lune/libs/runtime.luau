@@ -11,6 +11,7 @@
 --> Only a release build refuses to run elsewhere, since its executables carry the runtime that built
 --> them. The compiler itself must keep working on any Lune: pesde runs it on the user's.
 local fs = require("@lune/fs")
+local luauLibrary = require("@lune/luau")
 local stdio = require("@lune/stdio")
 
 --> The pin in rokit.toml, found from wherever the script runs: the root, test/, benchmark/, src/CLI.
@@ -67,6 +68,17 @@ function runtime.notice(purpose: string)
 		stdio.ewrite(`! {line}\n`)
 	end
 	stdio.ewrite(`{rule}{reset}\n`)
+end
+
+--> A full garbage collection, before each measurement: a benchmark times several tools in one process,
+--> and each would otherwise inherit the heap the one before it left, which moved an allocating decode
+--> by up to 40% with its place in the order. The sandbox leaves `collectgarbage` only "count", as on
+--> Roblox; LuneBlox 0.10.9 added `luau.collect`, and a runtime without it does nothing here.
+function runtime.collect()
+	local collect = (luauLibrary :: any).collect
+	if collect then
+		collect()
+	end
 end
 
 --> Refuses to go on unless this is LuneBlox at the pinned version.

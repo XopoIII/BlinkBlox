@@ -1,1 +1,4 @@
+# Every text file is LF in the working tree too, whatever core.autocrlf says: stylua.toml wants Unix
+# line endings, and Git for Windows' default of CRLF on checkout fails every file at the pre-commit hook.
+* text=auto eol=lf
 *.png binary

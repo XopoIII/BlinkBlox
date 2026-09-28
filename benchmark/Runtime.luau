@@ -42,6 +42,7 @@ local Frames = 200
 local Filter: string? = nil
 local Only: { string }? = nil
 local Traffic = false
+local SourcesDirectory: string? = nil
 do
 	local Index = 1
 	while Index <= #process.args do
@@ -50,6 +51,9 @@ do
 			--> What `lune run Runtime -- ...` passes through ahead of the arguments.
 		elseif Argument == "--frames" then
 			Frames = assert(tonumber(process.args[Index + 1]), "--frames takes a number")
+			Index += 1
+		elseif Argument == "--sources" then
+			SourcesDirectory = assert(process.args[Index + 1], "--sources takes a directory")
 			Index += 1
 		elseif Argument == "--traffic" then
 			Traffic = true
@@ -66,6 +70,11 @@ end
 --> The schema Studio's benchmark compiles, with the client flushing when told to rather than on a
 --> Heartbeat that does not exist here.
 local function Generate(): (string, string)
+	--> Another version's modules, generated from the same schema with `option ManualReplication = true`:
+	--> the only way to time two versions in one harness.
+	if SourcesDirectory then
+		return fs.readFile(`{SourcesDirectory}/Server.luau`), fs.readFile(`{SourcesDirectory}/Client.luau`)
+	end
 	local Source = fs.readFile("./definitions/Definition.blink")
 	local Tree = Parser.new("./definitions/", "Definition.blink", nil, Attributes.new(nil)):Parse(Source)
 	Tree.Value.Options.ManualReplication = true
@@ -132,6 +141,7 @@ local function Run(Tool: Tools.Tool, Bench: string, Pool: { any }): Result
 	local PoolSize = #Pool
 	local Sent = 0
 
+	runtime.collect()
 	for Frame = 1, WARMUP_FRAMES + Frames do
 		local Start = os.clock()
 		for _ = 1, EVENTS_PER_FRAME do
@@ -200,8 +210,9 @@ for _, Name in Tools.ORDER do
 end
 
 runtime.notice("These timings")
+local Label = if SourcesDirectory then `modules from {SourcesDirectory}` else _G.VERSION or "(unbundled)"
 print(
-	`BlinkBlox {_G.VERSION or "(unbundled)"}{if Traffic then " with TrafficStats" else ""}, {Frames} frames of {EVENTS_PER_FRAME} events, times in ms per frame, on {runtime.description}`
+	`BlinkBlox {Label}{if Traffic then " with TrafficStats" else ""}, {Frames} frames of {EVENTS_PER_FRAME} events, times in ms per frame, on {runtime.description}`
 )
 
 for _, Bench in BENCHES do

@@ -26,6 +26,19 @@ Neither the wire nor the generated modules change.
   two sides now deliver what they sent each other while loading before anything is timed, which
   Warp's client needs to learn its event ids. The figures of the tools already compared did not move
   (a 100-frame run of each before and after, within the run-to-run noise).
+- The toolchain runs on LuneBlox 0.10.9, and every benchmark runs a full garbage collection before
+  each measurement. `Runtime` times every tool one after another in one process, and each inherited
+  the heap the one before it left: BlinkBlox's `BooleansRandom` decode measured 5.3 ms or 7.5 ms with
+  nothing changed but what ran first. The sandbox leaves `collectgarbage` only `"count"`, as Roblox
+  does, so LuneBlox 0.10.9 added `luau.collect()` for it.
+- `BooleansRandom` and `EntitiesRandom` hold 1001 payloads, one more than a frame fires, so no frame
+  repeats the one before it. Warp sends each packet as its XOR against the last, and with 1000 two
+  frames were identical and XORed to zeros: its random payloads compressed to 0.02 bytes an event
+  where every other tool's stayed at their size.
+- `luneblox run Runtime -- --sources <dir>` times the `Server.luau` and `Client.luau` in a directory
+  instead of generating them, which is how two releases are compared in one harness.
+- `.gitattributes` keeps every text file LF in the working tree. Git for Windows checks files out
+  with CRLF by default, and `stylua --check` then failed every one at the pre-commit hook.
 
 ## 0.41.2 — 2026-09-28
 
