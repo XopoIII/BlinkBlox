@@ -74,10 +74,11 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 
 Each tool fires 1000 events a frame from client to server. Blink is the original project BlinkBlox
 forked from, at its last release, 0.18.9. The runs were made on 2026-09-28 on an Intel Core
-i7-13700K on BlinkBlox 0.41.2.
+i7-13700K: in Studio on BlinkBlox 0.41.2, on LuneBlox on 0.42.0.
 
 In Studio, the numbers are the median frame rate and the milliseconds a frame's thousand fires took.
-Warp encodes later in the frame than it fires, so its frame rate is the figure to read.
+Warp's Fire only queues its value and encodes it later in the frame, where the bench cannot time it,
+so only its frame rate is shown.
 
 | Tool | 1000 booleans | 1000 booleans, each different | 100 entities | 100 entities, each different |
 |---|---|---|---|---|
@@ -88,7 +89,7 @@ Warp encodes later in the frame than it fires, so its frame rate is the figure t
 | ByteNet | 30 FPS, 17.5 ms | 23 FPS, 21.4 ms | 35 FPS, 15.8 ms | 34 FPS, 16.6 ms |
 | Packet | 35 FPS, 27.3 ms | 28 FPS, 31.8 ms | 27 FPS, 19.2 ms | 27 FPS, 19.9 ms |
 | QuickNet | **60 FPS**\*, 1.9 ms | **60 FPS**\*, 7.1 ms | 58 FPS, 6.2 ms | 57 FPS, 6.7 ms |
-| Warp | **60 FPS**\*, 0.1 ms | 55 FPS, 0.1 ms | 33 FPS, 0.1 ms | 32 FPS, 0.1 ms |
+| Warp | **60 FPS**\* | 55 FPS | 33 FPS | 32 FPS |
 
 \* Studio caps the frame rate at 60.
 

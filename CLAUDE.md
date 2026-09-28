@@ -45,8 +45,12 @@ Two other projects occupy the neighbouring ground, and neither covers this one:
   the game's job) and no `pcall` around per-event decoding, so one malformed event discards the rest
   of that player's batch.
 - **upstream `rewrite`** is a compiler-architecture project, described above.
+- **QuickNet and Warp** are runtime-schema libraries, benchmarked beside BlinkBlox since 0.42.0.
+  QuickNet rate-limits each event per player and bounds packets, but reports a decode failure only to
+  the output and allocates whatever length a client names. Warp has no per-event limit and no
+  protected decode.
 
-Neither protects a live server from its own clients. That is the gap this fork fills: **the
+None of them reports every refusal to the game and bounds every allocation before it happens. That is the gap this fork fills: **the
 generated server module should be safe to point at the open internet** — without giving up the
 TypeScript output, the Studio plugin or the docs. Bandwidth parity is a second-order goal, and speed
 is held as a ratchet: a release is benchmarked against the one before it, and nothing may get slower.
@@ -92,7 +96,10 @@ easy to break without noticing.
 - Roblox runs Luau 0.740 (September 2026) with its own fast flags, and so does LuneBlox, which every
   figure here is measured on. Among the flags is `DebugCodegenOptSize`, set in Studio as on clients,
   which skips block linearisation in native code: native timings on LuneBlox are what Roblox gets,
-  about 20% slower on the thousand-event benches than Luau's defaults (`LUNE_ROBLOX_FFLAGS=0`).
+  slower on the thousand-event benches than Luau's defaults (`LUNE_ROBLOX_FFLAGS=0`) -- a tenth to a
+  fifth on decode, over half on Entities' fire, on both the M1 and the i7. It is also why a channel's
+  decoder is a function called once an event rather than a loop with the dispatch inside it: the long
+  loop body compiled to slower native code (`src/Generator/init.luau`).
 - Lune 0.10.5's Luau 0.709 left a whole module interpreted once one function was too large to
   compile, so past about 70 events its "native" rows were interpreted; figures published before
   LuneBlox carry that. Luau 0.740 leaves only the too-large function interpreted.

@@ -51,7 +51,7 @@ named type that no event or function uses is not included, since nothing sends i
 ### What it does not cover
 
 - **Options.** They decide how a module is generated, not what it sends: `Casing`, `Typescript`, the
-  output paths, `SyncValidation`, `WriteValidations`, `Predict`, the packet limits, the rate options
+  output paths, `SyncValidation`, `WriteValidations`, `Predict`, `PackedBooleanReader`, the packet limits, the rate options
   and `InvocationTimeout` can all differ between the two sides. `RemoteScope` is left out too,
   because it is already part of the remotes' names.
 - **`Call`, `Rate`, `Burst` and `Concurrency`.** They decide how the receiving side dispatches and

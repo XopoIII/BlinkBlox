@@ -233,13 +233,13 @@ The payload is an array of 1000 `true` values: `boolean[0..1000]`.
 | zap | **60** | 12.15 | 0.13 |
 | ByteNet | 30 | 17.45 | 0.13 |
 | Packet | 35 | 27.31 | 0.13 |
-| QuickNet | **60** | 1.89 | **0.04** |
-| Warp | **60** | **0.10** | 0.15 |
+| QuickNet | **60** | **1.89** | **0.04** |
+| Warp | **60** | -- | 0.15 |
 
-The same array a thousand times compresses to almost nothing for every tool. BlinkBlox's and
-QuickNet's are smaller still because both pack a
-[`boolean[]`](/BlinkBlox/language/types/#arrays-of-booleans) eight elements to a byte before the
-compressor sees it. The others spend a whole byte on each boolean.
+The same array a thousand times compresses to almost nothing for every tool. BlinkBlox, QuickNet and
+Warp pack a [`boolean[]`](/BlinkBlox/language/types/#arrays-of-booleans) eight elements to a byte
+before the compressor sees it; BlinkBlox's and QuickNet's came to 0.04 bytes an event and Warp's to
+0.15. Blink, zap, ByteNet and Packet spend a whole byte on each boolean.
 
 ### Entities
 
@@ -249,17 +249,18 @@ animation.
 | Tool | FPS | Fire ms | Bytes |
 |---|---|---|---|
 | Roblox remotes | 15 | 72.70 | 33620 |
-| **BlinkBlox** | **60** | 1.98 | **0.69** |
+| **BlinkBlox** | **60** | **1.98** | **0.69** |
 | Blink | 44 | 2.81 | 0.70 |
 | zap | 45 | 7.35 | **0.69** |
 | ByteNet | 35 | 15.79 | **0.69** |
 | Packet | 27 | 19.24 | **0.69** |
 | QuickNet | 58 | 6.21 | **0.69** |
-| Warp | 33 | **0.11** | 1.33 |
+| Warp | 33 | -- | 1.33 |
 
-Every tool encodes six `u8` fields in six bytes, and the compressor removes the rest. Blink fires
-nearly as fast as BlinkBlox here and runs at 44 FPS all the same: Studio runs the server in the same
-process, and the time goes to decoding, which the LuneBlox table above measures.
+Every tool encodes six `u8` fields in six bytes, and the compressor removes nearly all the rest;
+Warp's XOR framing left 1.33 bytes an event. Blink fires in 2.8 ms to BlinkBlox's 2.0 and runs at 44
+FPS all the same: Studio runs the server in the same process, and the time goes to decoding, which
+the LuneBlox table above measures.
 
 ### BooleansRandom
 
@@ -268,13 +269,13 @@ The same shape as Booleans, with a different array in every event.
 | Tool | FPS | Fire ms | Bytes |
 |---|---|---|---|
 | Roblox remotes | 15 | 29.05 | 7324 |
-| **BlinkBlox** | **60** | 4.81 | 128.4 |
+| **BlinkBlox** | **60** | **4.81** | 128.4 |
 | Blink | **60** | 9.89 | 193.9 |
 | zap | 46 | 18.08 | 193.8 |
 | ByteNet | 23 | 21.40 | 193.3 |
 | Packet | 28 | 31.79 | 194.2 |
 | QuickNet | **60** | 7.12 | **128.1** |
-| Warp | 55 | **0.11** | 128.6 |
+| Warp | 55 | -- | 128.6 |
 
 A thousand random booleans hold 125 bytes of information. BlinkBlox, QuickNet and Warp send 128,
 the packed array and its length. The others send a byte per boolean and leave zstd to find the bits,
@@ -287,15 +288,22 @@ The same shape as Entities, with different structs in every event.
 | Tool | FPS | Fire ms | Bytes |
 |---|---|---|---|
 | Roblox remotes | 15 | 74.49 | 37321 |
-| **BlinkBlox** | **60** | 2.38 | 603.7 |
+| **BlinkBlox** | **60** | **2.38** | 603.7 |
 | Blink | 45 | 3.16 | 604.1 |
 | zap | 44 | 7.77 | 603.4 |
 | ByteNet | 34 | 16.55 | 605.2 |
 | Packet | 27 | 19.93 | **602.9** |
 | QuickNet | 57 | 6.74 | 604.2 |
-| Warp | 32 | **0.11** | 603.4 |
+| Warp | 32 | -- | 603.4 |
 
-600 bytes of random data do not compress, and every tool sends them with a few bytes of framing.
+600 bytes of random data do not compress, and every tool sends them with a few bytes of framing:
+BlinkBlox writes 602 bytes an event where the others write 603, and the gaps in this column, under a
+byte, are the sampling of `Stats.DataSendKbps` rather than the encoding.
+
+Warp's fire time is left out of all four: its Fire only queues the value, and it encodes the queue
+later in the frame on a signal of its own that the bench cannot time, so the figure read 0.1 ms while
+its frame rate fell to 32. Its frame rate here, and its send in the LuneBlox table above, are what it
+costs.
 
 BlinkBlox holds Studio's cap on all four benches. On the M1 in 0.36.2 it held it only on the boolean
 ones, at 56 and 51 FPS on the Entities benches; this machine is faster, and between 0.34.0 and

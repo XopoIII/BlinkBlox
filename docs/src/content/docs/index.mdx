@@ -131,8 +131,8 @@ local Items = Net.GetInventory.Invoke(1)
 
 A thousand events a frame from client to server, run in Studio on an Intel Core i7-13700K on 0.41.2.
 Blink is upstream's last release, 0.18.9. The numbers are median frame rates, with the milliseconds a
-frame's thousand fires took in brackets. Warp encodes later in the frame than it fires, so its fire
-time is near zero and its frame rate is the figure to read.
+frame's thousand fires took in brackets. Warp's Fire only queues its value and encodes it later in
+the frame, where the bench cannot time it, so only its frame rate is shown.
 
 | Tool | 1000 booleans | 1000 booleans, each different | 100 entities | 100 entities, each different |
 |---|---|---|---|---|
@@ -143,7 +143,7 @@ time is near zero and its frame rate is the figure to read.
 | ByteNet | 30 FPS (17.5 ms) | 23 FPS (21.4 ms) | 35 FPS (15.8 ms) | 34 FPS (16.6 ms) |
 | Packet | 35 FPS (27.3 ms) | 28 FPS (31.8 ms) | 27 FPS (19.2 ms) | 27 FPS (19.9 ms) |
 | QuickNet | **60 FPS**\* (1.9 ms) | **60 FPS**\* (7.1 ms) | 58 FPS (6.2 ms) | 57 FPS (6.7 ms) |
-| Warp | **60 FPS**\* (0.1 ms) | 55 FPS (0.1 ms) | 33 FPS (0.1 ms) | 32 FPS (0.1 ms) |
+| Warp | **60 FPS**\* | 55 FPS | 33 FPS | 32 FPS |
 
 \* Studio caps the frame rate at 60. [How these were measured](/BlinkBlox/guides/benchmarks/).
 
@@ -160,14 +160,15 @@ of it, discarding the rest of that player's batch with nothing for the game to c
 
 [QuickNet](https://github.com/breadboardengineer1234/QuickNet) and
 [Warp](https://github.com/imezx/Warp) are libraries rather than compilers: a schema is declared at
-runtime and packed into buffers. QuickNet limits each event per player, but counts a call only once
-it has decoded it, and one `pcall` covers a whole packet, so a malformed event drops the ones after
-it. Warp counts a player's bytes a packet at a time, outside Studio only, and reads lengths the
-client sends straight into `table.create`.
+runtime and packed into buffers. QuickNet limits each event per player and bounds a packet's size
+and its calls, and a `pcall` around each packet stops a malformed event from throwing, as BlinkBlox's
+does. It only warns in the output rather than telling the game who sent it, and allocates whatever
+array length a client names before reading any of it. Warp counts a player's bytes a packet at a
+time, outside Studio only, and reads lengths the client sends straight into `table.create`.
 
 | | BlinkBlox | Blink 0.18 | Zap | QuickNet 0.3 | Warp 1.1 |
 |---|---|---|---|---|---|
-| Per-player, per-event rate limits | Yes | No | No | Yes, counted after decoding | No |
+| Per-player, per-event rate limits | Yes | No | No | Yes | No |
 | A decode failure is caught and reported to the game | Yes | No | No | Caught, not reported | No |
 | Shared bitfield for booleans and optionals | Yes | No | Yes | Boolean arrays only | Optionals, boolean arrays |
 | TypeScript output | Yes | Yes | Yes | No | No |
