@@ -44,6 +44,8 @@ local Filter: string? = nil
 local Only: { string }? = nil
 local Traffic = false
 local SourcesDirectory: string? = nil
+--> Set in a child: the one bench, mode and tool it times; see the loop at the end.
+local Cell: { Bench: string, Native: boolean, Name: string }? = nil
 do
 	local Index = 1
 	while Index <= #process.args do
@@ -58,6 +60,13 @@ do
 			Index += 1
 		elseif Argument == "--traffic" then
 			Traffic = true
+		elseif Argument == "--cell" then
+			Cell = {
+				Bench = assert(process.args[Index + 1], "--cell takes a bench, a mode and a tool"),
+				Native = process.args[Index + 2] == "native",
+				Name = assert(process.args[Index + 3], "--cell takes a bench, a mode and a tool"),
+			}
+			Index += 3
 		elseif Argument == "--tools" then
 			Only = string.split(assert(process.args[Index + 1], "--tools takes a list"), ",")
 			Index += 1
@@ -194,8 +203,30 @@ local function Format(Value: number): string
 	return string.format("%.3f", Value)
 end
 
-local ServerSource, ClientSource = Generate()
-local Sources = { Server = ServerSource, Client = ClientSource }
+--- One tool's row for one bench and mode.
+local function Row(Bench: string, Native: boolean, Name: string): string
+	local ServerSource, ClientSource = Generate()
+	local Sources = { Server = ServerSource, Client = ClientSource }
+	--> A fresh load per run: listeners, buffers and the inbound budget start from nothing.
+	local Result = Run(Tools.Load(Name, Native, Bench, Sources), Bench, LoadPool(Bench))
+	local Cells: { string } = {
+		Names.Display(Name),
+		if Native then "native" else "interpreted",
+		Format(Result.Fire.Median),
+		Format(Result.Fire.P99),
+		Format(Result.Flush.Median),
+		Format(Result.Decode.Median),
+		Format(Result.Decode.P99),
+		string.format("%.2f", Result.Bytes),
+		string.format("%.2f", Result.Compressed),
+	}
+	return `|{table.concat(Cells, "|")}|`
+end
+
+if Cell then
+	print(Row(Cell.Bench, Cell.Native, Cell.Name))
+	return
+end
 
 local Selected: { string } = {}
 for _, Name in Tools.ORDER do
@@ -227,7 +258,10 @@ for _, Bench in BENCHES do
 	print("|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|")
 	print("|---|---|---|---|---|---|---|---|---|")
 
-	local Pool = LoadPool(Bench)
+	--> Each row in a process of its own. In one process every tool inherited the heap and the
+	--> allocator's state the ones before it left, and the first paid for growing them: BlinkBlox,
+	--> always first, decoded Booleans natively in 6.5 ms, and in 2.9 when it ran last, where QuickNet
+	--> took 3.6 in sixth place and 7.4 in first. Every row now starts from the same process.
 	for _, Native in { true, false } do
 		for _, Name in Selected do
 			if LOCAL_BENCHES[Bench] and Name ~= "blink" then
@@ -235,20 +269,24 @@ for _, Bench in BENCHES do
 				continue
 			end
 
-			--> A fresh load per run: listeners, buffers and the inbound budget start from nothing.
-			local Result = Run(Tools.Load(Name, Native, Bench, Sources), Bench, Pool)
-			local Cells: { string } = {
-				Names.Display(Name),
-				if Native then "native" else "interpreted",
-				Format(Result.Fire.Median),
-				Format(Result.Fire.P99),
-				Format(Result.Flush.Median),
-				Format(Result.Decode.Median),
-				Format(Result.Decode.P99),
-				string.format("%.2f", Result.Bytes),
-				string.format("%.2f", Result.Compressed),
-			}
-			print(`|{table.concat(Cells, "|")}|`)
+			local Arguments = { "run", "Runtime", "--", "--cell", Bench, if Native then "native" else "interpreted" }
+			table.insert(Arguments, Name)
+			table.insert(Arguments, "--frames")
+			table.insert(Arguments, tostring(Frames))
+			if SourcesDirectory then
+				table.insert(Arguments, "--sources")
+				table.insert(Arguments, SourcesDirectory)
+			end
+			if Traffic then
+				table.insert(Arguments, "--traffic")
+			end
+			local Child = process.exec(runtime.command, Arguments)
+			local Line = string.match(Child.stdout, "(|[^\n]*|)%s*$")
+			if Child.ok and Line then
+				print(Line)
+			else
+				error(`{Name} failed on {Bench}:\n{Child.stderr}{Child.stdout}`, 0)
+			end
 		end
 	end
 end
