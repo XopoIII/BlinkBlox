@@ -104,7 +104,8 @@ easy to break without noticing.
 
 `luneblox` (github.com/XopoIII/LuneBlox, pinned in `rokit.toml`) is Lune running the Luau version
 Roblox runs, with Roblox's fast flags and Luau built at `-O3` -- upstream Lune 0.10.5 runs Luau 0.709,
-where interpreted code measured over twice as slow. Tests, benchmarks and release builds run on it;
+where interpreted code measured over twice as slow on an Apple M1 and 15-35% slower on an i7-13700K.
+Tests, benchmarks and release builds run on it;
 `.lune/libs/runtime.luau` prints a warning when a test or benchmark runs anywhere else, the scripts
 shell out through `runtime.command` so a run stays on one runtime, and a release build refuses.
 

@@ -73,40 +73,57 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 ## Performance
 
 Each tool fires 1000 events a frame from client to server. Blink is the original project BlinkBlox
-forked from, at its last release, 0.18.9. The runs were made on an Apple M1: in Studio on BlinkBlox
-0.36.2, on Lune on 0.40.0.
+forked from, at its last release, 0.18.9. The runs were made on 2026-09-28 on an Intel Core
+i7-13700K on BlinkBlox 0.41.2.
 
 In Studio, the numbers are the median frame rate and the milliseconds a frame's thousand fires took.
+Warp encodes later in the frame than it fires, so its frame rate is the figure to read.
 
-| Payload | Roblox remotes | BlinkBlox | Blink | zap | ByteNet | Packet |
-|---|---|---|---|---|---|---|
-| 1000 booleans | 16 FPS, 29.2 ms | **60 FPS**\*, **4.2 ms** | 53 FPS, 8.4 ms | 35 FPS, 25.9 ms | 17 FPS, 41.3 ms | 15 FPS, 67.3 ms |
-| 1000 booleans, each different | 16 FPS, 29.4 ms | **60 FPS**\*, **8.7 ms** | 36 FPS, 20.5 ms | 26 FPS, 34.4 ms | 15 FPS, 44.7 ms | 15 FPS, 77.5 ms |
-| 100 entities | 16 FPS, 110.1 ms | **56 FPS**, **4.0 ms** | 22 FPS, 4.6 ms | 22 FPS, 20.5 ms | 18 FPS, 37.8 ms | 15 FPS, 50.3 ms |
-| 100 entities, each different | 15 FPS, 115.6 ms | **51 FPS**, 5.1 ms | 22 FPS, **5.0 ms** | 22 FPS, 20.4 ms | 17 FPS, 38.3 ms | 15 FPS, 53.1 ms |
+| Tool | 1000 booleans | 1000 booleans, each different | 100 entities | 100 entities, each different |
+|---|---|---|---|---|
+| Roblox remotes | 15 FPS, 26.0 ms | 15 FPS, 29.1 ms | 15 FPS, 72.7 ms | 15 FPS, 74.5 ms |
+| **BlinkBlox** | **60 FPS**\*, 1.9 ms | **60 FPS**\*, 4.8 ms | **60 FPS**\*, 2.0 ms | **60 FPS**\*, 2.4 ms |
+| Blink | **60 FPS**\*, 4.5 ms | **60 FPS**\*, 9.9 ms | 44 FPS, 2.8 ms | 45 FPS, 3.2 ms |
+| zap | **60 FPS**\*, 12.2 ms | 46 FPS, 18.1 ms | 45 FPS, 7.4 ms | 44 FPS, 7.8 ms |
+| ByteNet | 30 FPS, 17.5 ms | 23 FPS, 21.4 ms | 35 FPS, 15.8 ms | 34 FPS, 16.6 ms |
+| Packet | 35 FPS, 27.3 ms | 28 FPS, 31.8 ms | 27 FPS, 19.2 ms | 27 FPS, 19.9 ms |
+| QuickNet | **60 FPS**\*, 1.9 ms | **60 FPS**\*, 7.1 ms | 58 FPS, 6.2 ms | 57 FPS, 6.7 ms |
+| Warp | **60 FPS**\*, 0.1 ms | 55 FPS, 0.1 ms | 33 FPS, 0.1 ms | 32 FPS, 0.1 ms |
 
 \* Studio caps the frame rate at 60.
 
-On Lune, without Roblox, the numbers are the milliseconds a frame's thousand fires took
-interpreted, as most players' clients run them, then the milliseconds the server took to decode
-them natively, and the bytes one event takes before compression. Each is the median of three runs.
+On [LuneBlox](https://github.com/XopoIII/LuneBlox), without Roblox -- the Luau version and flags
+Roblox runs -- on an Intel Core i7-13700K with BlinkBlox 0.41.2, each figure the median of three
+runs. "Send" is a frame's thousand fires and the flush into a packet, interpreted, as most players'
+clients run it; "decode" is the server decoding them, natively compiled, as a Roblox server runs
+it; bytes are one event before compression.
 
-| Payload | BlinkBlox | Blink | zap | ByteNet | Packet |
-|---|---|---|---|---|---|
-| 1000 booleans | **37.7 / 4.2 ms, 128 B** | 68.8 / 11.9 ms, 1003 B | 174.0 / 13.3 ms, 1003 B | 126.6 / 122.4 ms, 1003 B | 124.3 / 116.7 ms, 1003 B |
-| 100 entities | **33.5** / **12.2 ms**, **602 B** | **33.5** / 73.2 ms, 603 B | 83.9 / 74.1 ms, 603 B | 109.1 / 110.6 ms, 603 B | 100.6 / 162.5 ms, 603 B |
+| Tool | 1000 booleans: send / decode | 100 entities: send / decode | Bytes, booleans / entities |
+|---|---|---|---|
+| **BlinkBlox** | **17.2** / 6.5 ms | **12.9** / **7.3 ms** | **128** / **602** |
+| Blink | 30.9 / 11.0 ms | 13.1 / 25.4 ms | 1003 / 603 |
+| zap | 70.4 / 8.6 ms | 35.6 / 25.6 ms | 1003 / 603 |
+| ByteNet | 58.6 / 51.1 ms | 45.5 / 46.3 ms | 1003 / 603 |
+| Packet | 58.2 / 51.6 ms | 43.1 / 58.5 ms | 1003 / 603 |
+| QuickNet | 18.2 / **4.1 ms** | 23.7 / 12.6 ms | **128** / 603 |
+| Warp | 41.4 / 9.0 ms | 71.1 / 29.8 ms | **128** / **602** |
 
-A game also sends the other way. Natively, on the same run, with fifty players:
+A game also sends the other way. Natively, with fifty players, send then decode, medians of five
+runs:
 
-| Scenario | BlinkBlox | Blink | zap | ByteNet | Packet |
-|---|---|---|---|---|---|
-| 100 structs a frame to everyone, `FireAll` | **0.037 ms, 1 remote call** | 2.10 ms, 50 calls | 2.46 ms, 50 calls | 0.099 ms, 1 call | 0.209 ms, 1 call |
-| Decoding them on a client | **0.024 ms** | 0.081 ms | 0.077 ms | 0.268 ms | 0.452 ms |
-| 8 unreliable inputs a frame, with [`BatchUnreliable`](https://xopoiii.github.io/BlinkBlox/language/options/#batchunreliable) | **0.004 ms, 1 remote call** | 0.009 ms, 8 calls | 0.006 ms, 8 calls | 0.006 ms, 1 call | none |
+| Tool | 100 structs a frame to everyone, `FireAll` | 8 unreliable inputs a frame |
+|---|---|---|
+| **BlinkBlox** | **0.020 / 0.016 ms, 1 remote call** | **0.002 / 0.002 ms, 1 remote call** with [`BatchUnreliable`](https://xopoiii.github.io/BlinkBlox/language/options/#batchunreliable) |
+| Blink | 0.955 / 0.027 ms, 50 calls | 0.002 / 0.003 ms, 8 calls |
+| zap | 1.010 / 0.026 ms, 50 calls | 0.003 / 0.002 ms, 8 calls |
+| ByteNet | 0.049 / 0.108 ms, 1 call | 0.003 / 0.008 ms, 1 call |
+| Packet | 0.089 / 0.185 ms, 1 call | no unreliable channel |
+| QuickNet | 0.334 / 0.040 ms, 50 calls | 0.002 / 0.003 ms, 1 call |
+| Warp | 2.569 / 0.125 ms, 50 calls | 0.004 / 0.008 ms, 1 call |
 
-A client receiving 100 events a frame spread over 128 declarations decodes them in 0.053 ms
-interpreted in 0.41.0, from 0.086 ms in 0.40.0: the event an index names is found by halving the range rather than one comparison
-after another.
+A client receiving 100 events a frame spread over 128 declarations decodes them in 0.013 ms
+natively and 0.025 ms interpreted: the event an index names is found by halving the range rather
+than one comparison after another.
 
 The methodology, the bandwidth, the random payloads, streams and the full percentiles are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and

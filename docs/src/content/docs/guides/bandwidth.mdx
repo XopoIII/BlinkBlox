@@ -296,7 +296,7 @@ it.
 An array of 1000 booleans is 128 bytes from BlinkBlox's encoder, where Blink, zap, ByteNet and Packet
 write 1003, because `boolean[]` is packed eight to a byte. QuickNet and Warp pack a boolean array the
 same way, and spend a byte on a boolean field of a struct, where BlinkBlox packs those too. With a different random array in every
-event, measured in Studio on 0.36.2 after Roblox's compression, that is 128.5 bytes an event for
-BlinkBlox and about 193 for the others: the compressor finds some of the bits a byte per boolean
+event, measured in Studio on 0.41.2 after Roblox's compression, that is 128.4 bytes an event for
+BlinkBlox, 128.1 for QuickNet and 128.6 for Warp, and about 194 for the others: the compressor finds some of the bits a byte per boolean
 wastes, not all of them. Structs of plain `u8` fields cost every tool the same.
 [Benchmarks](/BlinkBlox/guides/benchmarks/) has the full numbers and how they were measured.

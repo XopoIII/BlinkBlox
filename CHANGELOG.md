@@ -37,6 +37,12 @@ Neither the wire nor the generated modules change.
   where every other tool's stayed at their size.
 - `luneblox run Runtime -- --sources <dir>` times the `Server.luau` and `Client.luau` in a directory
   instead of generating them, which is how two releases are compared in one harness.
+- Every published benchmark figure was taken again, on an Intel Core i7-13700K with LuneBlox 0.10.9,
+  each run alone on one performance core: `Runtime` three times, `Rivals` and `Scenarios` five, three
+  releases side by side with `--sources`, the runtime comparison, and the Studio place with all eight
+  modes. On the Entities benches BlinkBlox now holds Studio's 60 FPS cap, as it did only on the
+  boolean ones on the M1. QuickNet decodes a boolean array faster than BlinkBlox, and the tables say
+  so.
 - `.gitattributes` keeps every text file LF in the working tree. Git for Windows checks files out
   with CRLF by default, and `stylua --check` then failed every one at the pre-commit hook.
 

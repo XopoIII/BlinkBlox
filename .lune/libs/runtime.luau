@@ -3,8 +3,8 @@
 -->
 --> BlinkBlox's tests, benchmarks and release builds run on LuneBlox (github.com/XopoIII/LuneBlox): Lune
 --> running the Luau version Roblox runs, with Roblox's fast flags, built for speed. Upstream Lune
---> 0.10.5 runs Luau 0.709 with Luau's defaults, where interpreted code measured over twice as slow and
---> large modules never compiled natively. A benchmark there is not comparable with the published
+--> 0.10.5 runs Luau 0.709 with Luau's defaults, where interpreted code measured over twice as slow on an
+--> Apple M1 (15-35% on an i7-13700K) and large modules could stay interpreted. A benchmark there is not comparable with the published
 --> figures, and a test there checks a VM no game runs -- so anything a contributor runs to reproduce
 --> our results says so, loudly, instead of quietly producing other numbers.
 -->
