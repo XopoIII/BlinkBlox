@@ -732,7 +732,6 @@ local function StepReplication()
     end
 end
 local Decoding = -1
-local DecodeListening: string? = nil
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -749,19 +748,17 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	StepReplication()
 end)
 local function DecodeReliable()
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
 	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
 	Decoding = Index
 	if Index == 0 then
 		local Value: number = SerdesFunctions.ReadEVENT_Inserted()
 		local BOUND_LISTENER = Events.Reliable[0]
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "Inserted"
-			DecodeListening = "Inserted"
+			Decoding = -2 - Index
 			BOUND_LISTENER(Value)
-			DecodeListening = nil
 		else
 			if #Queue.Reliable[0] > 256 then
 				warn("[BlinkBlox]: Event queue of \"Inserted\" exceeded 256, did you forget to implement a listener?")
@@ -773,9 +770,8 @@ local function DecodeReliable()
 		local BOUND_LISTENER = Events.Reliable[1]
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "Alpha"
-			DecodeListening = "Alpha"
+			Decoding = -2 - Index
 			BOUND_LISTENER(Value)
-			DecodeListening = nil
 		else
 			if #Queue.Reliable[1] > 256 then
 				warn("[BlinkBlox]: Event queue of \"Alpha\" exceeded 256, did you forget to implement a listener?")
@@ -787,10 +783,9 @@ local function DecodeReliable()
 	end
 end
 local function DecodeUnreliable()
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
 	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
@@ -806,18 +801,16 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
-	DecodeListening = nil
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
 		if Parsed then
 			break
 		end
-		local Listening = DecodeListening
-		if not Listening then
+		if Decoding > -2 then
 			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
 			break
 		end
-		DecodeListening = nil
+		local Listening = EventNames.Reliable[-2 - Decoding]
 		task.spawn(error, Failure, 0)
 	end
 end)
@@ -833,18 +826,16 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
-	DecodeListening = nil
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
 		if Parsed then
 			break
 		end
-		local Listening = DecodeListening
-		if not Listening then
+		if Decoding > -2 then
 			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
 			break
 		end
-		DecodeListening = nil
+		local Listening = EventNames.Unreliable[-2 - Decoding]
 		task.spawn(error, Failure, 0)
 	end
 end)

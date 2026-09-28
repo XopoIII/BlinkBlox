@@ -4056,7 +4056,6 @@ local function StepReplication()
     end
 end
 local Decoding = -1
-local DecodeListening: string? = nil
 local DecodeRemaining = 64
 local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, Size: number)
 	while RecieveCursor < Size do
@@ -4070,10 +4069,9 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 end
 RunService.Heartbeat:Connect(StepReplication)
 local function DecodeReliable(Player: Player)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
 	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
 	Decoding = Index
 	if Index == 0 then
 		local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientPollEvent())
@@ -4090,9 +4088,8 @@ local function DecodeReliable(Player: Player)
 		local BOUND_LISTENER = Events.Reliable[4]
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "ClientEmptyEvent"
-			DecodeListening = "ClientEmptyEvent"
+			Decoding = -2 - Index
 			BOUND_LISTENER(Player, Value)
-			DecodeListening = nil
 		else
 			if #Queue.Reliable[4] < 256 then
 				table.insert(Queue.Reliable[4], table.pack(Player, Value))
@@ -4132,9 +4129,8 @@ local function DecodeReliable(Player: Player)
 		local BOUND_LISTENER = Events.Reliable[24]
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "ReliableClient"
-			DecodeListening = "ReliableClient"
+			Decoding = -2 - Index
 			BOUND_LISTENER(Player, Value)
-			DecodeListening = nil
 		else
 			if #Queue.Reliable[24] < 256 then
 				table.insert(Queue.Reliable[24], table.pack(Player, Value))
@@ -4183,10 +4179,9 @@ local function DecodeReliable(Player: Player)
 	end
 end
 local function DecodeUnreliable(Player: Player)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
 	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
 	Decoding = Index
 	if Index == 0 then
 		local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent())
@@ -4203,18 +4198,16 @@ local function DecodeUnreliable(Player: Player)
 		local BOUND_LISTENER = Events.Unreliable[4]
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "ClientEmptyUnreliableEvent"
-			DecodeListening = "ClientEmptyUnreliableEvent"
+			Decoding = -2 - Index
 			BOUND_LISTENER(Player, Value)
-			DecodeListening = nil
 		end
 	elseif Index == 12 then
 		local Value: number = SerdesFunctions.ReadEVENT_UnreliableClient()
 		local BOUND_LISTENER = Events.Unreliable[12]
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "UnreliableClient"
-			DecodeListening = "UnreliableClient"
+			Decoding = -2 - Index
 			BOUND_LISTENER(Player, Value)
-			DecodeListening = nil
 		end
 	else
 		error("[BlinkBlox]: Unknown event index.")
@@ -4248,18 +4241,16 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	SerdesThread = coroutine.running()
 	DecodeRemaining = 64
 	Decoding = -1
-	DecodeListening = nil
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Player, Size)
 		if Parsed then
 			break
 		end
-		local Listening = DecodeListening
-		if not Listening then
+		if Decoding > -2 then
 			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
 			break
 		end
-		DecodeListening = nil
+		local Listening = EventNames.Reliable[-2 - Decoding]
 		if not ListenerFailed(Player, Listening, Failure) then
 			task.spawn(error, Failure, 0)
 		end
@@ -4296,18 +4287,16 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	SerdesThread = coroutine.running()
 	DecodeRemaining = 64
 	Decoding = -1
-	DecodeListening = nil
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Player, Size)
 		if Parsed then
 			break
 		end
-		local Listening = DecodeListening
-		if not Listening then
+		if Decoding > -2 then
 			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
 			break
 		end
-		DecodeListening = nil
+		local Listening = EventNames.Unreliable[-2 - Decoding]
 		if not ListenerFailed(Player, Listening, Failure) then
 			task.spawn(error, Failure, 0)
 		end

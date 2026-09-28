@@ -3355,7 +3355,6 @@ local function StepReplication()
     end
 end
 local Decoding = -1
-local DecodeListening: string? = nil
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -3372,10 +3371,9 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	StepReplication()
 end)
 local function DecodeReliable()
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
 	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
 	Decoding = Index
 	if Index < 20 then
 		if Index < 11 then
@@ -3388,9 +3386,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[5]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "EmptyEvent"
-					DecodeListening = "EmptyEvent"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[5] > 256 then
 						warn("[BlinkBlox]: Event queue of \"EmptyEvent\" exceeded 256, did you forget to implement a listener?")
@@ -3420,9 +3417,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[7]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Flags8"
-					DecodeListening = "Flags8"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[7] > 256 then
 						warn("[BlinkBlox]: Event queue of \"Flags8\" exceeded 256, did you forget to implement a listener?")
@@ -3434,9 +3430,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[8]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Flags16"
-					DecodeListening = "Flags16"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[8] > 256 then
 						warn("[BlinkBlox]: Event queue of \"Flags16\" exceeded 256, did you forget to implement a listener?")
@@ -3448,9 +3443,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[9]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Flags32"
-					DecodeListening = "Flags32"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[9] > 256 then
 						warn("[BlinkBlox]: Event queue of \"Flags32\" exceeded 256, did you forget to implement a listener?")
@@ -3462,9 +3456,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[10]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Flags33"
-					DecodeListening = "Flags33"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[10] > 256 then
 						warn("[BlinkBlox]: Event queue of \"Flags33\" exceeded 256, did you forget to implement a listener?")
@@ -3480,9 +3473,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[11]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "DynamicMap"
-					DecodeListening = "DynamicMap"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[11] > 256 then
 						warn("[BlinkBlox]: Event queue of \"DynamicMap\" exceeded 256, did you forget to implement a listener?")
@@ -3494,9 +3486,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[12]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "DynamicArray"
-					DecodeListening = "DynamicArray"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[12] > 256 then
 						warn("[BlinkBlox]: Event queue of \"DynamicArray\" exceeded 256, did you forget to implement a listener?")
@@ -3508,9 +3499,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[13]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "PlayerEvent"
-					DecodeListening = "PlayerEvent"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[13] > 256 then
 						warn("[BlinkBlox]: Event queue of \"PlayerEvent\" exceeded 256, did you forget to implement a listener?")
@@ -3522,9 +3512,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[15]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Unknown"
-					DecodeListening = "Unknown"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[15] > 256 then
 						warn("[BlinkBlox]: Event queue of \"Unknown\" exceeded 256, did you forget to implement a listener?")
@@ -3536,9 +3525,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[16]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "MapEvent"
-					DecodeListening = "MapEvent"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[16] > 256 then
 						warn("[BlinkBlox]: Event queue of \"MapEvent\" exceeded 256, did you forget to implement a listener?")
@@ -3550,9 +3538,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[17]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "MapStructEvent"
-					DecodeListening = "MapStructEvent"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[17] > 256 then
 						warn("[BlinkBlox]: Event queue of \"MapStructEvent\" exceeded 256, did you forget to implement a listener?")
@@ -3564,9 +3551,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[18]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "MapComplexEvent"
-					DecodeListening = "MapComplexEvent"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[18] > 256 then
 						warn("[BlinkBlox]: Event queue of \"MapComplexEvent\" exceeded 256, did you forget to implement a listener?")
@@ -3578,9 +3564,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[19]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "MapReferenceEvent"
-					DecodeListening = "MapReferenceEvent"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[19] > 256 then
 						warn("[BlinkBlox]: Event queue of \"MapReferenceEvent\" exceeded 256, did you forget to implement a listener?")
@@ -3628,9 +3613,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[22]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "ReliableServer"
-					DecodeListening = "ReliableServer"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[22] > 256 then
 						warn("[BlinkBlox]: Event queue of \"ReliableServer\" exceeded 256, did you forget to implement a listener?")
@@ -3653,9 +3637,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[25]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InstanceAny"
-					DecodeListening = "InstanceAny"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[25] > 256 then
 						warn("[BlinkBlox]: Event queue of \"InstanceAny\" exceeded 256, did you forget to implement a listener?")
@@ -3667,9 +3650,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[26]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InstanceOfType"
-					DecodeListening = "InstanceOfType"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[26] > 256 then
 						warn("[BlinkBlox]: Event queue of \"InstanceOfType\" exceeded 256, did you forget to implement a listener?")
@@ -3681,9 +3663,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[27]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InstanceOptional"
-					DecodeListening = "InstanceOptional"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[27] > 256 then
 						warn("[BlinkBlox]: Event queue of \"InstanceOptional\" exceeded 256, did you forget to implement a listener?")
@@ -3695,9 +3676,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[28]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Reference"
-					DecodeListening = "Reference"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[28] > 256 then
 						warn("[BlinkBlox]: Event queue of \"Reference\" exceeded 256, did you forget to implement a listener?")
@@ -3713,9 +3693,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[29]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "ReferenceArray"
-					DecodeListening = "ReferenceArray"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[29] > 256 then
 						warn("[BlinkBlox]: Event queue of \"ReferenceArray\" exceeded 256, did you forget to implement a listener?")
@@ -3727,9 +3706,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[30]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "ReferenceOptional"
-					DecodeListening = "ReferenceOptional"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[30] > 256 then
 						warn("[BlinkBlox]: Event queue of \"ReferenceOptional\" exceeded 256, did you forget to implement a listener?")
@@ -3759,9 +3737,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[32]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Tuple"
-					DecodeListening = "Tuple"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value1, Value2, Value3, Value4, Value5, Value6)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[32] > 256 then
 						warn("[BlinkBlox]: Event queue of \"Tuple\" exceeded 256, did you forget to implement a listener?")
@@ -3791,9 +3768,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[34]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InScopeEvent"
-					DecodeListening = "InScopeEvent"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[34] > 256 then
 						warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
@@ -3805,9 +3781,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[35]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InAnotherScopeEvent"
-					DecodeListening = "InAnotherScopeEvent"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[35] > 256 then
 						warn("[BlinkBlox]: Event queue of \"InAnotherScopeEvent\" exceeded 256, did you forget to implement a listener?")
@@ -3819,9 +3794,8 @@ local function DecodeReliable()
 				local BOUND_LISTENER = Events.Reliable[36]
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InScopeEvent"
-					DecodeListening = "InScopeEvent"
+					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
-					DecodeListening = nil
 				else
 					if #Queue.Reliable[36] > 256 then
 						warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
@@ -3835,10 +3809,9 @@ local function DecodeReliable()
 	end
 end
 local function DecodeUnreliable()
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
 	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
 	Decoding = Index
 	if Index < 8 then
 		if Index == 2 then
@@ -3850,27 +3823,24 @@ local function DecodeUnreliable()
 			local BOUND_LISTENER = Events.Unreliable[5]
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "EmptyUnreliableEvent"
-				DecodeListening = "EmptyUnreliableEvent"
+				Decoding = -2 - Index
 				BOUND_LISTENER(Value)
-				DecodeListening = nil
 			end
 		elseif Index == 6 then
 			local Value: { number } = SerdesFunctions.ReadEVENT_ArrayPrimitive()
 			local BOUND_LISTENER = Events.Unreliable[6]
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ArrayPrimitive"
-				DecodeListening = "ArrayPrimitive"
+				Decoding = -2 - Index
 				BOUND_LISTENER(Value)
-				DecodeListening = nil
 			end
 		elseif Index == 7 then
 			local Value: number? = SerdesFunctions.ReadEVENT_OptionalPrimitive()
 			local BOUND_LISTENER = Events.Unreliable[7]
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "OptionalPrimitive"
-				DecodeListening = "OptionalPrimitive"
+				Decoding = -2 - Index
 				BOUND_LISTENER(Value)
-				DecodeListening = nil
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -3897,9 +3867,8 @@ local function DecodeUnreliable()
 			local BOUND_LISTENER = Events.Unreliable[10]
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnreliableServer"
-				DecodeListening = "UnreliableServer"
+				Decoding = -2 - Index
 				BOUND_LISTENER(Value)
-				DecodeListening = nil
 			end
 		elseif Index == 11 then
 			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServerAsync()
@@ -3912,9 +3881,8 @@ local function DecodeUnreliable()
 			local BOUND_LISTENER = Events.Unreliable[13]
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "TupleUnreliable"
-				DecodeListening = "TupleUnreliable"
+				Decoding = -2 - Index
 				BOUND_LISTENER(Value1, Value2, Value3, Value4, Value5)
-				DecodeListening = nil
 			end
 		else
 			error("[BlinkBlox]: Unknown event index.")
@@ -3933,18 +3901,16 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
-	DecodeListening = nil
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
 		if Parsed then
 			break
 		end
-		local Listening = DecodeListening
-		if not Listening then
+		if Decoding > -2 then
 			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
 			break
 		end
-		DecodeListening = nil
+		local Listening = EventNames.Reliable[-2 - Decoding]
 		task.spawn(error, Failure, 0)
 	end
 end)
@@ -3960,18 +3926,16 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
-	DecodeListening = nil
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
 		if Parsed then
 			break
 		end
-		local Listening = DecodeListening
-		if not Listening then
+		if Decoding > -2 then
 			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
 			break
 		end
-		DecodeListening = nil
+		local Listening = EventNames.Unreliable[-2 - Decoding]
 		task.spawn(error, Failure, 0)
 	end
 end)

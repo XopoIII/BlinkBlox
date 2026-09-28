@@ -34,10 +34,12 @@ export type Event = {
 --- result under `--!strict`.
 ---
 --- `Direct`, for the one listener of a Single Sync event received in the decode loop, calls it without
---- a pcall of its own: the loop's pcall catches its error, sees `DecodeListening` naming the event, and
---- reports it the same way and goes on with the next event (Generator/init.luau, CloseDecode). A pcall
---- an event cost more than the decode of a small one. Predict, replay and a Many event's listeners,
---- which the next listener of the same event must survive, keep theirs.
+--- a pcall of its own: `Decoding` is set to `-2 - Index` first, so when the loop's pcall catches an
+--- error with it there, the listener threw, and it is reported the same way and the decode goes on
+--- with the next event (Generator/init.luau, CloseDecode). The next event's index overwrites it. A
+--- pcall an event cost more than the decode of a small one, and naming the event with a string a
+--- call cost two writes the collector watches. Predict, replay and a Many event's listeners, which
+--- the next listener of the same event must survive, keep their pcall.
 local function Call(
 	Event: Event,
 	Path: string,
@@ -62,9 +64,7 @@ local function Call(
 	end
 
 	if Direct then
-		Target:Line(`DecodeListening = "{Event.Name}"`)
-		Target:Line(`{Path}({Arguments})`)
-		return Target:Line("DecodeListening = nil")
+		return Target:Line("Decoding = -2 - Index"):Line(`{Path}({Arguments})`)
 	end
 
 	local Raise = "task.spawn(error, ListenerFailure, 0)"

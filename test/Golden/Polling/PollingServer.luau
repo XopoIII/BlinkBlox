@@ -1256,7 +1256,6 @@ local function StepReplication()
     end
 end
 local Decoding = -1
-local DecodeListening: string? = nil
 local DecodeRemaining = 64
 local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, Size: number)
 	while RecieveCursor < Size do
@@ -1270,10 +1269,9 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 end
 RunService.Heartbeat:Connect(StepReplication)
 local function DecodeReliable(Player: Player)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
 	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
 	Decoding = Index
 	if Index == 0 then
 		local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_PollingEvent())
@@ -1290,10 +1288,9 @@ local function DecodeReliable(Player: Player)
 	end
 end
 local function DecodeUnreliable(Player: Player)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
 	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
@@ -1325,18 +1322,16 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	SerdesThread = coroutine.running()
 	DecodeRemaining = 64
 	Decoding = -1
-	DecodeListening = nil
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Player, Size)
 		if Parsed then
 			break
 		end
-		local Listening = DecodeListening
-		if not Listening then
+		if Decoding > -2 then
 			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
 			break
 		end
-		DecodeListening = nil
+		local Listening = EventNames.Reliable[-2 - Decoding]
 		if not ListenerFailed(Player, Listening, Failure) then
 			task.spawn(error, Failure, 0)
 		end
@@ -1373,18 +1368,16 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	SerdesThread = coroutine.running()
 	DecodeRemaining = 64
 	Decoding = -1
-	DecodeListening = nil
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Player, Size)
 		if Parsed then
 			break
 		end
-		local Listening = DecodeListening
-		if not Listening then
+		if Decoding > -2 then
 			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
 			break
 		end
-		DecodeListening = nil
+		local Listening = EventNames.Unreliable[-2 - Decoding]
 		if not ListenerFailed(Player, Listening, Failure) then
 			task.spawn(error, Failure, 0)
 		end

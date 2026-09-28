@@ -56,8 +56,6 @@ local _ = {
 	require("@self/Function"),
 }
 
-local Types = Prefabs.Types
-
 local Generator = {}
 
 function Generator.Reset()
@@ -130,8 +128,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> The loop over one packet's events, made once for the module and handed the channel's decoder;
 	--> see CloseDecode below. What one packet's decode keeps between events lives in the module, as
 	--> the cursor does, so no packet allocates anything to decode:
-	--> - `Decoding`, the index of the event being read, for a failure to name it;
-	--> - `DecodeListening`, the name of the event whose Sync listener is running, or nil;
+	--> - `Decoding`, the index of the event being read, for a failure to name it, or `-2 - Index` while
+	-->   that event's Sync listener runs (Listeners.Call);
 	--> - `DecodeRemaining`, the events the packet may still decode before MaxEventsPerPacket.
 	-->
 	--> Whether the player is still in the game is asked once a packet, by InboundAccept before it is
@@ -141,7 +139,6 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> already queued when the player leaves always has.
 	local DecodeState = {
 		"local Decoding = -1\n",
-		"local DecodeListening: string? = nil\n",
 	}
 	local DecodeLoop = if State.Context == "Server"
 		then Table.Merge(DecodeState, {
@@ -182,13 +179,21 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> under one pcall for the whole packet. The decoder is a function of the module, made once. It was
 	--> a closure written inside the loop, which allocated one and its upvalues for every event -- a
 	--> quarter of what a one-byte event cost the server to decode -- and then one for every packet.
-	--> `Decoding` carries the index out of the pcall, so a failure can name the event it happened in;
-	--> it is reset first, so a failure to read the index names none.
+	--> A loop with the dispatch inside it, one call a packet, interpreted faster, but it compiled to
+	--> slower native code: under Roblox's flags a long loop body is not linearised, and a hundred events
+	--> carrying a part decoded in 0.015 ms rather than 0.012.
+	--> `Decoding` carries the index out of the pcall, so a failure can name the event it happened in.
+	--> It is reset before the index is read: a listener that yields, or decodes another packet, can
+	--> leave the cursor past the end of the one this loop holds, and that failure must be the packet's,
+	--> named after no event -- not the listener's, whose mark would otherwise still stand, and whose
+	--> error goes on with the next event, which would be the same unreadable byte again. The index is
+	--> read in place rather than through `Read`, a call an event.
 	local DecoderArguments = if State.Context == "Server" then "Player: Player" else ""
 	local function OpenDecode(Name: string): Blocks.Block
 		local Decoder = Blocks.Function(`Decode{Name}`, DecoderArguments, nil, false, true)
 		Decoder:Line("Decoding = -1")
-		Types.u8.Read("Index", Decoder)
+		Decoder:Line("local Index = buffer.readu8(RecieveBuffer, RecieveCursor)")
+		Decoder:Line("RecieveCursor += 1")
 		Decoder:Line("Decoding = Index")
 		return Decoder
 	end
@@ -276,13 +281,12 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	-->
 	--> The pcall is around the loop rather than around each event. A failure stops the packet either
 	--> way -- the cursor is wherever the throw left it -- so one pcall a packet stops it at the same
-	--> event, and a pcall an event had cost a one-byte event more than its decode did. A listener's
-	--> own error never reaches it: each listener is called under a pcall of its own. `return` inside
-	--> an event's branch still leaves only that event, because it returns from `DecodeEvent`.
+	--> event, and a pcall an event had cost a one-byte event more than its decode did. `return` inside
+	--> an event's branch still leaves only that event, because it returns from the decoder.
 	-->
 	--> A Sync listener received here is called without a pcall of its own (Listeners.Call), with
-	--> `DecodeListening` naming its event while it runs: when the packet's pcall catches an error with
-	--> that set, the listener threw, not the packet, and it is reported as a listener error was -- to
+	--> `Decoding` at `-2 - Index` while it runs: when the packet's pcall catches an error with it
+	--> there, the listener threw, not the packet, and it is reported as a listener error was -- to
 	--> the game's handler or raised on a thread of its own -- and the decode goes on from the next
 	--> event, where the cursor already is. A packet's listeners that throw nothing cost no pcall each;
 	--> one that throws costs one more for the rest of its packet.
@@ -295,18 +299,16 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 			Connection:Line(`DecodeRemaining = {MaxEvents}`)
 		end
 		Connection:Line("Decoding = -1")
-		Connection:Line("DecodeListening = nil")
 		Connection:Line("while true do")
 		Connection:Line(`\tlocal Parsed: boolean, Failure: any = pcall(DecodeLoop, {LoopArguments})`)
 		Connection:Line("\tif Parsed then")
 		Connection:Line("\t\tbreak")
 		Connection:Line("\tend")
-		Connection:Line("\tlocal Listening = DecodeListening")
-		Connection:Line("\tif not Listening then")
+		Connection:Line("\tif Decoding > -2 then")
 		Connection:Line(`\t\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], Failure)`)
 		Connection:Line("\t\tbreak")
 		Connection:Line("\tend")
-		Connection:Line("\tDecodeListening = nil")
+		Connection:Line(`\tlocal Listening = EventNames.{Name}[-2 - Decoding]`)
 		if OnServer then
 			Connection:Line("\tif not ListenerFailed(Player, Listening, Failure) then")
 			Connection:Line("\t\ttask.spawn(error, Failure, 0)")
