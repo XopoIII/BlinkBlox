@@ -12,6 +12,8 @@ local process = require("@lune/process")
 local stdio = require("@lune/stdio")
 local task = require("@lune/task")
 
+local runtime = require("../.lune/libs/runtime")
+
 local Compiler = "init"
 
 --- Schemas to compile, in a fixed order.
@@ -40,6 +42,7 @@ end
 
 local function ErrorPrint(Message: string)
 	stdio.write(`\r[{stdio.color("red")}ERROR{stdio.color("reset")}] {Message}\n`)
+	runtime.notice("The test results")
 	process.exit(20)
 end
 
@@ -185,7 +188,11 @@ local function Prepare()
 
 			local Path = `../../test/Sources/{File}`
 			PrettyPrint("cyan", `Compiling: {File}...`, true)
-			local Result = process.exec("lune", { "run", Compiler, Path, "--", "--yes" }, { cwd = "../src/CLI" })
+			local Result = process.exec(
+				runtime.command,
+				{ "run", Compiler, Path, "--", "--yes" },
+				{ cwd = "../src/CLI" }
+			)
 			if not Result.ok then
 				ErrorPrint(`{File} failed to compile!\n{Result.stderr}`)
 			else
@@ -207,7 +214,7 @@ local function Prepare()
 		end
 
 		local Repeat = process.exec(
-			"lune",
+			runtime.command,
 			{ "run", Compiler, COMPILE_TEST_FILE, "--", "--yes" },
 			{ cwd = "../src/CLI" }
 		)
@@ -241,7 +248,7 @@ local function Prepare()
 			end
 
 			local Result = process.exec(
-				"lune",
+				runtime.command,
 				{ "run", Compiler, `../../test/Sources/Invalid/{File}`, "--", "--yes", "--compact" },
 				{ cwd = "../src/CLI" }
 			)

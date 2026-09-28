@@ -19,6 +19,7 @@
 --- cannot run is left out of its rows rather than run another way.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local runtime = require("../.lune/libs/runtime")
 
 local Attributes = require("../src/Modules/Attributes")
 local Generator = require("../src/Generator")
@@ -439,7 +440,10 @@ for _, Name in ORDER do
 	end
 end
 
-print(`BlinkBlox {_G.VERSION or "(unbundled)"}, {Frames} frames, times in ms per frame, {CROWD} players where a crowd`)
+runtime.notice("These timings")
+print(
+	`BlinkBlox {_G.VERSION or "(unbundled)"}, {Frames} frames, times in ms per frame, {CROWD} players where a crowd, on {runtime.description}`
+)
 
 for _, Scenario in SCENARIOS do
 	if Filter and not string.find(Scenario.Name, Filter, 1, true) then
@@ -473,3 +477,5 @@ for _, Scenario in SCENARIOS do
 		end
 	end
 end
+
+runtime.notice("These timings")

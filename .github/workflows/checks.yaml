@@ -54,7 +54,7 @@ jobs:
       # `--no-compile` is not an option here: the point is to prove the CURRENT compiler still
       # produces network code that behaves, so the suite regenerates it first.
       - name: Tests
-        run: lune run Test --yes
+        run: luneblox run Test --yes
         working-directory: test
 
   # The docs site was deployed only from main, so a broken page, a dead link or an example that no

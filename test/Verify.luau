@@ -8,6 +8,7 @@
 local Harness = require("./Harness")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local runtime = require("../.lune/libs/runtime")
 local serde = require("@lune/serde")
 
 local Assertions = require("./Assertions")
@@ -25,7 +26,7 @@ local FILES = { "Server.luau", "Client.luau", "Types.luau", "Client.d.ts", "Serv
 type Snapshot = { [string]: { Contents: string, Modified: number } | false }
 
 local function Run(...: string): process.ExecResult
-	return process.exec("lune", { "run", Compiler, SCHEMA, "--", ... }, { cwd = "../src/CLI" })
+	return process.exec(runtime.command, { "run", Compiler, SCHEMA, "--", ... }, { cwd = "../src/CLI" })
 end
 
 local function Build(...: string)
@@ -160,7 +161,11 @@ RunClosure("CLI --verify --json lists every compared file", function()
 	AssertUntouched(Before, "--verify --json")
 
 	--> Without --verify the field is absent, so its absence says nothing was compared.
-	local Plain = process.exec("lune", { "run", Compiler, SCHEMA, "--", "--check", "--json" }, { cwd = "../src/CLI" })
+	local Plain = process.exec(
+		runtime.command,
+		{ "run", Compiler, SCHEMA, "--", "--check", "--json" },
+		{ cwd = "../src/CLI" }
+	)
 	assert(Plain.ok and not string.find(Plain.stdout, '"verify"', 1, true), Plain.stdout)
 end)
 
@@ -267,7 +272,7 @@ end)
 --> A schema error is reported as it is under --check, and with nothing compared.
 RunClosure("CLI --verify reports a schema error before comparing", function()
 	local Result = process.exec(
-		"lune",
+		runtime.command,
 		{ "run", Compiler, "../../test/Sources/Invalid/MissingRateLimit", "--", "--verify", "--json" },
 		{ cwd = "../src/CLI" }
 	)

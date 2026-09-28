@@ -9,6 +9,7 @@
 local Harness = require("./Harness")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local runtime = require("../.lune/libs/runtime")
 local serde = require("@lune/serde")
 local task = require("@lune/task")
 
@@ -26,7 +27,7 @@ RunClosure("CLI compile prompt", function()
 
 	local Result: process.ExecResult
 	local Thread = task.spawn(function()
-		Result = process.exec("lune", { "run", Compiler, COMPILE_TEST_FILE }, { cwd = "../src/CLI" })
+		Result = process.exec(runtime.command, { "run", Compiler, COMPILE_TEST_FILE }, { cwd = "../src/CLI" })
 	end)
 
 	if coroutine.status(Thread) ~= "suspended" then
@@ -37,7 +38,11 @@ RunClosure("CLI compile prompt", function()
 end)
 
 RunClosure("CLI compile --yes", function()
-	local Result = process.exec("lune", { "run", Compiler, COMPILE_TEST_FILE, "--", "--yes" }, { cwd = "../src/CLI" })
+	local Result = process.exec(
+		runtime.command,
+		{ "run", Compiler, COMPILE_TEST_FILE, "--", "--yes" },
+		{ cwd = "../src/CLI" }
+	)
 	assert(Result.ok, Result.stderr)
 end)
 
@@ -47,7 +52,7 @@ end)
 --> before the flags were parsed. Both halves are asserted, because either one alone still passes if
 --> the other regresses.
 RunClosure("CLI --version prints a version", function()
-	local Result = process.exec("lune", { "run", Compiler, "--", "--version" }, { cwd = "../src/CLI" })
+	local Result = process.exec(runtime.command, { "run", Compiler, "--", "--version" }, { cwd = "../src/CLI" })
 	assert(Result.ok, Result.stderr)
 	assert(string.find(Result.stdout, "BlinkBlox", 1, true), `--version printed no version: {Result.stdout}`)
 end)
@@ -55,14 +60,18 @@ end)
 --> The usage line named `blinkblox.exe` on every platform, although only the Windows release has the
 --> extension.
 RunClosure("CLI --help names the executable for this platform", function()
-	local Result = process.exec("lune", { "run", Compiler, "--", "--help" }, { cwd = "../src/CLI" })
+	local Result = process.exec(runtime.command, { "run", Compiler, "--", "--help" }, { cwd = "../src/CLI" })
 	assert(Result.ok, Result.stderr)
 	local Named = string.find(Result.stdout, "blinkblox.exe", 1, true) ~= nil
 	assert(Named == (process.os == "windows"), `--help named the wrong executable: {Result.stdout}`)
 end)
 
 RunClosure("CLI --version answers even when quiet", function()
-	local Result = process.exec("lune", { "run", Compiler, "--", "--version", "--quiet" }, { cwd = "../src/CLI" })
+	local Result = process.exec(
+		runtime.command,
+		{ "run", Compiler, "--", "--version", "--quiet" },
+		{ cwd = "../src/CLI" }
+	)
 	assert(Result.ok, Result.stderr)
 	assert(
 		string.find(Result.stdout, "BlinkBlox", 1, true),
@@ -72,7 +81,7 @@ end)
 
 RunClosure("CLI --quiet prints no banner", function()
 	local Result = process.exec(
-		"lune",
+		runtime.command,
 		{ "run", Compiler, COMPILE_TEST_FILE, "--", "--yes", "--quiet" },
 		{ cwd = "../src/CLI" }
 	)
@@ -86,7 +95,7 @@ local GATED = "../../test/Sources/Profiles/Gated"
 local GATED_OUTPUT = "Network/ProfileServer.luau"
 
 local function CompileGated(...: string): (boolean, string)
-	local Result = process.exec("lune", { "run", Compiler, ... }, { cwd = "../src/CLI" })
+	local Result = process.exec(runtime.command, { "run", Compiler, ... }, { cwd = "../src/CLI" })
 	if not Result.ok then
 		return false, Result.stdout .. Result.stderr
 	end
@@ -122,7 +131,7 @@ end)
 --> is not there afterwards.
 RunClosure("CLI --check writes nothing", function()
 	pcall(fs.removeFile, GATED_OUTPUT)
-	local Result = process.exec("lune", { "run", Compiler, GATED, "--", "--check" }, { cwd = "../src/CLI" })
+	local Result = process.exec(runtime.command, { "run", Compiler, GATED, "--", "--check" }, { cwd = "../src/CLI" })
 	assert(Result.ok, Result.stdout .. Result.stderr)
 	assert(not fs.isFile(GATED_OUTPUT), "--check wrote the server module")
 end)
@@ -130,7 +139,11 @@ end)
 --> `--json` is read by programs, so standard output has to be one document and nothing else -- a
 --> banner or a progress line in front of it fails the decode here before any field is looked at.
 local function CompileJson(Schema: string, ...: string): (process.ExecResult, any)
-	local Result = process.exec("lune", { "run", Compiler, Schema, "--", "--json", ... }, { cwd = "../src/CLI" })
+	local Result = process.exec(
+		runtime.command,
+		{ "run", Compiler, Schema, "--", "--json", ... },
+		{ cwd = "../src/CLI" }
+	)
 	local Decoded, Document = pcall(serde.decode, "json" :: "json", Result.stdout)
 	assert(Decoded, `--json printed something that is not JSON: {Result.stdout}{Result.stderr}`)
 	return Result, Document
@@ -175,7 +188,11 @@ RunClosure("CLI --json reports a missing schema", function()
 end)
 
 RunClosure("CLI refuses --json with --watch", function()
-	local Result = process.exec("lune", { "run", Compiler, GATED, "--", "--json", "--watch" }, { cwd = "../src/CLI" })
+	local Result = process.exec(
+		runtime.command,
+		{ "run", Compiler, GATED, "--", "--json", "--watch" },
+		{ cwd = "../src/CLI" }
+	)
 	assert(not Result.ok, "--json --watch was accepted")
 end)
 

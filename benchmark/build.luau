@@ -10,6 +10,7 @@
 --- when no terminal is attached, which is every script and CI runner.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local runtime = require("../.lune/libs/runtime")
 local serde = require("@lune/serde")
 
 local EXECUTABLE = if process.os == "windows" then ".exe" else ""
@@ -39,7 +40,7 @@ if Download then
 	print("Downloading dependencies...")
 	Fresh("./tools")
 	Fresh("./packages")
-	Step("lune", { "run", "download" })
+	Step(runtime.command, { "run", "download" })
 end
 
 print("Compiling definitions")
@@ -64,7 +65,7 @@ Step(`./tools/zap{EXECUTABLE}`, { "./definitions/Scenarios.zap" })
 for _, Name in { "Definition", "Scenarios" } do
 	local Definition = `{process.cwd}definitions/{Name}.upstream.blink`
 	print(`> lune run init {Definition} -- --yes (in ./tools/upstream/src/CLI)`)
-	local Result = process.exec("lune", { "run", "init", Definition, "--", "--yes" }, {
+	local Result = process.exec(runtime.command, { "run", "init", Definition, "--", "--yes" }, {
 		cwd = "./tools/upstream/src/CLI",
 		stdio = "inherit",
 	})
@@ -75,7 +76,7 @@ end
 if Local then
 	local Definition = `{process.cwd}definitions/Definition.blink`
 	print(`> lune run init {Definition} -- --yes (in ../src/CLI)`)
-	local Result = process.exec("lune", { "run", "init", Definition, "--", "--yes" }, {
+	local Result = process.exec(runtime.command, { "run", "init", Definition, "--", "--yes" }, {
 		cwd = "../src/CLI",
 		stdio = "inherit",
 	})
@@ -103,5 +104,5 @@ Step("darklua", { "process", "src", "roblox" })
 Step("rojo", { "build", "build.project.json", "--output", "./Benchmark.rbxl" })
 
 if Run then
-	Step("lune", { "run", "generate" })
+	Step(runtime.command, { "run", "generate" })
 end

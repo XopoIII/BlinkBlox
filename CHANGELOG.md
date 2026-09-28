@@ -7,6 +7,26 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+Neither the wire nor the generated modules change.
+
+### Changed
+
+- The toolchain runs on [LuneBlox](https://github.com/XopoIII/LuneBlox), `luneblox` in `rokit.toml`:
+  Lune on Luau 0.740, the version Roblox runs, with Roblox's fast flags, where Lune 0.10.5 runs
+  0.709 with Luau's defaults. Tests and benchmarks warn when run on anything else, benchmarks name
+  the runtime in their header, and a release build refuses, since its executables carry the runtime
+  that built them. The same modules timed on each: interpreted fire and decode take less than half
+  the time, and a 128-declaration module that Lune left interpreted compiles natively. Native code
+  on the thousand-event benches is about 20% slower than Lune's figures said, because Roblox sets
+  `DebugCodegenOptSize` -- the figures now match what a Roblox server runs.
+- The compiler run through pesde hands itself over to `luneblox` when it is installed, with the same
+  arguments and output, and otherwise runs on the Lune pesde started, as before.
+  `BLINKBLOX_NO_LUNEBLOX=1` keeps it there.
+- The type gate runs luau-lsp 1.70.1, on Luau 0.740; the generated modules still carry no strict
+  errors.
+
 ## 0.41.0 — 2026-09-28
 
 The wire does not change for any schema that compiled before. A client module now sends at most 60

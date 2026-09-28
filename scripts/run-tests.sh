@@ -15,4 +15,4 @@ export PATH="$HOME/.rokit/bin:$PATH"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/test"
 
-lune run Test --yes
+luneblox run Test --yes

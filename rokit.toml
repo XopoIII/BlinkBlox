@@ -2,14 +2,17 @@
 # For more information, see https://github.com/rojo-rbx/rokit
 #
 # Every version here is pinned exactly. Run `rokit install` after cloning to get all of them.
-# Versions are the latest releases as of 2026-09-10.
+# Versions are the latest releases as of 2026-09-28.
+#
+# Lune is this project's fork, LuneBlox: upstream Lune 0.10.5 runs Luau 0.709, and Roblox runs 0.740
+# with its own set of Luau's flags. LuneBlox runs the Luau Roblox runs, with Roblox's flags.
 
 [tools]
 rojo = "rojo-rbx/rojo@7.7.0"                # file <-> Studio sync, and sourcemaps for luau-lsp
-lune = "lune-org/lune@0.10.5"               # Luau runtime: runs the compiler CLI and the test suite
+luneblox = "XopoIII/LuneBlox@0.10.6"        # Luau runtime: runs the compiler CLI, tests and benchmarks
 stylua = "JohnnyMorganz/StyLua@2.5.2"       # formatter
 selene = "Kampfkarren/selene@0.31.0"        # linter
-luau-lsp = "JohnnyMorganz/luau-lsp@1.69.0"  # editor LSP, and `luau-lsp analyze` for the type gate
+luau-lsp = "JohnnyMorganz/luau-lsp@1.70.1"  # editor LSP, and `luau-lsp analyze` for the type gate
 lefthook = "evilmartians/lefthook@2.1.14"   # git hooks
 darklua = "seaofvoices/darklua@0.19.0"      # bundler for release builds and the Studio plugin
 run-in-roblox = "rojo-rbx/run-in-roblox@0.3.0"

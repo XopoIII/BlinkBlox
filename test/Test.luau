@@ -8,7 +8,9 @@ local task = require("@lune/task")
 
 local ErrorPrint = Harness.ErrorPrint
 local PrettyPrint = Harness.PrettyPrint
+local runtime = require("../.lune/libs/runtime")
 
+runtime.notice("The test results")
 Harness.Prepare()
 
 local Shared = require("./Shared")
@@ -471,5 +473,6 @@ end)
 require("./Specs")
 
 PrettyPrint("green", `All tests passed successfully!`)
+runtime.notice("The test results")
 
 process.exit(0)

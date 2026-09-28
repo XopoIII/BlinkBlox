@@ -8,7 +8,8 @@ import { Aside } from '@astrojs/starlight/components';
 There are two benchmarks, and they answer different questions.
 
 - **The runtime benchmark** times the generated code on
-  [Lune](https://lune-org.github.io/docs), without Roblox. It is reproducible on any machine and
+  [LuneBlox](https://github.com/XopoIII/LuneBlox) -- Lune on the Luau version Roblox runs, with
+  Roblox's fast flags -- without Roblox. It is reproducible on any machine and
   separates the three things the code does: firing events, flushing them into a packet, and the
   server decoding that packet. It runs BlinkBlox, Blink, zap, ByteNet and Packet.
 - **The Studio benchmark** puts the same tools and plain remotes inside Roblox Studio, and reports
@@ -114,7 +115,7 @@ its fires and decodes cheaper with it.
 
 The benchmark above sends in one direction, a thousand reliable events a frame from a client. A game
 also has the server sending to a crowd, small unreliable events every frame, and events carrying
-Instances. `lune run Rivals` runs those on every tool, from the same run and machine as the table
+Instances. `luneblox run Rivals` runs those on every tool, from the same run and machine as the table
 above; the figures are milliseconds a frame, natively compiled, with the remote calls and bytes a
 frame summed over every player reached.
 
@@ -138,7 +139,7 @@ every scenario, interpreted included, are in
 
 ### A schema with many events
 
-`lune run Scenarios -- ManyEvents` sends 100 reliable events a frame spread over 128 declarations, the
+`luneblox run Scenarios -- ManyEvents` sends 100 reliable events a frame spread over 128 declarations, the
 shape of a game with many remotes rather than one hot one, and times the client decoding them. The
 event an index names used to be found by comparing it with every declaration before it; it is now
 found by halving the range, down to runs of eight. Interpreted, as most clients run it -- medians of
@@ -153,15 +154,15 @@ The first declaration of a large channel pays for it: it was one comparison away
 A channel of up to eight declarations, which covers every other benchmark here, compiles exactly as it
 did.
 
-There is no native row because Lune cannot give one. The Luau inside Lune 0.10.5 leaves a whole module
-interpreted once any function in it is too large to compile, and a module's top-level function grows
-with every declaration: the server module stops compiling natively at about 70 events and the client's
-at about 85, in 0.40.0 as much as now. Current Luau (the 0.738 CLI, `--codegen`) leaves only that
-top-level function interpreted, which runs once when the module is required, and compiles the rest: a
-loop placed in a 250-event server module ran in 60 ms natively and 277 ms interpreted. Roblox runs
-current Luau, so a game's large module is native where it matters.
+These figures have no native row because they were taken on Lune 0.10.5, which could not give one:
+its Luau 0.709 leaves a whole module interpreted once any function in it is too large to compile, and a
+module's top-level function grows with every declaration, so the server module stopped compiling
+natively at about 70 events and the client's at about 85. Current Luau leaves only that top-level
+function interpreted, which runs once when the module is required. On LuneBlox, which runs it, the 128
+declarations compile: 0.043 ms to fire and 0.022 ms to decode natively, against 0.060 and 0.040
+interpreted. Roblox runs current Luau, so a game's large module is native where it matters.
 
-Streams have no counterpart in the other tools. `lune run Scenarios` times them for BlinkBlox: a
+Streams have no counterpart in the other tools. `luneblox run Scenarios` times them for BlinkBlox: a
 stream of 16 units to 50 players takes one `FireAllClients` a frame and 0.016 ms to flush natively,
 and a stream held per player 0.084 ms for all fifty.
 
@@ -309,20 +310,37 @@ Packet's EntitiesRandom came to 486 bytes an event, less than the 600 bytes of r
 ## Running them yourself
 
 The harness lives in [`benchmark/`](https://github.com/XopoIII/BlinkBlox/tree/main/benchmark) and
-runs on Windows, macOS and Linux.
+runs on Windows, macOS and Linux, on [LuneBlox](https://github.com/XopoIII/LuneBlox): `rokit install`
+in the repository installs the version it pins. Run on anything else, each benchmark says so before
+and after its figures, and names the runtime in its header, because the figures would not be
+comparable. The same schema's modules, timed on Lune 0.10.5 and on LuneBlox 0.10.6 (median of three
+runs, Apple M1):
 
-- `lune run Runtime` times the generated code. `lune run Runtime -- Entities` runs only the benches
-  whose name contains `Entities`, `lune run Runtime -- --frames 50` makes the run shorter, and
-  `lune run Runtime -- --tools blink,zap` runs only the tools listed. The harness knows BlinkBlox as
+| | Lune 0.10.5 | LuneBlox, Roblox's flags | LuneBlox, Luau's defaults |
+|---|---|---|---|
+| Luau | 0.709 | 0.740 | 0.740 |
+| Entities, interpreted: fire / decode (ms) | 33.47 / 48.53 | 15.38 / 20.70 | 15.44 / 20.82 |
+| Entities, native: fire / decode (ms) | 3.23 / 10.91 | 3.92 / 10.83 | 2.57 / 9.07 |
+| 128 declarations, native: fire / decode (ms) | 0.078 / 0.053 | 0.043 / 0.022 | 0.046 / 0.024 |
+
+Interpreted code, which most players' clients run, takes less than half the time, mostly because
+LuneBlox builds Luau at `-O3` where Lune's size profile built it at `-Os`. Native code on the
+thousand-event benches is slower with Roblox's flags than with Luau's defaults: Roblox sets
+`DebugCodegenOptSize`, which skips a native optimisation, and the middle column is what a Roblox
+server gets. `LUNE_ROBLOX_FFLAGS=0` gives the last column.
+
+- `luneblox run Runtime` times the generated code. `luneblox run Runtime -- Entities` runs only the benches
+  whose name contains `Entities`, `luneblox run Runtime -- --frames 50` makes the run shorter, and
+  `luneblox run Runtime -- --tools blink,zap` runs only the tools listed. The harness knows BlinkBlox as
   `blink` and Blink as `upstream`; the others by their lower-case names.
-- `lune run Scenarios` and `lune run Rivals` time a server sending to a crowd, unreliable events,
+- `luneblox run Scenarios` and `luneblox run Rivals` time a server sending to a crowd, unreliable events,
   streams and Instances: BlinkBlox alone, and every tool. `--batch` builds BlinkBlox with
   `BatchUnreliable`; `Rivals` takes `--tools` as `Runtime` does.
-- `lune run Performance` times the compiler itself: lexing, parsing and generating the test schema.
-- `lune run build --download --run` fetches zap, BlinkBlox, ByteNet and Packet for the machine it
+- `luneblox run Performance` times the compiler itself: lexing, parsing and generating the test schema.
+- `luneblox run build --download --run` fetches zap, BlinkBlox, ByteNet and Packet for the machine it
   runs on, and the source of Blink, the original project, builds the Studio place, runs it with `run-in-roblox`, and
   writes `Benchmarks.md`. Press F5 when Studio's Output asks. Without `--download` it reuses the tools it has; without `--run` it
   only builds the place. `--local` compiles the schema with the checkout's own compiler rather than
   the latest release, which is how the numbers above were taken.
-- `lune run Probe` measures how large an unreliable payload Roblox delivers, in both directions. It
+- `luneblox run Probe` measures how large an unreliable payload Roblox delivers, in both directions. It
   is what [`MaxUnreliableSize`](/BlinkBlox/language/options/#maxunreliablesize) was set from.
