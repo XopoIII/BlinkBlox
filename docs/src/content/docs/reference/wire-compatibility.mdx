@@ -110,6 +110,7 @@ hashes `WIRE_VERSION`, a number the compiler bumps by hand whenever a type's byt
 | 0.38.2 | No change to the format. | 0.27.0 to 0.39.x. |
 | 0.39.0 | [Stamps](/BlinkBlox/language/stamps/) added: a stamped event carries two bytes after its values, and the stamp is part of the schema signature. `Per: Player` changes which player a stream is sent to, not what a client receives. Schemas that use neither compile to the same bytes. | 0.27.0 to 0.39.x. |
 | 0.40.0 | `WIRE_VERSION` 3. A length nobody bounded, or one whose span needs two bytes, is a varint; a span past two bytes takes three where it took four. An enum's index and a tagged enum's tag are bits in the bitfield rather than a byte each. A stream carries no sequence number, and is ordered by its stamp. Unreliable events may share a packet -- streams always, other events under `BatchUnreliable` -- which every receiver since 0.21.0 decodes. | 0.40.0 onward. |
+| 0.41.1 | Nothing: the compiler emits exactly what 0.41.0 did. The release is the toolchain, now LuneBlox. | 0.40.0 onward. |
 | 0.41.0 | Quantized floats added (`f32<0.01>(-1..1)`): a step on a float was refused before, so only schemas that use one are affected, and it is part of the schema signature. `Priority`, the outbound budget and `ClientFlushRate` decide what is sent and when, not how. | 0.40.0 onward. |
 
 Modules from different releases with the same `WIRE_VERSION` interoperate, but a fix to how a value is

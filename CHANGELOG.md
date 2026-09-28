@@ -7,7 +7,7 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
-## Unreleased
+## 0.41.1 — 2026-09-28
 
 Neither the wire nor the generated modules change.
 

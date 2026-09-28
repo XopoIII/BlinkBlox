@@ -14,6 +14,18 @@ at 60 frames a second or fewer notices nothing. See [a client sends at most 60 t
 second](#a-client-sends-at-most-60-times-a-second).
 </Aside>
 
+## 0.41.1
+
+A toolchain release: the compiler emits exactly what 0.41.0 did, byte for byte, so nothing needs
+regenerating.
+
+- The native executables are built on [LuneBlox](https://github.com/XopoIII/LuneBlox), Lune on the Luau
+  version Roblox runs with Roblox's fast flags, and the compiler inside them is 14 to 25% faster.
+- Run through pesde, the compiler hands itself over to `luneblox` when it is installed, and otherwise
+  runs on the Lune pesde started, as before. `BLINKBLOX_NO_LUNEBLOX=1` keeps it there.
+- The [benchmarks](/BlinkBlox/guides/benchmarks/) are measured on LuneBlox, so their figures are what
+  Roblox runs.
+
 ## Upgrading
 
 1. Update the compiler to 0.41.0 (the rokit pin, the release binary or the Studio plugin).
