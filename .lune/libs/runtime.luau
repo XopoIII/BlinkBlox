@@ -32,7 +32,7 @@ local runtime = {
 	matches = isLuneBlox and (expected == nil or expected == version),
 	--> The command that runs a script on this same runtime, for anything a script shells out to.
 	command = if isLuneBlox then "luneblox" else "lune",
-	--> What to record beside a result, e.g. "LuneBlox 0.10.7 (Luau 0.740)".
+	--> What to record beside a result, e.g. "LuneBlox 0.10.8 (Luau 0.740)".
 	description = if name then `{name} {version} (Luau 0.{luau})` else _VERSION,
 	expected = expected,
 }
