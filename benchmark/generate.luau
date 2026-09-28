@@ -116,6 +116,17 @@ local Metrics = {
 	},
 }
 
+--> The share of a run's events the server never heard, as the table prints it. Only an exact count
+--> reads "0%": it used to be floored to a whole percent, so up to one event in a hundred could go
+--> missing behind a zero, and a server that heard more than was sent read as zero too.
+local function Loss(Result: Benchmark): (number, string)
+	local Lost = (1 - Result.Recieve / Result.Sent) * 100
+	if Result.Recieve == Result.Sent then
+		return Lost, "0%"
+	end
+	return Lost, string.format("%.2f%%", Lost)
+end
+
 local function WriteBenchResults(Name: string, Results: { [string]: Benchmark })
 	local Output =
 		`\n## [{Name}](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches/{Name}.luau)\n`
@@ -129,15 +140,15 @@ local function WriteBenchResults(Name: string, Results: { [string]: Benchmark })
 		Output ..= `\n|---|---|---|---|---|---|---|---|`
 		for _, Tool in Names.Sort(Keys(Results)) do
 			local Result = Results[Tool]
-			local Loss = math.floor((1 - (Result.Recieve / Result.Sent)) * 100)
-			if Loss > 50 then
-				Output ..= `\n|{Names.Display(Tool)}|-|-|-|-|-|-|{Loss}%`
+			local Lost, LossText = Loss(Result)
+			if Lost > 50 then
+				Output ..= `\n|{Names.Display(Tool)}|-|-|-|-|-|-|{LossText}|`
 				continue
 			end
 
 			local Numbers = Result[Metric.Samples]
 			if Numbers == nil then
-				Output ..= `\n|{Names.Display(Tool)}|-|-|-|-|-|-|{Loss}%|`
+				Output ..= `\n|{Names.Display(Tool)}|-|-|-|-|-|-|{LossText}|`
 				continue
 			end
 
@@ -146,7 +157,7 @@ local function WriteBenchResults(Name: string, Results: { [string]: Benchmark })
 				Formatted[Index] = string.format("%.2f", Value)
 			end
 
-			Output ..= `\n|{Names.Display(Tool)}|{table.concat(Formatted, "|")}|{Loss}%|`
+			Output ..= `\n|{Names.Display(Tool)}|{table.concat(Formatted, "|")}|{LossText}|`
 		end
 	end
 
@@ -155,15 +166,15 @@ local function WriteBenchResults(Name: string, Results: { [string]: Benchmark })
 	Output ..= "\n|---|---|---|---|"
 	for _, Tool in Names.Sort(Keys(Results)) do
 		local Result = Results[Tool]
-		local Loss = math.floor((1 - (Result.Recieve / Result.Sent)) * 100)
-		if Result.BytesPerEvent == nil or Loss > 50 then
-			Output ..= `\n|{Names.Display(Tool)}|-|-|{Loss}%|`
+		local Lost, LossText = Loss(Result)
+		if Result.BytesPerEvent == nil or Lost > 50 then
+			Output ..= `\n|{Names.Display(Tool)}|-|-|{LossText}|`
 			continue
 		end
 
 		local Bytes = string.format("%.2f", Result.BytesPerEvent)
 		local Drain = string.format("%.1f", Result.Drain or 0)
-		Output ..= `\n|{Names.Display(Tool)}|{Bytes}|{Drain}|{Loss}%|`
+		Output ..= `\n|{Names.Display(Tool)}|{Bytes}|{Drain}|{LossText}|`
 	end
 
 	Contents ..= Output

@@ -29,6 +29,8 @@ end
 
 type Benchmark = {
 	Sent: number,
+	--> Events the server heard, counted there and asked for once the tool has drained. A run that
+	--> lost or duplicated one says so in the Output, not only in the table.
 	Recieve: number,
 	--> Bytes each event cost on the wire, after Roblox's compression: every byte the client sent from
 	--> the first fire until its backlog drained, less what it sends when idle, over the events fired.
@@ -166,12 +168,23 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 
 	return {
 		Sent = Sent,
-		Recieve = 0,
+		Recieve = 0, --> Filled in by `CountDelivered` once the server has had time to hear it all.
 		BytesPerEvent = math.max(Kilobytes - Idle * Metered, 0) * 1000 / Sent,
 		Drain = Drain,
 		Framerate = FrameratePercentiles,
 		FireTime = FireTimePercentiles,
 	}
+end
+
+--> Asks the server how many of this run's events it heard, and says so: a frame rate means nothing
+--> for a tool that dropped what it was timed on.
+local function CountDelivered(Tool: string, Bench: string, Result: Benchmark)
+	Result.Recieve = ReplicatedStorage.Shared.GetRecieved:InvokeServer(Bench, Tool)
+	if Result.Recieve == Result.Sent then
+		print(`> {Tool} delivered all {Result.Sent} events of {Bench}`)
+	else
+		warn(`> {Tool} delivered {Result.Recieve} of {Result.Sent} events of {Bench}`)
+	end
 end
 
 local function RunBenchmarks()
@@ -186,17 +199,11 @@ local function RunBenchmarks()
 
 			--> Give ROBLOX some time to rest in-between tools
 			WaitForPacketsToProcess()
+			CountDelivered(Tool, Bench, Results[Bench][Tool])
 		end
 
 		--> Give ROBLOX some time to rest in-between benchmarks
 		WaitForPacketsToProcess()
-	end
-
-	local Recieved = ReplicatedStorage.Shared.GetRecieved:InvokeServer()
-	for Bench, Tools in Recieved do
-		for Tool, Recieve in Tools do
-			Results[Bench][Tool].Recieve = Recieve
-		end
 	end
 
 	print("Finished running benchmarks, generating results...")

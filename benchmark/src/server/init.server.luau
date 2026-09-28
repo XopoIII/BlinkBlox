@@ -84,8 +84,9 @@ for Name, Pool in Benches do
 	end
 end
 
-ReplicatedStorage.Shared.GetRecieved.OnServerInvoke = function()
-	return Recieved
+--> How many events of one bench and tool the server heard, asked once that tool has drained.
+ReplicatedStorage.Shared.GetRecieved.OnServerInvoke = function(_Player, Bench: string, Tool: string)
+	return Recieved[Bench][Tool]
 end
 
 ReplicatedStorage.Shared.Generate.OnServerEvent:Connect(function(Player, JSON)
