@@ -153,12 +153,19 @@ TypeScript output, the Studio plugin or the documentation.
 leaves rate limiting to the game, and its decode loop has no `pcall`: one malformed event throws out
 of it, discarding the rest of that player's batch with nothing for the game to catch.
 
-| | BlinkBlox | Blink 0.18 | Zap |
-|---|---|---|---|
-| Per-player, per-event rate limits | Yes | No | No |
-| A decode failure is caught and reported to the game | Yes | No | No |
-| Shared bitfield for booleans and optionals | Yes | No | Yes |
-| TypeScript output | Yes | Yes | Yes |
+[QuickNet](https://github.com/breadboardengineer1234/QuickNet) and
+[Warp](https://github.com/imezx/Warp) are libraries rather than compilers: a schema is declared at
+runtime and packed into buffers. QuickNet limits each event per player, but counts a call only once
+it has decoded it, and one `pcall` covers a whole packet, so a malformed event drops the ones after
+it. Warp counts a player's bytes a packet at a time, outside Studio only, and reads lengths the
+client sends straight into `table.create`.
+
+| | BlinkBlox | Blink 0.18 | Zap | QuickNet 0.3 | Warp 1.1 |
+|---|---|---|---|---|---|
+| Per-player, per-event rate limits | Yes | No | No | Yes, counted after decoding | No |
+| A decode failure is caught and reported to the game | Yes | No | No | Caught, not reported | No |
+| Shared bitfield for booleans and optionals | Yes | No | Yes | Boolean arrays only | Optionals, boolean arrays |
+| TypeScript output | Yes | Yes | Yes | No | No |
 
 <CardGrid>
 	<LinkCard title="Install BlinkBlox" href="/BlinkBlox/getting-started/installation/" description="Rokit, pesde, release binaries or the Studio plugin." />

@@ -31,9 +31,23 @@ local REQUIRES: { [string]: { string } } = {
 	zap = { "src/shared/zap/Server.luau", "src/shared/zap/Client.luau" },
 	bytenet = { "packages/bytenet/init.luau" },
 	packet = { "packages/packet/init.luau" },
+	quicknet = { "packages/quicknet/init.luau" },
+	warp = { "packages/warp/init.luau" },
 }
 
-Tools.ORDER = { "blink", "upstream", "zap", "bytenet", "packet" }
+Tools.ORDER = { "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp" }
+
+--> The packages a World mounts, those downloaded.
+function Tools.Mounts(): { string }
+	local Mounts = {}
+	for _, Name in { "bytenet", "packet", "quicknet", "warp" } do
+		local Path = `packages/{Name}`
+		if fs.isDir(Path) then
+			table.insert(Mounts, Path)
+		end
+	end
+	return Mounts
+end
 
 --- Why `Name` cannot run here, or nil when it can.
 function Tools.Missing(Name: string): string?
@@ -83,27 +97,21 @@ function Tools.Load(Name: string, Native: boolean, Bench: string, Sources: { Ser
 		return Blink(Environment.Load(Sources.Server, Sources.Client, Native), Bench)
 	end
 
-	local Mounts = {}
-	for _, Path in { "packages/bytenet", "packages/packet" } do
-		if fs.isDir(Path) then
-			table.insert(Mounts, Path)
-		end
-	end
-
-	local Universe = World.Universe(Native, Mounts)
+	local Universe = World.Universe(Native, Tools.Mounts())
 	--> The server first: it creates the remotes and assigns the ids the client then reads.
 	local Server = World.new(Universe, true)
 	local ServerEvents = Server.Require(`src/shared/modes/{Name}.luau`)
 	local Client = World.new(Universe, false)
 	local ClientEvents = Client.Require(`src/shared/modes/{Name}.luau`)
-	World.Drain(Universe)
+	World.Settle(Universe)
 
 	local ClientEvent = ClientEvents[Bench]
 	local ServerEvent = ServerEvents[Bench]
 
 	local Fire: (Value: any) -> ()
 	local Listen: (Callback: (Value: any) -> ()) -> ()
-	if Name == "upstream" then
+	--> QuickNet's and Warp's modes wrap each event in BlinkBlox's shape.
+	if Name == "upstream" or Name == "quicknet" or Name == "warp" then
 		Fire = ClientEvent.Fire
 		Listen = function(Callback)
 			ServerEvent.On(function(_Player, Value)

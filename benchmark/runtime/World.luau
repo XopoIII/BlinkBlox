@@ -1,15 +1,16 @@
 --!strict
 --- Just enough of Roblox, on Lune, to load the other tools the Studio benchmark compares against:
---- zap's generated modules, ByteNet and Packet.
+--- zap's generated modules, ByteNet, Packet, QuickNet and Warp.
 ---
 --- Environment.luau loads BlinkBlox's own modules, whose few needs are known. The other tools reach
 --- for more: an instance tree they `require(script.Parent.X)` through, `Instance.new` for their
 --- remotes, attributes, `HttpService`, `Enum`, and a `task` library they dispatch listeners through.
 --- A `Universe` is what Roblox replicates -- the instance tree, the remotes, the one player -- and a
---- `World` is one side of it, server or client, with its own module cache, `_G` and RunService.
+--- `World` is one side of it, server or client, with its own module cache, `_G`, `shared` and
+--- RunService.
 ---
 --- Modules keep the real global environment, as in Environment.luau: a chunk with a custom one is
---- never natively compiled. Roblox's globals arrive as locals prepended to each module's source.
+--- never natively compiled. Roblox's globals arrive as upvalues of each module's code; see Source.luau.
 ---
 --- `task` runs a spawned thread at once and queues a deferred one, and the benchmark drains that
 --- queue inside the timed region it belongs to. Packet hands every listener to `task.defer`, so a
@@ -18,37 +19,11 @@ local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local serde = require("@lune/serde")
 
+local Mocks = require("./Mocks")
+local Source = require("./Source")
+local Signal = Mocks.Signal
+
 local World = {}
-
-local function Signal()
-	local Callbacks: { (...any) -> () } = {}
-	local Self = {}
-
-	function Self.Connect(_self, Callback: (...any) -> ())
-		table.insert(Callbacks, Callback)
-		return {
-			Disconnect = function()
-				local Index = table.find(Callbacks, Callback)
-				if Index then
-					table.remove(Callbacks, Index)
-				end
-			end,
-		}
-	end
-	Self.Once = Self.Connect
-
-	function Self.Fire(_self, ...)
-		for _, Callback in table.clone(Callbacks) do
-			Callback(...)
-		end
-	end
-
-	function Self.Wait()
-		error("The benchmark cannot wait on a signal")
-	end
-
-	return Self
-end
 
 --> An instance: its properties and children behind a metatable, so `script.Signal` finds a child and
 --> assigning `Parent` moves it.
@@ -194,9 +169,10 @@ local function Remote(Universe: Universe, ClassName: string)
 		return if Instances and #Instances > 0 then table.clone(Instances) else Instances
 	end
 
-	State.Properties.FireServer = function(_self, Buffer: buffer, Instances: { any }?)
+	--> Warp's client asks for the server's event ids with a call that carries nothing.
+	State.Properties.FireServer = function(_self, Buffer: buffer?, Instances: { any }?)
 		Universe.Calls += 1
-		Universe.Bytes += buffer.len(Buffer)
+		Universe.Bytes += if Buffer then buffer.len(Buffer) else 0
 		table.insert(Universe.Outbox, { Buffer = Buffer, Instances = Keep(Instances), Remote = Object } :: any)
 	end
 	State.Properties.FireClient = function(_self, Player: any, Buffer: buffer, Instances: { any }?)
@@ -295,92 +271,35 @@ function World.Universe(Native: boolean, Mounts: { string }, Count: number?, Ins
 	return Universe
 end
 
-local function Resume(Thread: thread, ...)
-	local Success, Error = coroutine.resume(Thread, ...)
-	if not Success then
-		error(debug.traceback(Thread, tostring(Error)), 0)
-	end
-end
-
-local function Task(Universe: Universe)
-	local Task = {}
-
-	function Task.spawn(Callback: any, ...): thread
-		local Thread = if type(Callback) == "thread" then Callback else coroutine.create(Callback)
-		Resume(Thread, ...)
-		return Thread
-	end
-
-	function Task.defer(Callback: any, ...): thread
-		local Thread = if type(Callback) == "thread" then Callback else coroutine.create(Callback)
-		table.insert(Universe.Deferred, table.pack(Thread, ...))
-		return Thread
-	end
-
-	function Task.delay(_Seconds: number, Callback: any, ...): thread
-		--> Only invocation timeouts are delayed, and the benchmark invokes nothing.
-		return if type(Callback) == "thread" then Callback else coroutine.create(Callback)
-	end
-
-	function Task.cancel(_Thread: thread) end
-
-	function Task.wait()
-		error("The benchmark cannot wait")
-	end
-
-	return table.freeze(Task)
-end
-
 --- Runs every deferred thread, and whatever those defer in turn.
 function World.Drain(Universe: Universe)
-	local Deferred = Universe.Deferred
-	local Index = 1
-	while Index <= #Deferred do
-		local Entry = Deferred[Index]
-		Resume(Entry[1], table.unpack(Entry, 2, (Entry :: any).n))
-		Index += 1
+	Mocks.Drain(Universe.Deferred)
+end
+
+--- Delivers what the two sides sent each other while loading, both ways, until neither sends more,
+--- then forgets it was sent: Warp's client learns its event ids from the server this way before it can
+--- fire one. Call it once both sides are loaded, before anything is timed.
+function World.Settle(Universe: Universe)
+	World.Drain(Universe)
+	for _ = 1, 8 do
+		if #Universe.Outbox == 0 and #Universe.Inbox == 0 then
+			break
+		end
+		local Outbox, Inbox = table.clone(Universe.Outbox), table.clone(Universe.Inbox)
+		table.clear(Universe.Outbox)
+		table.clear(Universe.Inbox)
+		for _, Packet in Outbox do
+			(Packet :: any).Remote.OnServerEvent:Fire(Universe.Player, Packet.Buffer, Packet.Instances)
+		end
+		for _, Packet in Inbox do
+			(Packet :: any).Remote.OnClientEvent:Fire(Packet.Buffer, Packet.Instances)
+		end
+		World.Drain(Universe)
 	end
-	table.clear(Deferred)
+	assert(#Universe.Outbox == 0 and #Universe.Inbox == 0, "The two sides never stopped talking while loading")
+	Universe.Calls = 0
+	Universe.Bytes = 0
 end
-
---> Only what the tools touch while loading: zap builds CFrames for its special cases, and Packet
---> lists Enums and a Vector3 among its statics.
-local function Value(Kind: string)
-	return setmetatable({}, {
-		__index = function(Self, Key)
-			local Member = { Kind = Kind, Name = Key }
-			rawset(Self, Key, Member)
-			return Member
-		end,
-	})
-end
-
-local CFrame = {
-	Angles = function(...)
-		return { Kind = "CFrame", ... }
-	end,
-	new = function(...)
-		return { Kind = "CFrame", ... }
-	end,
-}
-
-local function Constructor(Kind: string)
-	return {
-		new = function(...)
-			return { Kind = Kind, ... }
-		end,
-		fromRGB = function(...)
-			return { Kind = Kind, ... }
-		end,
-	}
-end
-
---> `print` goes nowhere, as `warn` does: ByteNet's release prints its whole instance list on every
---> Instance it writes, and a terminal is far slower to print to than Roblox's output.
-local PRELUDE =
-	"local game, script, require, task, warn, print, _G, Instance, CFrame, Vector3, Vector2, Color3, Enum, workspace = ...\n"
-local PRELUDE_TYPEOF =
-	"local game, script, require, task, warn, print, _G, Instance, CFrame, Vector3, Vector2, Color3, Enum, workspace, typeof = ...\n"
 
 --> What `typeof` says with Universe.Instances on: a mock instance is an "Instance".
 local function MockTypeof(Value: any): string
@@ -393,48 +312,6 @@ end
 --- A part the scenarios send, for a universe with Instances on.
 function World.Part(Name: string): any
 	return Create("Part", Name)
-end
-
---> The prelude goes after the directives, which count only above the first line of code, and never
---> inside a block comment, whose lines would not start with `--`.
---> Also says whether the module asks to be natively compiled. A Roblox server compiles only the ones
---> that do, where Lune's `codegenEnabled` compiles everything: left alone, a tool that never declares
---> `--!native` -- Packet does not, and ByteNet does in 7 of its 35 files -- would be timed natively
---> here and interpreted in a game.
-local function Prepare(Source: string, Native: boolean, Prelude: string): (string, boolean)
-	local Lines = string.split(Source, "\n")
-	local Index = 1
-	local Declared = false
-	while Lines[Index] do
-		local Line = Lines[Index]
-		if string.sub(Line, 1, 3) == "--!" then
-			if string.match(Line, "^%-%-!native%s*$") then
-				Declared = true
-				if not Native then
-					table.remove(Lines, Index)
-					continue
-				end
-			end
-		elseif Line ~= "" and (string.sub(Line, 1, 2) ~= "--" or string.sub(Line, 1, 3) == "--[") then
-			break
-		end
-		Index += 1
-	end
-
-	table.insert(Lines, Index, Prelude)
-	return table.concat(Lines, "\n"), Declared
-end
-
-local function Normalise(Path: string): string
-	local Parts = {}
-	for _, Part in string.split(Path, "/") do
-		if Part == ".." and #Parts > 0 and Parts[#Parts] ~= ".." then
-			table.remove(Parts)
-		elseif Part ~= "." and Part ~= "" then
-			table.insert(Parts, Part)
-		end
-	end
-	return table.concat(Parts, "/")
 end
 
 export type World = {
@@ -463,6 +340,11 @@ function World.new(Universe: Universe, IsServer: boolean): World
 		IsStudio = function()
 			return false
 		end,
+		--> True only in Studio's Run mode, which a live server is not: Warp takes the client's path when
+		--> it says true.
+		IsRunMode = function()
+			return false
+		end,
 	}
 
 	local Services = {
@@ -484,11 +366,15 @@ function World.new(Universe: Universe, IsServer: boolean): World
 		},
 	}
 
-	local Game = {
-		GetService = function(_self, Name: string)
-			return assert(Services[Name], `No mock for the {Name} service`)
+	local function GetService(_self, Name: string)
+		return assert(Services[Name], `No mock for the {Name} service`)
+	end
+	--> Warp reaches a service as `game.RunService`, which Roblox resolves to the service by name.
+	local Game = setmetatable({ GetService = GetService }, {
+		__index = function(Self, Name: string)
+			return GetService(Self, Name)
 		end,
-	}
+	})
 
 	local Instance = {
 		new = function(ClassName: string, Parent: any?)
@@ -502,11 +388,12 @@ function World.new(Universe: Universe, IsServer: boolean): World
 		end,
 	}
 
-	local Globals = {}
+	--> `_G` and `shared` are each side's own, as each Roblox peer runs its own VM.
+	local Globals, Shared = {}, {}
 	local Cache: { [string]: any } = {}
 	local Loading: { [string]: boolean } = {}
-	local Task = Task(Universe)
-	local Enum = Value("Enum")
+	local Task = Mocks.Task(Universe.Deferred)
+	local Enum = Mocks.Enum()
 	local Warn = function() end
 
 	local Require: (Target: any, From: string?) -> any
@@ -517,9 +404,12 @@ function World.new(Universe: Universe, IsServer: boolean): World
 		assert(not Loading[Path], `{Path} requires itself`)
 		Loading[Path] = true
 
-		local Source, Declared =
-			Prepare(fs.readFile(Path), Universe.Native, if Universe.Instances then PRELUDE_TYPEOF else PRELUDE)
-		local Bytecode = luau.compile(Source, {
+		local Text, Declared = Source.Prepare(
+			fs.readFile(Path),
+			Universe.Native,
+			if Universe.Instances then Source.GLOBALS_TYPEOF else Source.GLOBALS
+		)
+		local Bytecode = luau.compile(Text, {
 			optimizationLevel = 2,
 			debugLevel = 1,
 		})
@@ -533,23 +423,26 @@ function World.new(Universe: Universe, IsServer: boolean): World
 			return Require(Target, Path)
 		end
 
-		local Result = Chunk(
-			Game,
-			Script,
-			LocalRequire,
-			Task,
-			Warn,
-			Warn,
-			Globals,
-			Instance,
-			CFrame,
-			Constructor("Vector3"),
-			Constructor("Vector2"),
-			Constructor("Color3"),
-			Enum,
-			Universe.Root,
-			MockTypeof
-		)
+		local Result = Chunk({
+			game = Game,
+			script = Script,
+			require = LocalRequire,
+			task = Task,
+			warn = Warn,
+			--> Nowhere, as `warn` does: ByteNet's release prints its whole instance list on every Instance it
+			--> writes, and a terminal is far slower to print to than Roblox's output.
+			print = Warn,
+			_G = Globals,
+			shared = Shared,
+			Instance = Instance,
+			CFrame = Mocks.CFrame,
+			Vector3 = Mocks.Vector3,
+			Vector2 = Mocks.Vector2,
+			Color3 = Mocks.Color3,
+			Enum = Enum,
+			workspace = Universe.Root,
+			typeof = MockTypeof,
+		})
 		Cache[Path] = Result
 		Loading[Path] = nil
 		return Result
@@ -564,8 +457,16 @@ function World.new(Universe: Universe, IsServer: boolean): World
 			return Load((assert(Path, `Cannot require {Target}`)))
 		end
 
-		local Base = if From then string.match(From, "^(.*)/[^/]*$") or "." else "."
-		local Path = Normalise(`{Base}/{Target}`)
+		--> As Luau resolves a string: `@self` is an `init.luau`'s own folder, and `./` in one is the folder
+		--> that holds it, whose siblings a module's `./` names anywhere else.
+		local Folder = if From then string.match(From, "^(.*)/[^/]*$") or "." else "."
+		local Base = Folder
+		if string.sub(Target, 1, 6) == "@self/" then
+			Target = string.sub(Target, 7)
+		elseif From and string.match(From, "/init%.luau$") then
+			Base = `{Folder}/..`
+		end
+		local Path = Source.Normalise(`{Base}/{Target}`)
 		if string.sub(Path, -5) == ".luau" and fs.isFile(Path) then
 			return Load(Path)
 		elseif fs.isFile(`{Path}.luau`) then
@@ -576,7 +477,7 @@ function World.new(Universe: Universe, IsServer: boolean): World
 
 	return {
 		Require = function(Path: string)
-			return Require(Normalise(Path))
+			return Require(Source.Normalise(Path))
 		end,
 		Heartbeat = Heartbeat,
 	}

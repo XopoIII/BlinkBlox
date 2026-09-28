@@ -7,6 +7,26 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+Neither the wire nor the generated modules change.
+
+### Changed
+
+- The benchmarks compare two more libraries, [QuickNet](https://github.com/breadboardengineer1234/QuickNet)
+  0.3.5 and [Warp](https://github.com/imezx/Warp) 1.1.0-pre7, in `Runtime`, `Rivals` and the Studio
+  place. Both pack typed events into buffers and batch them a frame, and QuickNet publishes figures
+  against Blink 0.18.8. Neither is on Wally at that version, so `download.luau` fetches each from its
+  GitHub source. QuickNet's rate limit is lifted per event, as its own benchmark does, and Warp's
+  8000-byte inbound cap is raised as Packet's is.
+- The harness that loads the other tools grew what they needed and loads them as Roblox would:
+  `@native` functions compile natively where the module does not declare `--!native`, a module's
+  own code runs inside a function so Roblox's globals do not count against its 200 locals, `@self`
+  and an `init.luau`'s `./` resolve as Luau resolves them, and each side has its own `shared`. The
+  two sides now deliver what they sent each other while loading before anything is timed, which
+  Warp's client needs to learn its event ids. The figures of the tools already compared did not move
+  (a 100-frame run of each before and after, within the run-to-run noise).
+
 ## 0.41.2 — 2026-09-28
 
 Neither the wire nor the generated modules change.
