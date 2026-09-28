@@ -1,4 +1,5 @@
 local fs = require("@lune/fs")
+local runtime = require("../.lune/libs/runtime")
 local stdio = require("@lune/stdio")
 
 local Attributes = require("../src/Modules/Attributes")
@@ -29,7 +30,7 @@ local function Format(Time: number): string
 		Suffix = "ns"
 	elseif Time < 0.001 then
 		Time *= 1E+6
-		Suffix = "μs"
+		Suffix = "us"
 	elseif Time < 1 then
 		Time *= 1000
 		Suffix = "ms"
@@ -81,6 +82,8 @@ end
 _G.RELEASE = true
 _G.VERSION = "PERFORMANCE"
 
+runtime.notice("These timings")
+
 BenchmarkClosure("Lex", function()
 	SourceLexer:Initialize(Source)
 
@@ -103,3 +106,5 @@ end)
 BenchmarkClosure("Generate client", function()
 	Generator.Generate("Client", AbstractSyntaxTree)
 end)
+
+runtime.notice("These timings")

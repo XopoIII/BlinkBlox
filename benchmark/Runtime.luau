@@ -23,6 +23,7 @@
 --- rows are both interpreted. `interpreted` is what most players' clients run.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local runtime = require("../.lune/libs/runtime")
 local serde = require("@lune/serde")
 
 local Attributes = require("../src/Modules/Attributes")
@@ -198,8 +199,9 @@ for _, Name in Tools.ORDER do
 	end
 end
 
+runtime.notice("These timings")
 print(
-	`BlinkBlox {_G.VERSION or "(unbundled)"}{if Traffic then " with TrafficStats" else ""}, {Frames} frames of {EVENTS_PER_FRAME} events, times in ms per frame`
+	`BlinkBlox {_G.VERSION or "(unbundled)"}{if Traffic then " with TrafficStats" else ""}, {Frames} frames of {EVENTS_PER_FRAME} events, times in ms per frame, on {runtime.description}`
 )
 
 for _, Bench in BENCHES do
@@ -238,3 +240,5 @@ for _, Bench in BENCHES do
 		end
 	end
 end
+
+runtime.notice("These timings")

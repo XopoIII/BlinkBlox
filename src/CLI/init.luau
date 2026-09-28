@@ -7,6 +7,10 @@
 local process = require("@lune/process")
 local stdio = require("@lune/stdio")
 
+--> Before anything prints: run under LuneBlox when it is installed and this is not it. The path is
+--> taken here because only the entry chunk names the file that was run -- the bundle, under pesde.
+require("@self/Utility/Relaunch")(debug.info(1, "s"))
+
 local Attributes = require("./Modules/Attributes")
 local Compile = require("@self/Utility/Compile")
 local Watch = require("@self/Utility/Watch")

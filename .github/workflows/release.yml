@@ -31,7 +31,7 @@ jobs:
         uses: CompeyDev/setup-rokit@v0.1.0
 
       - name: Build binaries
-        run: lune run build
+        run: luneblox run build
 
       - name: linux-aarch64
         run: gh release upload ${{github.event.release.tag_name}} release/blinkblox-linux-aarch64.tar.xz

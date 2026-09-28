@@ -26,9 +26,9 @@ inbound limits, which Blink does not have, and without `Tiny`.
 
 ## Without Studio
 
-`lune run Runtime` in this directory times every tool above on Lune, where Studio cannot: interpreted, as most
+`luneblox run Runtime` in this directory times every tool above on Lune, where Studio cannot: interpreted, as most
 players' clients run code, and decoding on the server, which Studio does not time. It loads zap's and Blink's
-generated modules, ByteNet and Packet from the same files Studio runs (after `lune run build --download`) with just
+generated modules, ByteNet and Packet from the same files Studio runs (after `luneblox run build --download`) with just
 enough of Roblox mocked around them, and times a frame's thousand fires, the flush into packets, and the server decoding those packets
 and calling its listener. `Bytes/event` is the encoder's output; `zstd` is that output compressed as Roblox would.
 
@@ -111,7 +111,7 @@ some native figures in earlier tables were interpreted ones.
 
 ## Sending to a crowd, unreliable events and Instances
 
-`lune run Rivals` runs the paths the benchmark above never does, on every tool, all loaded the same way so each pays for
+`luneblox run Rivals` runs the paths the benchmark above never does, on every tool, all loaded the same way so each pays for
 the same mocks, each flushing on its own Heartbeat. The events are in `definitions/Scenarios.blink`, declared for each tool
 in `definitions/Scenarios.zap`, `definitions/Scenarios.upstream.blink` and `runtime/rivals/modes`. Times are
 milliseconds a frame; `Remote calls/frame` and `Bytes/frame` are summed over every player a frame reached.
@@ -233,7 +233,7 @@ BlinkBlox with `option BatchUnreliable`, which gathers a frame's unreliable even
 
 ## Streams
 
-`lune run Scenarios` runs the same paths for BlinkBlox alone, with streams in place of the unreliable events: a stream
+`luneblox run Scenarios` runs the same paths for BlinkBlox alone, with streams in place of the unreliable events: a stream
 of 16 units to 50 players (`StreamWorld`), and one held per player (`StreamPerPlayer`). The streams to everyone due in
 a frame share one `FireAllClients`.
 
@@ -267,7 +267,7 @@ With `--batch`:
 
 ## Many events
 
-`lune run Scenarios -- ManyEvents` sends 100 reliable events a frame spread over the 128 `Many` declarations of
+`luneblox run Scenarios -- ManyEvents` sends 100 reliable events a frame spread over the 128 `Many` declarations of
 `definitions/Scenarios.blink`, and times the client decoding them. Run 2026-09-28, interpreted, medians of three runs
 taken alternately with both versions' modules loaded from files:
 

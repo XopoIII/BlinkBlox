@@ -19,6 +19,7 @@
 --- fewer calls for the same bytes is cheaper on the wire than its bytes say.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
+local runtime = require("../.lune/libs/runtime")
 
 local Attributes = require("../src/Modules/Attributes")
 local Crowd = require("./runtime/Crowd")
@@ -324,7 +325,10 @@ end
 
 local ServerSource, ClientSource = Generate()
 
-print(`BlinkBlox {_G.VERSION or "(unbundled)"}, {Frames} frames, times in ms per frame, {CROWD} players where a crowd`)
+runtime.notice("These timings")
+print(
+	`BlinkBlox {_G.VERSION or "(unbundled)"}, {Frames} frames, times in ms per frame, {CROWD} players where a crowd, on {runtime.description}`
+)
 print("")
 print("|Scenario|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|")
 print("|---|---|---|---|---|---|---|")
@@ -348,3 +352,5 @@ for _, Native in { true, false } do
 		print(`|{table.concat(Cells, "|")}|`)
 	end
 end
+
+runtime.notice("These timings")

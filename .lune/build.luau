@@ -2,6 +2,11 @@
 local fs = require("@lune/fs")
 local log = require("./libs/log")
 local process = require("@lune/process")
+local runtime = require("./libs/runtime")
+
+--> Each executable carries the runtime that builds it, so a release built anywhere but LuneBlox
+--> would ship players a compiler on a different Luau than the one every test and figure ran on.
+runtime.require("A release build")
 
 type Archs = | "aarch64" | "x86_64"
 
@@ -24,7 +29,7 @@ local function build_executable(platform: Platforms, arch: Archs)
 	local target = `{platform}-{arch}`
 	local exe_name = `{EXE_NAME}{platform == "windows" and ".exe" or ""}`
 	local exe_path = `{RELEASE_DIR}/{exe_name}`
-	local build_result = process.exec("lune", {
+	local build_result = process.exec(runtime.command, {
 		"build",
 		BUNDLE_PATH,
 		"--output",

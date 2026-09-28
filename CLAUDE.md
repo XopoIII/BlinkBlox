@@ -89,13 +89,28 @@ easy to break without noticing.
   hitch Roblox delivers the backlog at once, and a refused reliable packet takes its events along.
 - Luau allows 200 locals a function. Each struct field is scoped (`src/Generator/Scope.luau`), or a
   struct of fifty CFrames fails to load.
-- Lune 0.10.5's Luau leaves a whole module interpreted once one function is too large to compile, and
-  a module's top-level function grows with its declarations: past about 70 events on the server and 85
-  on the client, Lune's "native" rows are interpreted. Current Luau (the 0.738 CLI with `--codegen`)
-  leaves only the top-level function interpreted, so games are unaffected; benchmarks are not.
+- Roblox runs Luau 0.740 (September 2026) with its own fast flags, and so does LuneBlox, which every
+  figure here is measured on. Among the flags is `DebugCodegenOptSize`, set in Studio as on clients,
+  which skips block linearisation in native code: native timings on LuneBlox are what Roblox gets,
+  about 20% slower on the thousand-event benches than Luau's defaults (`LUNE_ROBLOX_FFLAGS=0`).
+- Lune 0.10.5's Luau 0.709 left a whole module interpreted once one function was too large to
+  compile, so past about 70 events its "native" rows were interpreted; figures published before
+  LuneBlox carry that. Luau 0.740 leaves only the too-large function interpreted.
 - Studio caps the frame rate at 60 and compiles LocalScripts natively where most clients do not, and
-  Roblox's zstd squeezes a repeated payload to nothing: `benchmark/Runtime.luau` times on Lune, native
-  and interpreted, with random payloads.
+  Roblox's zstd squeezes a repeated payload to nothing: `benchmark/Runtime.luau` times on LuneBlox,
+  native and interpreted, with random payloads.
+
+## The toolchain runs on LuneBlox
+
+`luneblox` (github.com/XopoIII/LuneBlox, pinned in `rokit.toml`) is Lune running the Luau version
+Roblox runs, with Roblox's fast flags and Luau built at `-O3` -- upstream Lune 0.10.5 runs Luau 0.709,
+where interpreted code measured over twice as slow. Tests, benchmarks and release builds run on it;
+`.lune/libs/runtime.luau` prints a warning when a test or benchmark runs anywhere else, the scripts
+shell out through `runtime.command` so a run stays on one runtime, and a release build refuses.
+
+The compiler's own source must still run on upstream Lune: pesde runs the bundled compiler on the
+user's Lune, whatever its version. So `src/` uses no syntax or library newer than upstream Lune's Luau
+(`const`, `if local`); tests and benchmarks may.
 
 ## Invariants that are easy to break
 
@@ -140,8 +155,8 @@ schema on remotes nothing else shares. Each of these fails when the bug it is ab
 |---|---|
 | Install the toolchain | `rokit install` |
 | Run the test suite | `sh scripts/run-tests.sh` |
-| Re-record the output snapshots | `cd test && lune run Test --yes --update-goldens` |
-| Replay or vary the property draws | `cd test && BLINKBLOX_SEED=<n> lune run Test --yes` |
+| Re-record the output snapshots | `cd test && luneblox run Test --yes --update-goldens` |
+| Replay or vary the property draws | `cd test && BLINKBLOX_SEED=<n> luneblox run Test --yes` |
 | Type-check everything | `sh scripts/type-check.sh` |
 | Lint | `selene src test plugin/src .lune` |
 | Check type-checking modes | `sh scripts/check-strict.sh` |
@@ -150,12 +165,12 @@ schema on remotes nothing else shares. Each of these fails when the bug it is ab
 | Check formatting | `stylua --check src test plugin .lune` |
 | Format | `stylua src test plugin .lune` |
 | Install git hooks | `lefthook install` |
-| Compile a schema | `lune run init <path-to-.blink> -- --yes` (from `src/CLI`) |
-| Check a schema, diagnostics as JSON | `lune run init <path-to-.blink> -- --check --json` (from `src/CLI`) |
-| Build release binaries | `lune run build` |
-| Time the generated modules | `lune run Runtime` (from `benchmark`) |
-| Time the compiler | `lune run Performance` (from `benchmark`) |
-| Measure the unreliable payload limit in Studio | `lune run Probe` (from `benchmark`) |
+| Compile a schema | `luneblox run init <path-to-.blink> -- --yes` (from `src/CLI`) |
+| Check a schema, diagnostics as JSON | `luneblox run init <path-to-.blink> -- --check --json` (from `src/CLI`) |
+| Build release binaries | `luneblox run build` |
+| Time the generated modules | `luneblox run Runtime` (from `benchmark`) |
+| Time the compiler | `luneblox run Performance` (from `benchmark`) |
+| Measure the unreliable payload limit in Studio | `luneblox run Probe` (from `benchmark`) |
 | Docs, locally | `cd docs && npm install && npm run dev` |
 | Build the docs (dead links fail it) | `cd docs && npm run build` |
 
@@ -165,7 +180,7 @@ The same gates run in CI (`.github/workflows/checks.yaml`) and before each commi
 warning that is tolerated once stops being read.
 
 The version is recorded in two files -- `build/.darklua.json` and `pesde.toml` -- and
-`lune run bump <version>` writes both. `scripts/check-versions.sh` fails the build if they disagree.
+`luneblox run bump <version>` writes both. `scripts/check-versions.sh` fails the build if they disagree.
 The docs print it as well, as the rokit pin `XopoIII/BlinkBlox@<version>` and as the CLI's banner on
 a line of its own; they sat at 0.33.0 through three releases, so `bump` now rewrites them too
 (`.lune/libs/docs_version.luau`) and `check-versions.sh` fails on a stale one.
@@ -287,5 +302,5 @@ not frozen** — the old warning about an anchor-matching patch script no longer
 
 What replaced it as the safety net is `test/Golden/`: a committed copy of every test schema's
 generated modules. Any change to the emitter shows up there as a reviewable diff instead of as
-silence. Regenerate with `lune run Test --yes --update-goldens` from `test/`, and read the diff
+silence. Regenerate with `luneblox run Test --yes --update-goldens` from `test/`, and read the diff
 before committing it — that diff IS the review.
