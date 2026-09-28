@@ -213,7 +213,9 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	end
 
 	if not State.Options.ManualReplication then
-		Replication.Push("RunService.Heartbeat:Connect(StepReplication)")
+		for _, Line in Fragments.Heartbeat(State.Context, State.Options) do
+			Replication.Push(Line)
+		end
 	end
 
 	--> Parse declarations

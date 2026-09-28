@@ -217,7 +217,38 @@ local ROTATION_HELPERS = {
 	"end\n",
 }
 
+--- What the module's Heartbeat runs. The server sends every frame.
+---
+--- A client sends at most `ClientFlushRate` times a second, 60 unless the schema says. Roblox spends
+--- about 11 bytes on every remote call beside its payload -- measured in Studio, 240 calls of 40
+--- bytes a second cost 13.2 KB/s where 60 of 160 cost 11.2 -- and the server's inbound budget
+--- charges each packet at least 128 bytes, so a client at 500 frames a second sending every frame
+--- spent the whole default budget on floors. What a frame gathers waits for the next send instead,
+--- which Roblox's own network step, 60 a second, delays it to anyway. A client at 60 frames or fewer
+--- sends every frame, as it always did; the tenth of an interval of slack is for Heartbeats that come
+--- a hair early. `StepReplication` called by the game still sends at once.
+local function Heartbeat(Context: string, Options: { ClientFlushRate: number? }): { string }
+	if Context ~= "Client" then
+		return { "RunService.Heartbeat:Connect(StepReplication)" }
+	end
+
+	local Rate = Options.ClientFlushRate or Grammar.DEFAULTS.ClientFlushRate
+	return {
+		`local FLUSH_INTERVAL = 1 / {Rate}`,
+		"local FlushClock = 0",
+		"RunService.Heartbeat:Connect(function(Delta: number)",
+		"	FlushClock += Delta",
+		"	if FlushClock < FLUSH_INTERVAL * 0.9 then",
+		"		return",
+		"	end",
+		"	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)",
+		"	StepReplication()",
+		"end)",
+	}
+end
+
 return {
+	Heartbeat = Heartbeat,
 	EVENTS_TYPE = EVENTS_TYPE,
 	ROTATION_HELPERS = ROTATION_HELPERS,
 	InboundGuard = InboundGuard,

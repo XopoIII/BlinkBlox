@@ -25,6 +25,16 @@ The wire does not change, and neither does a module built without the new option
   stored, where each bound read the field back out of its table: 30% off decoding a struct of three
   ranged numbers.
 
+### Changed
+
+- A client sends at most `option ClientFlushRate` times a second, 60 unless the schema says, where it
+  sent every Heartbeat. Measured in Studio, each remote call costs about 11 bytes beside its payload
+  (240 calls of 40 bytes a second went out as 13.2 KB/s, 60 of 160 as 11.2), and the inbound budget
+  charges each packet at least 128 bytes, so a client at 500 frames a second sending every frame spent
+  the whole default budget on floors. At 60 frames or fewer nothing changes, and a `StepReplication`
+  the game calls still sends at once. The same run found no loss, no warning and no ping rise from 60
+  to 480 packets a second on either remote, so there is no cap Roblox enforces to stay under.
+
 ### Added
 
 - `option OutboundBytesPerSecond` and `OutboundBurst`, a per-player budget for what the server sends,

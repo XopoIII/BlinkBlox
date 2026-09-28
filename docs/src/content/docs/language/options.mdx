@@ -39,6 +39,7 @@ A few rules hold for all of them:
 | `ExportLimits` | boolean | `false` | [Output](#exportlimits) |
 | `FutureLibrary`, `PromiseLibrary` | Luau path | none | [Output](#futurelibrary-and-promiselibrary) |
 | `ManualReplication` | boolean | `false` | [Runtime behaviour](#manualreplication) |
+| `ClientFlushRate` | sends a second | `60` | [Runtime behaviour](#clientflushrate) |
 | `BatchUnreliable` | boolean | `false` | [Runtime behaviour](#batchunreliable) |
 | `UsePolling` | boolean | `false` | [Runtime behaviour](#usepolling) |
 | `Predict` | boolean | `false` | [Runtime behaviour](#predict) |
@@ -230,6 +231,27 @@ RunService.PostSimulation:Connect(function()
     Net.StepReplication()
 end)
 ```
+
+### `ClientFlushRate`
+Default: `60`
+
+The most times a second a client's Heartbeat sends what it has gathered. A client running at 60 frames
+a second or fewer sends every frame; one at 144 or 240 sends 60 times a second, and what a frame fires
+waits for the next send.
+
+Every remote call costs about 11 bytes beside its payload -- measured in Studio, 240 calls of 40 bytes a
+second went out as 13.2 KB/s, and 60 calls of 160 bytes as 11.2 KB/s -- and the server's
+[inbound budget](#inboundbytespersecond-inboundburst) charges each packet at least 128 bytes, so a client
+at 500 frames a second that sent every frame spent the whole default budget on those floors alone.
+Roblox's own network step runs 60 times a second, so a send made more often does not arrive sooner.
+
+```blink
+option ClientFlushRate = 120
+```
+
+It limits the Heartbeat only: `StepReplication` called by the game still sends at once, and under
+[`ManualReplication`](#manualreplication) there is no Heartbeat to limit. An unreliable event outside
+[`BatchUnreliable`](#batchunreliable) is sent when it is fired, as before.
 
 ### `BatchUnreliable`
 Default: `false`

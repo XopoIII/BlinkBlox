@@ -73,6 +73,7 @@ Grammar.OPTIONS = {
 	InboundBurst = "Number",
 	OutboundBytesPerSecond = "Number",
 	OutboundBurst = "Number",
+	ClientFlushRate = "Number",
 	DefaultRate = "Number",
 	RequireRates = "Boolean",
 	Predict = "Boolean",
@@ -100,6 +101,7 @@ Grammar.DEFAULTS = {
 	InboundRatePackets = 8,
 	MaxUnreliableSize = 980,
 	UnreliableInstanceBytes = 6,
+	ClientFlushRate = 60,
 }
 
 --- The fields of an event's `Stream` block (docs/src/content/docs/language/streams.mdx): the rate
@@ -373,6 +375,9 @@ export type Options = {
 	--> it may bank. Only a `Priority: Low` send is ever left out for it.
 	OutboundBytesPerSecond: number?,
 	OutboundBurst: number?,
+
+	--> The most times a second a client's Heartbeat sends what it has gathered; see Fragments.Heartbeat.
+	ClientFlushRate: number?,
 
 	--> Largest payload an unreliable event may send: its buffer, plus `UnreliableInstanceBytes` for
 	--> each Instance beside it. Roblox drops an UnreliableRemoteEvent whose payload passes 1000

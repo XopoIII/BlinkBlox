@@ -976,7 +976,16 @@ local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 		DecodeEvent()
 	end
 end
-RunService.Heartbeat:Connect(StepReplication)
+local FLUSH_INTERVAL = 1 / 60
+local FlushClock = 0
+RunService.Heartbeat:Connect(function(Delta: number)
+	FlushClock += Delta
+	if FlushClock < FLUSH_INTERVAL * 0.9 then
+		return
+	end
+	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
+	StepReplication()
+end)
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
 	RecieveBuffer = Buffer
