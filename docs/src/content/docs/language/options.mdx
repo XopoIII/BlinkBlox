@@ -43,6 +43,7 @@ A few rules hold for all of them:
 | `BatchUnreliable` | boolean | `false` | [Runtime behaviour](#batchunreliable) |
 | `UsePolling` | boolean | `false` | [Runtime behaviour](#usepolling) |
 | `Predict` | boolean | `false` | [Runtime behaviour](#predict) |
+| `PackedBooleanReader` | `"Auto"`, `"Bits"`, `"Rows"` | `"Auto"` | [Runtime behaviour](#packedbooleanreader) |
 | `ClientConnectTimeout` | seconds | wait for ever | [Starting up](#clientconnecttimeout) |
 | `AutoStart` | boolean | `true` | [Starting up](#autostart) |
 | `WriteValidations` | boolean | `false` | [Validation](#writevalidations) |
@@ -339,6 +340,29 @@ Off by default because it is an entry point into your listeners that does not ex
 Enable it where you want it -- a `@profile("dev")` or `@profile("test")` setting is a good fit -- and
 leave it off in builds where you do not.
 </Aside>
+
+### `PackedBooleanReader`
+Default: `"Auto"`
+Values: `"Auto"`, `"Bits"`, `"Rows"`
+
+How a received [`boolean[]`](/BlinkBlox/language/types/#arrays-of-booleans) is unpacked. Two ways
+are fastest in different places:
+
+- `"Bits"` tests each bit. Natively compiled code, which a Roblox server runs, inlines the test, and
+  nothing measured faster there.
+- `"Rows"` copies a byte's eight elements from a table of 256 rows. Interpreted code, which most
+  players' clients run, decodes a thousand 1000-element arrays about 30% faster this way, and native
+  code about a third slower.
+
+`"Auto"` emits both, and the module measures which is faster as it loads -- both read the same 1024
+elements eight times, which takes tens of microseconds, once -- then uses that one. A server, a
+client and Studio, which compiles LocalScripts natively, each get the faster one. `"Bits"` or
+`"Rows"` fixes the choice and emits only that reader. The wire is the same whichever is chosen, so
+the two sides may differ. A schema without a `boolean[]` emits neither.
+
+```blink
+option PackedBooleanReader = "Bits"
+```
 
 ## Starting up
 

@@ -193,16 +193,17 @@ end
 --> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
 --> reaches the save.
 local PendingCursor = -1
-local PendingInstances = 0
 
 --> How many Instances the client's batch held after the last write into it that returned. Every write
 --> into the batch starts from there, so Begin takes it from here rather than counting the list, and
---> only a write that can add Instances counts it again; see the commits in the client template.
+--> only a write that can add Instances counts it again; see the commits in the client template. It
+--> is also where a write that threw is undone to: only a write that returns moves it, so it still
+--> holds what the batch had when that write began, and a Fire keeps no copy of its own.
 local CommittedInstances = 0
 
 local function Settle()
     if PendingCursor >= 0 then
-        Rollback(PendingCursor, PendingInstances)
+        Rollback(PendingCursor, CommittedInstances)
         PendingCursor = -1
     end
 end
@@ -214,7 +215,6 @@ local function Begin()
         Settle()
     end
     PendingCursor = SendCursor
-    PendingInstances = CommittedInstances
 end
 
 local function Mark(): (number, number)
@@ -571,6 +571,57 @@ local function UnpackRotation(X: number, Y: number, Z: number, Index: number, A:
 	end
 	return CFrame.new(X, Y, Z, A, B, C, D)
 end
+
+local PACKED_ROWS = table.create(256)
+for Byte = 0, 255 do
+	local Row = table.create(8)
+	for Bit = 0, 7 do
+		Row[Bit + 1] = bit32.btest(Byte, bit32.lshift(1, Bit))
+	end
+	PACKED_ROWS[Byte + 1] = table.freeze(Row)
+end
+table.freeze(PACKED_ROWS)
+local function PackedRows(Source: buffer, Offset: number, Length: number, Value: { boolean })
+	local Whole = Length // 8
+	for Byte = 0, Whole - 1 do
+		table.move(PACKED_ROWS[buffer.readu8(Source, Offset + Byte) + 1], 1, 8, Byte * 8 + 1, Value)
+	end
+	if Length % 8 ~= 0 then
+		table.move(PACKED_ROWS[buffer.readu8(Source, Offset + Whole) + 1], 1, Length % 8, Whole * 8 + 1, Value)
+	end
+end
+local function PackedBits(Source: buffer, Offset: number, Length: number, Value: { boolean })
+	for Byte = 0, Length // 8 - 1 do
+		local Bits = buffer.readu8(Source, Offset + Byte)
+		local Base = Byte * 8
+		Value[Base + 1] = bit32.btest(Bits, 1)
+		Value[Base + 2] = bit32.btest(Bits, 2)
+		Value[Base + 3] = bit32.btest(Bits, 4)
+		Value[Base + 4] = bit32.btest(Bits, 8)
+		Value[Base + 5] = bit32.btest(Bits, 16)
+		Value[Base + 6] = bit32.btest(Bits, 32)
+		Value[Base + 7] = bit32.btest(Bits, 64)
+		Value[Base + 8] = bit32.btest(Bits, 128)
+	end
+end
+local PACKED_BY_ROWS = (function(): boolean
+	local Probe = buffer.create(128)
+	for Index = 0, 127 do
+		buffer.writeu8(Probe, Index, (Index * 37 + 11) % 256)
+	end
+	local Target = table.create(1024, false)
+	local Bits, Rows = math.huge, math.huge
+	for _ = 1, 8 do
+		local Start = os.clock()
+		PackedBits(Probe, 0, 1024, Target)
+		local Middle = os.clock()
+		PackedRows(Probe, 0, 1024, Target)
+		local Finish = os.clock()
+		Bits = math.min(Bits, Middle - Start)
+		Rows = math.min(Rows, Finish - Middle)
+	end
+	return Rows < Bits
+end)()
 local RATE_TEMPLATE = table.freeze({10, 0, 0, 0, 10, 0, 0, 0, 2, 0, 0, 0})
 
 --> Sequence numbers for ordered unreliable events, per player and per event, both ways.
@@ -2136,24 +2187,28 @@ function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
 	local Value = table.create(Length)
 	do
 		local PACKED_OFFSET = Read((Length + 7) // 8)
-		local PACKED_WHOLE = Length // 8
-		for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-			local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-			local PACKED_BASE = PACKED_BYTE * 8
-			Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-			Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-			Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-			Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-			Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-			Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-			Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-			Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-		end
-		if Length % 8 ~= 0 then
-			local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-			local PACKED_BASE = PACKED_WHOLE * 8
-			for PACKED_BIT = 0, Length % 8 - 1 do
-				Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+		if PACKED_BY_ROWS then
+			PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+		else
+			local PACKED_WHOLE = Length // 8
+			for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+				local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+				local PACKED_BASE = PACKED_BYTE * 8
+				Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+				Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+				Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+				Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+				Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+				Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+				Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+				Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+			end
+			if Length % 8 ~= 0 then
+				local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+				local PACKED_BASE = PACKED_WHOLE * 8
+				for PACKED_BIT = 0, Length % 8 - 1 do
+					Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+				end
 			end
 		end
 	end
@@ -7273,24 +7328,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7378,24 +7437,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = BLOCK_START + 0
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7487,24 +7550,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7601,24 +7668,28 @@ if not RunService:IsRunning() then
 					local Item_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Item_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -7716,24 +7787,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7829,24 +7904,28 @@ if not RunService:IsRunning() then
 					Value.List = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.List)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -7861,24 +7940,28 @@ if not RunService:IsRunning() then
 					Value.Fixed = table.create(Length)
 					do
 						local PACKED_OFFSET = BLOCK_START + 1
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.Fixed)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -8039,24 +8122,28 @@ if not RunService:IsRunning() then
 					local Element_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Element_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -10738,7 +10825,7 @@ end
 
 --> Reports a listener's error, or returns false when no handler is installed and the caller should
 --> surface it the way it did before the handler existed. Never throws or yields: it runs inside the
---> decode loop's per-event pcall.
+--> decode loop's pcall, or in the connection itself after a listener threw, before the decode goes on.
 local function ListenerFailed(Player: Player, Event: string, Failure: unknown): boolean
     local Handler = ListenerHandler
     if not Handler then
@@ -10885,7 +10972,7 @@ local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: num
 
         local Handler = RateHandler
         if Handler then
-            --> Spawned, not called. This runs inside the per-event pcall that contains a truncated
+            --> Spawned, not called. This runs inside the decode loop's pcall that contains a truncated
             --> packet, so a throwing handler would abort the rest of the packet; and a handler that
             --> yields -- an analytics write, a datastore call -- would stall decoding.
             Spawn(Handler, Player, Name, Refused)
@@ -10940,7 +11027,7 @@ local function ConcurrencyAccept(Player: Player, Index: number, Limit: number, N
 
     local Handler = RateHandler
     if Handler then
-        --> Spawned for RateAccept's reason: this runs inside the per-event pcall of the decode loop.
+        --> Spawned for RateAccept's reason: this runs inside the decode loop's pcall.
         Spawn(Handler, Player, Name, Refused)
     end
 
@@ -11221,18 +11308,502 @@ local function StepReplication()
         SharedBuffer = buffer.create(64)
     end
 end
-local function DecodeLoop(DecodeEvent: () -> (), Player: Player, Size: number)
-	local DecodedEvents = 0
-	while RecieveCursor < Size and Player.Parent ~= nil do
-		DecodedEvents += 1
-		if DecodedEvents > 64 then
+local Decoding = -1
+local DecodeRemaining = 64
+local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, Size: number)
+	while RecieveCursor < Size do
+		if DecodeRemaining == 0 then
 			ReportDrop(Player, "Events", 64)
 			break
 		end
-		DecodeEvent()
+		DecodeRemaining -= 1
+		DecodeEvent(Player)
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
+local function DecodeReliable(Player: Player)
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
+	Decoding = Index
+	if Index < 47 then
+		if Index < 9 then
+			if Index == 0 then
+				local Value: number = SerdesFunctions.ReadEVENT_RateLimited()
+				if RateAccept(Player, 1, 5, 10, "RateLimited") == true then
+					local BOUND_LISTENER = Events.Reliable[0]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "RateLimited"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Player, Value)
+					else
+						if #Queue.Reliable[0] < 256 then
+							table.insert(Queue.Reliable[0], table.pack(Player, Value))
+						end
+					end
+				end
+			elseif Index == 1 then
+				local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_RateLimitedPoll())
+				if Queue.Reliable[1].count < MAX_POLLED and RateAccept(Player, 5, 5, 10, "RateLimitedPoll") then
+					Push(Queue.Reliable[1], Arguments)
+				end
+			elseif Index == 2 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: number = SerdesFunctions.ReadFUNCTION_DATA_RateLimitedCall()
+				if not RateAccept(Player, 9, 2, 2, "RateLimitedCall") then
+					LoadPlayer(Player)
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 2)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					SavePlayerBuffer(Player)
+					return
+				end
+				if Events.Reliable[2] ~= nil then
+					Spawn(Events.Reliable[2], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[2] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 2)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[2], table.pack(Player, Value, InvocationIdentifier))
+				end
+			elseif Index == 3 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: number = SerdesFunctions.ReadFUNCTION_DATA_ConcurrentCall()
+				if not ConcurrencyAccept(Player, 3, 2, "ConcurrentCall") then
+					LoadPlayer(Player)
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 3)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					SavePlayerBuffer(Player)
+					return
+				end
+				if Events.Reliable[3] ~= nil then
+					Spawn(Events.Reliable[3], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[3] >= 256 then
+						ConcurrencyRelease(Player, 3)
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 3)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[3], table.pack(Player, Value, InvocationIdentifier))
+				end
+			elseif Index == 5 then
+				local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientPollEvent())
+				if Queue.Reliable[5].count < MAX_POLLED then
+					Push(Queue.Reliable[5], Arguments)
+				end
+			elseif Index == 6 then
+				local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyPollEvent())
+				if Queue.Reliable[6].count < MAX_POLLED then
+					Push(Queue.Reliable[6], Arguments)
+				end
+			else
+				error("[BlinkBlox]: Unknown event index.")
+			end
+		else
+			if Index == 9 then
+				local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyEvent()
+				local BOUND_LISTENER = Events.Reliable[9]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "ClientEmptyEvent"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Player, Value)
+				else
+					if #Queue.Reliable[9] < 256 then
+						table.insert(Queue.Reliable[9], table.pack(Player, Value))
+					end
+				end
+			elseif Index == 11 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: nil = SerdesFunctions.ReadFUNCTION_DATA_EmptyFunction()
+				if Events.Reliable[11] ~= nil then
+					Spawn(Events.Reliable[11], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[11] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 11)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[11], table.pack(Player, Value, InvocationIdentifier))
+				end
+			elseif Index == 12 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: nil = SerdesFunctions.ReadFUNCTION_DATA_UnitFunction()
+				if Events.Reliable[12] ~= nil then
+					Spawn(Events.Reliable[12], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[12] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 12)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[12], table.pack(Player, Value, InvocationIdentifier))
+				end
+			elseif Index == 20 then
+				local Value: { boolean } = SerdesFunctions.ReadEVENT_Booleans()
+				local BOUND_LISTENER = Events.Reliable[20]
+				if BOUND_LISTENER ~= nil then
+					Spawn(RunListener, "Booleans", BOUND_LISTENER, Player, Value)
+				else
+					if #Queue.Reliable[20] < 256 then
+						table.insert(Queue.Reliable[20], table.pack(Player, Value))
+					end
+				end
+			elseif Index == 32 then
+				local Value: number = SerdesFunctions.ReadEVENT_ReliableClient()
+				local BOUND_LISTENER = Events.Reliable[32]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "ReliableClient"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Player, Value)
+				else
+					if #Queue.Reliable[32] < 256 then
+						table.insert(Queue.Reliable[32], table.pack(Player, Value))
+					end
+				end
+			elseif Index == 40 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: number = SerdesFunctions.ReadFUNCTION_DATA_RemoteFunction()
+				if Events.Reliable[40] ~= nil then
+					Spawn(Events.Reliable[40], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[40] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 40)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[40], table.pack(Player, Value, InvocationIdentifier))
+				end
+			elseif Index == 42 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadFUNCTION_DATA_TupleFunction()
+				if Events.Reliable[42] ~= nil then
+					Spawn(Events.Reliable[42], Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
+				else
+					if #Queue.Reliable[42] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 42)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[42], table.pack(Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier))
+				end
+			else
+				error("[BlinkBlox]: Unknown event index.")
+			end
+		end
+	else
+		if Index < 55 then
+			if Index == 47 then
+				local Value: any = SerdesFunctions.ReadEVENT_UnknownInbound()
+				local BOUND_LISTENER = Events.Reliable[47]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "UnknownInbound"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Player, Value)
+				else
+					if #Queue.Reliable[47] < 256 then
+						table.insert(Queue.Reliable[47], table.pack(Player, Value))
+					end
+				end
+			elseif Index == 49 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value1: number, Value2: string = SerdesFunctions.ReadFUNCTION_DATA_NamedTupleFunction()
+				if Events.Reliable[49] ~= nil then
+					Spawn(Events.Reliable[49], Player, Value1, Value2, InvocationIdentifier)
+				else
+					if #Queue.Reliable[49] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 49)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[49], table.pack(Player, Value1, Value2, InvocationIdentifier))
+				end
+			elseif Index == 51 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: number = SerdesFunctions.ReadFUNCTION_DATA_NeverAnswered()
+				if Events.Reliable[51] ~= nil then
+					Spawn(Events.Reliable[51], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[51] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 51)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[51], table.pack(Player, Value, InvocationIdentifier))
+				end
+			elseif Index == 52 then
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+					local Success, ReturnValue = pcall(function ()
+						if Answered ~= 1 then
+							error("The call failed on the side that answered it.")
+						end
+						return SerdesFunctions.ReadFUNCTION_RETURN_AskClient()
+					end)
+				local Thread = TakeInvocation(PlayerInvocations[Player], InvocationIdentifier, 52)
+				if Thread ~= nil then
+					if coroutine.status(Thread) == "suspended" then
+						task.spawn(Thread, Success, ReturnValue)
+					end
+				end
+				if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+			elseif Index == 53 then
+				local Value: number = SerdesFunctions.ReadEVENT_RangedFromClient()
+				local BOUND_LISTENER = Events.Reliable[53]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "RangedFromClient"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Player, Value)
+				else
+					if #Queue.Reliable[53] < 256 then
+						table.insert(Queue.Reliable[53], table.pack(Player, Value))
+					end
+				end
+			elseif Index == 54 then
+				local Value: Vector3 = SerdesFunctions.ReadEVENT_RangedVectorFromClient()
+				local BOUND_LISTENER = Events.Reliable[54]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "RangedVectorFromClient"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Player, Value)
+				else
+					if #Queue.Reliable[54] < 256 then
+						table.insert(Queue.Reliable[54], table.pack(Player, Value))
+					end
+				end
+			else
+				error("[BlinkBlox]: Unknown event index.")
+			end
+		else
+			if Index == 55 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: number = SerdesFunctions.ReadFUNCTION_DATA_BadlyAnswered()
+				if Events.Reliable[55] ~= nil then
+					Spawn(Events.Reliable[55], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[55] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 55)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[55], table.pack(Player, Value, InvocationIdentifier))
+				end
+			elseif Index == 56 then
+				local Value: number = SerdesFunctions.ReadEVENT_PlainFromClient()
+				local BOUND_LISTENER = Events.Reliable[56]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "PlainFromClient"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Player, Value)
+				else
+					if #Queue.Reliable[56] < 256 then
+						table.insert(Queue.Reliable[56], table.pack(Player, Value))
+					end
+				end
+			elseif Index == 57 then
+				local Value: nil = SerdesFunctions.ReadEVENT_Unlistened()
+				local BOUND_LISTENER = Events.Reliable[57]
+				if BOUND_LISTENER ~= nil then
+					Spawn(RunListener, "Unlistened", BOUND_LISTENER, Player, Value)
+				else
+					if #Queue.Reliable[57] < 256 then
+						table.insert(Queue.Reliable[57], table.pack(Player, Value))
+					end
+				end
+			elseif Index == 58 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: nil = SerdesFunctions.ReadFUNCTION_DATA_Unanswered()
+				if Events.Reliable[58] ~= nil then
+					Spawn(Events.Reliable[58], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[58] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 58)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						return
+					end
+					table.insert(Queue.Reliable[58], table.pack(Player, Value, InvocationIdentifier))
+				end
+			elseif Index == 60 then
+				local Value: number = SerdesFunctions.ReadEVENT_RangedFloat32()
+				local BOUND_LISTENER = Events.Reliable[60]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "RangedFloat32"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Player, Value)
+				else
+					if #Queue.Reliable[60] < 256 then
+						table.insert(Queue.Reliable[60], table.pack(Player, Value))
+					end
+				end
+			elseif Index == 61 then
+				local Value: number = SerdesFunctions.ReadEVENT_RangedFloat16()
+				local BOUND_LISTENER = Events.Reliable[61]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "RangedFloat16"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Player, Value)
+				else
+					if #Queue.Reliable[61] < 256 then
+						table.insert(Queue.Reliable[61], table.pack(Player, Value))
+					end
+				end
+			elseif Index == 64 then
+				local Value: number = SerdesFunctions.ReadEVENT_RangedFloat24()
+				local BOUND_LISTENER = Events.Reliable[64]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "RangedFloat24"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Player, Value)
+				else
+					if #Queue.Reliable[64] < 256 then
+						table.insert(Queue.Reliable[64], table.pack(Player, Value))
+					end
+				end
+			else
+				error("[BlinkBlox]: Unknown event index.")
+			end
+		end
+	end
+end
+local function DecodeUnreliable(Player: Player)
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
+	Decoding = Index
+	if Index == 1 then
+		-- Read BLOCK: 2 bytes
+		local BLOCK_START = Read(2)
+		local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		local Value: number = SerdesFunctions.ReadEVENT_OrderedPosition()
+		if OrderAccept(Player, 1, OrderIdentifier) == true then
+			local BOUND_LISTENER = Events.Unreliable[1]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "OrderedPosition"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Player, Value)
+			end
+		end
+	elseif Index == 2 then
+		local Value: string = SerdesFunctions.ReadEVENT_UnreliableOversize()
+		local BOUND_LISTENER = Events.Unreliable[2]
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "UnreliableOversize"
+			Decoding = -2 - Index
+			BOUND_LISTENER(Player, Value)
+		end
+	elseif Index == 3 then
+		local Value1: buffer, Value2: { Instance } = SerdesFunctions.ReadEVENT_UnreliableInstances()
+		local BOUND_LISTENER = Events.Unreliable[3]
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "UnreliableInstances"
+			Decoding = -2 - Index
+			BOUND_LISTENER(Player, Value1, Value2)
+		end
+	elseif Index == 4 then
+		local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent())
+		if Queue.Unreliable[4].count < MAX_POLLED then
+			Push(Queue.Unreliable[4], Arguments)
+		end
+	elseif Index == 5 then
+		local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyUnreliablePollEvent())
+		if Queue.Unreliable[5].count < MAX_POLLED then
+			Push(Queue.Unreliable[5], Arguments)
+		end
+	elseif Index == 8 then
+		local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyUnreliableEvent()
+		local BOUND_LISTENER = Events.Unreliable[8]
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "ClientEmptyUnreliableEvent"
+			Decoding = -2 - Index
+			BOUND_LISTENER(Player, Value)
+		end
+	elseif Index == 16 then
+		local Value: number = SerdesFunctions.ReadEVENT_UnreliableClient()
+		local BOUND_LISTENER = Events.Unreliable[16]
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "UnreliableClient"
+			Decoding = -2 - Index
+			BOUND_LISTENER(Player, Value)
+		end
+	elseif Index == 18 then
+		local Value: number = SerdesFunctions.ReadEVENT_RangedUnreliableFromClient()
+		local BOUND_LISTENER = Events.Unreliable[18]
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "RangedUnreliableFromClient"
+			Decoding = -2 - Index
+			BOUND_LISTENER(Player, Value)
+		end
+	else
+		error("[BlinkBlox]: Unknown event index.")
+	end
+end
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
 	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
 		ReportDrop(Player, "Malformed", 0)
@@ -11259,422 +11830,24 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		if Index < 47 then
-			if Index < 9 then
-				if Index == 0 then
-					local Value: number = SerdesFunctions.ReadEVENT_RateLimited()
-					if RateAccept(Player, 1, 5, 10, "RateLimited") == true then
-						local BOUND_LISTENER = Events.Reliable[0]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "RateLimited"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-							if not ListenerRan and not ListenerFailed(Player, "RateLimited", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[0] < 256 then
-								table.insert(Queue.Reliable[0], table.pack(Player, Value))
-							end
-						end
-					end
-				elseif Index == 1 then
-					local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_RateLimitedPoll())
-					if Queue.Reliable[1].count < MAX_POLLED and RateAccept(Player, 5, 5, 10, "RateLimitedPoll") then
-						Push(Queue.Reliable[1], Arguments)
-					end
-				elseif Index == 2 then
-					-- Read BLOCK: 1 bytes
-					local BLOCK_START = Read(1)
-					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					local Value: number = SerdesFunctions.ReadFUNCTION_DATA_RateLimitedCall()
-					if not RateAccept(Player, 9, 2, 2, "RateLimitedCall") then
-						LoadPlayer(Player)
-						local Position = Allocate(3)
-						buffer.writeu8(SendBuffer, Position, 2)
-						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-						buffer.writeu8(SendBuffer, Position + 2, 0)
-						SavePlayerBuffer(Player)
-						return
-					end
-					if Events.Reliable[2] ~= nil then
-						Spawn(Events.Reliable[2], Player, Value, InvocationIdentifier)
-					else
-						if #Queue.Reliable[2] >= 256 then
-							LoadPlayer(Player)
-							local Position = Allocate(3)
-							buffer.writeu8(SendBuffer, Position, 2)
-							buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-							buffer.writeu8(SendBuffer, Position + 2, 0)
-							SavePlayerBuffer(Player)
-							return
-						end
-						table.insert(Queue.Reliable[2], table.pack(Player, Value, InvocationIdentifier))
-					end
-				elseif Index == 3 then
-					-- Read BLOCK: 1 bytes
-					local BLOCK_START = Read(1)
-					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					local Value: number = SerdesFunctions.ReadFUNCTION_DATA_ConcurrentCall()
-					if not ConcurrencyAccept(Player, 3, 2, "ConcurrentCall") then
-						LoadPlayer(Player)
-						local Position = Allocate(3)
-						buffer.writeu8(SendBuffer, Position, 3)
-						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-						buffer.writeu8(SendBuffer, Position + 2, 0)
-						SavePlayerBuffer(Player)
-						return
-					end
-					if Events.Reliable[3] ~= nil then
-						Spawn(Events.Reliable[3], Player, Value, InvocationIdentifier)
-					else
-						if #Queue.Reliable[3] >= 256 then
-							ConcurrencyRelease(Player, 3)
-							LoadPlayer(Player)
-							local Position = Allocate(3)
-							buffer.writeu8(SendBuffer, Position, 3)
-							buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-							buffer.writeu8(SendBuffer, Position + 2, 0)
-							SavePlayerBuffer(Player)
-							return
-						end
-						table.insert(Queue.Reliable[3], table.pack(Player, Value, InvocationIdentifier))
-					end
-				elseif Index == 5 then
-					local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientPollEvent())
-					if Queue.Reliable[5].count < MAX_POLLED then
-						Push(Queue.Reliable[5], Arguments)
-					end
-				elseif Index == 6 then
-					local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyPollEvent())
-					if Queue.Reliable[6].count < MAX_POLLED then
-						Push(Queue.Reliable[6], Arguments)
-					end
-				else
-					error("[BlinkBlox]: Unknown event index.")
-				end
-			else
-				if Index == 9 then
-					local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyEvent()
-					local BOUND_LISTENER = Events.Reliable[9]
-					if BOUND_LISTENER ~= nil then
-						SerdesEvent = "ClientEmptyEvent"
-						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-						if not ListenerRan and not ListenerFailed(Player, "ClientEmptyEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-					else
-						if #Queue.Reliable[9] < 256 then
-							table.insert(Queue.Reliable[9], table.pack(Player, Value))
-						end
-					end
-				elseif Index == 11 then
-					-- Read BLOCK: 1 bytes
-					local BLOCK_START = Read(1)
-					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					local Value: nil = SerdesFunctions.ReadFUNCTION_DATA_EmptyFunction()
-					if Events.Reliable[11] ~= nil then
-						Spawn(Events.Reliable[11], Player, Value, InvocationIdentifier)
-					else
-						if #Queue.Reliable[11] >= 256 then
-							LoadPlayer(Player)
-							local Position = Allocate(3)
-							buffer.writeu8(SendBuffer, Position, 11)
-							buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-							buffer.writeu8(SendBuffer, Position + 2, 0)
-							SavePlayerBuffer(Player)
-							return
-						end
-						table.insert(Queue.Reliable[11], table.pack(Player, Value, InvocationIdentifier))
-					end
-				elseif Index == 12 then
-					-- Read BLOCK: 1 bytes
-					local BLOCK_START = Read(1)
-					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					local Value: nil = SerdesFunctions.ReadFUNCTION_DATA_UnitFunction()
-					if Events.Reliable[12] ~= nil then
-						Spawn(Events.Reliable[12], Player, Value, InvocationIdentifier)
-					else
-						if #Queue.Reliable[12] >= 256 then
-							LoadPlayer(Player)
-							local Position = Allocate(3)
-							buffer.writeu8(SendBuffer, Position, 12)
-							buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-							buffer.writeu8(SendBuffer, Position + 2, 0)
-							SavePlayerBuffer(Player)
-							return
-						end
-						table.insert(Queue.Reliable[12], table.pack(Player, Value, InvocationIdentifier))
-					end
-				elseif Index == 20 then
-					local Value: { boolean } = SerdesFunctions.ReadEVENT_Booleans()
-					local BOUND_LISTENER = Events.Reliable[20]
-					if BOUND_LISTENER ~= nil then
-						Spawn(RunListener, "Booleans", BOUND_LISTENER, Player, Value)
-					else
-						if #Queue.Reliable[20] < 256 then
-							table.insert(Queue.Reliable[20], table.pack(Player, Value))
-						end
-					end
-				elseif Index == 32 then
-					local Value: number = SerdesFunctions.ReadEVENT_ReliableClient()
-					local BOUND_LISTENER = Events.Reliable[32]
-					if BOUND_LISTENER ~= nil then
-						SerdesEvent = "ReliableClient"
-						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-						if not ListenerRan and not ListenerFailed(Player, "ReliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-					else
-						if #Queue.Reliable[32] < 256 then
-							table.insert(Queue.Reliable[32], table.pack(Player, Value))
-						end
-					end
-				elseif Index == 40 then
-					-- Read BLOCK: 1 bytes
-					local BLOCK_START = Read(1)
-					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					local Value: number = SerdesFunctions.ReadFUNCTION_DATA_RemoteFunction()
-					if Events.Reliable[40] ~= nil then
-						Spawn(Events.Reliable[40], Player, Value, InvocationIdentifier)
-					else
-						if #Queue.Reliable[40] >= 256 then
-							LoadPlayer(Player)
-							local Position = Allocate(3)
-							buffer.writeu8(SendBuffer, Position, 40)
-							buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-							buffer.writeu8(SendBuffer, Position + 2, 0)
-							SavePlayerBuffer(Player)
-							return
-						end
-						table.insert(Queue.Reliable[40], table.pack(Player, Value, InvocationIdentifier))
-					end
-				elseif Index == 42 then
-					-- Read BLOCK: 1 bytes
-					local BLOCK_START = Read(1)
-					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadFUNCTION_DATA_TupleFunction()
-					if Events.Reliable[42] ~= nil then
-						Spawn(Events.Reliable[42], Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
-					else
-						if #Queue.Reliable[42] >= 256 then
-							LoadPlayer(Player)
-							local Position = Allocate(3)
-							buffer.writeu8(SendBuffer, Position, 42)
-							buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-							buffer.writeu8(SendBuffer, Position + 2, 0)
-							SavePlayerBuffer(Player)
-							return
-						end
-						table.insert(Queue.Reliable[42], table.pack(Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier))
-					end
-				else
-					error("[BlinkBlox]: Unknown event index.")
-				end
-			end
-		else
-			if Index < 55 then
-				if Index == 47 then
-					local Value: any = SerdesFunctions.ReadEVENT_UnknownInbound()
-					local BOUND_LISTENER = Events.Reliable[47]
-					if BOUND_LISTENER ~= nil then
-						SerdesEvent = "UnknownInbound"
-						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-						if not ListenerRan and not ListenerFailed(Player, "UnknownInbound", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-					else
-						if #Queue.Reliable[47] < 256 then
-							table.insert(Queue.Reliable[47], table.pack(Player, Value))
-						end
-					end
-				elseif Index == 49 then
-					-- Read BLOCK: 1 bytes
-					local BLOCK_START = Read(1)
-					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					local Value1: number, Value2: string = SerdesFunctions.ReadFUNCTION_DATA_NamedTupleFunction()
-					if Events.Reliable[49] ~= nil then
-						Spawn(Events.Reliable[49], Player, Value1, Value2, InvocationIdentifier)
-					else
-						if #Queue.Reliable[49] >= 256 then
-							LoadPlayer(Player)
-							local Position = Allocate(3)
-							buffer.writeu8(SendBuffer, Position, 49)
-							buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-							buffer.writeu8(SendBuffer, Position + 2, 0)
-							SavePlayerBuffer(Player)
-							return
-						end
-						table.insert(Queue.Reliable[49], table.pack(Player, Value1, Value2, InvocationIdentifier))
-					end
-				elseif Index == 51 then
-					-- Read BLOCK: 1 bytes
-					local BLOCK_START = Read(1)
-					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					local Value: number = SerdesFunctions.ReadFUNCTION_DATA_NeverAnswered()
-					if Events.Reliable[51] ~= nil then
-						Spawn(Events.Reliable[51], Player, Value, InvocationIdentifier)
-					else
-						if #Queue.Reliable[51] >= 256 then
-							LoadPlayer(Player)
-							local Position = Allocate(3)
-							buffer.writeu8(SendBuffer, Position, 51)
-							buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-							buffer.writeu8(SendBuffer, Position + 2, 0)
-							SavePlayerBuffer(Player)
-							return
-						end
-						table.insert(Queue.Reliable[51], table.pack(Player, Value, InvocationIdentifier))
-					end
-				elseif Index == 52 then
-					-- Read BLOCK: 2 bytes
-					local BLOCK_START = Read(2)
-					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-						local Success, ReturnValue = pcall(function ()
-							if Answered ~= 1 then
-								error("The call failed on the side that answered it.")
-							end
-							return SerdesFunctions.ReadFUNCTION_RETURN_AskClient()
-						end)
-					local Thread = TakeInvocation(PlayerInvocations[Player], InvocationIdentifier, 52)
-					if Thread ~= nil then
-						if coroutine.status(Thread) == "suspended" then
-							task.spawn(Thread, Success, ReturnValue)
-						end
-					end
-					if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-				elseif Index == 53 then
-					local Value: number = SerdesFunctions.ReadEVENT_RangedFromClient()
-					local BOUND_LISTENER = Events.Reliable[53]
-					if BOUND_LISTENER ~= nil then
-						SerdesEvent = "RangedFromClient"
-						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-						if not ListenerRan and not ListenerFailed(Player, "RangedFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-					else
-						if #Queue.Reliable[53] < 256 then
-							table.insert(Queue.Reliable[53], table.pack(Player, Value))
-						end
-					end
-				elseif Index == 54 then
-					local Value: Vector3 = SerdesFunctions.ReadEVENT_RangedVectorFromClient()
-					local BOUND_LISTENER = Events.Reliable[54]
-					if BOUND_LISTENER ~= nil then
-						SerdesEvent = "RangedVectorFromClient"
-						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-						if not ListenerRan and not ListenerFailed(Player, "RangedVectorFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-					else
-						if #Queue.Reliable[54] < 256 then
-							table.insert(Queue.Reliable[54], table.pack(Player, Value))
-						end
-					end
-				else
-					error("[BlinkBlox]: Unknown event index.")
-				end
-			else
-				if Index == 55 then
-					-- Read BLOCK: 1 bytes
-					local BLOCK_START = Read(1)
-					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					local Value: number = SerdesFunctions.ReadFUNCTION_DATA_BadlyAnswered()
-					if Events.Reliable[55] ~= nil then
-						Spawn(Events.Reliable[55], Player, Value, InvocationIdentifier)
-					else
-						if #Queue.Reliable[55] >= 256 then
-							LoadPlayer(Player)
-							local Position = Allocate(3)
-							buffer.writeu8(SendBuffer, Position, 55)
-							buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-							buffer.writeu8(SendBuffer, Position + 2, 0)
-							SavePlayerBuffer(Player)
-							return
-						end
-						table.insert(Queue.Reliable[55], table.pack(Player, Value, InvocationIdentifier))
-					end
-				elseif Index == 56 then
-					local Value: number = SerdesFunctions.ReadEVENT_PlainFromClient()
-					local BOUND_LISTENER = Events.Reliable[56]
-					if BOUND_LISTENER ~= nil then
-						SerdesEvent = "PlainFromClient"
-						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-						if not ListenerRan and not ListenerFailed(Player, "PlainFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-					else
-						if #Queue.Reliable[56] < 256 then
-							table.insert(Queue.Reliable[56], table.pack(Player, Value))
-						end
-					end
-				elseif Index == 57 then
-					local Value: nil = SerdesFunctions.ReadEVENT_Unlistened()
-					local BOUND_LISTENER = Events.Reliable[57]
-					if BOUND_LISTENER ~= nil then
-						Spawn(RunListener, "Unlistened", BOUND_LISTENER, Player, Value)
-					else
-						if #Queue.Reliable[57] < 256 then
-							table.insert(Queue.Reliable[57], table.pack(Player, Value))
-						end
-					end
-				elseif Index == 58 then
-					-- Read BLOCK: 1 bytes
-					local BLOCK_START = Read(1)
-					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					local Value: nil = SerdesFunctions.ReadFUNCTION_DATA_Unanswered()
-					if Events.Reliable[58] ~= nil then
-						Spawn(Events.Reliable[58], Player, Value, InvocationIdentifier)
-					else
-						if #Queue.Reliable[58] >= 256 then
-							LoadPlayer(Player)
-							local Position = Allocate(3)
-							buffer.writeu8(SendBuffer, Position, 58)
-							buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-							buffer.writeu8(SendBuffer, Position + 2, 0)
-							SavePlayerBuffer(Player)
-							return
-						end
-						table.insert(Queue.Reliable[58], table.pack(Player, Value, InvocationIdentifier))
-					end
-				elseif Index == 60 then
-					local Value: number = SerdesFunctions.ReadEVENT_RangedFloat32()
-					local BOUND_LISTENER = Events.Reliable[60]
-					if BOUND_LISTENER ~= nil then
-						SerdesEvent = "RangedFloat32"
-						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-						if not ListenerRan and not ListenerFailed(Player, "RangedFloat32", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-					else
-						if #Queue.Reliable[60] < 256 then
-							table.insert(Queue.Reliable[60], table.pack(Player, Value))
-						end
-					end
-				elseif Index == 61 then
-					local Value: number = SerdesFunctions.ReadEVENT_RangedFloat16()
-					local BOUND_LISTENER = Events.Reliable[61]
-					if BOUND_LISTENER ~= nil then
-						SerdesEvent = "RangedFloat16"
-						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-						if not ListenerRan and not ListenerFailed(Player, "RangedFloat16", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-					else
-						if #Queue.Reliable[61] < 256 then
-							table.insert(Queue.Reliable[61], table.pack(Player, Value))
-						end
-					end
-				elseif Index == 64 then
-					local Value: number = SerdesFunctions.ReadEVENT_RangedFloat24()
-					local BOUND_LISTENER = Events.Reliable[64]
-					if BOUND_LISTENER ~= nil then
-						SerdesEvent = "RangedFloat24"
-						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-						if not ListenerRan and not ListenerFailed(Player, "RangedFloat24", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-					else
-						if #Queue.Reliable[64] < 256 then
-							table.insert(Queue.Reliable[64], table.pack(Player, Value))
-						end
-					end
-				else
-					error("[BlinkBlox]: Unknown event index.")
-				end
-			end
+	DecodeRemaining = 64
+	Decoding = -1
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Player, Size)
+		if Parsed then
+			break
 		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
-	if not Parsed then
-		ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
+		if Decoding > -2 then
+			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
+			break
+		end
+		local Listening = EventNames.Reliable[-2 - Decoding]
+		if not ListenerFailed(Player, Listening, Failure) then
+			task.spawn(error, Failure, 0)
+		end
+		if Player.Parent == nil then
+			break
+		end
 	end
 end)
 Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -11703,83 +11876,24 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		if Index == 1 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-			local Value: number = SerdesFunctions.ReadEVENT_OrderedPosition()
-			if OrderAccept(Player, 1, OrderIdentifier) == true then
-				local BOUND_LISTENER = Events.Unreliable[1]
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "OrderedPosition"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-					if not ListenerRan and not ListenerFailed(Player, "OrderedPosition", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-				end
-			end
-		elseif Index == 2 then
-			local Value: string = SerdesFunctions.ReadEVENT_UnreliableOversize()
-			local BOUND_LISTENER = Events.Unreliable[2]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "UnreliableOversize"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "UnreliableOversize", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		elseif Index == 3 then
-			local Value1: buffer, Value2: { Instance } = SerdesFunctions.ReadEVENT_UnreliableInstances()
-			local BOUND_LISTENER = Events.Unreliable[3]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "UnreliableInstances"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value1, Value2)
-				if not ListenerRan and not ListenerFailed(Player, "UnreliableInstances", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		elseif Index == 4 then
-			local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent())
-			if Queue.Unreliable[4].count < MAX_POLLED then
-				Push(Queue.Unreliable[4], Arguments)
-			end
-		elseif Index == 5 then
-			local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ClientEmptyUnreliablePollEvent())
-			if Queue.Unreliable[5].count < MAX_POLLED then
-				Push(Queue.Unreliable[5], Arguments)
-			end
-		elseif Index == 8 then
-			local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyUnreliableEvent()
-			local BOUND_LISTENER = Events.Unreliable[8]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "ClientEmptyUnreliableEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "ClientEmptyUnreliableEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		elseif Index == 16 then
-			local Value: number = SerdesFunctions.ReadEVENT_UnreliableClient()
-			local BOUND_LISTENER = Events.Unreliable[16]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "UnreliableClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "UnreliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		elseif Index == 18 then
-			local Value: number = SerdesFunctions.ReadEVENT_RangedUnreliableFromClient()
-			local BOUND_LISTENER = Events.Unreliable[18]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "RangedUnreliableFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "RangedUnreliableFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		else
-			error("[BlinkBlox]: Unknown event index.")
+	DecodeRemaining = 64
+	Decoding = -1
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Player, Size)
+		if Parsed then
+			break
 		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
-	if not Parsed then
-		ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
+		if Decoding > -2 then
+			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
+			break
+		end
+		local Listening = EventNames.Unreliable[-2 - Decoding]
+		if not ListenerFailed(Player, Listening, Failure) then
+			task.spawn(error, Failure, 0)
+		end
+		if Player.Parent == nil then
+			break
+		end
 	end
 end)
 
@@ -15306,24 +15420,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -15411,24 +15529,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = BLOCK_START + 0
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -15520,24 +15642,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -15634,24 +15760,28 @@ local Returns = table.freeze({
 					local Item_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Item_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -15749,24 +15879,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -15862,24 +15996,28 @@ local Returns = table.freeze({
 					Value.List = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.List)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -15894,24 +16032,28 @@ local Returns = table.freeze({
 					Value.Fixed = table.create(Length)
 					do
 						local PACKED_OFFSET = BLOCK_START + 1
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.Fixed)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -16072,24 +16214,28 @@ local Returns = table.freeze({
 					local Element_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Element_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end

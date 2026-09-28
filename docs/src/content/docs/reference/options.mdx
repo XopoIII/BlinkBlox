@@ -38,6 +38,7 @@ page explains each one in full.
 | [`ClientConnectTimeout`](/BlinkBlox/language/options/#clientconnecttimeout) | number above zero | none; wait for ever | Seconds the client waits for the remotes before it returns a module with `Connected` false and every entry point stubbed. |
 | [`AutoStart`](/BlinkBlox/language/options/#autostart) | boolean | `true` | `false`: the server module creates and connects nothing until the game calls `Start()`. |
 | [`TrafficStats`](/BlinkBlox/language/options/#trafficstats) | boolean | `false` | Count bytes, events and packets sent and received, per event and per channel, behind `GetTrafficStats()` and `ResetTrafficStats()`. Emits nothing when off. |
+| [`PackedBooleanReader`](/BlinkBlox/language/options/#packedbooleanreader) | `"Auto"`, `"Bits"` or `"Rows"` | `"Auto"` | How a received `boolean[]` is unpacked: testing each bit, copying rows of eight, or whichever the module measured faster as it loaded. |
 | `UseColon` | boolean | none | Deprecated and ignored; warns `W3017`. Delete it. |
 
 ## Value syntax
@@ -50,9 +51,10 @@ page explains each one in full.
 | whole number | a positive integer | `option MaxPacketSize = 16384` |
 | seconds | a number above zero, fractions allowed (`ClientConnectTimeout` only) | `option ClientConnectTimeout = 2.5` |
 | casing | a bare word | `option Casing = Camel` |
+| reader | a quoted word | `option PackedBooleanReader = "Rows"` |
 
-A number that is zero, negative or, outside `ClientConnectTimeout`, fractional is refused (`E2003`), as is an unknown option name or
-casing. An option after the first declaration is `E3016`; one set twice for the same build is `E3024`.
+A number that is zero, negative or, outside `ClientConnectTimeout`, fractional is refused (`E2003`), as is an unknown option name,
+casing or reader. An option after the first declaration is `E3016`; one set twice for the same build is `E3024`.
 
 ## What the options do not change
 

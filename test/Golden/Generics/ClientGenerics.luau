@@ -192,16 +192,17 @@ end
 --> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
 --> reaches the save.
 local PendingCursor = -1
-local PendingInstances = 0
 
 --> How many Instances the client's batch held after the last write into it that returned. Every write
 --> into the batch starts from there, so Begin takes it from here rather than counting the list, and
---> only a write that can add Instances counts it again; see the commits in the client template.
+--> only a write that can add Instances counts it again; see the commits in the client template. It
+--> is also where a write that threw is undone to: only a write that returns moves it, so it still
+--> holds what the batch had when that write began, and a Fire keeps no copy of its own.
 local CommittedInstances = 0
 
 local function Settle()
     if PendingCursor >= 0 then
-        Rollback(PendingCursor, PendingInstances)
+        Rollback(PendingCursor, CommittedInstances)
         PendingCursor = -1
     end
 end
@@ -213,7 +214,6 @@ local function Begin()
         Settle()
     end
     PendingCursor = SendCursor
-    PendingInstances = CommittedInstances
 end
 
 local function Mark(): (number, number)
@@ -810,12 +810,25 @@ local function SendPacket(From: number, To: number, FromInstances: number, ToIns
     Reliable:FireServer(Buffer, table.move(SendInstances, FromInstances + 1, ToInstances, 1, {}))
 end
 
+--> The last frame's packet, filled again when the next is the same size. A remote serialises what it
+--> is fired with as it is called, so nothing still reads it; a new buffer every frame was an
+--> allocation, zero-filled, the size of the frame's traffic, and a flush of a thousand events cost
+--> several times QuickNet's, which keeps its buffers.
+local LastPacket: buffer? = nil
+
 local function StepReplication()
     Settle()
     local Used = SendCursor
     if Used > 0 then
         if #Cuts == 0 then
-            local Buffer = buffer.create(Used)
+            local Buffer: buffer
+            local Last = LastPacket
+            if Last ~= nil and buffer.len(Last) == Used then
+                Buffer = Last
+            else
+                Buffer = buffer.create(Used)
+                LastPacket = Buffer
+            end
             buffer.copy(Buffer, 0, SendBuffer, 0, Used)
             Reliable:FireServer(Buffer, SendInstances)
         else
@@ -846,8 +859,10 @@ local function StepReplication()
     if Shrink then
         SendSize = 64
         SendBuffer = buffer.create(64)
+        LastPacket = nil
     end
 end
+local Decoding = -1
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -863,6 +878,20 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
+local function DecodeReliable()
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
+	Decoding = Index
+	error("[BlinkBlox]: This channel receives no events.")
+end
+local function DecodeUnreliable()
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
+	Decoding = Index
+	error("[BlinkBlox]: This channel receives no events.")
+end
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
 	RecieveBuffer = Buffer
@@ -874,18 +903,18 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
-	if not Parsed then
-		ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
+	Decoding = -1
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
+		if Parsed then
+			break
+		end
+		if Decoding > -2 then
+			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
+			break
+		end
+		local Listening = EventNames.Reliable[-2 - Decoding]
+		task.spawn(error, Failure, 0)
 	end
 end)
 Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -899,18 +928,18 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
-	if not Parsed then
-		ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
+	Decoding = -1
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
+		if Parsed then
+			break
+		end
+		if Decoding > -2 then
+			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
+			break
+		end
+		local Listening = EventNames.Unreliable[-2 - Decoding]
+		task.spawn(error, Failure, 0)
 	end
 end)
 

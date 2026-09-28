@@ -23,12 +23,15 @@ local Tools: { [string]: { Url: string, Binary: string } } = {
 }
 
 --> A package is either the latest GitHub release, fetched from Wally by that tag (`GitHub`), or a
---> pinned `Version` for a package with no GitHub releases to ask. `Source` is the folder inside the
---> Wally archive that holds the module, `src` unless given. `Patch` runs on the unpacked package.
+--> pinned `Version` for a package with no GitHub releases to ask. A package on no registry names the
+--> GitHub source archive of its pinned version instead (`Archive`), whose one top folder is skipped.
+--> `Source` is the folder inside the archive that holds the module, `src` unless given. `Patch` runs
+--> on the unpacked package.
 type Package = {
 	GitHub: string?,
 	Version: string?,
-	Wally: string,
+	Wally: string?,
+	Archive: string?,
 	Source: string?,
 	Patch: ((Directory: string) -> ())?,
 }
@@ -63,6 +66,35 @@ local Packages: { [string]: Package } = {
 			Replace(`{Directory}/init.luau`, "if bytes > 8_000 then", "if bytes > math.huge then")
 			--> The upload keeps its manifest beside the module, where Rojo would build it into one.
 			fs.removeFile(`{Directory}/wally.toml`)
+		end,
+	},
+
+	--> QuickNet publishes a Studio model with each release and nothing on a registry. Its v0.3.5-beta
+	--> tag points at a commit whose source still says v0.3.4; the release is the commit below, made
+	--> the day it was published and the head of main since.
+	quicknet = {
+		Version = "v0.3.5-beta (f7cfdf5)",
+		Archive = "https://github.com/breadboardengineer1234/QuickNet/archive/f7cfdf5ce014d939525116f667233e5effbcce57.zip",
+		--> The repository keeps the module as `QuickNet.luau` beside a `QuickNet` folder of its children,
+		--> which the model joins into one. A folder with an `init.luau` is the same thing on disk.
+		Patch = function(Directory: string)
+			for _, Entry in fs.readDir(`{Directory}/QuickNet`) do
+				fs.move(`{Directory}/QuickNet/{Entry}`, `{Directory}/{Entry}`)
+			end
+			fs.removeDir(`{Directory}/QuickNet`)
+			fs.move(`{Directory}/QuickNet.luau`, `{Directory}/init.luau`)
+			--> Its rate limit and packet cap are set per event, by the modes, as its own benchmark does.
+		end,
+	},
+
+	--> Warp's releases after 1.0 are on neither Wally nor pesde; this is the source of its latest.
+	warp = {
+		Version = "1.1.0-pre7",
+		Archive = "https://github.com/imezx/Warp/archive/refs/tags/1.1.0-pre7.zip",
+		--> Warp's server charges each packet at least 800 bytes and drops a player's past 8000 until it
+		--> next sends them something, outside Studio. Raised as Packet's is, for the same reason.
+		Patch = function(Directory: string)
+			Replace(`{Directory}/Server/init.luau`, "if bytes > 8e3 then", "if bytes > math.huge then")
 		end,
 	},
 }
@@ -232,13 +264,25 @@ for Name, Urls in Packages do
 		PackageVersion = string.sub(Version, 2)
 	end
 
-	local DownloadUrl = `{Urls.Wally}{PackageVersion}`
-	local CurlResult = Curl(DownloadUrl, `{ZipPath}.zip`, { "Wally-Version: 0.3.2" })
+	local CurlResult = if Urls.Archive
+		then Curl(Urls.Archive, `{ZipPath}.zip`)
+		else Curl(
+			`{assert(Urls.Wally, `{Name} names neither Wally nor an archive`)}{PackageVersion}`,
+			`{ZipPath}.zip`,
+			{
+				"Wally-Version: 0.3.2",
+			}
+		)
 	assert(CurlResult.ok, `Encountered an exception while downloading files for {Name}, {CurlResult.stderr}`)
 
 	Extract(`{ZipPath}.zip`, ZipPath)
 
 	local Source = Urls.Source or "src"
+	if Urls.Archive then
+		local Entries = fs.readDir(ZipPath)
+		assert(#Entries == 1, `The {Name} archive should hold one folder, not {#Entries} entries`)
+		Source = `{Entries[1]}/{Source}`
+	end
 	if Source == "." then
 		fs.move(ZipPath, FinalPath, true)
 	else

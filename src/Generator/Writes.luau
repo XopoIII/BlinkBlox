@@ -76,7 +76,6 @@ function Writes.new(
 		Target:Line("if PendingCursor >= 0 then Settle() end")
 		Target:Line("local Start, Before = SendCursor, CommittedInstances")
 		Target:Line("PendingCursor = Start")
-		Target:Line("PendingInstances = Before")
 		Target:Line(WriteEvent)
 		Target:Line("local Count = #SendInstances")
 		Target:Line("PendingCursor = -1")

@@ -62,6 +62,7 @@ Grammar.OPTIONS = {
 	PromiseLibrary = "String",
 	SyncValidation = "Boolean",
 	WriteValidations = "Boolean",
+	PackedBooleanReader = "String",
 	ManualReplication = "Boolean",
 	BatchUnreliable = "Boolean",
 	RemoteScope = "String",
@@ -356,6 +357,8 @@ export type Options = {
 	PromiseLibrary: string?,
 	SyncValidation: boolean?,
 	WriteValidations: boolean?,
+	--- How a packed `boolean[]` is read: "Auto" (measured as the module loads), "Bits" or "Rows".
+	PackedBooleanReader: string?,
 	ManualReplication: boolean?,
 	BatchUnreliable: boolean?,
 	RemoteScope: string?,

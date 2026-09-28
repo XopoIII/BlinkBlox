@@ -1,12 +1,12 @@
 --!strict
 --- Scenarios.luau's paths, run on every tool the benchmark compares. Run from this directory, after
---- `lune run build --download` has fetched the tools and packages:
+--- `luneblox run build --download` has fetched the tools and packages:
 ---
----     lune run Rivals                      every scenario and tool, natively compiled and interpreted
----     lune run Rivals -- Broadcast         only the scenarios whose name contains "Broadcast"
----     lune run Rivals -- --frames 50       fewer frames
----     lune run Rivals -- --tools blink,zap only these tools
----     lune run Rivals -- --batch           BlinkBlox with option BatchUnreliable
+---     luneblox run Rivals                      every scenario and tool, natively compiled and interpreted
+---     luneblox run Rivals -- Broadcast         only the scenarios whose name contains "Broadcast"
+---     luneblox run Rivals -- --frames 50       fewer frames
+---     luneblox run Rivals -- --tools blink,zap only these tools
+---     luneblox run Rivals -- --batch           BlinkBlox with option BatchUnreliable
 ---
 --- Every tool loads through World.luau here, BlinkBlox included, so each pays for the same mocks: a
 --- remote call costs the same whoever makes it. Each flushes on its own Heartbeat, as it would in a
@@ -20,24 +20,28 @@
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local runtime = require("../.lune/libs/runtime")
+runtime.ballast()
 
+local Apis = require("./runtime/rivals/Apis")
 local Attributes = require("../src/Modules/Attributes")
 local Generator = require("../src/Generator")
 local Names = require("./Names")
 local Parser = require("../src/Parser")
+local Tools = require("./runtime/Tools")
 local World = require("./runtime/World")
 
 local WARMUP_FRAMES = 10
-local CROWD = 50
 --> What each Heartbeat tells the tools a frame took; see the same constant in runtime/Tools.luau.
 local FRAME = 1 / 30
 
-local ORDER = { "blink", "upstream", "zap", "bytenet", "packet" }
+local ORDER = { "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp" }
 local REQUIRES: { [string]: { string } } = {
 	upstream = { "runtime/rivals/upstream/Server.luau" },
 	zap = { "runtime/rivals/zap/Server.luau" },
 	bytenet = { "packages/bytenet/init.luau" },
 	packet = { "packages/packet/init.luau" },
+	quicknet = { "packages/quicknet/init.luau" },
+	warp = { "packages/warp/init.luau" },
 }
 
 local Frames = 200
@@ -50,7 +54,7 @@ do
 	while Index <= #process.args do
 		local Argument = process.args[Index]
 		if Argument == "--" then
-			--> What `lune run Rivals -- ...` passes through ahead of the arguments.
+			--> What `luneblox run Rivals -- ...` passes through ahead of the arguments.
 		elseif Argument == "--batch" then
 			Batch = true
 		elseif Argument == "--frames" then
@@ -76,265 +80,10 @@ do
 	fs.writeFile("./runtime/rivals/blink/Client.luau", Generator.Generate("Client", Tree))
 end
 
-type Unit = {
-	id: number,
-	x: number,
-	y: number,
-	z: number,
-	health: number,
-	moving: boolean,
-	crouched: boolean,
-}
-
-local function MakeUnit(Id: number, Frame: number): Unit
-	return {
-		id = Id,
-		x = Id * 3.5 + Frame * 0.25,
-		y = 12.75,
-		z = Id * -1.5 - Frame * 0.125,
-		health = (Id * 7 + Frame) % 101,
-		moving = (Id + Frame) % 2 == 0,
-		crouched = (Id + Frame) % 3 == 0,
-	}
-end
-
-local function MakeInput(Index: number, Frame: number)
-	return { move = (Frame + Index) % 256, turn = Index * 100 - 400, jump = Index == 1, sprint = Frame % 2 == 0 }
-end
-
---- What a scenario asks of a tool: one call each, with the tool's own modules. `Listen` binds the
---- receiving side's listener, which calls `Received` once per event.
-type Api = {
-	Listen: (Server: any, Client: any, Received: () -> ()) -> (),
-	Fire: (Server: any, Client: any, Universe: World.Universe, Frame: number) -> (),
-}
-
-type Scenario = {
-	Name: string,
-	Players: number,
-	Instances: boolean?,
-	--> Which side sends, so the flush and the delivery go the right way.
-	FromServer: boolean,
-	Expected: number,
-	Tools: { [string]: Api },
-}
-
-local BROADCASTS = 100
-local INPUTS = 8
-local TOUCHES = 100
-local WORLD_UNITS = 16
-
-local function Units(Frame: number): { Unit }
-	local List = table.create(WORLD_UNITS)
-	for Index = 1, WORLD_UNITS do
-		List[Index] = MakeUnit(Index, Frame)
-	end
-	return List
-end
-
---> BlinkBlox and upstream share an API.
-local function BlinkStyle(): { [string]: Api }
-	return {
-		Broadcast = {
-			Listen = function(_Server, Client, Received)
-				Client.Snapshot.On(Received)
-			end,
-			Fire = function(Server, _Client, _Universe, Frame)
-				for Index = 1, BROADCASTS do
-					Server.Snapshot.FireAll(MakeUnit(Index, Frame))
-				end
-			end,
-		},
-		UnreliableInput = {
-			Listen = function(Server, _Client, Received)
-				Server.Input.On(Received)
-			end,
-			Fire = function(_Server, Client, _Universe, Frame)
-				for Index = 1, INPUTS do
-					Client.Input.Fire(MakeInput(Index, Frame))
-				end
-			end,
-		},
-		Instances = {
-			Listen = function(Server, _Client, Received)
-				Server.Touch.On(Received)
-			end,
-			Fire = function(_Server, Client, Universe, Frame)
-				local Parts = (Universe :: any).Parts
-				for Index = 1, TOUCHES do
-					Client.Touch.Fire(Parts[(Index + Frame) % #Parts + 1], Index)
-				end
-			end,
-		},
-		WorldState = {
-			Listen = function(_Server, Client, Received)
-				Client.WorldState.On(Received)
-			end,
-			Fire = function(Server, _Client, _Universe, Frame)
-				Server.WorldState.FireAll(Units(Frame))
-			end,
-		},
-		SelfState = {
-			Listen = function(_Server, Client, Received)
-				Client.SelfState.On(Received)
-			end,
-			Fire = function(Server, _Client, Universe, Frame)
-				for Index, Player in Universe.Crowd do
-					Server.SelfState.Fire(Player, MakeUnit(Index, Frame))
-				end
-			end,
-		},
-	}
-end
-
-local ZAP: { [string]: Api } = {
-	Broadcast = {
-		Listen = function(_Server, Client, Received)
-			Client.Snapshot.SetCallback(Received)
-		end,
-		Fire = function(Server, _Client, _Universe, Frame)
-			for Index = 1, BROADCASTS do
-				Server.Snapshot.FireAll(MakeUnit(Index, Frame))
-			end
-		end,
-	},
-	UnreliableInput = {
-		Listen = function(Server, _Client, Received)
-			Server.Input.SetCallback(Received)
-		end,
-		Fire = function(_Server, Client, _Universe, Frame)
-			for Index = 1, INPUTS do
-				Client.Input.Fire(MakeInput(Index, Frame))
-			end
-		end,
-	},
-	Instances = {
-		Listen = function(Server, _Client, Received)
-			Server.Touch.SetCallback(Received)
-		end,
-		Fire = function(_Server, Client, Universe, Frame)
-			local Parts = (Universe :: any).Parts
-			for Index = 1, TOUCHES do
-				Client.Touch.Fire({ part = Parts[(Index + Frame) % #Parts + 1], force = Index })
-			end
-		end,
-	},
-	WorldState = {
-		Listen = function(_Server, Client, Received)
-			Client.WorldState.SetCallback(Received)
-		end,
-		Fire = function(Server, _Client, _Universe, Frame)
-			Server.WorldState.FireAll(Units(Frame))
-		end,
-	},
-	SelfState = {
-		Listen = function(_Server, Client, Received)
-			Client.SelfState.SetCallback(Received)
-		end,
-		Fire = function(Server, _Client, Universe, Frame)
-			for Index, Player in Universe.Crowd do
-				Server.SelfState.Fire(Player, MakeUnit(Index, Frame))
-			end
-		end,
-	},
-}
-
-local BYTENET: { [string]: Api } = {
-	Broadcast = {
-		Listen = function(_Server, Client, Received)
-			Client.Snapshot.listen(Received)
-		end,
-		Fire = function(Server, _Client, _Universe, Frame)
-			for Index = 1, BROADCASTS do
-				Server.Snapshot.sendToAll(MakeUnit(Index, Frame))
-			end
-		end,
-	},
-	UnreliableInput = {
-		Listen = function(Server, _Client, Received)
-			Server.Input.listen(Received)
-		end,
-		Fire = function(_Server, Client, _Universe, Frame)
-			for Index = 1, INPUTS do
-				Client.Input.send(MakeInput(Index, Frame))
-			end
-		end,
-	},
-	Instances = {
-		Listen = function(Server, _Client, Received)
-			Server.Touch.listen(Received)
-		end,
-		Fire = function(_Server, Client, Universe, Frame)
-			local Parts = (Universe :: any).Parts
-			for Index = 1, TOUCHES do
-				Client.Touch.send({ part = Parts[(Index + Frame) % #Parts + 1], force = Index })
-			end
-		end,
-	},
-	WorldState = {
-		Listen = function(_Server, Client, Received)
-			Client.WorldState.listen(Received)
-		end,
-		Fire = function(Server, _Client, _Universe, Frame)
-			Server.WorldState.sendToAll(Units(Frame))
-		end,
-	},
-	SelfState = {
-		Listen = function(_Server, Client, Received)
-			Client.SelfState.listen(Received)
-		end,
-		Fire = function(Server, _Client, Universe, Frame)
-			for Index, Player in Universe.Crowd do
-				Server.SelfState.sendTo(MakeUnit(Index, Frame), Player)
-			end
-		end,
-	},
-}
-
-local PACKET: { [string]: Api } = {
-	Broadcast = {
-		Listen = function(_Server, Client, Received)
-			Client.Snapshot.OnClientEvent:Connect(Received)
-		end,
-		Fire = function(Server, _Client, _Universe, Frame)
-			for Index = 1, BROADCASTS do
-				Server.Snapshot:Fire(MakeUnit(Index, Frame))
-			end
-		end,
-	},
-	Instances = {
-		Listen = function(Server, _Client, Received)
-			Server.Touch.OnServerEvent:Connect(Received)
-		end,
-		Fire = function(_Server, Client, Universe, Frame)
-			local Parts = (Universe :: any).Parts
-			for Index = 1, TOUCHES do
-				Client.Touch:Fire(Parts[(Index + Frame) % #Parts + 1], Index)
-			end
-		end,
-	},
-}
-
-local APIS: { [string]: { [string]: Api } } = {
-	blink = BlinkStyle(),
-	upstream = BlinkStyle(),
-	zap = ZAP,
-	bytenet = BYTENET,
-	packet = PACKET,
-}
-
-local SCENARIOS: { { Name: string, Players: number, Instances: boolean?, FromServer: boolean, Expected: number } } = {
-	{ Name = "Broadcast", Players = CROWD, FromServer = true, Expected = BROADCASTS },
-	{ Name = "UnreliableInput", Players = 1, FromServer = false, Expected = INPUTS },
-	{ Name = "Instances", Players = 1, Instances = true, FromServer = false, Expected = TOUCHES },
-	{ Name = "WorldState", Players = CROWD, FromServer = true, Expected = 1 },
-	{ Name = "SelfState", Players = CROWD, FromServer = true, Expected = 1 },
-}
-
 local function Missing(Name: string): string?
 	for _, Path in REQUIRES[Name] or {} do
 		if not fs.isFile(Path) then
-			return `{Path} is missing; run \`lune run build --download\` first`
+			return `{Path} is missing; run \`luneblox run build --download\` first`
 		end
 	end
 	return nil
@@ -347,15 +96,8 @@ end
 
 type Result = { Fire: number, Flush: number, Decode: number, Calls: number, Bytes: number }
 
-local function Run(Tool: string, Scenario: any, Api: Api, Native: boolean): Result
-	local Mounts = {}
-	for _, Path in { "packages/bytenet", "packages/packet" } do
-		if fs.isDir(Path) then
-			table.insert(Mounts, Path)
-		end
-	end
-
-	local Universe = World.Universe(Native, Mounts, Scenario.Players, Scenario.Instances == true)
+local function Run(Tool: string, Scenario: any, Api: Apis.Api, Native: boolean): Result
+	local Universe = World.Universe(Native, Tools.Mounts(), Scenario.Players, Scenario.Instances == true)
 	local Parts = {}
 	for Index = 1, 16 do
 		Parts[Index] = World.Part(`Part{Index}`)
@@ -367,7 +109,7 @@ local function Run(Tool: string, Scenario: any, Api: Api, Native: boolean): Resu
 	local Server = ServerWorld.Require(Mode)
 	local ClientWorld = World.new(Universe, false)
 	local Client = ClientWorld.Require(Mode)
-	World.Drain(Universe)
+	World.Settle(Universe)
 
 	local Received = 0
 	Api.Listen(Server, Client, function()
@@ -378,6 +120,7 @@ local function Run(Tool: string, Scenario: any, Api: Api, Native: boolean): Resu
 	local Calls, Bytes = 0, 0
 	local Sender = if Scenario.FromServer then ServerWorld else ClientWorld
 
+	runtime.collect()
 	for Frame = 1, WARMUP_FRAMES + Frames do
 		table.clear(Universe.Outbox)
 		table.clear(Universe.Inbox)
@@ -442,10 +185,10 @@ end
 
 runtime.notice("These timings")
 print(
-	`BlinkBlox {_G.VERSION or "(unbundled)"}, {Frames} frames, times in ms per frame, {CROWD} players where a crowd, on {runtime.description}`
+	`BlinkBlox {_G.VERSION or "(unbundled)"}, {Frames} frames, times in ms per frame, {Apis.CROWD} players where a crowd, on {runtime.description}`
 )
 
-for _, Scenario in SCENARIOS do
+for _, Scenario in Apis.SCENARIOS do
 	if Filter and not string.find(Scenario.Name, Filter, 1, true) then
 		continue
 	end
@@ -458,7 +201,7 @@ for _, Scenario in SCENARIOS do
 
 	for _, Native in { true, false } do
 		for _, Tool in Selected do
-			local Api = APIS[Tool][Scenario.Name]
+			local Api = Apis.APIS[Tool][Scenario.Name]
 			if not Api then
 				continue
 			end

@@ -180,16 +180,17 @@ end
 --> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
 --> reaches the save.
 local PendingCursor = -1
-local PendingInstances = 0
 
 --> How many Instances the client's batch held after the last write into it that returned. Every write
 --> into the batch starts from there, so Begin takes it from here rather than counting the list, and
---> only a write that can add Instances counts it again; see the commits in the client template.
+--> only a write that can add Instances counts it again; see the commits in the client template. It
+--> is also where a write that threw is undone to: only a write that returns moves it, so it still
+--> holds what the batch had when that write began, and a Fire keeps no copy of its own.
 local CommittedInstances = 0
 
 local function Settle()
     if PendingCursor >= 0 then
-        Rollback(PendingCursor, PendingInstances)
+        Rollback(PendingCursor, CommittedInstances)
         PendingCursor = -1
     end
 end
@@ -201,7 +202,6 @@ local function Begin()
         Settle()
     end
     PendingCursor = SendCursor
-    PendingInstances = CommittedInstances
 end
 
 local function Mark(): (number, number)

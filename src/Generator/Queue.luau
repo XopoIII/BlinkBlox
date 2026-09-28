@@ -21,8 +21,8 @@ local CAPACITY = 256
 --- writes, so the caller rejects promptly. A dropped call is not an option -- the caller is parked
 --- until its timeout, holding one of its 32 slots the whole time.
 ---
---- `return` rather than `continue`: this is emitted inside the per-event `pcall(function()`, and
---- returning from it lands back in the decode loop exactly as continuing would.
+--- `return`: this is emitted in the channel's decoder, which the decode loop calls once an event, and
+--- returning from it goes on with the packet's next event.
 local function Refuse(Target: Block, Index: number, Indent: number): Block
 	for _, Line in
 		{

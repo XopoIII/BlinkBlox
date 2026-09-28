@@ -192,16 +192,17 @@ end
 --> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
 --> reaches the save.
 local PendingCursor = -1
-local PendingInstances = 0
 
 --> How many Instances the client's batch held after the last write into it that returned. Every write
 --> into the batch starts from there, so Begin takes it from here rather than counting the list, and
---> only a write that can add Instances counts it again; see the commits in the client template.
+--> only a write that can add Instances counts it again; see the commits in the client template. It
+--> is also where a write that threw is undone to: only a write that returns moves it, so it still
+--> holds what the batch had when that write began, and a Fire keeps no copy of its own.
 local CommittedInstances = 0
 
 local function Settle()
     if PendingCursor >= 0 then
-        Rollback(PendingCursor, PendingInstances)
+        Rollback(PendingCursor, CommittedInstances)
         PendingCursor = -1
     end
 end
@@ -213,7 +214,6 @@ local function Begin()
         Settle()
     end
     PendingCursor = SendCursor
-    PendingInstances = CommittedInstances
 end
 
 local function Mark(): (number, number)
@@ -570,6 +570,57 @@ local function UnpackRotation(X: number, Y: number, Z: number, Index: number, A:
 	end
 	return CFrame.new(X, Y, Z, A, B, C, D)
 end
+
+local PACKED_ROWS = table.create(256)
+for Byte = 0, 255 do
+	local Row = table.create(8)
+	for Bit = 0, 7 do
+		Row[Bit + 1] = bit32.btest(Byte, bit32.lshift(1, Bit))
+	end
+	PACKED_ROWS[Byte + 1] = table.freeze(Row)
+end
+table.freeze(PACKED_ROWS)
+local function PackedRows(Source: buffer, Offset: number, Length: number, Value: { boolean })
+	local Whole = Length // 8
+	for Byte = 0, Whole - 1 do
+		table.move(PACKED_ROWS[buffer.readu8(Source, Offset + Byte) + 1], 1, 8, Byte * 8 + 1, Value)
+	end
+	if Length % 8 ~= 0 then
+		table.move(PACKED_ROWS[buffer.readu8(Source, Offset + Whole) + 1], 1, Length % 8, Whole * 8 + 1, Value)
+	end
+end
+local function PackedBits(Source: buffer, Offset: number, Length: number, Value: { boolean })
+	for Byte = 0, Length // 8 - 1 do
+		local Bits = buffer.readu8(Source, Offset + Byte)
+		local Base = Byte * 8
+		Value[Base + 1] = bit32.btest(Bits, 1)
+		Value[Base + 2] = bit32.btest(Bits, 2)
+		Value[Base + 3] = bit32.btest(Bits, 4)
+		Value[Base + 4] = bit32.btest(Bits, 8)
+		Value[Base + 5] = bit32.btest(Bits, 16)
+		Value[Base + 6] = bit32.btest(Bits, 32)
+		Value[Base + 7] = bit32.btest(Bits, 64)
+		Value[Base + 8] = bit32.btest(Bits, 128)
+	end
+end
+local PACKED_BY_ROWS = (function(): boolean
+	local Probe = buffer.create(128)
+	for Index = 0, 127 do
+		buffer.writeu8(Probe, Index, (Index * 37 + 11) % 256)
+	end
+	local Target = table.create(1024, false)
+	local Bits, Rows = math.huge, math.huge
+	for _ = 1, 8 do
+		local Start = os.clock()
+		PackedBits(Probe, 0, 1024, Target)
+		local Middle = os.clock()
+		PackedRows(Probe, 0, 1024, Target)
+		local Finish = os.clock()
+		Bits = math.min(Bits, Middle - Start)
+		Rows = math.min(Rows, Finish - Middle)
+	end
+	return Rows < Bits
+end)()
 
 --> Sequence numbers for ordered unreliable events, one counter per event each way.
 local OrderOut: { number } = {}
@@ -7131,24 +7182,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7236,24 +7291,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = BLOCK_START + 0
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7345,24 +7404,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7459,24 +7522,28 @@ if not RunService:IsRunning() then
 					local Item_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Item_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -7574,24 +7641,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7687,24 +7758,28 @@ if not RunService:IsRunning() then
 					Value.List = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.List)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -7719,24 +7794,28 @@ if not RunService:IsRunning() then
 					Value.Fixed = table.create(Length)
 					do
 						local PACKED_OFFSET = BLOCK_START + 1
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.Fixed)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -7897,24 +7976,28 @@ if not RunService:IsRunning() then
 					local Element_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Element_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -10393,12 +10476,25 @@ local function SendPacket(From: number, To: number, FromInstances: number, ToIns
     Reliable:FireServer(Buffer, table.move(SendInstances, FromInstances + 1, ToInstances, 1, {}))
 end
 
+--> The last frame's packet, filled again when the next is the same size. A remote serialises what it
+--> is fired with as it is called, so nothing still reads it; a new buffer every frame was an
+--> allocation, zero-filled, the size of the frame's traffic, and a flush of a thousand events cost
+--> several times QuickNet's, which keeps its buffers.
+local LastPacket: buffer? = nil
+
 local function StepReplication()
     Settle()
     local Used = SendCursor
     if Used > 0 then
         if #Cuts == 0 then
-            local Buffer = buffer.create(Used)
+            local Buffer: buffer
+            local Last = LastPacket
+            if Last ~= nil and buffer.len(Last) == Used then
+                Buffer = Last
+            else
+                Buffer = buffer.create(Used)
+                LastPacket = Buffer
+            end
             buffer.copy(Buffer, 0, SendBuffer, 0, Used)
             Reliable:FireServer(Buffer, SendInstances)
         else
@@ -10429,8 +10525,10 @@ local function StepReplication()
     if Shrink then
         SendSize = 64
         SendBuffer = buffer.create(64)
+        LastPacket = nil
     end
 end
+local Decoding = -1
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -10446,6 +10544,839 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
+local function DecodeReliable()
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
+	Decoding = Index
+	if Index < 31 then
+		if Index < 17 then
+			if Index < 11 then
+				if Index == 2 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_RateLimitedCall()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 2)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+				elseif Index == 3 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_ConcurrentCall()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 3)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+				elseif Index == 4 then
+					local Value: Vector3 = SerdesFunctions.ReadEVENT_SendOccupiedCell()
+					local BOUND_LISTENER = Events.Reliable[4]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "SendOccupiedCell"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[4] > 256 then
+							warn("[BlinkBlox]: Event queue of \"SendOccupiedCell\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[4], table.pack(Value))
+					end
+				elseif Index == 7 then
+					Push(Queue.Reliable[7], table.pack(SerdesFunctions.ReadEVENT_ServerPollEvent()))
+				elseif Index == 8 then
+					Push(Queue.Reliable[8], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyPollEvent()))
+				elseif Index == 10 then
+					local Value: nil = SerdesFunctions.ReadEVENT_EmptyEvent()
+					local BOUND_LISTENER = Events.Reliable[10]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "EmptyEvent"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[10] > 256 then
+							warn("[BlinkBlox]: Event queue of \"EmptyEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[10], table.pack(Value))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
+				end
+			else
+				if Index == 11 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_EmptyFunction()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 11)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+				elseif Index == 12 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, Value = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_UnitFunction()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 12)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, Value)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(Value, 0) end
+				elseif Index == 13 then
+					local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,} = SerdesFunctions.ReadEVENT_Flags8()
+					local BOUND_LISTENER = Events.Reliable[13]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Flags8"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[13] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Flags8\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[13], table.pack(Value))
+					end
+				elseif Index == 14 then
+					local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,} = SerdesFunctions.ReadEVENT_Flags16()
+					local BOUND_LISTENER = Events.Reliable[14]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Flags16"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[14] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Flags16\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[14], table.pack(Value))
+					end
+				elseif Index == 15 then
+					local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,} = SerdesFunctions.ReadEVENT_Flags32()
+					local BOUND_LISTENER = Events.Reliable[15]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Flags32"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[15] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Flags32\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[15], table.pack(Value))
+					end
+				elseif Index == 16 then
+					local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,} = SerdesFunctions.ReadEVENT_Flags33()
+					local BOUND_LISTENER = Events.Reliable[16]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Flags33"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[16] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Flags33\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[16], table.pack(Value))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
+				end
+			end
+		else
+			if Index < 24 then
+				if Index == 17 then
+					local Value: {[number]: { Static: number, Dynamic: buffer }} = SerdesFunctions.ReadEVENT_DynamicMap()
+					local BOUND_LISTENER = Events.Reliable[17]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "DynamicMap"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[17] > 256 then
+							warn("[BlinkBlox]: Event queue of \"DynamicMap\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[17], table.pack(Value))
+					end
+				elseif Index == 18 then
+					local Value: { { Static: number, Dynamic: buffer } } = SerdesFunctions.ReadEVENT_DynamicArray()
+					local BOUND_LISTENER = Events.Reliable[18]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "DynamicArray"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[18] > 256 then
+							warn("[BlinkBlox]: Event queue of \"DynamicArray\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[18], table.pack(Value))
+					end
+				elseif Index == 19 then
+					local Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number } = SerdesFunctions.ReadEVENT_PlayerEvent()
+					local BOUND_LISTENER = Events.Reliable[19]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "PlayerEvent"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[19] > 256 then
+							warn("[BlinkBlox]: Event queue of \"PlayerEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[19], table.pack(Value))
+					end
+				elseif Index == 21 then
+					local Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } = SerdesFunctions.ReadEVENT_Generic()
+					local BOUND_LISTENER = Events.Reliable[21]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Generic"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[21] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Generic\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[21], table.pack(Value))
+					end
+				elseif Index == 22 then
+					local Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }? = SerdesFunctions.ReadEVENT_GenericArray()
+					local BOUND_LISTENER = Events.Reliable[22]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "GenericArray"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[22] > 256 then
+							warn("[BlinkBlox]: Event queue of \"GenericArray\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[22], table.pack(Value))
+					end
+				elseif Index == 23 then
+					local Value: any = SerdesFunctions.ReadEVENT_Unknown()
+					local BOUND_LISTENER = Events.Reliable[23]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Unknown"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[23] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Unknown\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[23], table.pack(Value))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
+				end
+			else
+				if Index == 24 then
+					local Value: {[string]: number} = SerdesFunctions.ReadEVENT_MapEvent()
+					local BOUND_LISTENER = Events.Reliable[24]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "MapEvent"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[24] > 256 then
+							warn("[BlinkBlox]: Event queue of \"MapEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[24], table.pack(Value))
+					end
+				elseif Index == 25 then
+					local Value: { Map: {[string]: number} } = SerdesFunctions.ReadEVENT_MapStructEvent()
+					local BOUND_LISTENER = Events.Reliable[25]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "MapStructEvent"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[25] > 256 then
+							warn("[BlinkBlox]: Event queue of \"MapStructEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[25], table.pack(Value))
+					end
+				elseif Index == 26 then
+					local Value: {[string]: { number }} = SerdesFunctions.ReadEVENT_MapComplexEvent()
+					local BOUND_LISTENER = Events.Reliable[26]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "MapComplexEvent"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[26] > 256 then
+							warn("[BlinkBlox]: Event queue of \"MapComplexEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[26], table.pack(Value))
+					end
+				elseif Index == 27 then
+					local Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}? = SerdesFunctions.ReadEVENT_MapReferenceEvent()
+					local BOUND_LISTENER = Events.Reliable[27]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "MapReferenceEvent"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[27] > 256 then
+							warn("[BlinkBlox]: Event queue of \"MapReferenceEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[27], table.pack(Value))
+					end
+				elseif Index == 28 then
+					local Value: number = SerdesFunctions.ReadEVENT_ManyReliableSync()
+					if #Events.Reliable[28] > 0 then
+						local Epoch = ListenerEpoch
+						for _, Listener in Events.Reliable[28] do
+							if ListenerEpoch ~= Epoch and table.find(Events.Reliable[28], Listener) == nil then continue end
+							SerdesEvent = "ManyReliableSync"
+							local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
+							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+						end
+					else
+						if #Queue.Reliable[28] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ManyReliableSync\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[28], table.pack(Value))
+					end
+				elseif Index == 29 then
+					local Value: number = SerdesFunctions.ReadEVENT_ManyReliableAsync()
+					if #Events.Reliable[29] > 0 then
+						local Epoch = ListenerEpoch
+						for _, Listener in Events.Reliable[29] do
+							if ListenerEpoch ~= Epoch and table.find(Events.Reliable[29], Listener) == nil then continue end
+							Spawn(Listener, Value)
+						end
+					else
+						if #Queue.Reliable[29] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ManyReliableAsync\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[29], table.pack(Value))
+					end
+				elseif Index == 30 then
+					local Value: number = SerdesFunctions.ReadEVENT_ReliableServer()
+					local BOUND_LISTENER = Events.Reliable[30]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "ReliableServer"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[30] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ReliableServer\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[30], table.pack(Value))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
+				end
+			end
+		end
+	else
+		if Index < 44 then
+			if Index < 38 then
+				if Index == 31 then
+					local Value: number = SerdesFunctions.ReadEVENT_ReliableServerAsync()
+					local BOUND_LISTENER = Events.Reliable[31]
+					if BOUND_LISTENER ~= nil then
+						Spawn(BOUND_LISTENER, Value)
+					else
+						if #Queue.Reliable[31] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ReliableServerAsync\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[31], table.pack(Value))
+					end
+				elseif Index == 33 then
+					local Value: Instance = SerdesFunctions.ReadEVENT_InstanceAny()
+					local BOUND_LISTENER = Events.Reliable[33]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InstanceAny"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[33] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InstanceAny\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[33], table.pack(Value))
+					end
+				elseif Index == 34 then
+					local Value: Sound = SerdesFunctions.ReadEVENT_InstanceOfType()
+					local BOUND_LISTENER = Events.Reliable[34]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InstanceOfType"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[34] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InstanceOfType\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[34], table.pack(Value))
+					end
+				elseif Index == 35 then
+					local Value: Instance? = SerdesFunctions.ReadEVENT_InstanceOptional()
+					local BOUND_LISTENER = Events.Reliable[35]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InstanceOptional"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[35] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InstanceOptional\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[35], table.pack(Value))
+					end
+				elseif Index == 36 then
+					local Value: Motor6D = SerdesFunctions.ReadEVENT_InstanceOfClassWithDigit()
+					local BOUND_LISTENER = Events.Reliable[36]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InstanceOfClassWithDigit"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[36] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InstanceOfClassWithDigit\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[36], table.pack(Value))
+					end
+				elseif Index == 37 then
+					local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_Reference()
+					local BOUND_LISTENER = Events.Reliable[37]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Reference"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[37] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Reference\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[37], table.pack(Value))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
+				end
+			else
+				if Index == 38 then
+					local Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } } = SerdesFunctions.ReadEVENT_ReferenceArray()
+					local BOUND_LISTENER = Events.Reliable[38]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "ReferenceArray"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[38] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ReferenceArray\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[38], table.pack(Value))
+					end
+				elseif Index == 39 then
+					local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_ReferenceOptional()
+					local BOUND_LISTENER = Events.Reliable[39]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "ReferenceOptional"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[39] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ReferenceOptional\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[39], table.pack(Value))
+					end
+				elseif Index == 40 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_RemoteFunction()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 40)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+				elseif Index == 41 then
+					local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number } = SerdesFunctions.ReadEVENT_Tuple()
+					local BOUND_LISTENER = Events.Reliable[41]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Tuple"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value1, Value2, Value3, Value4, Value5, Value6)
+					else
+						if #Queue.Reliable[41] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Tuple\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[41], table.pack(Value1, Value2, Value3, Value4, Value5, Value6))
+					end
+				elseif Index == 42 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5 = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 42)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(ReturnValue1, 0) end
+				elseif Index == 43 then
+					local Value: number = SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent()
+					local BOUND_LISTENER = Events.Reliable[43]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InScopeEvent"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[43] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[43], table.pack(Value))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
+				end
+			end
+		else
+			if Index < 51 then
+				if Index == 44 then
+					local Value: number = SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_ReadEVENT_InAnotherScopeEvent()
+					local BOUND_LISTENER = Events.Reliable[44]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InAnotherScopeEvent"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[44] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InAnotherScopeEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[44], table.pack(Value))
+					end
+				elseif Index == 45 then
+					local Value: number = SerdesFunctions.ExampleScope_ReadEVENT_InScopeEvent()
+					local BOUND_LISTENER = Events.Reliable[45]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InScopeEvent"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value)
+					else
+						if #Queue.Reliable[45] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[45], table.pack(Value))
+					end
+				elseif Index == 46 then
+					local Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") } = SerdesFunctions.Issue33_ReadEVENT_Event()
+					local BOUND_LISTENER = Events.Reliable[46]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Event"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value1, Value2, Value3)
+					else
+						if #Queue.Reliable[46] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Event\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[46], table.pack(Value1, Value2, Value3))
+					end
+				elseif Index == 48 then
+					local Value1: number, Value2: string, Value3: number? = SerdesFunctions.ReadEVENT_NamedTuple()
+					local BOUND_LISTENER = Events.Reliable[48]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "NamedTuple"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value1, Value2, Value3)
+					else
+						if #Queue.Reliable[48] > 256 then
+							warn("[BlinkBlox]: Event queue of \"NamedTuple\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[48], table.pack(Value1, Value2, Value3))
+					end
+				elseif Index == 49 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue1, ReturnValue2 = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_NamedTupleFunction()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 49)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue1, ReturnValue2)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(ReturnValue1, 0) end
+				elseif Index == 50 then
+					local Value1: number, Value2: string, Value3: number = SerdesFunctions.ReadEVENT_PartiallyNamedTuple()
+					local BOUND_LISTENER = Events.Reliable[50]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "PartiallyNamedTuple"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value1, Value2, Value3)
+					else
+						if #Queue.Reliable[50] > 256 then
+							warn("[BlinkBlox]: Event queue of \"PartiallyNamedTuple\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[50], table.pack(Value1, Value2, Value3))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
+				end
+			else
+				if Index == 51 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_NeverAnswered()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 51)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+				elseif Index == 52 then
+					-- Read BLOCK: 1 bytes
+					local BLOCK_START = Read(1)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Value: number = SerdesFunctions.ReadFUNCTION_DATA_AskClient()
+					if Events.Reliable[52] ~= nil then
+						Spawn(Events.Reliable[52], Value, InvocationIdentifier)
+					else
+						if #Queue.Reliable[52] > 256 then
+							warn("[BlinkBlox]: Event queue of \"AskClient\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[52], table.pack(Value, InvocationIdentifier))
+					end
+				elseif Index == 55 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_BadlyAnswered()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 55)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+				elseif Index == 58 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_Unanswered()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 58)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+				elseif Index == 59 then
+					local Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number? = SerdesFunctions.ReadEVENT_QueuedHoles()
+					local BOUND_LISTENER = Events.Reliable[59]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "QueuedHoles"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value1, Value2, Value3, Value4, Value5)
+					else
+						if #Queue.Reliable[59] > 256 then
+							warn("[BlinkBlox]: Event queue of \"QueuedHoles\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[59], table.pack(Value1, Value2, Value3, Value4, Value5))
+					end
+				elseif Index == 62 then
+					local Value1: string, Value2: number = SerdesFunctions.ReadEVENT_NamedLength()
+					local BOUND_LISTENER = Events.Reliable[62]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "NamedLength"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value1, Value2)
+					else
+						if #Queue.Reliable[62] > 256 then
+							warn("[BlinkBlox]: Event queue of \"NamedLength\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[62], table.pack(Value1, Value2))
+					end
+				elseif Index == 63 then
+					local Value1: number, Value2: string = SerdesFunctions.ReadEVENT_LengthFirst()
+					local BOUND_LISTENER = Events.Reliable[63]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "LengthFirst"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Value1, Value2)
+					else
+						if #Queue.Reliable[63] > 256 then
+							warn("[BlinkBlox]: Event queue of \"LengthFirst\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[63], table.pack(Value1, Value2))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
+				end
+			end
+		end
+	end
+end
+local function DecodeUnreliable()
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
+	Decoding = Index
+	if Index < 12 then
+		if Index == 0 then
+			local Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number } = SerdesFunctions.Indexers_ReadEVENT_TestEvent()
+			local BOUND_LISTENER = Events.Unreliable[0]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "TestEvent"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Value1, Value2, Value3, Value4)
+			end
+		elseif Index == 6 then
+			Push(Queue.Unreliable[6], table.pack(SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent()))
+		elseif Index == 7 then
+			Push(Queue.Unreliable[7], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyUnreliablePollEvent()))
+		elseif Index == 9 then
+			local Value: nil = SerdesFunctions.ReadEVENT_EmptyUnreliableEvent()
+			local BOUND_LISTENER = Events.Unreliable[9]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "EmptyUnreliableEvent"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Value)
+			end
+		elseif Index == 10 then
+			local Value: { number } = SerdesFunctions.ReadEVENT_ArrayPrimitive()
+			local BOUND_LISTENER = Events.Unreliable[10]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "ArrayPrimitive"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Value)
+			end
+		elseif Index == 11 then
+			local Value: number? = SerdesFunctions.ReadEVENT_OptionalPrimitive()
+			local BOUND_LISTENER = Events.Unreliable[11]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "OptionalPrimitive"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Value)
+			end
+		else
+			error("[BlinkBlox]: Unknown event index.")
+		end
+	else
+		if Index == 12 then
+			local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableSync()
+			local Epoch = ListenerEpoch
+			for _, Listener in Events.Unreliable[12] do
+				if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[12], Listener) == nil then continue end
+				SerdesEvent = "ManyUnreliableSync"
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+		elseif Index == 13 then
+			local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableAsync()
+			local Epoch = ListenerEpoch
+			for _, Listener in Events.Unreliable[13] do
+				if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[13], Listener) == nil then continue end
+				Spawn(Listener, Value)
+			end
+		elseif Index == 14 then
+			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServer()
+			local BOUND_LISTENER = Events.Unreliable[14]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "UnreliableServer"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Value)
+			end
+		elseif Index == 15 then
+			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServerAsync()
+			local BOUND_LISTENER = Events.Unreliable[15]
+			if BOUND_LISTENER ~= nil then
+				Spawn(BOUND_LISTENER, Value)
+			end
+		elseif Index == 17 then
+			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadEVENT_TupleUnreliable()
+			local BOUND_LISTENER = Events.Unreliable[17]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "TupleUnreliable"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Value1, Value2, Value3, Value4, Value5)
+			end
+		elseif Index == 19 then
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			local Value: number = SerdesFunctions.ReadEVENT_OrderedToClient()
+			if OrderAccept(19, OrderIdentifier) == true then
+				local BOUND_LISTENER = Events.Unreliable[19]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "OrderedToClient"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Value)
+				end
+			end
+		else
+			error("[BlinkBlox]: Unknown event index.")
+		end
+	end
+end
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
 	RecieveBuffer = Buffer
@@ -10457,742 +11388,18 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		if Index < 31 then
-			if Index < 17 then
-				if Index < 11 then
-					if Index == 2 then
-						-- Read BLOCK: 2 bytes
-						local BLOCK_START = Read(2)
-						local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-							local Success, ReturnValue = pcall(function ()
-								if Answered ~= 1 then
-									error("The call failed on the side that answered it.")
-								end
-								return SerdesFunctions.ReadFUNCTION_RETURN_RateLimitedCall()
-							end)
-						local Thread = TakeInvocation(Invocations, InvocationIdentifier, 2)
-						if Thread ~= nil then
-							if coroutine.status(Thread) == "suspended" then
-								task.spawn(Thread, Success, ReturnValue)
-							end
-						end
-						if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-					elseif Index == 3 then
-						-- Read BLOCK: 2 bytes
-						local BLOCK_START = Read(2)
-						local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-							local Success, ReturnValue = pcall(function ()
-								if Answered ~= 1 then
-									error("The call failed on the side that answered it.")
-								end
-								return SerdesFunctions.ReadFUNCTION_RETURN_ConcurrentCall()
-							end)
-						local Thread = TakeInvocation(Invocations, InvocationIdentifier, 3)
-						if Thread ~= nil then
-							if coroutine.status(Thread) == "suspended" then
-								task.spawn(Thread, Success, ReturnValue)
-							end
-						end
-						if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-					elseif Index == 4 then
-						local Value: Vector3 = SerdesFunctions.ReadEVENT_SendOccupiedCell()
-						local BOUND_LISTENER = Events.Reliable[4]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "SendOccupiedCell"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[4] > 256 then
-								warn("[BlinkBlox]: Event queue of \"SendOccupiedCell\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[4], table.pack(Value))
-						end
-					elseif Index == 7 then
-						Push(Queue.Reliable[7], table.pack(SerdesFunctions.ReadEVENT_ServerPollEvent()))
-					elseif Index == 8 then
-						Push(Queue.Reliable[8], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyPollEvent()))
-					elseif Index == 10 then
-						local Value: nil = SerdesFunctions.ReadEVENT_EmptyEvent()
-						local BOUND_LISTENER = Events.Reliable[10]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "EmptyEvent"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[10] > 256 then
-								warn("[BlinkBlox]: Event queue of \"EmptyEvent\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[10], table.pack(Value))
-						end
-					else
-						error("[BlinkBlox]: Unknown event index.")
-					end
-				else
-					if Index == 11 then
-						-- Read BLOCK: 2 bytes
-						local BLOCK_START = Read(2)
-						local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-							local Success, ReturnValue = pcall(function ()
-								if Answered ~= 1 then
-									error("The call failed on the side that answered it.")
-								end
-								return SerdesFunctions.ReadFUNCTION_RETURN_EmptyFunction()
-							end)
-						local Thread = TakeInvocation(Invocations, InvocationIdentifier, 11)
-						if Thread ~= nil then
-							if coroutine.status(Thread) == "suspended" then
-								task.spawn(Thread, Success, ReturnValue)
-							end
-						end
-						if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-					elseif Index == 12 then
-						-- Read BLOCK: 2 bytes
-						local BLOCK_START = Read(2)
-						local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-							local Success, Value = pcall(function ()
-								if Answered ~= 1 then
-									error("The call failed on the side that answered it.")
-								end
-								return SerdesFunctions.ReadFUNCTION_RETURN_UnitFunction()
-							end)
-						local Thread = TakeInvocation(Invocations, InvocationIdentifier, 12)
-						if Thread ~= nil then
-							if coroutine.status(Thread) == "suspended" then
-								task.spawn(Thread, Success, Value)
-							end
-						end
-						if Answered == 1 and Success ~= true then error(Value, 0) end
-					elseif Index == 13 then
-						local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,} = SerdesFunctions.ReadEVENT_Flags8()
-						local BOUND_LISTENER = Events.Reliable[13]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "Flags8"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[13] > 256 then
-								warn("[BlinkBlox]: Event queue of \"Flags8\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[13], table.pack(Value))
-						end
-					elseif Index == 14 then
-						local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,} = SerdesFunctions.ReadEVENT_Flags16()
-						local BOUND_LISTENER = Events.Reliable[14]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "Flags16"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[14] > 256 then
-								warn("[BlinkBlox]: Event queue of \"Flags16\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[14], table.pack(Value))
-						end
-					elseif Index == 15 then
-						local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,} = SerdesFunctions.ReadEVENT_Flags32()
-						local BOUND_LISTENER = Events.Reliable[15]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "Flags32"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[15] > 256 then
-								warn("[BlinkBlox]: Event queue of \"Flags32\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[15], table.pack(Value))
-						end
-					elseif Index == 16 then
-						local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,} = SerdesFunctions.ReadEVENT_Flags33()
-						local BOUND_LISTENER = Events.Reliable[16]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "Flags33"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[16] > 256 then
-								warn("[BlinkBlox]: Event queue of \"Flags33\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[16], table.pack(Value))
-						end
-					else
-						error("[BlinkBlox]: Unknown event index.")
-					end
-				end
-			else
-				if Index < 24 then
-					if Index == 17 then
-						local Value: {[number]: { Static: number, Dynamic: buffer }} = SerdesFunctions.ReadEVENT_DynamicMap()
-						local BOUND_LISTENER = Events.Reliable[17]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "DynamicMap"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[17] > 256 then
-								warn("[BlinkBlox]: Event queue of \"DynamicMap\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[17], table.pack(Value))
-						end
-					elseif Index == 18 then
-						local Value: { { Static: number, Dynamic: buffer } } = SerdesFunctions.ReadEVENT_DynamicArray()
-						local BOUND_LISTENER = Events.Reliable[18]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "DynamicArray"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[18] > 256 then
-								warn("[BlinkBlox]: Event queue of \"DynamicArray\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[18], table.pack(Value))
-						end
-					elseif Index == 19 then
-						local Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number } = SerdesFunctions.ReadEVENT_PlayerEvent()
-						local BOUND_LISTENER = Events.Reliable[19]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "PlayerEvent"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[19] > 256 then
-								warn("[BlinkBlox]: Event queue of \"PlayerEvent\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[19], table.pack(Value))
-						end
-					elseif Index == 21 then
-						local Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } = SerdesFunctions.ReadEVENT_Generic()
-						local BOUND_LISTENER = Events.Reliable[21]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "Generic"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[21] > 256 then
-								warn("[BlinkBlox]: Event queue of \"Generic\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[21], table.pack(Value))
-						end
-					elseif Index == 22 then
-						local Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }? = SerdesFunctions.ReadEVENT_GenericArray()
-						local BOUND_LISTENER = Events.Reliable[22]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "GenericArray"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[22] > 256 then
-								warn("[BlinkBlox]: Event queue of \"GenericArray\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[22], table.pack(Value))
-						end
-					elseif Index == 23 then
-						local Value: any = SerdesFunctions.ReadEVENT_Unknown()
-						local BOUND_LISTENER = Events.Reliable[23]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "Unknown"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[23] > 256 then
-								warn("[BlinkBlox]: Event queue of \"Unknown\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[23], table.pack(Value))
-						end
-					else
-						error("[BlinkBlox]: Unknown event index.")
-					end
-				else
-					if Index == 24 then
-						local Value: {[string]: number} = SerdesFunctions.ReadEVENT_MapEvent()
-						local BOUND_LISTENER = Events.Reliable[24]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "MapEvent"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[24] > 256 then
-								warn("[BlinkBlox]: Event queue of \"MapEvent\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[24], table.pack(Value))
-						end
-					elseif Index == 25 then
-						local Value: { Map: {[string]: number} } = SerdesFunctions.ReadEVENT_MapStructEvent()
-						local BOUND_LISTENER = Events.Reliable[25]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "MapStructEvent"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[25] > 256 then
-								warn("[BlinkBlox]: Event queue of \"MapStructEvent\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[25], table.pack(Value))
-						end
-					elseif Index == 26 then
-						local Value: {[string]: { number }} = SerdesFunctions.ReadEVENT_MapComplexEvent()
-						local BOUND_LISTENER = Events.Reliable[26]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "MapComplexEvent"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[26] > 256 then
-								warn("[BlinkBlox]: Event queue of \"MapComplexEvent\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[26], table.pack(Value))
-						end
-					elseif Index == 27 then
-						local Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}? = SerdesFunctions.ReadEVENT_MapReferenceEvent()
-						local BOUND_LISTENER = Events.Reliable[27]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "MapReferenceEvent"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[27] > 256 then
-								warn("[BlinkBlox]: Event queue of \"MapReferenceEvent\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[27], table.pack(Value))
-						end
-					elseif Index == 28 then
-						local Value: number = SerdesFunctions.ReadEVENT_ManyReliableSync()
-						if #Events.Reliable[28] > 0 then
-							local Epoch = ListenerEpoch
-							for _, Listener in Events.Reliable[28] do
-								if ListenerEpoch ~= Epoch and table.find(Events.Reliable[28], Listener) == nil then continue end
-								SerdesEvent = "ManyReliableSync"
-								local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
-								if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-							end
-						else
-							if #Queue.Reliable[28] > 256 then
-								warn("[BlinkBlox]: Event queue of \"ManyReliableSync\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[28], table.pack(Value))
-						end
-					elseif Index == 29 then
-						local Value: number = SerdesFunctions.ReadEVENT_ManyReliableAsync()
-						if #Events.Reliable[29] > 0 then
-							local Epoch = ListenerEpoch
-							for _, Listener in Events.Reliable[29] do
-								if ListenerEpoch ~= Epoch and table.find(Events.Reliable[29], Listener) == nil then continue end
-								Spawn(Listener, Value)
-							end
-						else
-							if #Queue.Reliable[29] > 256 then
-								warn("[BlinkBlox]: Event queue of \"ManyReliableAsync\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[29], table.pack(Value))
-						end
-					elseif Index == 30 then
-						local Value: number = SerdesFunctions.ReadEVENT_ReliableServer()
-						local BOUND_LISTENER = Events.Reliable[30]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "ReliableServer"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[30] > 256 then
-								warn("[BlinkBlox]: Event queue of \"ReliableServer\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[30], table.pack(Value))
-						end
-					else
-						error("[BlinkBlox]: Unknown event index.")
-					end
-				end
-			end
-		else
-			if Index < 44 then
-				if Index < 38 then
-					if Index == 31 then
-						local Value: number = SerdesFunctions.ReadEVENT_ReliableServerAsync()
-						local BOUND_LISTENER = Events.Reliable[31]
-						if BOUND_LISTENER ~= nil then
-							Spawn(BOUND_LISTENER, Value)
-						else
-							if #Queue.Reliable[31] > 256 then
-								warn("[BlinkBlox]: Event queue of \"ReliableServerAsync\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[31], table.pack(Value))
-						end
-					elseif Index == 33 then
-						local Value: Instance = SerdesFunctions.ReadEVENT_InstanceAny()
-						local BOUND_LISTENER = Events.Reliable[33]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "InstanceAny"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[33] > 256 then
-								warn("[BlinkBlox]: Event queue of \"InstanceAny\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[33], table.pack(Value))
-						end
-					elseif Index == 34 then
-						local Value: Sound = SerdesFunctions.ReadEVENT_InstanceOfType()
-						local BOUND_LISTENER = Events.Reliable[34]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "InstanceOfType"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[34] > 256 then
-								warn("[BlinkBlox]: Event queue of \"InstanceOfType\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[34], table.pack(Value))
-						end
-					elseif Index == 35 then
-						local Value: Instance? = SerdesFunctions.ReadEVENT_InstanceOptional()
-						local BOUND_LISTENER = Events.Reliable[35]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "InstanceOptional"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[35] > 256 then
-								warn("[BlinkBlox]: Event queue of \"InstanceOptional\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[35], table.pack(Value))
-						end
-					elseif Index == 36 then
-						local Value: Motor6D = SerdesFunctions.ReadEVENT_InstanceOfClassWithDigit()
-						local BOUND_LISTENER = Events.Reliable[36]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "InstanceOfClassWithDigit"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[36] > 256 then
-								warn("[BlinkBlox]: Event queue of \"InstanceOfClassWithDigit\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[36], table.pack(Value))
-						end
-					elseif Index == 37 then
-						local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_Reference()
-						local BOUND_LISTENER = Events.Reliable[37]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "Reference"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[37] > 256 then
-								warn("[BlinkBlox]: Event queue of \"Reference\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[37], table.pack(Value))
-						end
-					else
-						error("[BlinkBlox]: Unknown event index.")
-					end
-				else
-					if Index == 38 then
-						local Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } } = SerdesFunctions.ReadEVENT_ReferenceArray()
-						local BOUND_LISTENER = Events.Reliable[38]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "ReferenceArray"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[38] > 256 then
-								warn("[BlinkBlox]: Event queue of \"ReferenceArray\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[38], table.pack(Value))
-						end
-					elseif Index == 39 then
-						local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_ReferenceOptional()
-						local BOUND_LISTENER = Events.Reliable[39]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "ReferenceOptional"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[39] > 256 then
-								warn("[BlinkBlox]: Event queue of \"ReferenceOptional\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[39], table.pack(Value))
-						end
-					elseif Index == 40 then
-						-- Read BLOCK: 2 bytes
-						local BLOCK_START = Read(2)
-						local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-							local Success, ReturnValue = pcall(function ()
-								if Answered ~= 1 then
-									error("The call failed on the side that answered it.")
-								end
-								return SerdesFunctions.ReadFUNCTION_RETURN_RemoteFunction()
-							end)
-						local Thread = TakeInvocation(Invocations, InvocationIdentifier, 40)
-						if Thread ~= nil then
-							if coroutine.status(Thread) == "suspended" then
-								task.spawn(Thread, Success, ReturnValue)
-							end
-						end
-						if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-					elseif Index == 41 then
-						local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number } = SerdesFunctions.ReadEVENT_Tuple()
-						local BOUND_LISTENER = Events.Reliable[41]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "Tuple"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5, Value6)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[41] > 256 then
-								warn("[BlinkBlox]: Event queue of \"Tuple\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[41], table.pack(Value1, Value2, Value3, Value4, Value5, Value6))
-						end
-					elseif Index == 42 then
-						-- Read BLOCK: 2 bytes
-						local BLOCK_START = Read(2)
-						local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-							local Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5 = pcall(function ()
-								if Answered ~= 1 then
-									error("The call failed on the side that answered it.")
-								end
-								return SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction()
-							end)
-						local Thread = TakeInvocation(Invocations, InvocationIdentifier, 42)
-						if Thread ~= nil then
-							if coroutine.status(Thread) == "suspended" then
-								task.spawn(Thread, Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5)
-							end
-						end
-						if Answered == 1 and Success ~= true then error(ReturnValue1, 0) end
-					elseif Index == 43 then
-						local Value: number = SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent()
-						local BOUND_LISTENER = Events.Reliable[43]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "InScopeEvent"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[43] > 256 then
-								warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[43], table.pack(Value))
-						end
-					else
-						error("[BlinkBlox]: Unknown event index.")
-					end
-				end
-			else
-				if Index < 51 then
-					if Index == 44 then
-						local Value: number = SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_ReadEVENT_InAnotherScopeEvent()
-						local BOUND_LISTENER = Events.Reliable[44]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "InAnotherScopeEvent"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[44] > 256 then
-								warn("[BlinkBlox]: Event queue of \"InAnotherScopeEvent\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[44], table.pack(Value))
-						end
-					elseif Index == 45 then
-						local Value: number = SerdesFunctions.ExampleScope_ReadEVENT_InScopeEvent()
-						local BOUND_LISTENER = Events.Reliable[45]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "InScopeEvent"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[45] > 256 then
-								warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[45], table.pack(Value))
-						end
-					elseif Index == 46 then
-						local Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") } = SerdesFunctions.Issue33_ReadEVENT_Event()
-						local BOUND_LISTENER = Events.Reliable[46]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "Event"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[46] > 256 then
-								warn("[BlinkBlox]: Event queue of \"Event\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[46], table.pack(Value1, Value2, Value3))
-						end
-					elseif Index == 48 then
-						local Value1: number, Value2: string, Value3: number? = SerdesFunctions.ReadEVENT_NamedTuple()
-						local BOUND_LISTENER = Events.Reliable[48]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "NamedTuple"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[48] > 256 then
-								warn("[BlinkBlox]: Event queue of \"NamedTuple\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[48], table.pack(Value1, Value2, Value3))
-						end
-					elseif Index == 49 then
-						-- Read BLOCK: 2 bytes
-						local BLOCK_START = Read(2)
-						local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-							local Success, ReturnValue1, ReturnValue2 = pcall(function ()
-								if Answered ~= 1 then
-									error("The call failed on the side that answered it.")
-								end
-								return SerdesFunctions.ReadFUNCTION_RETURN_NamedTupleFunction()
-							end)
-						local Thread = TakeInvocation(Invocations, InvocationIdentifier, 49)
-						if Thread ~= nil then
-							if coroutine.status(Thread) == "suspended" then
-								task.spawn(Thread, Success, ReturnValue1, ReturnValue2)
-							end
-						end
-						if Answered == 1 and Success ~= true then error(ReturnValue1, 0) end
-					elseif Index == 50 then
-						local Value1: number, Value2: string, Value3: number = SerdesFunctions.ReadEVENT_PartiallyNamedTuple()
-						local BOUND_LISTENER = Events.Reliable[50]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "PartiallyNamedTuple"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[50] > 256 then
-								warn("[BlinkBlox]: Event queue of \"PartiallyNamedTuple\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[50], table.pack(Value1, Value2, Value3))
-						end
-					else
-						error("[BlinkBlox]: Unknown event index.")
-					end
-				else
-					if Index == 51 then
-						-- Read BLOCK: 2 bytes
-						local BLOCK_START = Read(2)
-						local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-							local Success, ReturnValue = pcall(function ()
-								if Answered ~= 1 then
-									error("The call failed on the side that answered it.")
-								end
-								return SerdesFunctions.ReadFUNCTION_RETURN_NeverAnswered()
-							end)
-						local Thread = TakeInvocation(Invocations, InvocationIdentifier, 51)
-						if Thread ~= nil then
-							if coroutine.status(Thread) == "suspended" then
-								task.spawn(Thread, Success, ReturnValue)
-							end
-						end
-						if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-					elseif Index == 52 then
-						-- Read BLOCK: 1 bytes
-						local BLOCK_START = Read(1)
-						local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						local Value: number = SerdesFunctions.ReadFUNCTION_DATA_AskClient()
-						if Events.Reliable[52] ~= nil then
-							Spawn(Events.Reliable[52], Value, InvocationIdentifier)
-						else
-							if #Queue.Reliable[52] > 256 then
-								warn("[BlinkBlox]: Event queue of \"AskClient\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[52], table.pack(Value, InvocationIdentifier))
-						end
-					elseif Index == 55 then
-						-- Read BLOCK: 2 bytes
-						local BLOCK_START = Read(2)
-						local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-							local Success, ReturnValue = pcall(function ()
-								if Answered ~= 1 then
-									error("The call failed on the side that answered it.")
-								end
-								return SerdesFunctions.ReadFUNCTION_RETURN_BadlyAnswered()
-							end)
-						local Thread = TakeInvocation(Invocations, InvocationIdentifier, 55)
-						if Thread ~= nil then
-							if coroutine.status(Thread) == "suspended" then
-								task.spawn(Thread, Success, ReturnValue)
-							end
-						end
-						if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-					elseif Index == 58 then
-						-- Read BLOCK: 2 bytes
-						local BLOCK_START = Read(2)
-						local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-							local Success, ReturnValue = pcall(function ()
-								if Answered ~= 1 then
-									error("The call failed on the side that answered it.")
-								end
-								return SerdesFunctions.ReadFUNCTION_RETURN_Unanswered()
-							end)
-						local Thread = TakeInvocation(Invocations, InvocationIdentifier, 58)
-						if Thread ~= nil then
-							if coroutine.status(Thread) == "suspended" then
-								task.spawn(Thread, Success, ReturnValue)
-							end
-						end
-						if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-					elseif Index == 59 then
-						local Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number? = SerdesFunctions.ReadEVENT_QueuedHoles()
-						local BOUND_LISTENER = Events.Reliable[59]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "QueuedHoles"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[59] > 256 then
-								warn("[BlinkBlox]: Event queue of \"QueuedHoles\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[59], table.pack(Value1, Value2, Value3, Value4, Value5))
-						end
-					elseif Index == 62 then
-						local Value1: string, Value2: number = SerdesFunctions.ReadEVENT_NamedLength()
-						local BOUND_LISTENER = Events.Reliable[62]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "NamedLength"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[62] > 256 then
-								warn("[BlinkBlox]: Event queue of \"NamedLength\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[62], table.pack(Value1, Value2))
-						end
-					elseif Index == 63 then
-						local Value1: number, Value2: string = SerdesFunctions.ReadEVENT_LengthFirst()
-						local BOUND_LISTENER = Events.Reliable[63]
-						if BOUND_LISTENER ~= nil then
-							SerdesEvent = "LengthFirst"
-							local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2)
-							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-						else
-							if #Queue.Reliable[63] > 256 then
-								warn("[BlinkBlox]: Event queue of \"LengthFirst\" exceeded 256, did you forget to implement a listener?")
-							end
-							table.insert(Queue.Reliable[63], table.pack(Value1, Value2))
-						end
-					else
-						error("[BlinkBlox]: Unknown event index.")
-					end
-				end
-			end
+	Decoding = -1
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
+		if Parsed then
+			break
 		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
-	if not Parsed then
-		ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
+		if Decoding > -2 then
+			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
+			break
+		end
+		local Listening = EventNames.Reliable[-2 - Decoding]
+		task.spawn(error, Failure, 0)
 	end
 end)
 Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -11206,113 +11413,18 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		if Index < 12 then
-			if Index == 0 then
-				local Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number } = SerdesFunctions.Indexers_ReadEVENT_TestEvent()
-				local BOUND_LISTENER = Events.Unreliable[0]
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "TestEvent"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			elseif Index == 6 then
-				Push(Queue.Unreliable[6], table.pack(SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent()))
-			elseif Index == 7 then
-				Push(Queue.Unreliable[7], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyUnreliablePollEvent()))
-			elseif Index == 9 then
-				local Value: nil = SerdesFunctions.ReadEVENT_EmptyUnreliableEvent()
-				local BOUND_LISTENER = Events.Unreliable[9]
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "EmptyUnreliableEvent"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			elseif Index == 10 then
-				local Value: { number } = SerdesFunctions.ReadEVENT_ArrayPrimitive()
-				local BOUND_LISTENER = Events.Unreliable[10]
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "ArrayPrimitive"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			elseif Index == 11 then
-				local Value: number? = SerdesFunctions.ReadEVENT_OptionalPrimitive()
-				local BOUND_LISTENER = Events.Unreliable[11]
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "OptionalPrimitive"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			else
-				error("[BlinkBlox]: Unknown event index.")
-			end
-		else
-			if Index == 12 then
-				local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableSync()
-				local Epoch = ListenerEpoch
-				for _, Listener in Events.Unreliable[12] do
-					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[12], Listener) == nil then continue end
-					SerdesEvent = "ManyUnreliableSync"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			elseif Index == 13 then
-				local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableAsync()
-				local Epoch = ListenerEpoch
-				for _, Listener in Events.Unreliable[13] do
-					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[13], Listener) == nil then continue end
-					Spawn(Listener, Value)
-				end
-			elseif Index == 14 then
-				local Value: number = SerdesFunctions.ReadEVENT_UnreliableServer()
-				local BOUND_LISTENER = Events.Unreliable[14]
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "UnreliableServer"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			elseif Index == 15 then
-				local Value: number = SerdesFunctions.ReadEVENT_UnreliableServerAsync()
-				local BOUND_LISTENER = Events.Unreliable[15]
-				if BOUND_LISTENER ~= nil then
-					Spawn(BOUND_LISTENER, Value)
-				end
-			elseif Index == 17 then
-				local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadEVENT_TupleUnreliable()
-				local BOUND_LISTENER = Events.Unreliable[17]
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "TupleUnreliable"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			elseif Index == 19 then
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				local Value: number = SerdesFunctions.ReadEVENT_OrderedToClient()
-				if OrderAccept(19, OrderIdentifier) == true then
-					local BOUND_LISTENER = Events.Unreliable[19]
-					if BOUND_LISTENER ~= nil then
-						SerdesEvent = "OrderedToClient"
-						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-					end
-				end
-			else
-				error("[BlinkBlox]: Unknown event index.")
-			end
+	Decoding = -1
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
+		if Parsed then
+			break
 		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
-	if not Parsed then
-		ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
+		if Decoding > -2 then
+			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
+			break
+		end
+		local Listening = EventNames.Unreliable[-2 - Decoding]
+		task.spawn(error, Failure, 0)
 	end
 end)
 
@@ -14809,24 +14921,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -14914,24 +15030,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = BLOCK_START + 0
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -15023,24 +15143,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -15137,24 +15261,28 @@ local Returns = table.freeze({
 					local Item_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Item_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -15252,24 +15380,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -15365,24 +15497,28 @@ local Returns = table.freeze({
 					Value.List = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.List)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -15397,24 +15533,28 @@ local Returns = table.freeze({
 					Value.Fixed = table.create(Length)
 					do
 						local PACKED_OFFSET = BLOCK_START + 1
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.Fixed)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -15575,24 +15715,28 @@ local Returns = table.freeze({
 					local Element_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Element_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -17661,7 +17805,6 @@ local Returns = table.freeze({
 			if PendingCursor >= 0 then Settle() end
 			local Start, Before = SendCursor, CommittedInstances
 			PendingCursor = Start
-			PendingInstances = Before
 			SerdesFunctions.WriteEVENT_UnknownInbound(Value)
 			local Count = #SendInstances
 			PendingCursor = -1

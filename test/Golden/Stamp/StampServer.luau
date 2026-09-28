@@ -193,16 +193,17 @@ end
 --> none of it: a player's batch is written between `Load` and `SavePlayerBuffer`, and a throw never
 --> reaches the save.
 local PendingCursor = -1
-local PendingInstances = 0
 
 --> How many Instances the client's batch held after the last write into it that returned. Every write
 --> into the batch starts from there, so Begin takes it from here rather than counting the list, and
---> only a write that can add Instances counts it again; see the commits in the client template.
+--> only a write that can add Instances counts it again; see the commits in the client template. It
+--> is also where a write that threw is undone to: only a write that returns moves it, so it still
+--> holds what the batch had when that write began, and a Fire keeps no copy of its own.
 local CommittedInstances = 0
 
 local function Settle()
     if PendingCursor >= 0 then
-        Rollback(PendingCursor, PendingInstances)
+        Rollback(PendingCursor, CommittedInstances)
         PendingCursor = -1
     end
 end
@@ -214,7 +215,6 @@ local function Begin()
         Settle()
     end
     PendingCursor = SendCursor
-    PendingInstances = CommittedInstances
 end
 
 local function Mark(): (number, number)
@@ -925,7 +925,7 @@ end
 
 --> Reports a listener's error, or returns false when no handler is installed and the caller should
 --> surface it the way it did before the handler existed. Never throws or yields: it runs inside the
---> decode loop's per-event pcall.
+--> decode loop's pcall, or in the connection itself after a listener threw, before the decode goes on.
 local function ListenerFailed(Player: Player, Event: string, Failure: unknown): boolean
     local Handler = ListenerHandler
     if not Handler then
@@ -1072,7 +1072,7 @@ local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: num
 
         local Handler = RateHandler
         if Handler then
-            --> Spawned, not called. This runs inside the per-event pcall that contains a truncated
+            --> Spawned, not called. This runs inside the decode loop's pcall that contains a truncated
             --> packet, so a throwing handler would abort the rest of the packet; and a handler that
             --> yields -- an analytics write, a datastore call -- would stall decoding.
             Spawn(Handler, Player, Name, Refused)
@@ -1127,7 +1127,7 @@ local function ConcurrencyAccept(Player: Player, Index: number, Limit: number, N
 
     local Handler = RateHandler
     if Handler then
-        --> Spawned for RateAccept's reason: this runs inside the per-event pcall of the decode loop.
+        --> Spawned for RateAccept's reason: this runs inside the decode loop's pcall.
         Spawn(Handler, Player, Name, Refused)
     end
 
@@ -1750,18 +1750,67 @@ local function SendSTREAM_1(Player: Player, Value: { Gap: number, Bucket: number
 	Unreliable:FireClient(Player, Buffer, SendInstances)
 end
 local STREAM_1 = CreatePlayerStream("Trust", 1 / 10, 1 / 20, 2, 0.01, SendSTREAM_1)
-local function DecodeLoop(DecodeEvent: () -> (), Player: Player, Size: number)
-	local DecodedEvents = 0
-	while RecieveCursor < Size and Player.Parent ~= nil do
-		DecodedEvents += 1
-		if DecodedEvents > 64 then
+local Decoding = -1
+local DecodeRemaining = 64
+local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, Size: number)
+	while RecieveCursor < Size do
+		if DecodeRemaining == 0 then
 			ReportDrop(Player, "Events", 64)
 			break
 		end
-		DecodeEvent()
+		DecodeRemaining -= 1
+		DecodeEvent(Player)
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
+local function DecodeReliable(Player: Player)
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
+	Decoding = Index
+	if Index == 0 then
+		local Value1: number = SerdesFunctions.ReadEVENT_Swing()
+		Value1 = ClampStamp(Value1, 0.25)
+		if RateAccept(Player, 1, 2, 2, "Swing") == true then
+			local BOUND_LISTENER = Events.Reliable[0]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Swing"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Player, Value1)
+			else
+				if #Queue.Reliable[0] < 256 then
+					table.insert(Queue.Reliable[0], table.pack(Player, Value1))
+				end
+			end
+		end
+	else
+		error("[BlinkBlox]: Unknown event index.")
+	end
+end
+local function DecodeUnreliable(Player: Player)
+	Decoding = -1
+	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+	RecieveCursor += 1
+	Decoding = Index
+	if Index == 0 then
+		-- Read BLOCK: 2 bytes
+		local BLOCK_START = Read(2)
+		local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		local Value1: number, Value2: Vector3, Value3: number = SerdesFunctions.ReadEVENT_Aim()
+		Value3 = ClampStamp(Value3, 0.1)
+		if RateAccept(Player, 5, 30, 30, "Aim") == true then
+			if OrderAccept(Player, 0, OrderIdentifier) == true then
+				local Epoch = ListenerEpoch
+				for _, Listener in Events.Unreliable[0] do
+					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[0], Listener) == nil then continue end
+					Spawn(RunListener, "Aim", Listener, Player, Value1, Value2, Value3)
+				end
+			end
+		end
+	else
+		error("[BlinkBlox]: Unknown event index.")
+	end
+end
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
 	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
 		ReportDrop(Player, "Malformed", 0)
@@ -1788,35 +1837,24 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		if Index == 0 then
-			local Value1: number = SerdesFunctions.ReadEVENT_Swing()
-			Value1 = ClampStamp(Value1, 0.25)
-			if RateAccept(Player, 1, 2, 2, "Swing") == true then
-				local BOUND_LISTENER = Events.Reliable[0]
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "Swing"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value1)
-					if not ListenerRan and not ListenerFailed(Player, "Swing", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-				else
-					if #Queue.Reliable[0] < 256 then
-						table.insert(Queue.Reliable[0], table.pack(Player, Value1))
-					end
-				end
-			end
-		else
-			error("[BlinkBlox]: Unknown event index.")
+	DecodeRemaining = 64
+	Decoding = -1
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Player, Size)
+		if Parsed then
+			break
 		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
-	if not Parsed then
-		ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
+		if Decoding > -2 then
+			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
+			break
+		end
+		local Listening = EventNames.Reliable[-2 - Decoding]
+		if not ListenerFailed(Player, Listening, Failure) then
+			task.spawn(error, Failure, 0)
+		end
+		if Player.Parent == nil then
+			break
+		end
 	end
 end)
 Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -1845,35 +1883,24 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		coroutine.close(SerdesThread)
 	end
 	SerdesThread = coroutine.running()
-	local Decoding = -1
-	local function DecodeEvent()
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		Decoding = Index
-		if Index == 0 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-			local Value1: number, Value2: Vector3, Value3: number = SerdesFunctions.ReadEVENT_Aim()
-			Value3 = ClampStamp(Value3, 0.1)
-			if RateAccept(Player, 5, 30, 30, "Aim") == true then
-				if OrderAccept(Player, 0, OrderIdentifier) == true then
-					local Epoch = ListenerEpoch
-					for _, Listener in Events.Unreliable[0] do
-						if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[0], Listener) == nil then continue end
-						Spawn(RunListener, "Aim", Listener, Player, Value1, Value2, Value3)
-					end
-				end
-			end
-		else
-			error("[BlinkBlox]: Unknown event index.")
+	DecodeRemaining = 64
+	Decoding = -1
+	while true do
+		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Player, Size)
+		if Parsed then
+			break
 		end
-	end
-	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
-	if not Parsed then
-		ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
+		if Decoding > -2 then
+			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
+			break
+		end
+		local Listening = EventNames.Unreliable[-2 - Decoding]
+		if not ListenerFailed(Player, Listening, Failure) then
+			task.spawn(error, Failure, 0)
+		end
+		if Player.Parent == nil then
+			break
+		end
 	end
 end)
 

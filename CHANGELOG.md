@@ -7,6 +7,89 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.42.0 — 2026-09-29
+
+A release about the server's decode and the client's flush, measured against every library this fork
+is compared with -- QuickNet and Warp join the benchmarks -- and against 0.41.2 in one harness. The
+wire does not change: modules from 0.40.0 on still talk to these.
+
+### Faster
+
+Against 0.41.2, on LuneBlox, median of five runs (see the [benchmarks](/BlinkBlox/guides/benchmarks/)):
+
+- **A packet decodes without allocating.** Each packet made a closure for its events and each Sync
+  listener ran under a pcall of its own. A channel's decoder is now a function of the module, its
+  state beside the cursor, and a Single Sync listener is called directly: when it throws, the packet's
+  pcall sees the listener was running, reports it as before, and decoding goes on with the next event.
+  A thousand one-byte events decode in about half the time natively, and a hundred events carrying a
+  part in 0.011 ms rather than 0.021 -- Blink's is 0.013.
+- **Whether the player is still in the game is asked once a packet**, before it is decoded and after a
+  listener throws, rather than before every event.
+- **The client refills the last frame's packet** when the next is the same size, rather than
+  allocating one every frame: a thousand booleans flush in 0.005 ms, from 0.042.
+- **A packed `boolean[]` is read the faster way where the module runs.** Testing each bit is fastest
+  natively, copying rows of eight is about 30% faster interpreted; the module measures both as it
+  loads and uses the faster. A thousand 1000-element arrays decode interpreted in 14.2 ms, from 20.2.
+
+### Added
+
+- `option PackedBooleanReader = "Auto" | "Bits" | "Rows"`: `"Auto"` (the default) as above; the other
+  two fix the reader and emit only it. A value outside the three is `E2003`.
+
+### Upgrading
+
+- Nothing to regenerate for the wire. A module built by 0.42.0 talks to one built by 0.40.0 or later.
+- Two behaviours a game can see, both on the server:
+  - A Single Sync listener that throws is reported exactly as before -- the listener-error handler, or
+    raised on a thread -- and the rest of its packet is still decoded.
+  - A packet whose listener removes its own player mid-packet goes on to its end, at most
+    `MaxEventsPerPacket` events, as a packet already queued when a player leaves always has. A player
+    who has left before the packet is decoded is still refused before any of it is read.
+
+### Changed
+
+- The benchmarks compare two more libraries, [QuickNet](https://github.com/breadboardengineer1234/QuickNet)
+  0.3.5 and [Warp](https://github.com/imezx/Warp) 1.1.0-pre7, in `Runtime`, `Rivals` and the Studio
+  place. Both pack typed events into buffers and batch them a frame, and QuickNet publishes figures
+  against Blink 0.18.8. Neither is on Wally at that version, so `download.luau` fetches each from its
+  GitHub source. QuickNet's rate limit is lifted per event, as its own benchmark does, and Warp's
+  8000-byte inbound cap is raised as Packet's is.
+- The harness that loads the other tools grew what they needed and loads them as Roblox would:
+  `@native` functions compile natively where the module does not declare `--!native`, a module's
+  own code runs inside a function so Roblox's globals do not count against its 200 locals, `@self`
+  and an `init.luau`'s `./` resolve as Luau resolves them, and each side has its own `shared`. The
+  two sides now deliver what they sent each other while loading before anything is timed, which
+  Warp's client needs to learn its event ids. The figures of the tools already compared did not move
+  (a 100-frame run of each before and after, within the run-to-run noise).
+- The toolchain runs on LuneBlox 0.10.9, and every benchmark runs a full garbage collection before
+  each measurement. `Runtime` times every tool one after another in one process, and each inherited
+  the heap the one before it left: BlinkBlox's `BooleansRandom` decode measured 5.3 ms or 7.5 ms with
+  nothing changed but what ran first. The sandbox leaves `collectgarbage` only `"count"`, as Roblox
+  does, so LuneBlox 0.10.9 added `luau.collect()` for it.
+- `BooleansRandom` and `EntitiesRandom` hold 1001 payloads, one more than a frame fires, so no frame
+  repeats the one before it. Warp sends each reliable packet as its XOR against the last, and with 1000 two
+  frames were identical and XORed to zeros: its random payloads compressed to 0.02 bytes an event
+  where every other tool's stayed at their size.
+- `luneblox run Runtime -- --sources <dir>` times the `Server.luau` and `Client.luau` in a directory
+  instead of generating them, which is how two releases are compared in one harness.
+- Every published benchmark figure was taken again, on an Intel Core i7-13700K with LuneBlox 0.10.9,
+  each run alone on one performance core: `Runtime` three times, `Rivals` and `Scenarios` five, four
+  releases side by side with `--sources`, and the runtime comparison. The Studio place ran all eight
+  modes on 0.41.2 on the same machine; on it BlinkBlox holds the 60 FPS cap on the Entities benches
+  too, where on the M1 it held it only on the boolean ones -- a faster machine, since Blink rose from
+  22 to 44 FPS on the same bench.
+- `Runtime` times every row in a process of its own. In one process each tool inherited the heap and
+  the allocator's state the tools before it left, and the first paid for growing them: BlinkBlox,
+  always first, decoded Booleans natively in 6.5 ms, and in 2.9 run last, where QuickNet took 3.6 in
+  sixth place and 7.4 in first. Measured that way, BlinkBlox decodes fastest on every bench.
+- Every benchmark holds 64 MB for the whole process. Luau's collector paces itself on the heap, and
+  QuickNet keeps about 12 MB of buffers alive, so it was collected less often than the tools that keep
+  nothing and decoded booleans faster for it. A game server's heap is far larger than any tool's share.
+- Warp's fire time is left out of the Studio tables: its Fire only queues, and it encodes later in the
+  frame, so the figure read 0.1 ms while its frame rate fell to 32.
+- `.gitattributes` keeps every text file LF in the working tree. Git for Windows checks files out
+  with CRLF by default, and `stylua --check` then failed every one at the pre-commit hook.
+
 ## 0.41.2 — 2026-09-28
 
 Neither the wire nor the generated modules change.

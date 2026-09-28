@@ -129,16 +129,21 @@ local Items = Net.GetInventory.Invoke(1)
 
 ## Measured
 
-A thousand events a frame from client to server, run in Studio on an Apple M1 on 0.36.2. Blink is
-upstream's last release, 0.18.9. The numbers are median frame rates, with the milliseconds a frame's
-thousand fires took in brackets.
+A thousand events a frame from client to server, run in Studio on an Intel Core i7-13700K on 0.41.2.
+Blink is upstream's last release, 0.18.9. The numbers are median frame rates, with the milliseconds a
+frame's thousand fires took in brackets. Warp's Fire only queues its value and encodes it later in
+the frame, where the bench cannot time it, so only its frame rate is shown.
 
-| Payload | Roblox remotes | BlinkBlox | Blink | zap | ByteNet | Packet |
-|---|---|---|---|---|---|---|
-| 1000 booleans | 16 FPS (29.2 ms) | **60 FPS**\* (**4.2 ms**) | 53 FPS (8.4 ms) | 35 FPS (25.9 ms) | 17 FPS (41.3 ms) | 15 FPS (67.3 ms) |
-| 1000 booleans, each different | 16 FPS (29.4 ms) | **60 FPS**\* (**8.7 ms**) | 36 FPS (20.5 ms) | 26 FPS (34.4 ms) | 15 FPS (44.7 ms) | 15 FPS (77.5 ms) |
-| 100 entities | 16 FPS (110.1 ms) | **56 FPS** (**4.0 ms**) | 22 FPS (4.6 ms) | 22 FPS (20.5 ms) | 18 FPS (37.8 ms) | 15 FPS (50.3 ms) |
-| 100 entities, each different | 15 FPS (115.6 ms) | **51 FPS** (5.1 ms) | 22 FPS (**5.0 ms**) | 22 FPS (20.4 ms) | 17 FPS (38.3 ms) | 15 FPS (53.1 ms) |
+| Tool | 1000 booleans | 1000 booleans, each different | 100 entities | 100 entities, each different |
+|---|---|---|---|---|
+| Roblox remotes | 15 FPS (26.0 ms) | 15 FPS (29.1 ms) | 15 FPS (72.7 ms) | 15 FPS (74.5 ms) |
+| **BlinkBlox** | **60 FPS**\* (1.9 ms) | **60 FPS**\* (4.8 ms) | **60 FPS**\* (2.0 ms) | **60 FPS**\* (2.4 ms) |
+| Blink | **60 FPS**\* (4.5 ms) | **60 FPS**\* (9.9 ms) | 44 FPS (2.8 ms) | 45 FPS (3.2 ms) |
+| zap | **60 FPS**\* (12.2 ms) | 46 FPS (18.1 ms) | 45 FPS (7.4 ms) | 44 FPS (7.8 ms) |
+| ByteNet | 30 FPS (17.5 ms) | 23 FPS (21.4 ms) | 35 FPS (15.8 ms) | 34 FPS (16.6 ms) |
+| Packet | 35 FPS (27.3 ms) | 28 FPS (31.8 ms) | 27 FPS (19.2 ms) | 27 FPS (19.9 ms) |
+| QuickNet | **60 FPS**\* (1.9 ms) | **60 FPS**\* (7.1 ms) | 58 FPS (6.2 ms) | 57 FPS (6.7 ms) |
+| Warp | **60 FPS**\* | 55 FPS | 33 FPS | 32 FPS |
 
 \* Studio caps the frame rate at 60. [How these were measured](/BlinkBlox/guides/benchmarks/).
 
@@ -153,12 +158,20 @@ TypeScript output, the Studio plugin or the documentation.
 leaves rate limiting to the game, and its decode loop has no `pcall`: one malformed event throws out
 of it, discarding the rest of that player's batch with nothing for the game to catch.
 
-| | BlinkBlox | Blink 0.18 | Zap |
-|---|---|---|---|
-| Per-player, per-event rate limits | Yes | No | No |
-| A decode failure is caught and reported to the game | Yes | No | No |
-| Shared bitfield for booleans and optionals | Yes | No | Yes |
-| TypeScript output | Yes | Yes | Yes |
+[QuickNet](https://github.com/breadboardengineer1234/QuickNet) and
+[Warp](https://github.com/imezx/Warp) are libraries rather than compilers: a schema is declared at
+runtime and packed into buffers. QuickNet limits each event per player and bounds a packet's size
+and its calls, and a `pcall` around each packet stops a malformed event from throwing, as BlinkBlox's
+does. It only warns in the output rather than telling the game who sent it, and allocates whatever
+array length a client names before reading any of it. Warp counts a player's bytes a packet at a
+time, outside Studio only, and reads lengths the client sends straight into `table.create`.
+
+| | BlinkBlox | Blink 0.18 | Zap | QuickNet 0.3 | Warp 1.1 |
+|---|---|---|---|---|---|
+| Per-player, per-event rate limits | Yes | No | No | Yes | No |
+| A decode failure is caught and reported to the game | Yes | No | No | Caught, not reported | No |
+| Shared bitfield for booleans and optionals | Yes | No | Yes | Boolean arrays only | Optionals, boolean arrays |
+| TypeScript output | Yes | Yes | Yes | No | No |
 
 <CardGrid>
 	<LinkCard title="Install BlinkBlox" href="/BlinkBlox/getting-started/installation/" description="Rokit, pesde, release binaries or the Studio plugin." />

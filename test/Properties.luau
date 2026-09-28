@@ -300,9 +300,27 @@ local Unvalidated = Modules.MockRequire("../Network/PropertiesServer.luau", {
 	BrickColor = ServerEnvironment.BrickColor,
 })
 
+--> A packed `boolean[]` has two readers, and "Auto" picks one by timing them as the module loads, so
+--> which one the builds above run depends on the machine. Each is also built on its own.
+local function Reading(File: string, Reader: string)
+	local Variant = table.clone(Plain)
+	Variant.Value = table.clone(Plain.Value)
+	Variant.Value.Options = table.clone(Plain.Value.Options)
+	Variant.Value.Options.PackedBooleanReader = Reader
+	fs.writeFile(`../Network/{File}.luau`, Generator.Generate("Server", Variant))
+	return Modules.MockRequire(`../Network/{File}.luau`, {
+		game = ServerEnvironment.game,
+		Color3 = ServerEnvironment.Color3,
+		DateTime = ServerEnvironment.DateTime,
+		BrickColor = ServerEnvironment.BrickColor,
+	})
+end
+
 local Builds = {
 	{ Label = "WriteValidations on", Module = Server, Validated = true },
 	{ Label = "default options", Module = Unvalidated, Validated = false },
+	{ Label = `PackedBooleanReader "Bits"`, Module = Reading("PropertiesBits", "Bits"), Validated = false },
+	{ Label = `PackedBooleanReader "Rows"`, Module = Reading("PropertiesRows", "Rows"), Validated = false },
 }
 
 local Checked, Skipped = 0, 0
