@@ -9,6 +9,7 @@
 local Batches = require("./Batches")
 local Blocks = require("./Blocks")
 local Fragments = require("./Fragments")
+local Outbound = require("./Outbound")
 local State = require("./State")
 local Traffic = require("./Traffic")
 
@@ -32,6 +33,8 @@ export type Send = {
 	PerPlayer: boolean?,
 	--> Whether the event can carry an Instance; a batched write that cannot counts none.
 	Instances: boolean?,
+	--> Left out of a send to a player whose outbound budget is spent; see Outbound.luau.
+	Low: boolean?,
 }
 
 --- Stamps the recipient's own sequence number into an ordered packet. An unreliable server send always
@@ -56,6 +59,16 @@ local function CheckSize(Fire: Blocks.Block, Event: Send)
 	end
 
 	Fire:Line(`if not CheckUnreliableSize("{Event.Name}") then return end`)
+end
+
+--- Charges an unbatched unreliable send to `Player`, or to everyone when it is nil, against the
+--- outbound budget. A batched one is charged when its batch is sent.
+local function Charge(Target: Blocks.Block, Player: string?)
+	if not Outbound.Enabled() then
+		return
+	end
+
+	Target:Line(if Player then `OutboundCharge({Player}, SendCursor)` else "OutboundShared += SendCursor")
 end
 
 --- Whether this send goes to a batch rather than straight out: a stream's to everyone always, an
@@ -121,6 +134,12 @@ end
 --- An unreliable server send to one player, `Player`: the unreliable `Fire`, and a `Per: Player`
 --- stream's send. Leaves the function open for the caller to end.
 function Send.One(Fire: Blocks.Block, Event: Send): Blocks.Block
+	--> A low stream held per player is held back before its step instead, so its state is not
+	--> counted as sent; see Outbound.luau.
+	if Event.Low and not Event.Stream then
+		Fire:Line("if OutboundSpent(Player) then return end")
+	end
+
 	if Batched(Event) then
 		WriteBatched(Fire, Event, "Player", false)
 		return Fire
@@ -133,15 +152,25 @@ function Send.One(Fire: Blocks.Block, Event: Send): Blocks.Block
 	Fire:Lines(UNRELIABLE_BODY, 1)
 	Send.StampOrder(Fire, Event)
 	Fire:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
+	Charge(Fire, "Player")
 	Traffic.Sent(Fire, Event.Traffic, "SendCursor", true)
 	return Fire
 end
 
---- The loop over the players a send reaches, leaving out `Except` when asked to.
-local function EachRecipient(Target: Blocks.Block, Recipients: string, SkipExcept: boolean?): Blocks.Block
+--- The loop over the players a send reaches, leaving out `Except` when asked to, and a player whose
+--- outbound budget is spent when the send is low.
+local function EachRecipient(
+	Target: Blocks.Block,
+	Recipients: string,
+	SkipExcept: boolean?,
+	Low: boolean?
+): Blocks.Block
 	local Loop = Target:Iterator("_", "Player", Recipients)
 	if SkipExcept then
 		Loop = Loop:Compare("Player", "Except", "Equals"):Line("continue"):End()
+	end
+	if Low then
+		Loop = Loop:Line("if OutboundSpent(Player) then continue end")
 	end
 
 	return Loop
@@ -159,8 +188,11 @@ function Send.Broadcast(
 	Recipients: string,
 	Options: { AllClients: boolean?, SkipExcept: boolean? }
 ): Blocks.Block
+	--> A low send goes player by player, since some may be left out; one call to everyone cannot.
+	local AllClients = Options.AllClients and not Event.Low
+
 	--> An unordered event to everyone goes into the batch everyone shares, written there directly.
-	if not Event.IsReliable and Options.AllClients and not Event.Ordered and Batched(Event) then
+	if not Event.IsReliable and AllClients and not Event.Ordered and Batched(Event) then
 		WriteBatched(Fire, Event, "nil", true)
 		return Fire:End()
 	end
@@ -186,7 +218,7 @@ function Send.Broadcast(
 
 		--> Written once, into the scratch buffer, and copied into each player's batch: an ordered
 		--> event's sequence is each player's own.
-		local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept)
+		local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept, Event.Low)
 		AppendTo(Loop, Event)
 		Traffic.Sent(Loop, Event.Traffic, "SendCursor", true)
 		Loop:End()
@@ -196,16 +228,18 @@ function Send.Broadcast(
 		Fire:Lines(UNRELIABLE_BODY, 1)
 
 		--> An ordered packet carries a different number to each player, so it is sent one by one.
-		if Options.AllClients and not Event.Ordered then
+		if AllClients and not Event.Ordered then
 			Fire:Line("Unreliable:FireAllClients(Buffer, SendInstances)")
+			Charge(Fire, nil)
 			if Event.Traffic then
 				Fire:Line("local Reached = #Players:GetPlayers()")
 				Traffic.Sent(Fire, Event.Traffic, "SendCursor", true, "Reached")
 			end
 		else
-			local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept)
+			local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept, Event.Low)
 			Send.StampOrder(Loop, Event)
 			Loop:Line("Unreliable:FireClient(Player, Buffer, SendInstances)")
+			Charge(Loop, "Player")
 			Traffic.Sent(Loop, Event.Traffic, "SendCursor", true)
 			Loop:End()
 		end

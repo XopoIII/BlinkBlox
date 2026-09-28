@@ -385,8 +385,7 @@ function Serde.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Block
 			Prefabs.ReadPrefix("Length", Read, LengthType)
 		end
 
-		Read:Line(Assert.Lower)
-		Read:Line(Assert.Upper)
+		Prefabs.EmitReceivedLength(Read, Assert, Lower, Upper, Size.RangeWritten(Declaration :: any))
 
 		--> Checked on the SEND side too, and unconditionally; see Prefabs.EmitLengthGuard.
 		Prefabs.EmitLengthGuard(Write, Lower, Upper, `#{Variable}`)

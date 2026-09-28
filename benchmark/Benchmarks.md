@@ -265,6 +265,21 @@ With `--batch`:
 |StreamWorld|interpreted|0.001|0.034|0.010|1.0|13050.0|
 |StreamPerPlayer|interpreted|0.019|0.219|0.002|50.0|1000.0|
 
+## Many events
+
+`lune run Scenarios -- ManyEvents` sends 100 reliable events a frame spread over the 128 `Many` declarations of
+`definitions/Scenarios.blink`, and times the client decoding them. Run 2026-09-28, interpreted, medians of three runs
+taken alternately with both versions' modules loaded from files:
+
+|Scenario|0.40.0 decode|0.41.0 decode|
+|---|---|---|
+|ManyEvents|0.086|**0.053**|
+|Broadcast, index 0 of the same channel|**0.090**|0.093|
+
+Both native rows equal the interpreted ones on Lune 0.10.5: its Luau leaves a whole module interpreted once one function
+is too large, and a module's top-level function grows with every declaration -- about 70 events on the server, 85 on
+the client. Current Luau leaves only that function interpreted; see the docs' Benchmarks page.
+
 ## Results
 
 `P[NUMBER]` = [NUMBER] Percentile  

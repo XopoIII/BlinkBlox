@@ -22,6 +22,7 @@ local RECIEVE_BUFFER = Common.RECIEVE_BUFFER
 local SEND_POSITION = Common.SEND_POSITION
 local Asserts = AssertsModule.Asserts
 local EmitLengthGuard = AssertsModule.EmitLengthGuard
+local EmitReceivedLength = AssertsModule.EmitReceivedLength
 local GenerateSpaceGuard = AssertsModule.GenerateSpaceGuard
 
 --- The bounds a length lies within, and the numeral that carries it: a fixed-width one, or nil for a
@@ -71,9 +72,7 @@ local function ReadLength(Variable: string, Block: Block, Range: NumberRange?, A
 	--> the prefix is sized from the span, so `string(300..400)` fits a u8 whose 255 decodes to 555.
 	--> The bound named here is the one the schema author actually wrote.
 	if Range then
-		local Bounds = Assert(Variable, Lower, Upper, "Length")
-		Block:Line(Bounds.Lower)
-		Block:Line(Bounds.Upper)
+		EmitReceivedLength(Block, Assert(Variable, Lower, Upper, "Length"), Lower, Upper, true)
 	end
 
 	Block:Line(GenerateSpaceGuard("Length", Variable))

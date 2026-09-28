@@ -106,7 +106,9 @@ costs the same per entry and states its ceiling.
 
 A range on a number is a check, not an encoding: `u32(0..10)` still takes four bytes, and the
 receiver refuses anything outside `0..10`. Choose the narrowest type that holds every value you
-send, then add the range you mean.
+send, then add the range you mean. The one exception is a
+[quantized float](/BlinkBlox/language/types/#quantized-floats): `f32<0.01>(-1..1)` names a precision and
+a range, and BlinkBlox sends it in the fewest bytes that hold them -- one, here.
 
 | Type | Bytes | Holds |
 |---|---|---|

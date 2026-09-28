@@ -1513,7 +1513,6 @@ function SerdesFunctions.ReadEVENT_MapComplexEvent(): ({[string]: { number }})
 		-- Key_1: MapComplex
 		local OFFSET_0 = Read(1)
 		local Length = buffer.readu8(RecieveBuffer, OFFSET_0)
-		if Length < 0 then error(`Expected length of "Key_1" to be larger than or equal to 0, got {Length} instead.`) end
 		if Length > 20 then error(`Expected length of "Key_1" to be smaller than or equal to 20, got {Length} instead.`) end
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
@@ -1529,7 +1528,6 @@ function SerdesFunctions.ReadEVENT_MapComplexEvent(): ({[string]: { number }})
 			local OPERATION_OFFSET_0 = ARRAY_START_2
 			ARRAY_START_2 += 1
 			local Item_2 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			if not (Item_2 >= 0) then error(`Expected "Item_2" to be larger than or equal to 0, got {Item_2} instead.`) end
 			if not (Item_2 <= 100) then error(`Expected "Item_2" to be smaller than or equal to 100, got {Item_2} instead.`) end
 			Element_1[Slot_2] = Item_2
 		end
@@ -3310,7 +3308,16 @@ local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 		DecodeEvent()
 	end
 end
-RunService.Heartbeat:Connect(StepReplication)
+local FLUSH_INTERVAL = 1 / 60
+local FlushClock = 0
+RunService.Heartbeat:Connect(function(Delta: number)
+	FlushClock += Delta
+	if FlushClock < FLUSH_INTERVAL * 0.9 then
+		return
+	end
+	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
+	StepReplication()
+end)
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
 	RecieveBuffer = Buffer
@@ -3329,419 +3336,437 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
-		if Index == 2 then
-			Push(Queue.Reliable[2], table.pack(SerdesFunctions.ReadEVENT_ServerPollEvent()))
-		elseif Index == 3 then
-			Push(Queue.Reliable[3], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyPollEvent()))
-		elseif Index == 5 then
-			local Value: nil = SerdesFunctions.ReadEVENT_EmptyEvent()
-			local BOUND_LISTENER = Events.Reliable[5]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "EmptyEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[5] > 256 then
-					warn("[BlinkBlox]: Event queue of \"EmptyEvent\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[5], table.pack(Value))
-			end
-		elseif Index == 6 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				local Success, ReturnValue = pcall(function ()
-					if Answered ~= 1 then
-						error("The call failed on the side that answered it.")
+		if Index < 20 then
+			if Index < 11 then
+				if Index == 2 then
+					Push(Queue.Reliable[2], table.pack(SerdesFunctions.ReadEVENT_ServerPollEvent()))
+				elseif Index == 3 then
+					Push(Queue.Reliable[3], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyPollEvent()))
+				elseif Index == 5 then
+					local Value: nil = SerdesFunctions.ReadEVENT_EmptyEvent()
+					local BOUND_LISTENER = Events.Reliable[5]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "EmptyEvent"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[5] > 256 then
+							warn("[BlinkBlox]: Event queue of \"EmptyEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[5], table.pack(Value))
 					end
-					return SerdesFunctions.ReadFUNCTION_RETURN_EmptyFunction()
-				end)
-			local Thread = TakeInvocation(Invocations, InvocationIdentifier, 6)
-			if Thread ~= nil then
-				if coroutine.status(Thread) == "suspended" then
-					task.spawn(Thread, Success, ReturnValue)
-				end
-			end
-			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-		elseif Index == 7 then
-			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,} = SerdesFunctions.ReadEVENT_Flags8()
-			local BOUND_LISTENER = Events.Reliable[7]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Flags8"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[7] > 256 then
-					warn("[BlinkBlox]: Event queue of \"Flags8\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[7], table.pack(Value))
-			end
-		elseif Index == 8 then
-			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,} = SerdesFunctions.ReadEVENT_Flags16()
-			local BOUND_LISTENER = Events.Reliable[8]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Flags16"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[8] > 256 then
-					warn("[BlinkBlox]: Event queue of \"Flags16\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[8], table.pack(Value))
-			end
-		elseif Index == 9 then
-			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,} = SerdesFunctions.ReadEVENT_Flags32()
-			local BOUND_LISTENER = Events.Reliable[9]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Flags32"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[9] > 256 then
-					warn("[BlinkBlox]: Event queue of \"Flags32\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[9], table.pack(Value))
-			end
-		elseif Index == 10 then
-			local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,} = SerdesFunctions.ReadEVENT_Flags33()
-			local BOUND_LISTENER = Events.Reliable[10]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Flags33"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[10] > 256 then
-					warn("[BlinkBlox]: Event queue of \"Flags33\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[10], table.pack(Value))
-			end
-		elseif Index == 11 then
-			local Value: {[number]: { Static: number, Dynamic: buffer }} = SerdesFunctions.ReadEVENT_DynamicMap()
-			local BOUND_LISTENER = Events.Reliable[11]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "DynamicMap"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[11] > 256 then
-					warn("[BlinkBlox]: Event queue of \"DynamicMap\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[11], table.pack(Value))
-			end
-		elseif Index == 12 then
-			local Value: { { Static: number, Dynamic: buffer } } = SerdesFunctions.ReadEVENT_DynamicArray()
-			local BOUND_LISTENER = Events.Reliable[12]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "DynamicArray"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[12] > 256 then
-					warn("[BlinkBlox]: Event queue of \"DynamicArray\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[12], table.pack(Value))
-			end
-		elseif Index == 13 then
-			local Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number } = SerdesFunctions.ReadEVENT_PlayerEvent()
-			local BOUND_LISTENER = Events.Reliable[13]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "PlayerEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[13] > 256 then
-					warn("[BlinkBlox]: Event queue of \"PlayerEvent\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[13], table.pack(Value))
-			end
-		elseif Index == 15 then
-			local Value: any = SerdesFunctions.ReadEVENT_Unknown()
-			local BOUND_LISTENER = Events.Reliable[15]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Unknown"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[15] > 256 then
-					warn("[BlinkBlox]: Event queue of \"Unknown\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[15], table.pack(Value))
-			end
-		elseif Index == 16 then
-			local Value: {[string]: number} = SerdesFunctions.ReadEVENT_MapEvent()
-			local BOUND_LISTENER = Events.Reliable[16]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "MapEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[16] > 256 then
-					warn("[BlinkBlox]: Event queue of \"MapEvent\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[16], table.pack(Value))
-			end
-		elseif Index == 17 then
-			local Value: { Map: {[string]: number} } = SerdesFunctions.ReadEVENT_MapStructEvent()
-			local BOUND_LISTENER = Events.Reliable[17]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "MapStructEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[17] > 256 then
-					warn("[BlinkBlox]: Event queue of \"MapStructEvent\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[17], table.pack(Value))
-			end
-		elseif Index == 18 then
-			local Value: {[string]: { number }} = SerdesFunctions.ReadEVENT_MapComplexEvent()
-			local BOUND_LISTENER = Events.Reliable[18]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "MapComplexEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[18] > 256 then
-					warn("[BlinkBlox]: Event queue of \"MapComplexEvent\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[18], table.pack(Value))
-			end
-		elseif Index == 19 then
-			local Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}? = SerdesFunctions.ReadEVENT_MapReferenceEvent()
-			local BOUND_LISTENER = Events.Reliable[19]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "MapReferenceEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[19] > 256 then
-					warn("[BlinkBlox]: Event queue of \"MapReferenceEvent\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[19], table.pack(Value))
-			end
-		elseif Index == 20 then
-			local Value: number = SerdesFunctions.ReadEVENT_ManyReliableSync()
-			if #Events.Reliable[20] > 0 then
-				local Epoch = ListenerEpoch
-				for _, Listener in Events.Reliable[20] do
-					if ListenerEpoch ~= Epoch and table.find(Events.Reliable[20], Listener) == nil then continue end
-					SerdesEvent = "ManyReliableSync"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-			else
-				if #Queue.Reliable[20] > 256 then
-					warn("[BlinkBlox]: Event queue of \"ManyReliableSync\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[20], table.pack(Value))
-			end
-		elseif Index == 21 then
-			local Value: number = SerdesFunctions.ReadEVENT_ManyReliableAsync()
-			if #Events.Reliable[21] > 0 then
-				local Epoch = ListenerEpoch
-				for _, Listener in Events.Reliable[21] do
-					if ListenerEpoch ~= Epoch and table.find(Events.Reliable[21], Listener) == nil then continue end
-					Spawn(Listener, Value)
-				end
-			else
-				if #Queue.Reliable[21] > 256 then
-					warn("[BlinkBlox]: Event queue of \"ManyReliableAsync\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[21], table.pack(Value))
-			end
-		elseif Index == 22 then
-			local Value: number = SerdesFunctions.ReadEVENT_ReliableServer()
-			local BOUND_LISTENER = Events.Reliable[22]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "ReliableServer"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[22] > 256 then
-					warn("[BlinkBlox]: Event queue of \"ReliableServer\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[22], table.pack(Value))
-			end
-		elseif Index == 23 then
-			local Value: number = SerdesFunctions.ReadEVENT_ReliableServerAsync()
-			local BOUND_LISTENER = Events.Reliable[23]
-			if BOUND_LISTENER ~= nil then
-				Spawn(BOUND_LISTENER, Value)
-			else
-				if #Queue.Reliable[23] > 256 then
-					warn("[BlinkBlox]: Event queue of \"ReliableServerAsync\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[23], table.pack(Value))
-			end
-		elseif Index == 25 then
-			local Value: Instance = SerdesFunctions.ReadEVENT_InstanceAny()
-			local BOUND_LISTENER = Events.Reliable[25]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "InstanceAny"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[25] > 256 then
-					warn("[BlinkBlox]: Event queue of \"InstanceAny\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[25], table.pack(Value))
-			end
-		elseif Index == 26 then
-			local Value: Sound = SerdesFunctions.ReadEVENT_InstanceOfType()
-			local BOUND_LISTENER = Events.Reliable[26]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "InstanceOfType"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[26] > 256 then
-					warn("[BlinkBlox]: Event queue of \"InstanceOfType\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[26], table.pack(Value))
-			end
-		elseif Index == 27 then
-			local Value: Instance? = SerdesFunctions.ReadEVENT_InstanceOptional()
-			local BOUND_LISTENER = Events.Reliable[27]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "InstanceOptional"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[27] > 256 then
-					warn("[BlinkBlox]: Event queue of \"InstanceOptional\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[27], table.pack(Value))
-			end
-		elseif Index == 28 then
-			local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_Reference()
-			local BOUND_LISTENER = Events.Reliable[28]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Reference"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[28] > 256 then
-					warn("[BlinkBlox]: Event queue of \"Reference\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[28], table.pack(Value))
-			end
-		elseif Index == 29 then
-			local Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } } = SerdesFunctions.ReadEVENT_ReferenceArray()
-			local BOUND_LISTENER = Events.Reliable[29]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "ReferenceArray"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[29] > 256 then
-					warn("[BlinkBlox]: Event queue of \"ReferenceArray\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[29], table.pack(Value))
-			end
-		elseif Index == 30 then
-			local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_ReferenceOptional()
-			local BOUND_LISTENER = Events.Reliable[30]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "ReferenceOptional"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[30] > 256 then
-					warn("[BlinkBlox]: Event queue of \"ReferenceOptional\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[30], table.pack(Value))
-			end
-		elseif Index == 31 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				local Success, ReturnValue = pcall(function ()
-					if Answered ~= 1 then
-						error("The call failed on the side that answered it.")
+				elseif Index == 6 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_EmptyFunction()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 6)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue)
+						end
 					end
-					return SerdesFunctions.ReadFUNCTION_RETURN_RemoteFunction()
-				end)
-			local Thread = TakeInvocation(Invocations, InvocationIdentifier, 31)
-			if Thread ~= nil then
-				if coroutine.status(Thread) == "suspended" then
-					task.spawn(Thread, Success, ReturnValue)
-				end
-			end
-			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-		elseif Index == 32 then
-			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number } = SerdesFunctions.ReadEVENT_Tuple()
-			local BOUND_LISTENER = Events.Reliable[32]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Tuple"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5, Value6)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[32] > 256 then
-					warn("[BlinkBlox]: Event queue of \"Tuple\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[32], table.pack(Value1, Value2, Value3, Value4, Value5, Value6))
-			end
-		elseif Index == 33 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				local Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5 = pcall(function ()
-					if Answered ~= 1 then
-						error("The call failed on the side that answered it.")
+					if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+				elseif Index == 7 then
+					local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,} = SerdesFunctions.ReadEVENT_Flags8()
+					local BOUND_LISTENER = Events.Reliable[7]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Flags8"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[7] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Flags8\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[7], table.pack(Value))
 					end
-					return SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction()
-				end)
-			local Thread = TakeInvocation(Invocations, InvocationIdentifier, 33)
-			if Thread ~= nil then
-				if coroutine.status(Thread) == "suspended" then
-					task.spawn(Thread, Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5)
+				elseif Index == 8 then
+					local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,} = SerdesFunctions.ReadEVENT_Flags16()
+					local BOUND_LISTENER = Events.Reliable[8]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Flags16"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[8] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Flags16\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[8], table.pack(Value))
+					end
+				elseif Index == 9 then
+					local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,} = SerdesFunctions.ReadEVENT_Flags32()
+					local BOUND_LISTENER = Events.Reliable[9]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Flags32"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[9] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Flags32\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[9], table.pack(Value))
+					end
+				elseif Index == 10 then
+					local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,} = SerdesFunctions.ReadEVENT_Flags33()
+					local BOUND_LISTENER = Events.Reliable[10]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Flags33"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[10] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Flags33\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[10], table.pack(Value))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
 				end
-			end
-			if Answered == 1 and Success ~= true then error(ReturnValue1, 0) end
-		elseif Index == 34 then
-			local Value: number = SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent()
-			local BOUND_LISTENER = Events.Reliable[34]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "InScopeEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			else
-				if #Queue.Reliable[34] > 256 then
-					warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
+				if Index == 11 then
+					local Value: {[number]: { Static: number, Dynamic: buffer }} = SerdesFunctions.ReadEVENT_DynamicMap()
+					local BOUND_LISTENER = Events.Reliable[11]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "DynamicMap"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[11] > 256 then
+							warn("[BlinkBlox]: Event queue of \"DynamicMap\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[11], table.pack(Value))
+					end
+				elseif Index == 12 then
+					local Value: { { Static: number, Dynamic: buffer } } = SerdesFunctions.ReadEVENT_DynamicArray()
+					local BOUND_LISTENER = Events.Reliable[12]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "DynamicArray"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[12] > 256 then
+							warn("[BlinkBlox]: Event queue of \"DynamicArray\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[12], table.pack(Value))
+					end
+				elseif Index == 13 then
+					local Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number } = SerdesFunctions.ReadEVENT_PlayerEvent()
+					local BOUND_LISTENER = Events.Reliable[13]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "PlayerEvent"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[13] > 256 then
+							warn("[BlinkBlox]: Event queue of \"PlayerEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[13], table.pack(Value))
+					end
+				elseif Index == 15 then
+					local Value: any = SerdesFunctions.ReadEVENT_Unknown()
+					local BOUND_LISTENER = Events.Reliable[15]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Unknown"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[15] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Unknown\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[15], table.pack(Value))
+					end
+				elseif Index == 16 then
+					local Value: {[string]: number} = SerdesFunctions.ReadEVENT_MapEvent()
+					local BOUND_LISTENER = Events.Reliable[16]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "MapEvent"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[16] > 256 then
+							warn("[BlinkBlox]: Event queue of \"MapEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[16], table.pack(Value))
+					end
+				elseif Index == 17 then
+					local Value: { Map: {[string]: number} } = SerdesFunctions.ReadEVENT_MapStructEvent()
+					local BOUND_LISTENER = Events.Reliable[17]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "MapStructEvent"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[17] > 256 then
+							warn("[BlinkBlox]: Event queue of \"MapStructEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[17], table.pack(Value))
+					end
+				elseif Index == 18 then
+					local Value: {[string]: { number }} = SerdesFunctions.ReadEVENT_MapComplexEvent()
+					local BOUND_LISTENER = Events.Reliable[18]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "MapComplexEvent"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[18] > 256 then
+							warn("[BlinkBlox]: Event queue of \"MapComplexEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[18], table.pack(Value))
+					end
+				elseif Index == 19 then
+					local Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}? = SerdesFunctions.ReadEVENT_MapReferenceEvent()
+					local BOUND_LISTENER = Events.Reliable[19]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "MapReferenceEvent"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[19] > 256 then
+							warn("[BlinkBlox]: Event queue of \"MapReferenceEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[19], table.pack(Value))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
 				end
-				table.insert(Queue.Reliable[34], table.pack(Value))
-			end
-		elseif Index == 35 then
-			local Value: number = SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_ReadEVENT_InAnotherScopeEvent()
-			local BOUND_LISTENER = Events.Reliable[35]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "InAnotherScopeEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[35] > 256 then
-					warn("[BlinkBlox]: Event queue of \"InAnotherScopeEvent\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[35], table.pack(Value))
-			end
-		elseif Index == 36 then
-			local Value: number = SerdesFunctions.ExampleScope_ReadEVENT_InScopeEvent()
-			local BOUND_LISTENER = Events.Reliable[36]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "InScopeEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[36] > 256 then
-					warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
-				end
-				table.insert(Queue.Reliable[36], table.pack(Value))
 			end
 		else
-			error("[BlinkBlox]: Unknown event index.")
+			if Index < 29 then
+				if Index == 20 then
+					local Value: number = SerdesFunctions.ReadEVENT_ManyReliableSync()
+					if #Events.Reliable[20] > 0 then
+						local Epoch = ListenerEpoch
+						for _, Listener in Events.Reliable[20] do
+							if ListenerEpoch ~= Epoch and table.find(Events.Reliable[20], Listener) == nil then continue end
+							SerdesEvent = "ManyReliableSync"
+							local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
+							if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+						end
+					else
+						if #Queue.Reliable[20] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ManyReliableSync\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[20], table.pack(Value))
+					end
+				elseif Index == 21 then
+					local Value: number = SerdesFunctions.ReadEVENT_ManyReliableAsync()
+					if #Events.Reliable[21] > 0 then
+						local Epoch = ListenerEpoch
+						for _, Listener in Events.Reliable[21] do
+							if ListenerEpoch ~= Epoch and table.find(Events.Reliable[21], Listener) == nil then continue end
+							Spawn(Listener, Value)
+						end
+					else
+						if #Queue.Reliable[21] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ManyReliableAsync\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[21], table.pack(Value))
+					end
+				elseif Index == 22 then
+					local Value: number = SerdesFunctions.ReadEVENT_ReliableServer()
+					local BOUND_LISTENER = Events.Reliable[22]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "ReliableServer"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[22] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ReliableServer\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[22], table.pack(Value))
+					end
+				elseif Index == 23 then
+					local Value: number = SerdesFunctions.ReadEVENT_ReliableServerAsync()
+					local BOUND_LISTENER = Events.Reliable[23]
+					if BOUND_LISTENER ~= nil then
+						Spawn(BOUND_LISTENER, Value)
+					else
+						if #Queue.Reliable[23] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ReliableServerAsync\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[23], table.pack(Value))
+					end
+				elseif Index == 25 then
+					local Value: Instance = SerdesFunctions.ReadEVENT_InstanceAny()
+					local BOUND_LISTENER = Events.Reliable[25]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InstanceAny"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[25] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InstanceAny\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[25], table.pack(Value))
+					end
+				elseif Index == 26 then
+					local Value: Sound = SerdesFunctions.ReadEVENT_InstanceOfType()
+					local BOUND_LISTENER = Events.Reliable[26]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InstanceOfType"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[26] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InstanceOfType\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[26], table.pack(Value))
+					end
+				elseif Index == 27 then
+					local Value: Instance? = SerdesFunctions.ReadEVENT_InstanceOptional()
+					local BOUND_LISTENER = Events.Reliable[27]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InstanceOptional"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[27] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InstanceOptional\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[27], table.pack(Value))
+					end
+				elseif Index == 28 then
+					local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_Reference()
+					local BOUND_LISTENER = Events.Reliable[28]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Reference"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[28] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Reference\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[28], table.pack(Value))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
+				end
+			else
+				if Index == 29 then
+					local Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } } = SerdesFunctions.ReadEVENT_ReferenceArray()
+					local BOUND_LISTENER = Events.Reliable[29]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "ReferenceArray"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[29] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ReferenceArray\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[29], table.pack(Value))
+					end
+				elseif Index == 30 then
+					local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_ReferenceOptional()
+					local BOUND_LISTENER = Events.Reliable[30]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "ReferenceOptional"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[30] > 256 then
+							warn("[BlinkBlox]: Event queue of \"ReferenceOptional\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[30], table.pack(Value))
+					end
+				elseif Index == 31 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_RemoteFunction()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 31)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+				elseif Index == 32 then
+					local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number } = SerdesFunctions.ReadEVENT_Tuple()
+					local BOUND_LISTENER = Events.Reliable[32]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Tuple"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5, Value6)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[32] > 256 then
+							warn("[BlinkBlox]: Event queue of \"Tuple\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[32], table.pack(Value1, Value2, Value3, Value4, Value5, Value6))
+					end
+				elseif Index == 33 then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+						local Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5 = pcall(function ()
+							if Answered ~= 1 then
+								error("The call failed on the side that answered it.")
+							end
+							return SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction()
+						end)
+					local Thread = TakeInvocation(Invocations, InvocationIdentifier, 33)
+					if Thread ~= nil then
+						if coroutine.status(Thread) == "suspended" then
+							task.spawn(Thread, Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5)
+						end
+					end
+					if Answered == 1 and Success ~= true then error(ReturnValue1, 0) end
+				elseif Index == 34 then
+					local Value: number = SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent()
+					local BOUND_LISTENER = Events.Reliable[34]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InScopeEvent"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[34] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[34], table.pack(Value))
+					end
+				elseif Index == 35 then
+					local Value: number = SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_ReadEVENT_InAnotherScopeEvent()
+					local BOUND_LISTENER = Events.Reliable[35]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InAnotherScopeEvent"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[35] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InAnotherScopeEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[35], table.pack(Value))
+					end
+				elseif Index == 36 then
+					local Value: number = SerdesFunctions.ExampleScope_ReadEVENT_InScopeEvent()
+					local BOUND_LISTENER = Events.Reliable[36]
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "InScopeEvent"
+						local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+					else
+						if #Queue.Reliable[36] > 256 then
+							warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
+						end
+						table.insert(Queue.Reliable[36], table.pack(Value))
+					end
+				else
+					error("[BlinkBlox]: Unknown event index.")
+				end
+			end
 		end
 	end
 	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
@@ -3767,74 +3792,80 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
-		if Index == 2 then
-			Push(Queue.Unreliable[2], table.pack(SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent()))
-		elseif Index == 3 then
-			Push(Queue.Unreliable[3], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyUnreliablePollEvent()))
-		elseif Index == 5 then
-			local Value: nil = SerdesFunctions.ReadEVENT_EmptyUnreliableEvent()
-			local BOUND_LISTENER = Events.Unreliable[5]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "EmptyUnreliableEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-		elseif Index == 6 then
-			local Value: { number } = SerdesFunctions.ReadEVENT_ArrayPrimitive()
-			local BOUND_LISTENER = Events.Unreliable[6]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "ArrayPrimitive"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-		elseif Index == 7 then
-			local Value: number? = SerdesFunctions.ReadEVENT_OptionalPrimitive()
-			local BOUND_LISTENER = Events.Unreliable[7]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "OptionalPrimitive"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-		elseif Index == 8 then
-			local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableSync()
-			local Epoch = ListenerEpoch
-			for _, Listener in Events.Unreliable[8] do
-				if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[8], Listener) == nil then continue end
-				SerdesEvent = "ManyUnreliableSync"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-		elseif Index == 9 then
-			local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableAsync()
-			local Epoch = ListenerEpoch
-			for _, Listener in Events.Unreliable[9] do
-				if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[9], Listener) == nil then continue end
-				Spawn(Listener, Value)
-			end
-		elseif Index == 10 then
-			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServer()
-			local BOUND_LISTENER = Events.Unreliable[10]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "UnreliableServer"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-		elseif Index == 11 then
-			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServerAsync()
-			local BOUND_LISTENER = Events.Unreliable[11]
-			if BOUND_LISTENER ~= nil then
-				Spawn(BOUND_LISTENER, Value)
-			end
-		elseif Index == 13 then
-			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadEVENT_TupleUnreliable()
-			local BOUND_LISTENER = Events.Unreliable[13]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "TupleUnreliable"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		if Index < 8 then
+			if Index == 2 then
+				Push(Queue.Unreliable[2], table.pack(SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent()))
+			elseif Index == 3 then
+				Push(Queue.Unreliable[3], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyUnreliablePollEvent()))
+			elseif Index == 5 then
+				local Value: nil = SerdesFunctions.ReadEVENT_EmptyUnreliableEvent()
+				local BOUND_LISTENER = Events.Unreliable[5]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "EmptyUnreliableEvent"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+				end
+			elseif Index == 6 then
+				local Value: { number } = SerdesFunctions.ReadEVENT_ArrayPrimitive()
+				local BOUND_LISTENER = Events.Unreliable[6]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "ArrayPrimitive"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+				end
+			elseif Index == 7 then
+				local Value: number? = SerdesFunctions.ReadEVENT_OptionalPrimitive()
+				local BOUND_LISTENER = Events.Unreliable[7]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "OptionalPrimitive"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+				end
+			else
+				error("[BlinkBlox]: Unknown event index.")
 			end
 		else
-			error("[BlinkBlox]: Unknown event index.")
+			if Index == 8 then
+				local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableSync()
+				local Epoch = ListenerEpoch
+				for _, Listener in Events.Unreliable[8] do
+					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[8], Listener) == nil then continue end
+					SerdesEvent = "ManyUnreliableSync"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+				end
+			elseif Index == 9 then
+				local Value: number = SerdesFunctions.ReadEVENT_ManyUnreliableAsync()
+				local Epoch = ListenerEpoch
+				for _, Listener in Events.Unreliable[9] do
+					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[9], Listener) == nil then continue end
+					Spawn(Listener, Value)
+				end
+			elseif Index == 10 then
+				local Value: number = SerdesFunctions.ReadEVENT_UnreliableServer()
+				local BOUND_LISTENER = Events.Unreliable[10]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "UnreliableServer"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+				end
+			elseif Index == 11 then
+				local Value: number = SerdesFunctions.ReadEVENT_UnreliableServerAsync()
+				local BOUND_LISTENER = Events.Unreliable[11]
+				if BOUND_LISTENER ~= nil then
+					Spawn(BOUND_LISTENER, Value)
+				end
+			elseif Index == 13 then
+				local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadEVENT_TupleUnreliable()
+				local BOUND_LISTENER = Events.Unreliable[13]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "TupleUnreliable"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2, Value3, Value4, Value5)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+				end
+			else
+				error("[BlinkBlox]: Unknown event index.")
+			end
 		end
 	end
 	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)

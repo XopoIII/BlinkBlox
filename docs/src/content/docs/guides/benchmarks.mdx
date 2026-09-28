@@ -28,28 +28,31 @@ thousand different payloads a frame instead of one payload a thousand times, and
 
 Natively compiled, as a Roblox server runs the module:
 
-| Bench | Fire 0.34.0 | Fire 0.39.0 | Fire 0.40.0 | Decode 0.34.0 | Decode 0.39.0 | Decode 0.40.0 | Bytes |
+| Bench | Fire 0.34.0 | Fire 0.40.0 | Fire 0.41.0 | Decode 0.34.0 | Decode 0.40.0 | Decode 0.41.0 | Bytes |
 |---|---|---|---|---|---|---|---|
-| Booleans | 8.97 | 3.77 | **3.56** | 15.16 | 4.42 | **4.16** | 128 |
-| Entities | 3.57 | **3.20** | 3.23 | 72.95 | 11.72 | **10.78** | 602 |
-| BooleansRandom | 20.14 | 8.48 | **8.38** | 15.40 | 5.31 | **5.14** | 128 |
-| EntitiesRandom | 4.07 | **3.65** | **3.65** | 75.96 | 15.48 | **14.49** | 602 |
-| Tiny | 0.13 | 0.135 | **0.078** | 0.54 | 0.347 | **0.217** | 2 |
+| Booleans | 8.97 | 3.558 | **3.553** | 15.16 | 4.141 | **4.134** | 128 |
+| Entities | 3.57 | 3.224 | **3.222** | 72.95 | 10.762 | **10.761** | 602 |
+| BooleansRandom | 20.14 | **8.365** | **8.365** | 15.40 | **5.152** | 5.207 | 128 |
+| EntitiesRandom | 4.07 | 3.675 | **3.658** | 75.96 | 16.233 | **15.458** | 602 |
+| Tiny | 0.13 | 0.079 | **0.078** | 0.54 | 0.219 | **0.218** | 2 |
 
 Interpreted, as most Roblox clients run it:
 
-| Bench | Fire 0.34.0 | Fire 0.39.0 | Fire 0.40.0 | Decode 0.34.0 | Decode 0.39.0 | Decode 0.40.0 |
+| Bench | Fire 0.34.0 | Fire 0.40.0 | Fire 0.41.0 | Decode 0.34.0 | Decode 0.40.0 | Decode 0.41.0 |
 |---|---|---|---|---|---|---|
-| Booleans | 92.12 | 37.71 | **37.70** | 107.64 | 45.35 | **43.53** |
-| Entities | 34.13 | 33.48 | **33.43** | 103.77 | 54.14 | **48.22** |
-| BooleansRandom | 82.66 | 40.43 | **40.37** | 108.28 | 46.23 | **45.34** |
-| EntitiesRandom | 33.89 | 33.59 | **33.57** | 107.44 | 57.66 | **50.88** |
-| Tiny | 0.35 | 0.346 | **0.307** | 0.78 | 0.670 | **0.531** |
+| Booleans | 92.12 | 38.02 | **37.70** | 107.64 | 43.63 | **43.58** |
+| Entities | 34.13 | **33.43** | **33.43** | 103.77 | **48.60** | 48.61 |
+| BooleansRandom | 82.66 | **40.37** | 40.40 | 108.28 | **45.45** | 45.63 |
+| EntitiesRandom | 33.89 | 33.55 | **33.55** | 107.44 | 53.37 | **53.04** |
+| Tiny | 0.35 | 0.308 | **0.307** | 0.78 | 0.531 | **0.530** |
 
-0.34.0 was run on 2026-09-25 with Lune 0.10.5 on an Apple M1 with 16 GB of memory. The 0.39.0 and
-0.40.0 columns were run on 2026-09-27 on the same machine, three runs of each taken alternately --
-one of 0.39.0, one of 0.40.0, and again -- so the two see the same machine, and each figure is the
-median of the three. Both use 0.40.0's harness, whose mock players and Instances are userdata as in a
+0.34.0 was run on 2026-09-25 with Lune 0.10.5 on an Apple M1 with 16 GB of memory. The 0.40.0 and
+0.41.0 columns were run on 2026-09-28 on the same machine:
+both versions' modules generated to files first and loaded into one harness, five runs of each taken
+alternately, each figure the median of the five. Generating in the process being timed moves the
+heap, and that alone shows a few percent that is not in the code. On this schema the two versions'
+modules differ only by four bound checks the newer one leaves out, so every gap here is noise, the
+BooleansRandom decode included: its code is byte for byte the same. Both use 0.40.0's harness, whose mock players and Instances are userdata as in a
 game: before it they were tables, which native code sends back to the interpreter wherever a
 parameter is annotated `Player` or `Instance`. An Entities event is a byte shorter in 0.40.0: an
 array's length that needs two bytes of span is a varint, one byte under 128.
@@ -57,7 +60,7 @@ array's length that needs two bytes of span is a varint, one byte under 128.
 What 0.40.0 changed is framing and dispatch rather than the fields: one `pcall` a packet rather than
 one an event, none on a reliable `Fire`, and a reader that keeps the packet in a local. That is most
 of a one-byte event's cost, and a part of a struct's decode. See
-[What's new in 0.40](/BlinkBlox/guides/whats-new/).
+the [changelog](/BlinkBlox/changelog/).
 
 Columns taken on different days differ by more than the code does. Between single runs this machine
 moves a decode figure by up to a fifth, so compare within a column, or run both versions yourself,
@@ -133,9 +136,50 @@ listener sees one: the class of each Instance, and a `pcall` around the listener
 every scenario, interpreted included, are in
 [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
 
+### A schema with many events
+
+`lune run Scenarios -- ManyEvents` sends 100 reliable events a frame spread over 128 declarations, the
+shape of a game with many remotes rather than one hot one, and times the client decoding them. The
+event an index names used to be found by comparing it with every declaration before it; it is now
+found by halving the range, down to runs of eight. Interpreted, as most clients run it -- medians of
+three runs taken alternately, both versions' modules loaded from files:
+
+| Scenario | 0.40.0 | 0.41.0 |
+|---|---|---|
+| **ManyEvents**: 100 events over 128 declarations, decode | 0.086 ms | **0.053 ms** |
+| **Broadcast**, same schema: every event is the first declaration | **0.090 ms** | 0.093 ms |
+
+The first declaration of a large channel pays for it: it was one comparison away and is now a few.
+A channel of up to eight declarations, which covers every other benchmark here, compiles exactly as it
+did.
+
+There is no native row because Lune cannot give one. The Luau inside Lune 0.10.5 leaves a whole module
+interpreted once any function in it is too large to compile, and a module's top-level function grows
+with every declaration: the server module stops compiling natively at about 70 events and the client's
+at about 85, in 0.40.0 as much as now. Current Luau (the 0.738 CLI, `--codegen`) leaves only that
+top-level function interpreted, which runs once when the module is required, and compiles the rest: a
+loop placed in a 250-event server module ran in 60 ms natively and 277 ms interpreted. Roblox runs
+current Luau, so a game's large module is native where it matters.
+
 Streams have no counterpart in the other tools. `lune run Scenarios` times them for BlinkBlox: a
 stream of 16 units to 50 players takes one `FireAllClients` a frame and 0.016 ms to flush natively,
 and a stream held per player 0.084 ms for all fifty.
+
+## The cost of a remote call, in Studio
+
+Measured in Studio on the Apple M1: a client firing a 40-byte buffer 240 times a second, or a
+160-byte one 60 times a second -- the same 9 600 bytes a second -- read from
+`Stats.DataSendKbps`, the median over eight seconds.
+
+| Remote | 240 calls of 40 bytes | 60 calls of 160 bytes |
+|---|---|---|
+| `UnreliableRemoteEvent` | 13.2 KB/s | **11.2 KB/s** |
+| `RemoteEvent` | 13.0 KB/s | **10.9 KB/s** |
+
+That is about 11 bytes a call beside the payload, which is why a client sends at most
+[`ClientFlushRate`](/BlinkBlox/language/options/#clientflushrate) times a second, 60 by default. The
+same session sent 60 to 480 calls a second on each remote for five seconds: every call arrived, no
+warning was printed and the ping did not move, so Roblox enforces no rate of its own to stay under.
 
 ## Against other tools, in Studio
 

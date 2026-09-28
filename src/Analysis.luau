@@ -14,6 +14,7 @@ local Grammar = require("./Modules/Grammar")
 local InstanceSlots = require("./Modules/InstanceSlots")
 local Lexer = require("./Lexer")
 local ModuleNames = require("./Modules/ModuleNames")
+local Priorities = require("./Modules/Priorities")
 local Size = require("./Modules/Size")
 local Walk = require("./Modules/Walk")
 
@@ -463,6 +464,7 @@ local function Run(Source: string, File: string?, Declarations: { Declaration },
 	MapKeys(Source, File, Declarations)
 	Rotations(Source, File, Declarations)
 	InstanceSlots.Check(Source, File, Declarations, Options)
+	Priorities.Check(Source, File, Declarations, Options)
 end
 
 return {

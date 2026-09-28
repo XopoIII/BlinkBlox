@@ -16,6 +16,7 @@
 --- sent player by player. On the client there is one batch, which is also held to the server's
 --- MaxEventsPerPacket, as the reliable one is.
 local Lifecycle = require("./Lifecycle")
+local Outbound = require("./Outbound")
 local State = require("./State")
 
 local Batches = {}
@@ -334,7 +335,7 @@ function Batches.Body(): { string }
 	Server = string.gsub(Server, "%%ORDERED%%", function()
 		return Ordered
 	end)
-	return { COMMON, Server }
+	return { COMMON, Outbound.Batches(Server) }
 end
 
 return Batches

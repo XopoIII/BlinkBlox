@@ -9,17 +9,17 @@
 -- This file is not meant to be edited
 
 _G._BLINK = _G._BLINK or {}
-if _G._BLINK["Traffic"] then
-	error("[BlinkBlox]: An instance of BlinkBlox is already running with the remote scope \"Traffic\". Change the remote scope of either instance to avoid conflicts.")
+if _G._BLINK["BLINK"] then
+	error("[BlinkBlox]: An instance of BlinkBlox is already running with the remote scope \"BLINK\". Change the remote scope of either instance to avoid conflicts.")
 end
-_G._BLINK["Traffic"] = true
+_G._BLINK["BLINK"] = true
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
-local BASE_EVENT_NAME = "Traffic_BLINK"
-local SCHEMA_SIGNATURE = "2a747b6f3eaebf53"
+local BASE_EVENT_NAME = "BLINK"
+local SCHEMA_SIGNATURE = "82a4181b3949691b"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -515,98 +515,7 @@ local EventNames: any = {
     Unreliable = {}
 }
 
-
---> Traffic counters (option TrafficStats), in blocks of four: bytes and count sent, bytes and
---> count received. The reliable channel is the block at 1, the unreliable at 5, each event the
---> next from 9 on, in the order of TRAFFIC_NAMES. A channel counts packets, an event events.
---> An event of one size only counts events; TRAFFIC_SIZES has its size, and 0 for the rest.
-local TRAFFIC_NAMES: { string } = table.freeze({ "Byte", "Push", "Blip", "Ping", "Seq", "Note", "Trail", "Inner.Poll" })
-local TRAFFIC_SIZES: { number } = table.freeze({ 2, 2, 3, 2, 4, 0, 0, 2 })
-local TrafficCounters: { number } = table.create(8 + #TRAFFIC_NAMES * 4, 0)
-
-type BLINK_TRAFFIC_COUNTS = { Sent: number, SentBytes: number, Received: number, ReceivedBytes: number }
-type BLINK_TRAFFIC_STATS = { Events: { [string]: BLINK_TRAFFIC_COUNTS }, Reliable: BLINK_TRAFFIC_COUNTS, Unreliable: BLINK_TRAFFIC_COUNTS }
-
-local function TrafficCounts(Base: number, Bytes: number): BLINK_TRAFFIC_COUNTS
-	return {
-		Sent = TrafficCounters[Base + 1],
-		SentBytes = if Bytes > 0 then TrafficCounters[Base + 1] * Bytes else TrafficCounters[Base],
-		Received = TrafficCounters[Base + 3],
-		ReceivedBytes = if Bytes > 0 then TrafficCounters[Base + 3] * Bytes else TrafficCounters[Base + 2],
-	}
-end
-
---> A fresh table on every call, so the game may keep one and compare it with the next.
-local function GetTrafficStats(): BLINK_TRAFFIC_STATS
-	local Events: { [string]: BLINK_TRAFFIC_COUNTS } = {}
-	for Index, Name in TRAFFIC_NAMES do
-		Events[Name] = TrafficCounts(5 + Index * 4, TRAFFIC_SIZES[Index])
-	end
-
-	return {
-		Events = Events,
-		Reliable = TrafficCounts(1, 0),
-		Unreliable = TrafficCounts(5, 0),
-	}
-end
-
-local function ResetTrafficStats()
-	for Index = 1, #TrafficCounters do
-		TrafficCounters[Index] = 0
-	end
-end
 local RATE_TEMPLATE = table.freeze({})
-
---> Sequence numbers for ordered unreliable events, per player and per event, both ways.
-local OrderOut: { [Player]: { number } } = {}
-local OrderIn: { [Player]: { number } } = {}
-
-Players.PlayerRemoving:Connect(function(Player)
-	OrderOut[Player] = nil
-	OrderIn[Player] = nil
-end)
-
---> The next sequence number this player is sent for this event. A player who has already left
---> gets a number and keeps no state, which PlayerRemoving would have nothing left to clear.
-local function NextOrder(Player: Player, Slot: number): number
-	local State = OrderOut[Player]
-	if not State then
-		if Player.Parent == nil then
-			return 0
-		end
-		State = {}
-		OrderOut[Player] = State
-	end
-
-	local Identifier = ((State[Slot] or 0) + 1) % 65536
-	State[Slot] = Identifier
-	return Identifier
-end
-
---> Accepts a packet only if it is newer than the last one this player sent for this event.
-local function OrderAccept(Player: Player, Slot: number, Identifier: number): boolean
-	if Player.Parent == nil then
-		OrderIn[Player] = nil
-		return false
-	end
-
-	local State = OrderIn[Player]
-	if not State then
-		State = {}
-		OrderIn[Player] = State
-	end
-
-	local Last = State[Slot]
-	if Last ~= nil then
-		local Ahead = (Identifier - Last) % 65536
-		if Ahead == 0 or Ahead >= 32768 then
-			return false
-		end
-	end
-
-	State[Slot] = Identifier
-	return true
-end
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
@@ -623,129 +532,137 @@ local function CheckUnreliableSize(Name: string): boolean
 	warn(`[BlinkBlox]: Dropped unreliable event "{Name}", {Size} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
 	return false
 end
-local SerdesEvent = "?"
-local SerdesThread: thread?
-Events.Reliable[0] = {}
-Queue.Reliable[0] = table.create(256)
-EventNames.Reliable[0] = "Byte"
-Events.Unreliable[1] = {}
-Queue.Unreliable[1] = table.create(256)
-EventNames.Unreliable[1] = "Ping"
-Events.Reliable[2] = {}
-Queue.Reliable[2] = table.create(256)
-EventNames.Reliable[2] = "Note"
-Queue.Reliable[3] = table.create(256)
-EventNames.Reliable[3] = "Ask"
-Queue.Reliable[4] = CreateQueue()
-EventNames.Reliable[4] = "Poll"
-function SerdesFunctions.ReadEVENT_Byte(): (number)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
-	local RecieveBuffer = RecieveBuffer
-	-- Value: Byte
-	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	return Value
+
+local OUTBOUND_RATE = 20000
+local OUTBOUND_BURST = 40000
+--> OUTBOUND BUDGET. Each player's bucket holds its tokens, the clock it was last refilled at, and how
+--> much of everyone's traffic it has already paid for. A send to everyone adds to OutboundShared once,
+--> and each bucket pays that when it is next brought up to date, so a broadcast costs one addition
+--> rather than one per player. Charges may take a bucket below zero: every send but a low-priority one
+--> goes whatever the bucket holds, and the debt is what keeps the next low one out.
+local OutboundShared = 0
+local OutboundBudgets: {[Player]: {number}} = {}
+--> The per-player stream families declared `Priority: Low`.
+local OutboundLow: {[any]: boolean} = {}
+
+--> A bucket is made when its player joins, or for everyone already in the game when the module loads.
+--> It pays for everyone's traffic from then on, so one made later would miss the broadcasts before it.
+local function OutboundJoin(Player: Player): {number}
+    local Budget = { OUTBOUND_BURST, os.clock(), OutboundShared }
+    --> One made for a player who has already left is not kept: PlayerRemoving has run, and nothing
+    --> would drop it.
+    if Player.Parent ~= nil then
+        OutboundBudgets[Player] = Budget
+    end
+    return Budget
 end
 
-function SerdesFunctions.WriteEVENT_Push(Value: number): ()
+Players.PlayerAdded:Connect(OutboundJoin)
+Players.PlayerRemoving:Connect(function(Player)
+    OutboundBudgets[Player] = nil
+end)
+for _, Player in Players:GetPlayers() do
+    OutboundJoin(Player)
+end
+
+--> `Player`'s bucket, brought up to now.
+local function OutboundBudget(Player: Player): {number}
+    local Budget = OutboundBudgets[Player]
+    if Budget == nil then
+        return OutboundJoin(Player)
+    end
+
+    local Now = os.clock()
+
+    Budget[1] = math.min(OUTBOUND_BURST, Budget[1] + (Now - Budget[2]) * OUTBOUND_RATE) - (OutboundShared - Budget[3])
+    Budget[2] = Now
+    Budget[3] = OutboundShared
+    return Budget
+end
+
+--> Charges `Bytes` sent to `Player` alone.
+local function OutboundCharge(Player: Player, Bytes: number)
+    local Budget = OutboundBudgets[Player] or OutboundBudget(Player)
+    Budget[1] -= Bytes
+end
+
+--> Whether `Player` has spent their budget, so a low-priority send to them is left out.
+local function OutboundSpent(Player: Player): boolean
+    return OutboundBudget(Player)[1] <= 0
+end
+local SerdesEvent = "?"
+local SerdesThread: thread?
+function SerdesFunctions.WriteEVENT_Chatter(Value: buffer): ()
+	-- Allocate BLOCK: 1 bytes
+	local BLOCK_START = Allocate(1)
+	-- EVENT_Chatter (0)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+	-- Value: Chatter
+	local Length = buffer.len(Value)
+	if not (Length <= 500) then error(`Expected "Length" to be smaller than or equal to 500, got {Length} instead.`) end
+	WriteVarLength(Length)
+	Allocate(Length)
+	buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
+end
+
+function SerdesFunctions.WriteEVENT_Hit(Value: number): ()
 	-- Allocate BLOCK: 2 bytes
 	local BLOCK_START = Allocate(2)
-	-- EVENT_Push (1)
+	-- EVENT_Hit (1)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
-	-- Value: Push
+	-- Value: Hit
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
 
-function SerdesFunctions.WriteEVENT_Blip(Value: number): ()
+function SerdesFunctions.WriteEVENT_Score(Value: number): ()
 	-- Allocate BLOCK: 3 bytes
 	local BLOCK_START = Allocate(3)
-	-- EVENT_Blip (0)
+	-- EVENT_Score (0)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
-	-- Value: Blip
+	-- Value: Score
 	buffer.writeu16(SendBuffer, BLOCK_START + 1, Value)
 end
 
-function SerdesFunctions.ReadEVENT_Ping(): (number)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
-	local RecieveBuffer = RecieveBuffer
-	-- Value: Ping
-	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	return Value
-end
-
-function SerdesFunctions.WriteEVENT_Seq(Value: number): ()
+function SerdesFunctions.WriteEVENT_Crowd(Value1: number?, Value2: number): ()
 	-- Allocate BLOCK: 4 bytes
 	local BLOCK_START = Allocate(4)
-	-- EVENT_Seq (2)
+	local BITFIELD_1_0
+	-- EVENT_Crowd (2)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
-	buffer.writeu16(SendBuffer, BLOCK_START + 1, 0)
-	-- Value: Seq
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value)
-end
-
-function SerdesFunctions.ReadEVENT_Note(): (string)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
-	local RecieveBuffer = RecieveBuffer
-	-- Value: Note
-	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Length > 32 then error(`Expected length of "Value" to be smaller than or equal to 32, got {Length} instead.`) end
-	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
-	return Value
-end
-
-function SerdesFunctions.WriteEVENT_Trail(Value: { number }): ()
-	-- Allocate BLOCK: 4 bytes
-	local BLOCK_START = Allocate(4)
-	-- EVENT_Trail (3)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
-	buffer.writeu16(SendBuffer, BLOCK_START + 1, 0)
-	-- Value: Trail
-	-- START ARRAY
-	if not (#Value <= 4) then error(`Expected "#Value" to be smaller than or equal to 4, got {#Value} instead.`) end
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, #Value)
-		-- Allocate BLOCK: 1 bytes
-	local ARRAY_START_1 = Allocate(1 * #Value)
-	for Index = 1, #Value do
-		local Item_1 = Value[Index]
-		-- Item_1: Trail
-		-- Allocate 1
-		local OPERATION_OFFSET_0 = ARRAY_START_1
-		ARRAY_START_1 += 1
-		buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+	-- Value: Crowd
+	-- Value1: Crowd
+	BITFIELD_1_0 = 0
+	if Value1 ~= nil then BITFIELD_1_0 += 0x01 end
+	if Value1 ~= nil then
+		-- Allocate BLOCK: 2 bytes
+		local BLOCK_START = Allocate(2)
+		-- Value1: Crowd
+		buffer.writeu16(SendBuffer, BLOCK_START + 0, Value1)
 	end
-	-- END ARRAY
+	-- Value2: Crowd
+	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
-function SerdesFunctions.ReadFUNCTION_DATA_Ask(): (number)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
-	local RecieveBuffer = RecieveBuffer
-	-- Value: Ask
-	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	return Value
-end
-
-function SerdesFunctions.WriteFUNCTION_RETURN_Ask(Value: number, InvocationIdentifier: number): ()
+function SerdesFunctions.WriteEVENT_Mine(Value1: number?, Value2: number): ()
 	-- Allocate BLOCK: 4 bytes
 	local BLOCK_START = Allocate(4)
-	-- FUNCTION_RETURN_Ask (3)
+	local BITFIELD_1_0
+	-- EVENT_Mine (3)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
-	buffer.writeu8(SendBuffer, BLOCK_START + 1, InvocationIdentifier)
-	buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
-	-- Value: Ask
-	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value)
-end
-
-function SerdesFunctions.Inner_ReadEVENT_Poll(): (number)
-	-- Read BLOCK: 1 bytes
-	local BLOCK_START = Read(1)
-	local RecieveBuffer = RecieveBuffer
-	-- Value: Poll
-	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	return Value
+	-- Value: Mine
+	-- Value1: Mine
+	BITFIELD_1_0 = 0
+	if Value1 ~= nil then BITFIELD_1_0 += 0x01 end
+	if Value1 ~= nil then
+		-- Allocate BLOCK: 2 bytes
+		local BLOCK_START = Allocate(2)
+		-- Value1: Mine
+		buffer.writeu16(SendBuffer, BLOCK_START + 0, Value1)
+	end
+	-- Value2: Mine
+	buffer.writeu16(SendBuffer, BLOCK_START + 2, Value2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 if not RunService:IsRunning() then
@@ -758,49 +675,35 @@ if not RunService:IsRunning() then
 		SetPacketDropHandler = NOOP,
 		SetListenerErrorHandler = NOOP,
 		Remotes = REMOTE_NAMES,
-		GetTrafficStats = GetTrafficStats,
-		ResetTrafficStats = ResetTrafficStats,
-	Byte = {
-		On = NOOP_RETURNING
-	},
-	Push = {
+	Chatter = {
 		Fire = NOOP,
 		FireAll = NOOP,
 		FireList = NOOP,
 		FireExcept = NOOP
 	},
-	Blip = {
+	Hit = {
 		Fire = NOOP,
 		FireAll = NOOP,
 		FireList = NOOP,
 		FireExcept = NOOP
 	},
-	Ping = {
-		On = NOOP_RETURNING
-	},
-	Seq = {
+	Score = {
 		Fire = NOOP,
 		FireAll = NOOP,
 		FireList = NOOP,
 		FireExcept = NOOP
 	},
-	Note = {
-		On = NOOP_RETURNING
+	Crowd = {
+		Set = NOOP,
+		Clear = NOOP,
+		Urgent = NOOP,
+		SetFast = NOOP
 	},
-	Trail = {
-		Fire = NOOP,
-		FireAll = NOOP,
-		FireList = NOOP,
-		FireExcept = NOOP
-	},
-	Ask = {
-		On = NOOP_RETURNING
-	},
-	Inner = {
-		Poll = {
-			Iter = NOOP_RETURNING,
-			Next = NOOP_RETURNING
-		},
+	Mine = {
+		Set = NOOP,
+		Clear = NOOP,
+		Urgent = NOOP,
+		SetFast = NOOP
 	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
@@ -1459,8 +1362,7 @@ local function StepReplication()
             local Buffer = buffer.create(Used)
             buffer.copy(Buffer, 0, Send.Buffer, 0, Used)
             Reliable:FireClient(Player, Buffer, Send.Instances)
-            TrafficCounters[1] += Used
-            TrafficCounters[2] += 1
+            OutboundCharge(Player, Used)
 
             Send.Cursor = 0
             table.clear(Send.Instances)
@@ -1484,10 +1386,12 @@ local function StepReplication()
         buffer.copy(Buffer, 0, SharedBuffer, 0, Shared)
         if next(Diverged) == nil then
             Reliable:FireAllClients(Buffer, SharedInstances)
+            OutboundShared += Shared
         else
             for _, Player in Players:GetPlayers() do
                 if not Diverged[Player] then
                     Reliable:FireClient(Player, Buffer, SharedInstances)
+                    OutboundCharge(Player, Shared)
                 end
             end
         end
@@ -1504,6 +1408,559 @@ local function StepReplication()
         SharedBuffer = buffer.create(64)
     end
 end
+
+--> UNRELIABLE BATCHES; see Generator/Batches.luau.
+--> `Committed` counts the Instances of the events kept. `Pending` is set while an event is written
+--> straight into the batch: one that then threw has left its own Instances behind, and they are
+--> dropped before the batch is used again. Checking the flag spares every other use a count.
+type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Committed: number, Events: number, Pending: boolean }
+
+local function NewUnreliable(): BLINK_UNRELIABLE
+    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Committed = 0, Events = 0, Pending = false }
+end
+
+local function Clean(Batch: BLINK_UNRELIABLE)
+    if not Batch.Pending then
+        return
+    end
+
+    local Instances = Batch.Instances
+    for Index = #Instances, Batch.Committed + 1, -1 do
+        Instances[Index] = nil
+    end
+    Batch.Pending = false
+end
+
+--> Appends what the scratch buffer holds -- one event, written there by the send -- to `Batch`.
+local function CopyUnreliable(Batch: BLINK_UNRELIABLE): number
+    local Size = SendCursor
+    local Cursor = Batch.Cursor
+    local InUse = Cursor + Size
+    if InUse > Batch.Size then
+        local Grown = Batch.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Batch.Buffer, 0, Cursor)
+        Batch.Buffer = Resized
+        Batch.Size = Grown
+    end
+
+    buffer.copy(Batch.Buffer, Cursor, SendBuffer, 0, Size)
+    Batch.Cursor = InUse
+    Batch.Events += 1
+
+    local Count = #SendInstances
+    if Count > 0 then
+        table.move(SendInstances, 1, Count, Batch.Committed + 1, Batch.Instances)
+        Batch.Committed += Count
+    end
+
+    return Cursor
+end
+
+--> Whether the event in the scratch buffer would take `Batch` past the unreliable limit.
+local function Overflows(Batch: BLINK_UNRELIABLE): boolean
+    return Batch.Cursor + SendCursor + (Batch.Committed + #SendInstances) * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE
+end
+
+local SharedUnreliable = NewUnreliable()
+local PlayerUnreliable: {[Player]: BLINK_UNRELIABLE} = {}
+
+Players.PlayerRemoving:Connect(function(Player)
+    PlayerUnreliable[Player] = nil
+end)
+
+local function SendUnreliable(Batch: BLINK_UNRELIABLE, Player: Player?)
+    local Used = Batch.Cursor
+    if Used == 0 then
+        return
+    end
+
+    Clean(Batch)
+    local Packet = buffer.create(Used)
+    buffer.copy(Packet, 0, Batch.Buffer, 0, Used)
+    if Player then
+        Unreliable:FireClient(Player, Packet, Batch.Instances)
+        OutboundCharge(Player, Used)
+    else
+        Unreliable:FireAllClients(Packet, Batch.Instances)
+        OutboundShared += Used
+    end
+
+    Batch.Cursor = 0
+    Batch.Events = 0
+    if Batch.Committed > 0 then
+        Batch.Committed = 0
+        table.clear(Batch.Instances)
+    end
+end
+
+--> A player's batch, made on their first unreliable event of the session. None for a player who has
+--> already left: PlayerRemoving has run, and nothing would clear a batch made now.
+local function PlayerBatch(Player: Player): BLINK_UNRELIABLE?
+    local Batch = PlayerUnreliable[Player]
+    if Batch == nil then
+        if Player.Parent == nil then
+            return nil
+        end
+
+        Batch = NewUnreliable()
+        PlayerUnreliable[Player] = Batch
+    end
+
+    return Batch
+end
+
+--> Appends the event in the scratch buffer to everyone's batch, or to `Player`'s.
+local function AppendUnreliable(Player: Player?)
+    local Batch = if Player then PlayerBatch(Player) else SharedUnreliable
+    if Batch == nil then
+        return
+    end
+
+    Clean(Batch)
+    if Overflows(Batch) then
+        SendUnreliable(Batch, Player)
+    end
+    CopyUnreliable(Batch)
+end
+
+--> Where the event being written straight into a batch began: its first byte, and the Instances ahead
+--> of it.
+local BatchStart = 0
+local BatchInstances = 0
+
+--> Installs everyone's batch, or `Player`'s, as the send buffer, so a send to one batch writes its event
+--> there and copies nothing. None for a player who has left, who is written into the scratch buffer
+--> and sent nothing.
+local function LoadBatch(Player: Player?): BLINK_UNRELIABLE?
+    local Batch = if Player then PlayerBatch(Player) else SharedUnreliable
+    if Batch == nil then
+        LoadScratch()
+        BatchStart = 0
+        BatchInstances = 0
+        return nil
+    end
+
+    Clean(Batch)
+    Batch.Pending = true
+    SendSize = Batch.Size
+    SendCursor = Batch.Cursor
+    SendBuffer = Batch.Buffer
+    SendInstances = Batch.Instances
+    BatchStart = Batch.Cursor
+    BatchInstances = Batch.Committed
+    return Batch
+end
+
+--> Keeps the event just written into `Batch`, stamping an ordered one's sequence at `Slot`. When the
+--> event does not fit one packet beside what the batch already held, that goes first, on its own, and
+--> the event moves to the front.
+local function CommitBatch(Batch: BLINK_UNRELIABLE?, Player: Player?, Slot: number?, Instances: boolean)
+    if Batch == nil then
+        return
+    end
+
+    local Buffer = SendBuffer
+    local Start = BatchStart
+    local Count = if Instances then #SendInstances else BatchInstances
+    if Start > 0 and SendCursor + Count * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE then
+        local Packet = buffer.create(Start)
+        buffer.copy(Packet, 0, Buffer, 0, Start)
+        local Before = table.move(SendInstances, 1, BatchInstances, 1, {})
+        if Player then
+            Unreliable:FireClient(Player, Packet, Before)
+            OutboundCharge(Player, Start)
+        else
+            Unreliable:FireAllClients(Packet, Before)
+            OutboundShared += Start
+        end
+
+        local Size = SendCursor - Start
+        buffer.copy(Buffer, 0, Buffer, Start, Size)
+        table.move(SendInstances, BatchInstances + 1, Count, 1, SendInstances)
+        for Index = Count, Count - BatchInstances + 1, -1 do
+            SendInstances[Index] = nil
+        end
+
+        SendCursor = Size
+        Count -= BatchInstances
+        Start = 0
+        Batch.Events = 0
+    end
+
+    Batch.Buffer = Buffer
+    Batch.Size = SendSize
+    Batch.Cursor = SendCursor
+    Batch.Committed = Count
+    Batch.Pending = false
+end
+
+local StepBeforeUnreliable = StepReplication
+--> A batch is made only for a player still in the game, and PlayerRemoving drops it, so the flush asks
+--> nobody whether they are still here: that was a property read per player per frame.
+StepReplication = function()
+    StepBeforeUnreliable()
+    SendUnreliable(SharedUnreliable, nil)
+    for Player, Batch in PlayerUnreliable do
+        if Batch.Cursor > 0 then
+            SendUnreliable(Batch, Player)
+        end
+    end
+end
+--> STAMPS. A stamp is a server time in milliseconds modulo 65536; this puts it back in seconds, the
+--> one nearest this side's own server clock.
+local StampClock = game:GetService("Workspace")
+
+local function UnwrapStamp(Stamp: number): number
+    local Now = StampClock:GetServerTimeNow() * 1000
+    local Time = Now - Now % 65536 + Stamp
+    if Time > Now + 32768 then
+        Time -= 65536
+    elseif Time < Now - 32768 then
+        Time += 65536
+    end
+    return Time / 1000
+end
+--> STREAMS. The scheduler behind each `Stream` event; see the stream runtime in the compiler.
+type BLINK_STREAM = {
+    Name: string,
+    Interval: number,
+    FastInterval: number,
+    Keepalive: number,
+    Epsilon: number,
+    Send: (Value: any, ServerTime: number) -> (),
+
+    Value: any, --> The state the game set, nil while it holds none.
+    Holding: boolean, --> Set since the last Clear.
+    Clearing: boolean, --> Cleared after a state went out, and the nil not sent yet.
+    Live: boolean, --> A state went out since the last Clear.
+    Sent: any, --> A copy of the last state sent, which the game may have changed since.
+    Moved: boolean, --> The last send carried a change from the state before it.
+    Urgent: boolean,
+    Fast: boolean,
+    Clock: number, --> Seconds towards the next due step.
+    Since: number, --> Seconds since the last send.
+}
+
+--> A step lands on an interval within this much of it: 6 frames of 1/60 add to a hair under 0.1.
+local STREAM_SLACK = 1e-6
+
+--> A stream with `Per: Player`: one BLINK_STREAM for each player the game set a state for, made on
+--> the first Set or SetFast and dropped when the player leaves.
+type BLINK_PLAYER_STREAM = {
+    Name: string,
+    Interval: number,
+    FastInterval: number,
+    Keepalive: number,
+    Epsilon: number,
+    Send: (Player: Player, Value: any, ServerTime: number) -> (),
+    Players: { [Player]: BLINK_STREAM },
+}
+
+local Streams: { BLINK_STREAM } = {}
+local PlayerStreams: { BLINK_PLAYER_STREAM } = {}
+local StreamStepped = os.clock()
+
+local function NewStream(Name: string, Interval: number, FastInterval: number, Keepalive: number, Epsilon: number, Send: (any, number) -> ()): BLINK_STREAM
+    return {
+        Name = Name,
+        Interval = Interval,
+        FastInterval = FastInterval,
+        Keepalive = Keepalive,
+        Epsilon = Epsilon,
+        Send = Send,
+        Value = nil,
+        Holding = false,
+        Clearing = false,
+        Live = false,
+        Sent = nil,
+        Moved = false,
+        Urgent = false,
+        Fast = false,
+        Clock = 0,
+        Since = 0,
+    }
+end
+
+local function CreateStream(Name: string, Interval: number, FastInterval: number, Keepalive: number, Epsilon: number, Send: (any, number) -> ()): BLINK_STREAM
+    local Stream = NewStream(Name, Interval, FastInterval, Keepalive, Epsilon, Send)
+    table.insert(Streams, Stream)
+    return Stream
+end
+
+local function CreatePlayerStream(Name: string, Interval: number, FastInterval: number, Keepalive: number, Epsilon: number, Send: (Player, any, number) -> ()): BLINK_PLAYER_STREAM
+    local Family: BLINK_PLAYER_STREAM = {
+        Name = Name,
+        Interval = Interval,
+        FastInterval = FastInterval,
+        Keepalive = Keepalive,
+        Epsilon = Epsilon,
+        Send = Send,
+        Players = {},
+    }
+    table.insert(PlayerStreams, Family)
+    return Family
+end
+
+--> The player's own stream, made if `Create` asks and the player is still in the game. One who has
+--> left gets none: PlayerRemoving has dropped theirs, and a new one would be held for nobody.
+local function PlayerStream(Family: BLINK_PLAYER_STREAM, Player: Player, Create: boolean): BLINK_STREAM?
+    local Stream = Family.Players[Player]
+    if Stream or not Create or Player.Parent == nil then
+        return Stream
+    end
+
+    local function Send(Value: any, ServerTime: number)
+        Family.Send(Player, Value, ServerTime)
+    end
+
+    local Made = NewStream(Family.Name, Family.Interval, Family.FastInterval, Family.Keepalive, Family.Epsilon, Send)
+    Family.Players[Player] = Made
+    return Made
+end
+
+Players.PlayerRemoving:Connect(function(Player)
+    for _, Family in PlayerStreams do
+        Family.Players[Player] = nil
+    end
+end)
+
+--> Whether two states are the same, a number within Epsilon of the other counting as equal -- and
+--> each component of a vector, CFrame or Color3 the same way. Tables are equal when they hold the same
+--> keys with equal values; a buffer when its bytes are; anything else only when `==` says so. NaN
+--> equals nothing, so a state holding one is always sent.
+local function StreamEqual(A: any, B: any, Epsilon: number): boolean
+    if A == B then
+        return true
+    end
+
+    local Kind = typeof(A)
+    if Kind ~= typeof(B) then
+        return false
+    elseif Kind == "number" then
+        return math.abs(A - B) <= Epsilon
+    elseif Kind == "Vector3" or Kind == "vector" then
+        return math.abs(A.X - B.X) <= Epsilon and math.abs(A.Y - B.Y) <= Epsilon and math.abs(A.Z - B.Z) <= Epsilon
+    elseif Kind == "Color3" then
+        return math.abs(A.R - B.R) <= Epsilon and math.abs(A.G - B.G) <= Epsilon and math.abs(A.B - B.B) <= Epsilon
+    elseif Kind == "CFrame" then
+        local Left = { A:GetComponents() }
+        local Right = { B:GetComponents() }
+        for Index = 1, 12 do
+            if not (math.abs(Left[Index] - Right[Index]) <= Epsilon) then
+                return false
+            end
+        end
+        return true
+    elseif Kind == "buffer" then
+        return buffer.len(A) == buffer.len(B) and buffer.tostring(A) == buffer.tostring(B)
+    elseif Kind == "table" then
+        for Key, Item in A do
+            if not StreamEqual(Item, B[Key], Epsilon) then
+                return false
+            end
+        end
+        for Key in B do
+            if A[Key] == nil then
+                return false
+            end
+        end
+        return true
+    end
+
+    return false
+end
+
+--> What a sent state is compared against next, copied because the game may change a table it set.
+local function StreamCopy(Value: any): any
+    local Kind = typeof(Value)
+    if Kind == "table" then
+        local Copy = {}
+        for Key, Item in Value do
+            Copy[Key] = StreamCopy(Item)
+        end
+        return Copy
+    elseif Kind == "buffer" then
+        local Copy = buffer.create(buffer.len(Value))
+        buffer.copy(Copy, 0, Value)
+        return Copy
+    end
+
+    return Value
+end
+
+local function StreamSet(Stream: BLINK_STREAM, Value: any)
+    if Value == nil then
+        error(`[BlinkBlox]: Stream "{Stream.Name}" cannot be set to nil. Call Clear to clear it.`, 3)
+    end
+
+    --> An idle stream sends its first state at the next step, not an interval later; and a Clear not
+    --> sent yet is replaced by this state, which tells the clients just as much.
+    if not Stream.Holding then
+        Stream.Urgent = true
+    end
+
+    Stream.Value = Value
+    Stream.Holding = true
+    Stream.Clearing = false
+end
+
+local function StreamClear(Stream: BLINK_STREAM)
+    --> Only clients that were sent a state need telling it is gone.
+    Stream.Clearing = Stream.Live
+    Stream.Holding = false
+    Stream.Value = nil
+    Stream.Urgent = false
+end
+
+--> A per-player stream's members. Set and SetFast make the player's stream; Clear and Urgent have
+--> nothing to act on without one. Set checks for nil itself, so the error names the game's call.
+local function PlayerStreamSet(Family: BLINK_PLAYER_STREAM, Player: Player, Value: any)
+    if Value == nil then
+        error(`[BlinkBlox]: Stream "{Family.Name}" cannot be set to nil. Call Clear to clear it.`, 3)
+    end
+
+    local Stream = PlayerStream(Family, Player, true)
+    if Stream then
+        StreamSet(Stream, Value)
+    end
+end
+
+local function PlayerStreamClear(Family: BLINK_PLAYER_STREAM, Player: Player)
+    local Stream = PlayerStream(Family, Player, false)
+    if Stream then
+        StreamClear(Stream)
+    end
+end
+
+local function PlayerStreamUrgent(Family: BLINK_PLAYER_STREAM, Player: Player)
+    local Stream = PlayerStream(Family, Player, false)
+    if Stream then
+        Stream.Urgent = true
+    end
+end
+
+local function PlayerStreamSetFast(Family: BLINK_PLAYER_STREAM, Player: Player, Fast: boolean)
+    local Stream = PlayerStream(Family, Player, true)
+    if Stream then
+        Stream.Fast = Fast
+    end
+end
+
+local function SendStream(Stream: BLINK_STREAM, Value: any)
+    local ServerTime = math.floor(StampClock:GetServerTimeNow() * 1000) % 65536
+    local Sent: boolean, Failure: any = pcall(Stream.Send, Value, ServerTime)
+    if not Sent then
+        --> It would fail the same way at every step. The stream stops until the game sets another.
+        Stream.Holding = false
+        Stream.Value = nil
+        task.spawn(error, `[BlinkBlox]: Stream "{Stream.Name}" could not send its state: {Failure}`, 0)
+    end
+end
+
+local function StepStream(Stream: BLINK_STREAM, Delta: number)
+    if Stream.Clearing then
+        Stream.Clearing = false
+        Stream.Live = false
+        Stream.Sent = nil
+        Stream.Moved = false
+        Stream.Clock = 0
+        Stream.Since = 0
+        SendStream(Stream, nil)
+        return
+    end
+
+    if not Stream.Holding then
+        return
+    end
+
+    Stream.Clock += Delta
+    Stream.Since += Delta
+
+    local Interval = if Stream.Fast then Stream.FastInterval else Stream.Interval
+    local Forced = Stream.Urgent
+    if not Forced and Stream.Clock < Interval - STREAM_SLACK then
+        return
+    end
+
+    --> The clock keeps what it overran by, so a rate the frame rate does not divide still averages out
+    --> to the rate. After a hitch longer than an interval it starts again rather than catching up.
+    Stream.Urgent = false
+    Stream.Clock = if Forced then 0 else math.max(Stream.Clock - Interval, 0)
+    if Stream.Clock >= Interval then
+        Stream.Clock = 0
+    end
+
+    --> Moved is a change from a state the clients already have. The first state is not one, so a
+    --> stream that starts still is not sent twice.
+    local Changed = not Stream.Live or not StreamEqual(Stream.Value, Stream.Sent, Stream.Epsilon)
+    local Moved = Stream.Live and Changed
+    if not (Forced or Changed or Stream.Moved or Stream.Since >= Stream.Keepalive - STREAM_SLACK) then
+        return
+    end
+
+    Stream.Moved = Moved
+    Stream.Since = 0
+    Stream.Live = true
+    Stream.Sent = StreamCopy(Stream.Value)
+    SendStream(Stream, Stream.Value)
+end
+
+local function StepStreams()
+    local Now = os.clock()
+    local Delta = Now - StreamStepped
+    StreamStepped = Now
+
+    for _, Stream in Streams do
+        StepStream(Stream, Delta)
+    end
+
+    for _, Family in PlayerStreams do
+        local Low = OutboundLow[Family] == true
+        for Player, Stream in Family.Players do
+            if Low and OutboundSpent(Player) then
+                continue
+            end
+            StepStream(Stream, Delta)
+        end
+    end
+end
+
+--> Streams step first, so a state sent this frame goes out ahead of the frame's reliable batch.
+local StepReliable = StepReplication
+StepReplication = function()
+    StepStreams()
+    StepReliable()
+end
+
+-- Crowd: 20 a second
+local function SendSTREAM_2(Value: number?, ServerTime: number): ()
+	LoadScratch()
+	SerdesFunctions.WriteEVENT_Crowd(Value, ServerTime)
+	local Bytes = SendCursor + #SendInstances * UNRELIABLE_INSTANCE_BYTES
+	if Bytes > MAX_UNRELIABLE_SIZE then error(`{Bytes} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`) end
+	for _, Player in Players:GetPlayers() do
+		if OutboundSpent(Player) then continue end
+		AppendUnreliable(Player)
+	end
+	KeepScratch()
+end
+local STREAM_2 = CreateStream("Crowd", 1 / 20, 1 / 20, 1, 0, SendSTREAM_2)
+
+-- Mine: 20 a second, each player
+local function SendSTREAM_3(Player: Player, Value: number?, ServerTime: number): ()
+	local BATCH = LoadBatch(Player)
+	SerdesFunctions.WriteEVENT_Mine(Value, ServerTime)
+	local EVENT_BYTES = SendCursor - BatchStart
+	if EVENT_BYTES > MAX_UNRELIABLE_SIZE then error(`{EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`) end
+	CommitBatch(BATCH, Player, nil, false)
+end
+local STREAM_3 = CreatePlayerStream("Mine", 1 / 20, 1 / 20, 1, 0, SendSTREAM_3)
+OutboundLow[STREAM_3] = true
 local function DecodeLoop(DecodeEvent: () -> (), Player: Player, Size: number)
 	local DecodedEvents = 0
 	while RecieveCursor < Size and Player.Parent ~= nil do
@@ -1537,8 +1994,6 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	RecieveInstances = Instances
 	RecieveInstanceCursor = 0
 	local Size = buffer.len(RecieveBuffer)
-	TrafficCounters[3] += Size
-	TrafficCounters[4] += 1
 	if SerdesThread and coroutine.status(SerdesThread) == "suspended" then
 		warn(`[BlinkBlox]: Event "{SerdesEvent}" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.`)
 		coroutine.close(SerdesThread)
@@ -1551,68 +2006,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
-		if Index == 0 then
-			local Value: number = SerdesFunctions.ReadEVENT_Byte()
-			TrafficCounters[12] += 1
-			if #Events.Reliable[0] > 0 then
-				local Epoch = ListenerEpoch
-				for _, Listener in Events.Reliable[0] do
-					if ListenerEpoch ~= Epoch and table.find(Events.Reliable[0], Listener) == nil then continue end
-					SerdesEvent = "Byte"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Player, Value)
-					if not ListenerRan and not ListenerFailed(Player, "Byte", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-				end
-			else
-				if #Queue.Reliable[0] < 256 then
-					table.insert(Queue.Reliable[0], table.pack(Player, Value))
-				end
-			end
-		elseif Index == 2 then
-			local TrafficStart = RecieveCursor - 1
-			local Value: string = SerdesFunctions.ReadEVENT_Note()
-			TrafficCounters[31] += RecieveCursor - TrafficStart
-			TrafficCounters[32] += 1
-			if #Events.Reliable[2] > 0 then
-				local Epoch = ListenerEpoch
-				for _, Listener in Events.Reliable[2] do
-					if ListenerEpoch ~= Epoch and table.find(Events.Reliable[2], Listener) == nil then continue end
-					SerdesEvent = "Note"
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Player, Value)
-					if not ListenerRan and not ListenerFailed(Player, "Note", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-				end
-			else
-				if #Queue.Reliable[2] < 256 then
-					table.insert(Queue.Reliable[2], table.pack(Player, Value))
-				end
-			end
-		elseif Index == 3 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
-			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			local Value: number = SerdesFunctions.ReadFUNCTION_DATA_Ask()
-			if Events.Reliable[3] ~= nil then
-				Spawn(Events.Reliable[3], Player, Value, InvocationIdentifier)
-			else
-				if #Queue.Reliable[3] >= 256 then
-					LoadPlayer(Player)
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 3)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					SavePlayerBuffer(Player)
-					return
-				end
-				table.insert(Queue.Reliable[3], table.pack(Player, Value, InvocationIdentifier))
-			end
-		elseif Index == 4 then
-			local Arguments = table.pack(Player, SerdesFunctions.Inner_ReadEVENT_Poll())
-			if Queue.Reliable[4].count < MAX_POLLED then
-				Push(Queue.Reliable[4], Arguments)
-			end
-			TrafficCounters[40] += 1
-		else
-			error("[BlinkBlox]: Unknown event index.")
-		end
+		error("[BlinkBlox]: This channel receives no events.")
 	end
 	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
 	if not Parsed then
@@ -1640,8 +2034,6 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	RecieveInstances = Instances
 	RecieveInstanceCursor = 0
 	local Size = buffer.len(RecieveBuffer)
-	TrafficCounters[7] += Size
-	TrafficCounters[8] += 1
 	if SerdesThread and coroutine.status(SerdesThread) == "suspended" then
 		warn(`[BlinkBlox]: Event "{SerdesEvent}" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.`)
 		coroutine.close(SerdesThread)
@@ -1654,19 +2046,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
-		if Index == 1 then
-			local Value: number = SerdesFunctions.ReadEVENT_Ping()
-			TrafficCounters[24] += 1
-			local Epoch = ListenerEpoch
-			for _, Listener in Events.Unreliable[1] do
-				if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[1], Listener) == nil then continue end
-				SerdesEvent = "Ping"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "Ping", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		else
-			error("[BlinkBlox]: Unknown event index.")
-		end
+		error("[BlinkBlox]: This channel receives no events.")
 	end
 	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Player, Size)
 	if not Parsed then
@@ -1688,62 +2068,120 @@ local Returns = table.freeze({
 
 	Remotes = REMOTE_NAMES,
 
-	GetTrafficStats = GetTrafficStats,
-
-	ResetTrafficStats = ResetTrafficStats,
-
-	Byte = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Reliable[0])
-			table.insert(Listeners, Listener)
-			Events.Reliable[0] = Listeners
-			local Pending = Queue.Reliable[0]
-			Queue.Reliable[0] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "Byte", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+	Chatter = {
+		Fire = function(Player: Player, Value: buffer): ()
+			if OutboundSpent(Player) then return end
+			local BATCH = LoadBatch(Player)
+			SerdesFunctions.WriteEVENT_Chatter(Value)
+			local EVENT_BYTES = SendCursor - BatchStart
+			if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+				warn(`[BlinkBlox]: Dropped unreliable event "Chatter", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+				return
 			end
-			return function (): ()
-				local Index = table.find(Events.Reliable[0], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Reliable[0])
-					table.remove(Listeners, Index)
-					Events.Reliable[0] = Listeners
-					ListenerEpoch += 1
+			CommitBatch(BATCH, Player, nil, false)
+		end,
+		FireAll = function(Value: buffer): ()
+			LoadScratch()
+			SerdesFunctions.WriteEVENT_Chatter(Value)
+			if not CheckUnreliableSize("Chatter") then return end
+			for _, Player in Players:GetPlayers() do
+				if OutboundSpent(Player) then continue end
+				AppendUnreliable(Player)
+			end
+			KeepScratch()
+		end,
+		FireList = function(List: {Player}, Value: buffer): ()
+			LoadScratch()
+			SerdesFunctions.WriteEVENT_Chatter(Value)
+			if not CheckUnreliableSize("Chatter") then return end
+			for _, Player in List do
+				if OutboundSpent(Player) then continue end
+				AppendUnreliable(Player)
+			end
+			KeepScratch()
+		end,
+		FireExcept = function(Except: Player, Value: buffer): ()
+			LoadScratch()
+			SerdesFunctions.WriteEVENT_Chatter(Value)
+			if not CheckUnreliableSize("Chatter") then return end
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
 				end
+				if OutboundSpent(Player) then continue end
+				AppendUnreliable(Player)
 			end
-		end
+			KeepScratch()
+		end,
 	},
-	Push = {
+	Hit = {
+		Fire = function(Player: Player, Value: number): ()
+			local BATCH = LoadBatch(Player)
+			SerdesFunctions.WriteEVENT_Hit(Value)
+			local EVENT_BYTES = SendCursor - BatchStart
+			if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+				warn(`[BlinkBlox]: Dropped unreliable event "Hit", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+				return
+			end
+			CommitBatch(BATCH, Player, nil, false)
+		end,
+		FireAll = function(Value: number): ()
+			local BATCH = LoadBatch(nil)
+			SerdesFunctions.WriteEVENT_Hit(Value)
+			local EVENT_BYTES = SendCursor - BatchStart
+			if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+				warn(`[BlinkBlox]: Dropped unreliable event "Hit", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+				return
+			end
+			CommitBatch(BATCH, nil, nil, false)
+		end,
+		FireList = function(List: {Player}, Value: number): ()
+			LoadScratch()
+			SerdesFunctions.WriteEVENT_Hit(Value)
+			if not CheckUnreliableSize("Hit") then return end
+			for _, Player in List do
+				AppendUnreliable(Player)
+			end
+			KeepScratch()
+		end,
+		FireExcept = function(Except: Player, Value: number): ()
+			LoadScratch()
+			SerdesFunctions.WriteEVENT_Hit(Value)
+			if not CheckUnreliableSize("Hit") then return end
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
+				end
+				AppendUnreliable(Player)
+			end
+			KeepScratch()
+		end,
+	},
+	Score = {
 		Fire = function(Player: Player, Value: number): ()
 			LoadPlayer(Player)
-			local Cursor = SendCursor
-			SerdesFunctions.WriteEVENT_Push(Value)
-			TrafficCounters[14] += 1
+			SerdesFunctions.WriteEVENT_Score(Value)
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: number): ()
 			LoadScratch()
-			SerdesFunctions.WriteEVENT_Push(Value)
+			SerdesFunctions.WriteEVENT_Score(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
 			AppendShared(Buffer, Size, Instances)
-			local Reached = #Players:GetPlayers()
-			TrafficCounters[14] += Reached
 		end,
 		FireList = function(List: {Player}, Value: number): ()
 			LoadScratch()
-			SerdesFunctions.WriteEVENT_Push(Value)
+			SerdesFunctions.WriteEVENT_Score(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
 			for _, Player in List do
 				AppendPlayer(Player, Buffer, Size, Instances)
-				TrafficCounters[14] += 1
 			end
 		end,
 		FireExcept = function(Except: Player, Value: number): ()
 			LoadScratch()
-			SerdesFunctions.WriteEVENT_Push(Value)
+			SerdesFunctions.WriteEVENT_Score(Value)
 			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
 			KeepScratch()
 			for _, Player in Players:GetPlayers() do
@@ -1751,297 +2189,20 @@ local Returns = table.freeze({
 					continue
 				end
 				AppendPlayer(Player, Buffer, Size, Instances)
-				TrafficCounters[14] += 1
 			end
 		end,
 	},
-	Blip = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Blip(Value)
-			if not CheckUnreliableSize("Blip") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-			TrafficCounters[18] += 1
-			TrafficCounters[5] += SendCursor
-			TrafficCounters[6] += 1
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Blip(Value)
-			if not CheckUnreliableSize("Blip") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-			local Reached = #Players:GetPlayers()
-			TrafficCounters[18] += Reached
-			TrafficCounters[5] += SendCursor * Reached
-			TrafficCounters[6] += Reached
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Blip(Value)
-			if not CheckUnreliableSize("Blip") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[18] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Blip(Value)
-			if not CheckUnreliableSize("Blip") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[18] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
+	Crowd = {
+		Set = function(Value: number): () StreamSet(STREAM_2, Value) end,
+		Clear = function(): () StreamClear(STREAM_2) end,
+		Urgent = function(): () STREAM_2.Urgent = true end,
+		SetFast = function(Fast: boolean): () STREAM_2.Fast = Fast end,
 	},
-	Ping = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[1])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[1] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[1], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[1])
-					table.remove(Listeners, Index)
-					Events.Unreliable[1] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	Seq = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Seq(Value)
-			if not CheckUnreliableSize("Seq") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-			TrafficCounters[26] += 1
-			TrafficCounters[5] += SendCursor
-			TrafficCounters[6] += 1
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Seq(Value)
-			if not CheckUnreliableSize("Seq") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[26] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Seq(Value)
-			if not CheckUnreliableSize("Seq") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[26] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Seq(Value)
-			if not CheckUnreliableSize("Seq") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[26] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-	},
-	Note = {
-		On = function(Listener: (Player: Player, Value: string) -> ()): () -> ()
-			local Listeners = table.clone(Events.Reliable[2])
-			table.insert(Listeners, Listener)
-			Events.Reliable[2] = Listeners
-			local Pending = Queue.Reliable[2]
-			Queue.Reliable[2] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "Note", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				local Index = table.find(Events.Reliable[2], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Reliable[2])
-					table.remove(Listeners, Index)
-					Events.Reliable[2] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	Trail = {
-		Fire = function(Player: Player, Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Trail(Value)
-			if not CheckUnreliableSize("Trail") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-			TrafficCounters[33] += SendCursor
-			TrafficCounters[34] += 1
-			TrafficCounters[5] += SendCursor
-			TrafficCounters[6] += 1
-		end,
-		FireAll = function(Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Trail(Value)
-			if not CheckUnreliableSize("Trail") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[33] += SendCursor
-				TrafficCounters[34] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-		FireList = function(List: {Player}, Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Trail(Value)
-			if not CheckUnreliableSize("Trail") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[33] += SendCursor
-				TrafficCounters[34] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Trail(Value)
-			if not CheckUnreliableSize("Trail") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[33] += SendCursor
-				TrafficCounters[34] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-	},
-	Ask = {
-		On = function(Listener: (Player, number) -> (number)): ()
-			Events.Reliable[3] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
-				local ReturnValue: number;
-				local Success, Error = pcall(function ()
-					ReturnValue = Listener(Player, Value)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Ask, ReturnValue, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 3)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "Ask", Error) then warn(`"Ask" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[3] or {}
-				Queue.Reliable[3] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[3](table.unpack(Arguments, 1, Arguments.n))
-				end
-			end)
-		end
-	},
-	Inner = {
-		Poll = {
-			Iter = function(): () -> (number, Player, number)
-				local index = 0
-				local queue = Queue.Reliable[4]
-				return function (): (number, Player, number)
-					index += 1
-					local arguments = Pop(queue)
-					if arguments ~= nil then
-						return index, unpack(arguments, 1, arguments.n)
-					end
-					return nil :: any, nil :: any, nil :: any
-				end
-			end,
-			--- @deprecated v0.14.1 -- Use `Iter` instead.
-			Next = function(): () -> (number, Player, number)
-				local index = 0
-				local queue = Queue.Reliable[4]
-				return function (): (number, Player, number)
-					index += 1
-					local arguments = Pop(queue)
-					if arguments ~= nil then
-						return index, unpack(arguments, 1, arguments.n)
-					end
-					return nil :: any, nil :: any, nil :: any
-				end
-			end
-		},
+	Mine = {
+		Set = function(Player: Player, Value: number): () PlayerStreamSet(STREAM_3, Player, Value) end,
+		Clear = function(Player: Player): () PlayerStreamClear(STREAM_3, Player) end,
+		Urgent = function(Player: Player): () PlayerStreamUrgent(STREAM_3, Player) end,
+		SetFast = function(Player: Player, Fast: boolean): () PlayerStreamSetFast(STREAM_3, Player, Fast) end,
 	},
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)

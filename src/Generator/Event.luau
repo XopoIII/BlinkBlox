@@ -12,6 +12,7 @@ local Builder = require("../Modules/Builder")
 local Decode = require("./Decode")
 local Generators = require("./Generators")
 local Listeners = require("./Listeners")
+local Outbound = require("./Outbound")
 local Parser = require("../Parser")
 local Prefabs = require("./Prefabs")
 local Queues = require("./Queue")
@@ -403,6 +404,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			Ordered = if IsSequenced then Index else nil,
 			Instances = Writes.CarriesInstances(Value.Data),
 			Traffic = Counters,
+			Low = Outbound.Low(Value.Priority),
 		}
 		local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 		if IsReliable then

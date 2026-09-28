@@ -55,6 +55,9 @@ export type Attributes = {
 	--> `saturate` clamps a value into its range on send. See Modules/FixedPoint and Parser/Scales.
 	Scale: number?,
 	Saturate: boolean?,
+	--> A quantized float's minimum in steps: `f32<0.01>(-1..1)` is sent as a u8 of steps above -100.
+	--> Set with the node rewritten to that integer; see Parser/Scales.
+	Offset: number?,
 }
 
 export type AttributesTokens = {
@@ -171,6 +174,9 @@ export type Event = Node<
 		Stream: StreamSettings?,
 		--> Set on a stamped event: the listener also receives when the client sent it.
 		Stamp: StampSettings?,
+		--> Set to "Low" on a server's unreliable event or stream that may be left out of a send to a
+		--> player whose outbound budget is spent.
+		Priority: ("Low" | "Normal")?,
 	},
 	{
 		Identifier: Token,

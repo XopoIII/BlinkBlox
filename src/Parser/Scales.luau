@@ -19,6 +19,7 @@ local Settings = require("../Settings")
 type Parser = ParserClass.Parser
 type Token = ParserClass.Token
 type NumberRange = ParserClass.NumberRange
+type Primitive = ParserClass.Primitive
 
 export type Modifiers = { Scale: number?, Saturate: boolean?, Token: Token }
 
@@ -33,7 +34,7 @@ function Parser.IsNumber(_self: Parser, Primitive: Settings.Primitive): boolean
 	return Primitive.Component and Primitive.Bounds ~= nil
 end
 
-function Parser.NumberModifiers(self: Parser, Primitive: Settings.Primitive, Type: Token): Modifiers?
+function Parser.NumberModifiers(self: Parser, _Primitive: Settings.Primitive, Type: Token): Modifiers?
 	local Open = self:TryConsume("OpenChevrons")
 	if not Open then
 		return nil
@@ -50,14 +51,6 @@ function Parser.NumberModifiers(self: Parser, Primitive: Settings.Primitive, Typ
 			if Scale then
 				self:Diagnostic(Error.AnalyzeInvalidModifier, "Repeated scale")
 					:Primary(Token, "A number has one scale")
-					:Emit()
-			elseif not Primitive.Integer then
-				self:Diagnostic(Error.AnalyzeInvalidModifier, "Only an integer takes a scale")
-					:Primary(Token, "Remove this scale")
-					:Secondary(Type, `"{Type.Value}" is a float, which carries its own fraction`)
-					:Note(
-						`Scale an integer instead: \`u16<{Token.Value}>\` sends round(v / {Token.Value}) in two bytes.`
-					)
 					:Emit()
 			end
 
@@ -106,6 +99,47 @@ end
 function Parser.ScaledBounds(_self: Parser, Primitive: Settings.Primitive, Scale: number): NumberRange
 	local Bounds = Primitive.Bounds or DOUBLE_BOUNDS
 	return Settings.NumberRange.new(FixedPoint.Decode(Bounds.Min, Scale), FixedPoint.Decode(Bounds.Max, Scale))
+end
+
+--- Quantizes a float with a scale: `f32<0.01>(-1..1)` is sent as its offset from the range's minimum,
+--- in whole steps, in the narrowest unsigned integer that holds the span -- 200 steps, one byte, where
+--- the float took four. The node becomes that integer, scaled, with `Offset` the minimum's steps, so
+--- the size analysis, the signature and the serialisers see a scaled integer; only the offset is new
+--- to them. It needs both bounds, since the span is what sizes it.
+function Parser.Quantize(self: Parser, Node: Primitive, Range: NumberRange?)
+	local Value = Node.Value
+	local Scale = Value.Scale :: number
+	local Token = Node.Tokens.Primitive
+
+	if not Range or Range.Min == -math.huge or Range.Max == math.huge then
+		self:Diagnostic(Error.AnalyzeInvalidModifier, "A scaled float needs a closed range")
+			:Primary(Token, `Give it both bounds: \`{Token.Value}<{Scale}>(0..100)\``)
+			:Note("A scaled float is sent as whole steps from its minimum, in as few bytes as its range needs.")
+			:Emit()
+		return
+	end
+
+	local Low = FixedPoint.Encode(Range.Min, Scale)
+	local Span = FixedPoint.Encode(Range.Max, Scale) - Low
+	local Name = if Span <= 255
+		then "u8"
+		elseif Span <= 65535 then "u16"
+		elseif Span <= 16777215 then "u24"
+		elseif Span <= 4294967295 then "u32"
+		else nil
+	if not Name then
+		self:Diagnostic(Error.AnalyzeInvalidModifier, "A scaled float's range holds too many steps")
+			:Primary(Token, `{Span} steps of {Scale} do not fit four bytes`)
+			:Note("Use a larger step, a narrower range, or the float itself.")
+			:Emit()
+		return
+	end
+
+	local Integer = table.clone(Token)
+	Integer.Value = Name
+	Value.Primitive = Settings.Primtives[Name]
+	Value.Offset = Low
+	Node.Tokens.Primitive = Integer
 end
 
 --- Refuses a bound of a scaled range that falls between two steps. `u16<0.1>(0..0.05)` would put

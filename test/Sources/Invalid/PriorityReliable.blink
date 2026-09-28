@@ -1,0 +1,13 @@
+-- expect E3035
+-- A send left out for the outbound budget is lost, and a reliable event promises that it is not.
+option ClientOutput = "../../Network/PriorityReliableClient.luau"
+option ServerOutput = "../../Network/PriorityReliableServer.luau"
+option OutboundBytesPerSecond = 20000
+
+event Score {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Priority: Low,
+    Data: u16
+}

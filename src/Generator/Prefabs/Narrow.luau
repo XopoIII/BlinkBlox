@@ -7,8 +7,22 @@
 --- it. So the receiver checks against the bounds narrowed the same way. The encodings are monotonic, so
 --- a value inside the declared range always decodes inside the narrowed one, and a value outside it
 --- never does.
+---
+--- An integer is never narrowed, but its read has limits of its own: `readu8` yields nothing outside
+--- 0..255, so a bound at or past them is met by the read and needs no comparison.
 
 local Narrow = {}
+
+local INTEGERS: { [string]: { number } } = {
+	u8 = { 0, 255 },
+	u16 = { 0, 65535 },
+	u24 = { 0, 16777215 },
+	u32 = { 0, 4294967295 },
+	i8 = { -128, 127 },
+	i16 = { -32768, 32767 },
+	i24 = { -8388608, 8388607 },
+	i32 = { -2147483648, 2147483647 },
+}
 
 function Narrow.f32(Value: number): number
 	if Value ~= Value or Value == math.huge or Value == -math.huge then
@@ -82,6 +96,17 @@ function Narrow.Bounds(Primitive: string, Min: number, Max: number): (number, nu
 	end
 
 	return Min, Max
+end
+
+--- The least and most a read of `Primitive` can yield: an integer type's limits, and unbounded for
+--- everything else -- a float read can yield NaN, which only a comparison refuses.
+function Narrow.Readable(Primitive: string): (number, number)
+	local Limits = INTEGERS[Primitive]
+	if Limits then
+		return Limits[1], Limits[2]
+	end
+
+	return -math.huge, math.huge
 end
 
 return Narrow

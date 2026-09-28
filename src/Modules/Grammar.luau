@@ -71,6 +71,9 @@ Grammar.OPTIONS = {
 	MaxUnreliableSize = "Number",
 	InboundBytesPerSecond = "Number",
 	InboundBurst = "Number",
+	OutboundBytesPerSecond = "Number",
+	OutboundBurst = "Number",
+	ClientFlushRate = "Number",
 	DefaultRate = "Number",
 	RequireRates = "Boolean",
 	Predict = "Boolean",
@@ -98,6 +101,7 @@ Grammar.DEFAULTS = {
 	InboundRatePackets = 8,
 	MaxUnreliableSize = 980,
 	UnreliableInstanceBytes = 6,
+	ClientFlushRate = 60,
 }
 
 --- The fields of an event's `Stream` block (docs/src/content/docs/language/streams.mdx): the rate
@@ -128,6 +132,9 @@ Grammar.EVENT = {
 	--- Milliseconds a client's send time may reach back: the server hands the listener the time the
 	--- client sent the event, no earlier than this before the server received it.
 	{ Key = "Stamp", Type = "Number", Values = {}, Optional = true, Numeric = true },
+	--- `Low` leaves a server's unreliable send to a player out while that player's outbound budget is
+	--- spent; see option OutboundBytesPerSecond.
+	{ Key = "Priority", Type = "Identifier", Values = { "Low", "Normal" }, Optional = true },
 	{ Key = "Data", Type = "Identifier", Values = {}, Optional = true },
 } :: { EventOption }
 
@@ -363,6 +370,14 @@ export type Options = {
 	--> the most it may bank. Checked before a packet is decoded, unlike the limits per packet.
 	InboundBytesPerSecond: number?,
 	InboundBurst: number?,
+
+	--> The per-player outbound budget: bytes the server may send one player each second, and the most
+	--> it may bank. Only a `Priority: Low` send is ever left out for it.
+	OutboundBytesPerSecond: number?,
+	OutboundBurst: number?,
+
+	--> The most times a second a client's Heartbeat sends what it has gathered; see Fragments.Heartbeat.
+	ClientFlushRate: number?,
 
 	--> Largest payload an unreliable event may send: its buffer, plus `UnreliableInstanceBytes` for
 	--> each Instance beside it. Roblox drops an UnreliableRemoteEvent whose payload passes 1000

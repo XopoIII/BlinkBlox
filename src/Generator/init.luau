@@ -11,10 +11,12 @@ local Table = require("./Modules/Table")
 local Batches = require("@self/Batches")
 local Blocks = require("@self/Blocks")
 local Bodies = require("@self/Bodies")
+local Decode = require("@self/Decode")
 local Fragments = require("@self/Fragments")
 local GenerateTypescript = require("@self/Typescript")
 local Lifecycle = require("@self/Lifecycle")
 local Limits = require("@self/Limits")
+local Outbound = require("@self/Outbound")
 local Prefabs = require("@self/Prefabs")
 local Serde = require("@self/Serde")
 --> `option TrafficStats`; every call below emits nothing when it is off.
@@ -211,7 +213,9 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	end
 
 	if not State.Options.ManualReplication then
-		Replication.Push("RunService.Heartbeat:Connect(StepReplication)")
+		for _, Line in Fragments.Heartbeat(State.Context, State.Options) do
+			Replication.Push(Line)
+		end
 	end
 
 	--> Parse declarations
@@ -243,16 +247,16 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> A channel this side receives nothing on has no branch to hang that on, and its index read
 	--> alone never failed: junk was consumed byte by byte up to MaxEventsPerPacket, unreported. The
 	--> connection itself stays, since a remote nobody connects to queues whatever is sent to it.
-	local function CloseIndex(Channel: Blocks.Block, Listening: boolean): Blocks.Block
-		if not Listening then
+	local function CloseIndex(Channel: Blocks.Block, Branches: { State.Branch }): Blocks.Block
+		if #Branches == 0 then
 			return Channel:Line(`error("[BlinkBlox]: This channel receives no events.")`)
 		end
 
-		return Channel:Branch("Default"):Line(UNKNOWN_EVENT):End()
+		return Decode.Close(Channel, Branches, UNKNOWN_EVENT)
 	end
 
-	State.Reliables = CloseIndex(State.Reliables, State.Channels.Reliable.Listening)
-	State.Unreliables = CloseIndex(State.Unreliables, State.Channels.Unreliable.Listening)
+	State.Reliables = CloseIndex(State.Reliables, State.Channels.Reliable.Branches)
+	State.Unreliables = CloseIndex(State.Unreliables, State.Channels.Unreliable.Branches)
 
 	--> Close the decode function opened above, then decode the packet one event at a time. What is
 	--> said about a failure, and to whom, is ReportDecodeFailure's business: the server is silent
@@ -312,6 +316,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Bodies.Ordering(),
 		Bodies.UnreliableGuard(),
 		Bodies.PacketLimits(),
+		Outbound.Body(),
 		(if State.Options.SyncValidation then SYNC_VALIDATION_BODY else {}),
 		State.Events.DumpLines(),
 		State.LuauTypes.DumpLines(),
@@ -319,10 +324,14 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		Limits.Body(AbstractSyntaxTree),
 		Preamble,
 		State.Noop.DumpLines(),
-		string.split(Traffic.Template(Source[2]), "\r"),
+		string.split(Outbound.Flush(Traffic.Template(Source[2])), "\r"),
 		Batches.Body(),
 		Stamps.Runtime(),
-		(if State.UsesStreams then { StreamParts[if State.Context == "Server" then 1 else 2] } else {}),
+		(
+			if State.UsesStreams
+				then { if State.Context == "Server" then Outbound.Streams(StreamParts[1]) else StreamParts[2] }
+				else {}
+		),
 		State.Streams.DumpLines(),
 		Lifecycle.Connections(
 			State.Context,

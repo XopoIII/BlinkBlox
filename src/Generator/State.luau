@@ -2,7 +2,7 @@
 --- Everything one generation run builds up, in one table.
 ---
 --- These were module-level locals of Generator/init.luau, and several of them are REASSIGNED while
---- a run is under way -- an event swaps `Reliables` for the block it just branched into. A local is
+--- a run is under way -- the decode functions are swapped in once the connections are open. A local is
 --- an upvalue of the file that declares it, so no other file could take part in generating. Held as
 --- fields of one shared table, the event, function and type generators can live in files of their
 --- own and still read and write the same values.
@@ -15,6 +15,9 @@ local Prefabs = require("./Prefabs")
 local Settings = require("../Settings")
 
 export type Context = "Client" | "Server" | "Shared"
+
+--- One declaration's branch of a channel's decode loop, by the index it is sent under.
+export type Branch = { Index: number, Block: Blocks.Block }
 
 export type State = {
 	--- The scope whose declarations are being generated; swapped on the way into a nested scope.
@@ -33,7 +36,7 @@ export type State = {
 	--- Each stream's scheduler entry and the send it calls, emitted after the stream runtime.
 	Streams: Builder.Builder,
 
-	--- The decode branch each channel's next event is added to; reassigned as events are added.
+	--- Each channel's decode function, which its branches are nested in; see Decode.Close.
 	Reliables: Blocks.Block,
 	Unreliables: Blocks.Block,
 
@@ -62,8 +65,9 @@ export type State = {
 	--- (N - 1) * 4 + 1.
 	RateSlots: { { Rate: number, Burst: number } },
 
-	--- How many events each channel carries, and whether this side listens on it.
-	Channels: { [string]: { Count: number, Listening: boolean } },
+	--- How many events each channel carries, and the decode branch of each declaration this side
+	--- listens for on it: none means this side receives nothing there.
+	Channels: { [string]: { Count: number, Branches: { Branch } } },
 
 	Reset: () -> (),
 }
@@ -92,8 +96,8 @@ local State: State = {
 	UsesPromise = false,
 	RateSlots = {},
 	Channels = {
-		Reliable = { Count = 0, Listening = false },
-		Unreliable = { Count = 0, Listening = false },
+		Reliable = { Count = 0, Branches = {} },
+		Unreliable = { Count = 0, Branches = {} },
 	},
 
 	Reset = nil :: any,
@@ -118,7 +122,7 @@ function State.Reset()
 
 	for _, Channel in State.Channels do
 		Channel.Count = 0
-		Channel.Listening = false
+		table.clear(Channel.Branches)
 	end
 end
 

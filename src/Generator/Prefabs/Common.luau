@@ -115,7 +115,7 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 		local Modified = Value.Scale ~= nil or Value.Saturate == true
 		local WireRange = if Range and Value.Scale then Fixed.WireBounds(Declaration) else Range
 
-		local function GenerateValidation(Block: Block, TargetVariable: string)
+		local function GenerateValidation(Block: Block, TargetVariable: string, Measure: string?)
 			if Block == Write and WriteValidations ~= true then
 				return
 			end
@@ -140,21 +140,25 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 
 			if WireRange then
 				local Min, Max = WireRange.Min, WireRange.Max
+				--> A side the value can reach. An open side of a float range is infinite, and every
+				--> value passes it; on receipt, a side an integer's read already meets passes too -- a
+				--> scaled one's included, since it is checked in the steps it was read as. Either line is
+				--> left out rather than emitted -- `inf` would read as a nil global -- and NaN is still
+				--> refused, because a float's remaining side is `not (x >= Min)`.
+				local Floor, Ceiling = -math.huge, math.huge
 				if Block == Read then
 					Min, Max = Narrow.Bounds(Primitive, Min, Max)
+					Floor, Ceiling = Narrow.Readable(Primitive)
 				end
 
-				local Assert = AssertGenerator(TargetVariable, Min, Max)
+				local Assert = AssertGenerator(TargetVariable, Min, Max, Measure)
 				if not IsVariableSize and Assert.Exact then
 					Block:Line(Assert.Exact)
 				else
-					--> An open side of a float range is infinite, and every value passes it. Its line is
-					--> left out rather than emitted, since `inf` would read as a nil global. NaN is still
-					--> refused, because the side that remains is written `not (x >= Min)`.
-					if WireRange.Min ~= -math.huge then
+					if WireRange.Min > Floor then
 						Block:Line(Assert.Lower)
 					end
-					if WireRange.Max ~= math.huge then
+					if WireRange.Max < Ceiling then
 						Block:Line(Assert.Upper)
 					end
 				end
@@ -179,6 +183,18 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 			end
 		end
 
+		--> A number checked on receipt into a field is read into a local, checked there, then stored.
+		--> Checked where it was stored, each comparison read the field back out of its table, and on a
+		--> struct of three ranged numbers that was a third of the time spent decoding it. The local lives
+		--> in the field's own scope (Generator/Scope.luau), so it costs no register past the field.
+		local Checked = Target
+		if Type == "number" and not Modified and WireRange and string.find(Target, "[%.%[]") then
+			local Floor, Ceiling = Narrow.Readable(Primitive)
+			if not IsVariableSize or WireRange.Min > Floor or WireRange.Max < Ceiling then
+				Checked = "Checked"
+			end
+		end
+
 		if Modified then
 			Fixed.Write(Declaration, Target, Write, WriteValidations, function(Converted: string)
 				Prefab.Write(Converted, Write, Range, Components)
@@ -187,12 +203,17 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 			GenerateValidation(Write, Target)
 		end
 
-		Prefab.Read(Target, Read, Range, Components)
+		Prefab.Read(Checked, Read, Range, Components)
 		if not Modified then
 			Prefab.Write(Target, Write, Range, Components)
 		end
 
-		GenerateValidation(Read, Target)
+		if Checked ~= Target then
+			GenerateValidation(Read, Target, Checked)
+			Read:Line(`{Target} = {Checked}`)
+		else
+			GenerateValidation(Read, Target)
+		end
 		if Modified then
 			Fixed.Read(Declaration, Target, Read)
 		end

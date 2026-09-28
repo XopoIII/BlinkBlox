@@ -18,7 +18,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "55c00a6715ef1d01"
+local SCHEMA_SIGNATURE = "82a4181b3949691b"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -515,25 +515,6 @@ local EventNames: any = {
 }
 
 
---> Sequence numbers for ordered unreliable events, one counter per event each way.
-local OrderOut: { number } = {}
-local OrderIn: { number } = {}
-
---> Accepts a packet only if it is newer than the last one seen for this event.
-local function OrderAccept(Slot: number, Identifier: number): boolean
-	local State = OrderIn
-	local Last = State[Slot]
-	if Last ~= nil then
-		local Ahead = (Identifier - Last) % 65536
-		if Ahead == 0 or Ahead >= 32768 then
-			return false
-		end
-	end
-
-	State[Slot] = Identifier
-	return true
-end
-
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
 --> runtime, and says which event did it. Each Instance sent beside the buffer costs the
@@ -555,150 +536,80 @@ local MAX_INSTANCES_PER_PACKET = 256
 local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Unreliable[0] = table.create(256)
-EventNames.Unreliable[0] = "Heads"
-Queue.Unreliable[1] = CreateQueue()
-EventNames.Unreliable[1] = "Aim"
-Events.Unreliable[2] = {}
+EventNames.Unreliable[0] = "Chatter"
+Queue.Unreliable[1] = table.create(256)
+EventNames.Unreliable[1] = "Hit"
+Queue.Reliable[0] = table.create(256)
+EventNames.Reliable[0] = "Score"
 Queue.Unreliable[2] = table.create(256)
-EventNames.Unreliable[2] = "Clock"
-export type Head = { Id: number, Head: Vector3, Back: boolean }
-function SerdesFunctions.ReadEVENT_Heads(): ({ { Id: number, Head: Vector3, Back: boolean } }?, number)
+EventNames.Unreliable[2] = "Crowd"
+Queue.Unreliable[3] = table.create(256)
+EventNames.Unreliable[3] = "Mine"
+function SerdesFunctions.ReadEVENT_Chatter(): (buffer)
+	local RecieveBuffer = RecieveBuffer
+	-- Value: Chatter
+	local Length = ReadVarLength()
+	if Length > 500 then error(`Expected size of "Value" to be smaller than or equal to 500, got {Length} instead.`) end
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local Value = buffer.create(Length)
+	buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
+	return Value
+end
+
+function SerdesFunctions.ReadEVENT_Hit(): (number)
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
+	-- Value: Hit
+	local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	return Value
+end
+
+function SerdesFunctions.ReadEVENT_Score(): (number)
+	-- Read BLOCK: 2 bytes
+	local BLOCK_START = Read(2)
+	local RecieveBuffer = RecieveBuffer
+	-- Value: Score
+	local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	return Value
+end
+
+function SerdesFunctions.ReadEVENT_Crowd(): (number?, number)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
 	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
-	-- Value: Heads
-	-- Value1: Heads
+	-- Value: Crowd
+	-- Value1: Crowd
 	local Value1
 	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_1_0, 0x01) then
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		-- Value1: Heads
-		-- START ARRAY
-		local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		if not (Length <= 16) then error(`Expected "Length" to be smaller than or equal to 16, got {Length} instead.`) end
-		if Length * 11 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value1 = table.create(Length)
-			-- Read BLOCK: 11 bytes
-		local ARRAY_START_2 = Read(11 * Length)
-		local BITFIELD_3_0
-		for Slot_2 = 1, Length do
-			-- Item_2: Heads
-			local Item_2 = {Id = false, Head = false, Back = false} :: any
-			do
-				-- Item_2.Id: Id
-				-- Read 1
-				local OPERATION_OFFSET_0 = ARRAY_START_2
-				ARRAY_START_2 += 1
-				Item_2.Id = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-			end
-			do
-				-- Item_2.Head: Head
-				-- Read 3
-				local OPERATION_OFFSET_1 = ARRAY_START_2
-				ARRAY_START_2 += 3
-				local Encoded = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_1) + buffer.readu8(RecieveBuffer, OPERATION_OFFSET_1 + 2) * 0x10000
-				local X
-				local MantissaExponent = Encoded % 0x800000
-				if MantissaExponent == 0x7E0000 then
-					X = if Encoded >= 0x800000 then -math.huge else math.huge
-				elseif MantissaExponent > 0x7E0000 then
-					X = 0 / 0
-				elseif MantissaExponent == 0 then
-					X = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x20000
-					local Exponent = MantissaExponent // 0x20000
-					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
-					local Result = math.ldexp(Fraction, Exponent - 30)
-					X = if Encoded >= 0x800000 then -Result else Result
-				end
-				-- Read 3
-				local OPERATION_OFFSET_2 = ARRAY_START_2
-				ARRAY_START_2 += 3
-				Encoded = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_2) + buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2 + 2) * 0x10000
-				local Y
-				MantissaExponent = Encoded % 0x800000
-				if MantissaExponent == 0x7E0000 then
-					Y = if Encoded >= 0x800000 then -math.huge else math.huge
-				elseif MantissaExponent > 0x7E0000 then
-					Y = 0 / 0
-				elseif MantissaExponent == 0 then
-					Y = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x20000
-					local Exponent = MantissaExponent // 0x20000
-					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
-					local Result = math.ldexp(Fraction, Exponent - 30)
-					Y = if Encoded >= 0x800000 then -Result else Result
-				end
-				-- Read 3
-				local OPERATION_OFFSET_3 = ARRAY_START_2
-				ARRAY_START_2 += 3
-				Encoded = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_3) + buffer.readu8(RecieveBuffer, OPERATION_OFFSET_3 + 2) * 0x10000
-				local Z
-				MantissaExponent = Encoded % 0x800000
-				if MantissaExponent == 0x7E0000 then
-					Z = if Encoded >= 0x800000 then -math.huge else math.huge
-				elseif MantissaExponent > 0x7E0000 then
-					Z = 0 / 0
-				elseif MantissaExponent == 0 then
-					Z = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x20000
-					local Exponent = MantissaExponent // 0x20000
-					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
-					local Result = math.ldexp(Fraction, Exponent - 30)
-					Z = if Encoded >= 0x800000 then -Result else Result
-				end
-				Item_2.Head = Vector3.new(X, Y, Z)
-			end
-			do
-				-- Item_2.Back: Back
-				-- Read 1
-				local OPERATION_OFFSET_4 = ARRAY_START_2
-				ARRAY_START_2 += 1
-				BITFIELD_3_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_4)
-				Item_2.Back = bit32.btest(BITFIELD_3_0, 0x01)
-			end
-			Value1[Slot_2] = Item_2
-		end
-		-- END ARRAY
+		-- Read BLOCK: 2 bytes
+		local BLOCK_START = Read(2)
+		-- Value1: Crowd
+		Value1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	end
-	-- Value2: Heads
+	-- Value2: Crowd
 	local Value2 = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
 	return Value1, Value2
 end
 
-function SerdesFunctions.ReadEVENT_Aim(): (Vector3)
-	-- Read BLOCK: 12 bytes
-	local BLOCK_START = Read(12)
-	local RecieveBuffer = RecieveBuffer
-	-- Value: Aim
-	local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-	local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
-	local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
-	local Value = Vector3.new(X, Y, Z)
-	return Value
-end
-
-function SerdesFunctions.World_ReadEVENT_Clock(): (number?, number)
+function SerdesFunctions.ReadEVENT_Mine(): (number?, number)
 	-- Read BLOCK: 3 bytes
 	local BLOCK_START = Read(3)
 	local BITFIELD_1_0
 	local RecieveBuffer = RecieveBuffer
-	-- Value: Clock
-	-- Value1: Clock
+	-- Value: Mine
+	-- Value1: Mine
 	local Value1
 	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if bit32.btest(BITFIELD_1_0, 0x01) then
-		-- Read BLOCK: 8 bytes
-		local BLOCK_START = Read(8)
-		-- Value1: Clock
-		Value1 = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+		-- Read BLOCK: 2 bytes
+		local BLOCK_START = Read(2)
+		-- Value1: Mine
+		Value1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	end
-	-- Value2: Clock
+	-- Value2: Mine
 	local Value2 = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
 	return Value1, Value2
 end
@@ -707,23 +618,26 @@ if not RunService:IsRunning() then
 	local NOOP = function() end
 	local NOOP_RETURNING = function() return NOOP end
 	local Returns = table.freeze({
-		stepReplication = NOOP,
-		setRateLimitHandler = NOOP,
-		setDecodeErrorHandler = NOOP,
-		setPacketDropHandler = NOOP,
-		setListenerErrorHandler = NOOP,
-		remotes = REMOTE_NAMES,
-	Heads = {
-		on = NOOP_RETURNING
+		StepReplication = NOOP,
+		SetRateLimitHandler = NOOP,
+		SetDecodeErrorHandler = NOOP,
+		SetPacketDropHandler = NOOP,
+		SetListenerErrorHandler = NOOP,
+		Remotes = REMOTE_NAMES,
+	Chatter = {
+		On = NOOP_RETURNING
 	},
-	Aim = {
-		iter = NOOP_RETURNING,
-		next = NOOP_RETURNING
+	Hit = {
+		On = NOOP_RETURNING
 	},
-	World = {
-		Clock = {
-			on = NOOP_RETURNING
-		},
+	Score = {
+		On = NOOP_RETURNING
+	},
+	Crowd = {
+		On = NOOP_RETURNING
+	},
+	Mine = {
+		On = NOOP_RETURNING
 	},
 	})
 	return Returns :: BLINK_EVENTS_SYMBOL
@@ -963,7 +877,22 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
+		if Index == 0 then
+			local Value: number = SerdesFunctions.ReadEVENT_Score()
+			local BOUND_LISTENER = Events.Reliable[0]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Score"
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			else
+				if #Queue.Reliable[0] > 256 then
+					warn("[BlinkBlox]: Event queue of \"Score\" exceeded 256, did you forget to implement a listener?")
+				end
+				table.insert(Queue.Reliable[0], table.pack(Value))
+			end
+		else
+			error("[BlinkBlox]: Unknown event index.")
+		end
 	end
 	local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeEvent, Size)
 	if not Parsed then
@@ -989,32 +918,41 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 		local Index = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		Decoding = Index
 		if Index == 0 then
-			local Value1: { { Id: number, Head: Vector3, Back: boolean } }?, Value2: number = SerdesFunctions.ReadEVENT_Heads()
+			local Value: buffer = SerdesFunctions.ReadEVENT_Chatter()
+			local BOUND_LISTENER = Events.Unreliable[0]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Chatter"
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+		elseif Index == 1 then
+			local Value: number = SerdesFunctions.ReadEVENT_Hit()
+			local BOUND_LISTENER = Events.Unreliable[1]
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Hit"
+				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value)
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+		elseif Index == 2 then
+			local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Crowd()
 			Value2 = UnwrapStamp(Value2)
-			if StreamAccept(0, Value2) == true then
-				local BOUND_LISTENER = Events.Unreliable[0]
+			if StreamAccept(2, Value2) == true then
+				local BOUND_LISTENER = Events.Unreliable[2]
 				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "Heads"
+					SerdesEvent = "Crowd"
 					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2)
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
-		elseif Index == 1 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-			local Arguments = table.pack(SerdesFunctions.ReadEVENT_Aim())
-			if OrderAccept(1, OrderIdentifier) then
-				Push(Queue.Unreliable[1], Arguments)
-			end
-		elseif Index == 2 then
-			local Value1: number?, Value2: number = SerdesFunctions.World_ReadEVENT_Clock()
+		elseif Index == 3 then
+			local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Mine()
 			Value2 = UnwrapStamp(Value2)
-			if StreamAccept(2, Value2) == true then
-				local Epoch = ListenerEpoch
-				for _, Listener in Events.Unreliable[2] do
-					if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[2], Listener) == nil then continue end
-					Spawn(Listener, Value1, Value2)
+			if StreamAccept(3, Value2) == true then
+				local BOUND_LISTENER = Events.Unreliable[3]
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "Mine"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Value1, Value2)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 			end
 		else
@@ -1029,22 +967,22 @@ end)
 
 
 local Returns = table.freeze({
-	stepReplication = StepReplication,
+	StepReplication = StepReplication,
 
-	setRateLimitHandler = SetRateLimitHandler,
+	SetRateLimitHandler = SetRateLimitHandler,
 
-	setDecodeErrorHandler = SetDecodeErrorHandler,
+	SetDecodeErrorHandler = SetDecodeErrorHandler,
 
-	setPacketDropHandler = SetPacketDropHandler,
+	SetPacketDropHandler = SetPacketDropHandler,
 
-	setListenerErrorHandler = SetListenerErrorHandler,
+	SetListenerErrorHandler = SetListenerErrorHandler,
 
-	remotes = REMOTE_NAMES,
+	Remotes = REMOTE_NAMES,
 
-	Heads = {
-		on = function(Listener: (Value: { { Id: number, Head: Vector3, Back: boolean } }?, ServerTime: number) -> ()): () -> ()
+	Chatter = {
+		On = function(Listener: (Value: buffer) -> ()): () -> ()
 			if Events.Unreliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Heads\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+				warn("[BlinkBlox]: \"Chatter\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
 			Events.Unreliable[0] = Listener
 			return function (): ()
@@ -1054,50 +992,63 @@ local Returns = table.freeze({
 			end
 		end
 	},
-	Aim = {
-		iter = function(): () -> (number, Vector3)
-			local index = 0
-			local queue = Queue.Unreliable[1]
-			return function (): (number, Vector3)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
+	Hit = {
+		On = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Unreliable[1] ~= nil then
+				warn("[BlinkBlox]: \"Hit\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		next = function(): () -> (number, Vector3)
-			local index = 0
-			local queue = Queue.Unreliable[1]
-			return function (): (number, Vector3)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
+			Events.Unreliable[1] = Listener
+			return function (): ()
+				if Events.Unreliable[1] == Listener then
+					Events.Unreliable[1] = nil
 				end
-				return nil :: any, nil :: any
 			end
 		end
 	},
-	World = {
-		Clock = {
-			on = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
-				local Listeners = table.clone(Events.Unreliable[2])
-				table.insert(Listeners, Listener)
-				Events.Unreliable[2] = Listeners
-				return function (): ()
-					local Index = table.find(Events.Unreliable[2], Listener)
-					if Index ~= nil then
-						local Listeners = table.clone(Events.Unreliable[2])
-						table.remove(Listeners, Index)
-						Events.Unreliable[2] = Listeners
-						ListenerEpoch += 1
-					end
+	Score = {
+		On = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Reliable[0] ~= nil then
+				warn("[BlinkBlox]: \"Score\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Reliable[0] = Listener
+			local Pending = Queue.Reliable[0]
+			Queue.Reliable[0] = {}
+			for _, Arguments in Pending do
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+			return function (): ()
+				if Events.Reliable[0] == Listener then
+					Events.Reliable[0] = nil
 				end
 			end
-		},
+		end
+	},
+	Crowd = {
+		On = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
+			if Events.Unreliable[2] ~= nil then
+				warn("[BlinkBlox]: \"Crowd\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Unreliable[2] = Listener
+			return function (): ()
+				if Events.Unreliable[2] == Listener then
+					Events.Unreliable[2] = nil
+				end
+			end
+		end
+	},
+	Mine = {
+		On = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
+			if Events.Unreliable[3] ~= nil then
+				warn("[BlinkBlox]: \"Mine\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Unreliable[3] = Listener
+			return function (): ()
+				if Events.Unreliable[3] == Listener then
+					Events.Unreliable[3] = nil
+				end
+			end
+		end
 	},
 })
 type BLINK_EVENTS_SYMBOL = typeof(Returns)

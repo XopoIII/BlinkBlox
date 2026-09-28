@@ -162,6 +162,15 @@ function Parser.Event(self: Parser, Name: Token): Event
 		Data, Stamp = self:StampData(Name, Structure)
 	end
 
+	--> What a low priority leaves out is an unreliable send the server makes; nothing else can be
+	--> skipped without the receiver noticing a gap.
+	if Structure.Priority ~= nil and (Structure.From ~= "Server" or Structure.Type == "Reliable") then
+		self:Diagnostic(Error.AnalyzeInvalidPriority, `Event "{Name.Value}" cannot take a Priority`)
+			:Primary(Name, "Priority is for an unreliable event or stream the server sends")
+			:Note("A send left out for the budget is lost, which only an unreliable event may be.")
+			:Emit()
+	end
+
 	return {
 		Type = "Event",
 		Name = Name.Value,
@@ -174,6 +183,7 @@ function Parser.Event(self: Parser, Name: Token): Event
 			Burst = Structure.Burst,
 			Stream = Stream,
 			Stamp = Stamp,
+			Priority = Structure.Priority,
 		},
 		Tokens = {
 			Identifier = Name,

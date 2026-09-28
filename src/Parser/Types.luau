@@ -157,6 +157,10 @@ function Parser.Type(self: Parser, Name: Token, Keyword: Token?, IsDataField: bo
 			Value.Range = Range.Range
 			Tokens.Range = Range.Token
 		end
+
+		if Value.Scale and not Primitive.Integer then
+			self:Quantize(Declaration :: Primitive, Value.Range)
+		end
 	end
 
 	local function WrapInOptional()

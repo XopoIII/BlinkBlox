@@ -596,7 +596,6 @@ function SerdesFunctions.ReadEVENT_Crawls(): ({ { Id: number, Speed: number, Hea
 		-- Value1: Crawls
 		-- START ARRAY
 		local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		if not (Length >= 0) then error(`Expected "Length" to be larger than or equal to 0, got {Length} instead.`) end
 		if not (Length <= 16) then error(`Expected "Length" to be smaller than or equal to 16, got {Length} instead.`) end
 		if Length * 4 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 		Value1 = table.create(Length)
@@ -618,7 +617,6 @@ function SerdesFunctions.ReadEVENT_Crawls(): ({ { Id: number, Speed: number, Hea
 				local OPERATION_OFFSET_1 = ARRAY_START_2
 				ARRAY_START_2 += 2
 				Item_2.Speed = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_1)
-				if not (Item_2.Speed >= 0) then error(`Expected "Item_2.Speed" to be larger than or equal to 0, got {Item_2.Speed} instead.`) end
 				if not (Item_2.Speed <= 1000) then error(`Expected "Item_2.Speed" to be smaller than or equal to 1000, got {Item_2.Speed} instead.`) end
 				Item_2.Speed = Item_2.Speed / 10
 			end
@@ -977,7 +975,16 @@ local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 		DecodeEvent()
 	end
 end
-RunService.Heartbeat:Connect(StepReplication)
+local FLUSH_INTERVAL = 1 / 60
+local FlushClock = 0
+RunService.Heartbeat:Connect(function(Delta: number)
+	FlushClock += Delta
+	if FlushClock < FLUSH_INTERVAL * 0.9 then
+		return
+	end
+	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
+	StepReplication()
+end)
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
 	RecieveBuffer = Buffer

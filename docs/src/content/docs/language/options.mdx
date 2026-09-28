@@ -39,6 +39,7 @@ A few rules hold for all of them:
 | `ExportLimits` | boolean | `false` | [Output](#exportlimits) |
 | `FutureLibrary`, `PromiseLibrary` | Luau path | none | [Output](#futurelibrary-and-promiselibrary) |
 | `ManualReplication` | boolean | `false` | [Runtime behaviour](#manualreplication) |
+| `ClientFlushRate` | sends a second | `60` | [Runtime behaviour](#clientflushrate) |
 | `BatchUnreliable` | boolean | `false` | [Runtime behaviour](#batchunreliable) |
 | `UsePolling` | boolean | `false` | [Runtime behaviour](#usepolling) |
 | `Predict` | boolean | `false` | [Runtime behaviour](#predict) |
@@ -52,6 +53,8 @@ A few rules hold for all of them:
 | `MaxInstancesPerPacket` | instances | `256` | [Inbound limits](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) |
 | `InboundBytesPerSecond` | bytes | `8 * MaxPacketSize` | [Inbound limits](#inboundbytespersecond-inboundburst) |
 | `InboundBurst` | bytes | the larger of the above and `MaxPacketSize` | [Inbound limits](#inboundbytespersecond-inboundburst) |
+| `OutboundBytesPerSecond` | bytes | none | [Outbound budget](#outboundbytespersecond-outboundburst) |
+| `OutboundBurst` | bytes | one second of the above | [Outbound budget](#outboundbytespersecond-outboundburst) |
 | `DefaultRate` | events a second | none | [Rate limits](#defaultrate-requirerates) |
 | `RequireRates` | boolean | `false` | [Rate limits](#defaultrate-requirerates) |
 | `InvocationTimeout` | seconds | `10` | [Invocations](#invocationtimeout) |
@@ -228,6 +231,27 @@ RunService.PostSimulation:Connect(function()
     Net.StepReplication()
 end)
 ```
+
+### `ClientFlushRate`
+Default: `60`
+
+The most times a second a client's Heartbeat sends what it has gathered. A client running at 60 frames
+a second or fewer sends every frame; one at 144 or 240 sends 60 times a second, and what a frame fires
+waits for the next send.
+
+Every remote call costs about 11 bytes beside its payload -- measured in Studio, 240 calls of 40 bytes a
+second went out as 13.2 KB/s, and 60 calls of 160 bytes as 11.2 KB/s -- and the server's
+[inbound budget](#inboundbytespersecond-inboundburst) charges each packet at least 128 bytes, so a client
+at 500 frames a second that sent every frame spent the whole default budget on those floors alone.
+Roblox's own network step runs 60 times a second, so a send made more often does not arrive sooner.
+
+```blink
+option ClientFlushRate = 120
+```
+
+It limits the Heartbeat only: `StepReplication` called by the game still sends at once, and under
+[`ManualReplication`](#manualreplication) there is no Heartbeat to limit. An unreliable event outside
+[`BatchUnreliable`](#batchunreliable) is sent when it is fired, as before.
 
 ### `BatchUnreliable`
 Default: `false`
@@ -562,6 +586,31 @@ Refusals are reported at most once per player per second. With a
 with the reason `Budget` and the refused packet's length. Without one they are reported the way
 refused events are: a warning, and a call to
 [`SetRateLimitHandler`](/BlinkBlox/language/events/#rate-burst)'s handler with `Event` set to `nil`.
+
+## Outbound budget
+
+### `OutboundBytesPerSecond`, `OutboundBurst`
+Defaults: none, and a burst of one second of the rate
+
+Bound how many bytes a second the server sends each player, by leaving out what the schema marked as
+expendable.
+
+```blink
+option OutboundBytesPerSecond = 20000
+option OutboundBurst = 40000
+```
+
+Every byte the server sends a player is charged to that player's bucket: the reliable batch, the
+unreliable batches, every unreliable send, and each player's share of a send to everyone. Nothing is
+refused for it but a [`Priority: Low`](/BlinkBlox/language/events/#priority) event or stream, which is
+left out while the player's bucket is empty. Everything else still goes, and still spends: a frame of
+reliable traffic that overdraws the bucket keeps the low sends out until it has been paid back.
+
+This is for a game that sends more than a slow connection takes. Roblox queues reliable traffic a
+player cannot keep up with, and their ping climbs with it; the budget gives the bytes to the events
+that matter first. A server that stays under what its players can take never notices it.
+
+Without the option the module carries no budget at all, and a send costs what it always did.
 
 ## Rate limits
 

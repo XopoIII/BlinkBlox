@@ -102,6 +102,7 @@ export type Methods = {
 	) -> { Scale: number?, Saturate: boolean?, Token: Token }?,
 	ScaledBounds: (self: Parser, Primitive: Settings.Primitive, Scale: number) -> NumberRange,
 	CheckScaledRange: (self: Parser, Range: NumberRange, Token: Token, Scale: number) -> (),
+	Quantize: (self: Parser, Node: Primitive, Range: NumberRange?) -> (),
 
 	--> Document.luau
 	Parse: (self: Parser, Source: string, Scope: Scope?) -> Body,

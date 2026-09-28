@@ -550,7 +550,6 @@ function SerdesFunctions.ReadEVENT_Announce(): (string)
 	local RecieveBuffer = RecieveBuffer
 	-- Value: Announce
 	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-	if Length < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {Length} instead.`) end
 	if Length > 64 then error(`Expected length of "Value" to be smaller than or equal to 64, got {Length} instead.`) end
 	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 	local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
@@ -857,7 +856,16 @@ local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 		DecodeEvent()
 	end
 end
-RunService.Heartbeat:Connect(StepReplication)
+local FLUSH_INTERVAL = 1 / 60
+local FlushClock = 0
+RunService.Heartbeat:Connect(function(Delta: number)
+	FlushClock += Delta
+	if FlushClock < FLUSH_INTERVAL * 0.9 then
+		return
+	end
+	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
+	StepReplication()
+end)
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
 	RecieveBuffer = Buffer

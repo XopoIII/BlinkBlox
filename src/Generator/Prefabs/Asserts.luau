@@ -42,8 +42,9 @@ local function Bounds(
 end
 
 local Asserts = {
-	number = function(Variable: string, Min: number, Max: number): AssertPrefab
-		return Bounds(Variable, Min, Max, "", Variable, true)
+	--> `Measure` names a local the value was read into, when it is checked there and stored after.
+	number = function(Variable: string, Min: number, Max: number, Measure: string?): AssertPrefab
+		return Bounds(Variable, Min, Max, "", Measure or Variable, true)
 	end,
 
 	--> `Measure` names the expression to compare. The read path passes the decoded length so the
@@ -137,8 +138,23 @@ local function EmitLengthGuard(Block: Block, Lower: number, Upper: number, Lengt
 	Block:Line(Assert.Upper)
 end
 
+--- Emits the checks a received length still needs once its prefix is read. The prefix carries the
+--- length's offset from `Lower` as an unsigned numeral, so the length cannot fall below `Lower`, and it
+--- cannot pass `Lower` plus the most that numeral holds -- 65535 for a varint, which ReadVarLength
+--- refuses past, or a fixed numeral's ceiling. A bound the prefix already meets is a comparison that
+--- never fails, run once per string and once per array on every packet, so only an `Upper` short of
+--- that ceiling is checked.
+local function EmitReceivedLength(Block: Block, Assert: AssertPrefab, Lower: number, Upper: number, Written: boolean)
+	local Varint, _, Bytes = Size.LengthPrefix(Upper - Lower, Written)
+	local Ceiling = if Varint then 65535 else 256 ^ Bytes - 1
+	if Lower + Ceiling > Upper then
+		Block:Line(Assert.Upper)
+	end
+end
+
 return {
 	Asserts = Asserts,
+	EmitReceivedLength = EmitReceivedLength,
 	EmitLengthGuard = EmitLengthGuard,
 	GenerateSpaceGuard = GenerateSpaceGuard,
 	EmitCapacityGuard = EmitCapacityGuard,
