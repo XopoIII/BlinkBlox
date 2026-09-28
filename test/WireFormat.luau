@@ -255,6 +255,24 @@ RunClosure("Packed boolean arrays", function()
 		end
 	end
 
+	--> The server tests each bit, where native code inlines it, and the client copies a byte's eight
+	--> elements from a table of rows, which interprets faster: every byte, at every length of a last
+	--> partial byte and a whole one, written by one side and read by the other both ways.
+	for Byte = 0, 255 do
+		for Length = 1, 16 do
+			local Value = table.create(Length)
+			for Index = 1, Length do
+				Value[Index] = bit32.btest(Byte, bit32.lshift(1, (Index - 1) % 8))
+			end
+			local FromServer = Client.PackedBooleans.Read(Server.PackedBooleans.Write(Value))
+			local FromClient = Server.PackedBooleans.Read(Client.PackedBooleans.Write(Value))
+			if not Equals(FromServer, Value) or not Equals(FromClient, Value) then
+				ErrorPrint(`Failed "Packed boolean arrays": byte {Byte} at length {Length} read differently on a side.`)
+				return
+			end
+		end
+	end
+
 	--> Bit order is part of the format: element one is the least significant bit, like `Block.Bit`.
 	local Ordered = Client.PackedBooleans.Write({ true, false, false, false, false, false, false, false, true })
 	--> After the one-byte length.

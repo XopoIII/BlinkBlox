@@ -173,6 +173,16 @@ function Utility.Parse(Reader: Reader): Options
 					:Primary(Value, `Expected one of {ListKeys(Settings.Casings)}`)
 					:Emit()
 			end
+			if Name == "PackedBooleanReader" and Settings.PackedBooleanReaders[Value.Value] == nil then
+				Error.new(
+					Error.ParserUnknownOption,
+					Reader.Source,
+					`Invalid value for option "PackedBooleanReader"`,
+					Reader.File
+				)
+					:Primary(Value, `Expected one of {ListKeys(Settings.PackedBooleanReaders)}`)
+					:Emit()
+			end
 
 			if not Excluded then
 				Options[Name] = Value.Value

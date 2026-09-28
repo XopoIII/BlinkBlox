@@ -330,6 +330,9 @@ return {
 	--> rather than keeping a second list that drifts from it.
 	Casings = Indexes,
 
+	--> `option PackedBooleanReader`: see Generator/PackedBooleans.luau.
+	PackedBooleanReaders = { Auto = true, Bits = true, Rows = true },
+
 	GetCasing = function(Case: Case): Cases
 		local Index = Indexes[Case]
 		if not Index then

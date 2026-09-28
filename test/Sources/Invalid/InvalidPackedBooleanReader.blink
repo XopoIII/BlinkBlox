@@ -1,0 +1,5 @@
+-- expect E2003
+-- A reader other than the three the generator knows would otherwise emit neither and read nothing.
+option PackedBooleanReader = "Bytes"
+option ClientOutput = "../../Network/ReaderClient.luau"
+option ServerOutput = "../../Network/ReaderServer.luau"

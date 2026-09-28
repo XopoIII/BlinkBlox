@@ -217,6 +217,73 @@ local ROTATION_HELPERS = {
 	"end\n",
 }
 
+--> A packed `boolean[]`'s reader by rows. Row `Byte + 1` holds that byte's eight elements, least
+--> significant bit first, and one `table.move` copies them: interpreted, a thousand 1000-element arrays
+--> decode in 14.8 ms against 21.2 testing each bit. Natively the other way round -- `bit32.btest` against
+--> a constant is inlined, and rows cost 37% more -- so which is faster depends on how the module runs,
+--> and a server, a client and Studio run it differently. Spliced in only when a schema has such an
+--> array (see `Prefabs.Required`) and `PackedBooleanReader` is not "Bits".
+local PACKED_ROWS = {
+	"\n",
+	"local PACKED_ROWS = table.create(256)\n",
+	"for Byte = 0, 255 do\n",
+	"\tlocal Row = table.create(8)\n",
+	"\tfor Bit = 0, 7 do\n",
+	"\t\tRow[Bit + 1] = bit32.btest(Byte, bit32.lshift(1, Bit))\n",
+	"\tend\n",
+	"\tPACKED_ROWS[Byte + 1] = table.freeze(Row)\n",
+	"end\n",
+	"table.freeze(PACKED_ROWS)\n",
+	"local function PackedRows(Source: buffer, Offset: number, Length: number, Value: { boolean })\n",
+	"\tlocal Whole = Length // 8\n",
+	"\tfor Byte = 0, Whole - 1 do\n",
+	"\t\ttable.move(PACKED_ROWS[buffer.readu8(Source, Offset + Byte) + 1], 1, 8, Byte * 8 + 1, Value)\n",
+	"\tend\n",
+	"\tif Length % 8 ~= 0 then\n",
+	"\t\ttable.move(PACKED_ROWS[buffer.readu8(Source, Offset + Whole) + 1], 1, Length % 8, Whole * 8 + 1, Value)\n",
+	"\tend\n",
+	"end\n",
+}
+
+--> "Auto": which reader this module uses is measured as it loads, rather than guessed from its side.
+--> Both read the same 1024 elements eight times, alternately, and the fastest time of each is kept, so
+--> a collection or an interrupt in one round does not decide it. It takes tens of microseconds, once.
+--> The bit reader measured here is the same loop each array inlines.
+local PACKED_CALIBRATION = {
+	"local function PackedBits(Source: buffer, Offset: number, Length: number, Value: { boolean })\n",
+	"\tfor Byte = 0, Length // 8 - 1 do\n",
+	"\t\tlocal Bits = buffer.readu8(Source, Offset + Byte)\n",
+	"\t\tlocal Base = Byte * 8\n",
+	"\t\tValue[Base + 1] = bit32.btest(Bits, 1)\n",
+	"\t\tValue[Base + 2] = bit32.btest(Bits, 2)\n",
+	"\t\tValue[Base + 3] = bit32.btest(Bits, 4)\n",
+	"\t\tValue[Base + 4] = bit32.btest(Bits, 8)\n",
+	"\t\tValue[Base + 5] = bit32.btest(Bits, 16)\n",
+	"\t\tValue[Base + 6] = bit32.btest(Bits, 32)\n",
+	"\t\tValue[Base + 7] = bit32.btest(Bits, 64)\n",
+	"\t\tValue[Base + 8] = bit32.btest(Bits, 128)\n",
+	"\tend\n",
+	"end\n",
+	"local PACKED_BY_ROWS = (function(): boolean\n",
+	"\tlocal Probe = buffer.create(128)\n",
+	"\tfor Index = 0, 127 do\n",
+	"\t\tbuffer.writeu8(Probe, Index, (Index * 37 + 11) % 256)\n",
+	"\tend\n",
+	"\tlocal Target = table.create(1024, false)\n",
+	"\tlocal Bits, Rows = math.huge, math.huge\n",
+	"\tfor _ = 1, 8 do\n",
+	"\t\tlocal Start = os.clock()\n",
+	"\t\tPackedBits(Probe, 0, 1024, Target)\n",
+	"\t\tlocal Middle = os.clock()\n",
+	"\t\tPackedRows(Probe, 0, 1024, Target)\n",
+	"\t\tlocal Finish = os.clock()\n",
+	"\t\tBits = math.min(Bits, Middle - Start)\n",
+	"\t\tRows = math.min(Rows, Finish - Middle)\n",
+	"\tend\n",
+	"\treturn Rows < Bits\n",
+	"end)()\n",
+}
+
 --- What the module's Heartbeat runs. The server sends every frame.
 ---
 --- A client sends at most `ClientFlushRate` times a second, 60 unless the schema says. Roblox spends
@@ -251,6 +318,8 @@ return {
 	Heartbeat = Heartbeat,
 	EVENTS_TYPE = EVENTS_TYPE,
 	ROTATION_HELPERS = ROTATION_HELPERS,
+	PACKED_ROWS = PACKED_ROWS,
+	PACKED_CALIBRATION = PACKED_CALIBRATION,
 	InboundGuard = InboundGuard,
 	DIRECTIVES = DIRECTIVES,
 	VERSION_HEADER = VERSION_HEADER,

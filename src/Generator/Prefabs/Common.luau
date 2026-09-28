@@ -58,8 +58,9 @@ local DOUBLE = 8
 local Types: { [string]: TypePrefab } = {}
 
 --- Runtime helpers the emitted code has called during the current generate, so the generator splices
---- in only those. Cleared by `Generator.Reset`; `Rotation` is `Fragments.ROTATION_HELPERS`.
-local Required: { Rotation: boolean? } = {}
+--- in only those. Cleared by `Generator.Reset`; `Rotation` is `Fragments.ROTATION_HELPERS`,
+--- `PackedRows` is `Fragments.PACKED_ROWS` and `PackedCalibration` is `Fragments.PACKED_CALIBRATION`.
+local Required: { Rotation: boolean?, PackedRows: boolean?, PackedCalibration: boolean? } = {}
 
 local Primitives: { [string]: {
 	Type: string | (Declaration: Parser.Primitive) -> string,

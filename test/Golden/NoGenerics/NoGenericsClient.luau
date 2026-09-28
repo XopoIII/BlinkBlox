@@ -515,6 +515,57 @@ local EventNames: any = {
 }
 
 
+local PACKED_ROWS = table.create(256)
+for Byte = 0, 255 do
+	local Row = table.create(8)
+	for Bit = 0, 7 do
+		Row[Bit + 1] = bit32.btest(Byte, bit32.lshift(1, Bit))
+	end
+	PACKED_ROWS[Byte + 1] = table.freeze(Row)
+end
+table.freeze(PACKED_ROWS)
+local function PackedRows(Source: buffer, Offset: number, Length: number, Value: { boolean })
+	local Whole = Length // 8
+	for Byte = 0, Whole - 1 do
+		table.move(PACKED_ROWS[buffer.readu8(Source, Offset + Byte) + 1], 1, 8, Byte * 8 + 1, Value)
+	end
+	if Length % 8 ~= 0 then
+		table.move(PACKED_ROWS[buffer.readu8(Source, Offset + Whole) + 1], 1, Length % 8, Whole * 8 + 1, Value)
+	end
+end
+local function PackedBits(Source: buffer, Offset: number, Length: number, Value: { boolean })
+	for Byte = 0, Length // 8 - 1 do
+		local Bits = buffer.readu8(Source, Offset + Byte)
+		local Base = Byte * 8
+		Value[Base + 1] = bit32.btest(Bits, 1)
+		Value[Base + 2] = bit32.btest(Bits, 2)
+		Value[Base + 3] = bit32.btest(Bits, 4)
+		Value[Base + 4] = bit32.btest(Bits, 8)
+		Value[Base + 5] = bit32.btest(Bits, 16)
+		Value[Base + 6] = bit32.btest(Bits, 32)
+		Value[Base + 7] = bit32.btest(Bits, 64)
+		Value[Base + 8] = bit32.btest(Bits, 128)
+	end
+end
+local PACKED_BY_ROWS = (function(): boolean
+	local Probe = buffer.create(128)
+	for Index = 0, 127 do
+		buffer.writeu8(Probe, Index, (Index * 37 + 11) % 256)
+	end
+	local Target = table.create(1024, false)
+	local Bits, Rows = math.huge, math.huge
+	for _ = 1, 8 do
+		local Start = os.clock()
+		PackedBits(Probe, 0, 1024, Target)
+		local Middle = os.clock()
+		PackedRows(Probe, 0, 1024, Target)
+		local Finish = os.clock()
+		Bits = math.min(Bits, Middle - Start)
+		Rows = math.min(Rows, Finish - Middle)
+	end
+	return Rows < Bits
+end)()
+
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
 --> runtime, and says which event did it. Each Instance sent beside the buffer costs the

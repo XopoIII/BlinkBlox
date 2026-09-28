@@ -571,6 +571,57 @@ local function UnpackRotation(X: number, Y: number, Z: number, Index: number, A:
 	end
 	return CFrame.new(X, Y, Z, A, B, C, D)
 end
+
+local PACKED_ROWS = table.create(256)
+for Byte = 0, 255 do
+	local Row = table.create(8)
+	for Bit = 0, 7 do
+		Row[Bit + 1] = bit32.btest(Byte, bit32.lshift(1, Bit))
+	end
+	PACKED_ROWS[Byte + 1] = table.freeze(Row)
+end
+table.freeze(PACKED_ROWS)
+local function PackedRows(Source: buffer, Offset: number, Length: number, Value: { boolean })
+	local Whole = Length // 8
+	for Byte = 0, Whole - 1 do
+		table.move(PACKED_ROWS[buffer.readu8(Source, Offset + Byte) + 1], 1, 8, Byte * 8 + 1, Value)
+	end
+	if Length % 8 ~= 0 then
+		table.move(PACKED_ROWS[buffer.readu8(Source, Offset + Whole) + 1], 1, Length % 8, Whole * 8 + 1, Value)
+	end
+end
+local function PackedBits(Source: buffer, Offset: number, Length: number, Value: { boolean })
+	for Byte = 0, Length // 8 - 1 do
+		local Bits = buffer.readu8(Source, Offset + Byte)
+		local Base = Byte * 8
+		Value[Base + 1] = bit32.btest(Bits, 1)
+		Value[Base + 2] = bit32.btest(Bits, 2)
+		Value[Base + 3] = bit32.btest(Bits, 4)
+		Value[Base + 4] = bit32.btest(Bits, 8)
+		Value[Base + 5] = bit32.btest(Bits, 16)
+		Value[Base + 6] = bit32.btest(Bits, 32)
+		Value[Base + 7] = bit32.btest(Bits, 64)
+		Value[Base + 8] = bit32.btest(Bits, 128)
+	end
+end
+local PACKED_BY_ROWS = (function(): boolean
+	local Probe = buffer.create(128)
+	for Index = 0, 127 do
+		buffer.writeu8(Probe, Index, (Index * 37 + 11) % 256)
+	end
+	local Target = table.create(1024, false)
+	local Bits, Rows = math.huge, math.huge
+	for _ = 1, 8 do
+		local Start = os.clock()
+		PackedBits(Probe, 0, 1024, Target)
+		local Middle = os.clock()
+		PackedRows(Probe, 0, 1024, Target)
+		local Finish = os.clock()
+		Bits = math.min(Bits, Middle - Start)
+		Rows = math.min(Rows, Finish - Middle)
+	end
+	return Rows < Bits
+end)()
 local RATE_TEMPLATE = table.freeze({10, 0, 0, 0, 10, 0, 0, 0, 2, 0, 0, 0})
 
 --> Sequence numbers for ordered unreliable events, per player and per event, both ways.
@@ -2136,24 +2187,28 @@ function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
 	local Value = table.create(Length)
 	do
 		local PACKED_OFFSET = Read((Length + 7) // 8)
-		local PACKED_WHOLE = Length // 8
-		for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-			local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-			local PACKED_BASE = PACKED_BYTE * 8
-			Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-			Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-			Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-			Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-			Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-			Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-			Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-			Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-		end
-		if Length % 8 ~= 0 then
-			local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-			local PACKED_BASE = PACKED_WHOLE * 8
-			for PACKED_BIT = 0, Length % 8 - 1 do
-				Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+		if PACKED_BY_ROWS then
+			PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+		else
+			local PACKED_WHOLE = Length // 8
+			for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+				local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+				local PACKED_BASE = PACKED_BYTE * 8
+				Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+				Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+				Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+				Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+				Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+				Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+				Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+				Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+			end
+			if Length % 8 ~= 0 then
+				local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+				local PACKED_BASE = PACKED_WHOLE * 8
+				for PACKED_BIT = 0, Length % 8 - 1 do
+					Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+				end
 			end
 		end
 	end
@@ -7273,24 +7328,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7378,24 +7437,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = BLOCK_START + 0
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7487,24 +7550,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7601,24 +7668,28 @@ if not RunService:IsRunning() then
 					local Item_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Item_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -7716,24 +7787,28 @@ if not RunService:IsRunning() then
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -7829,24 +7904,28 @@ if not RunService:IsRunning() then
 					Value.List = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.List)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -7861,24 +7940,28 @@ if not RunService:IsRunning() then
 					Value.Fixed = table.create(Length)
 					do
 						local PACKED_OFFSET = BLOCK_START + 1
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.Fixed)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -8039,24 +8122,28 @@ if not RunService:IsRunning() then
 					local Element_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Element_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -15306,24 +15393,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -15411,24 +15502,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = BLOCK_START + 0
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -15520,24 +15615,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -15634,24 +15733,28 @@ local Returns = table.freeze({
 					local Item_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Item_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -15749,24 +15852,28 @@ local Returns = table.freeze({
 				local Value = table.create(Length)
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
-					local PACKED_WHOLE = Length // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-						local PACKED_BASE = PACKED_BYTE * 8
-						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-					end
-					if Length % 8 ~= 0 then
-						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-						local PACKED_BASE = PACKED_WHOLE * 8
-						for PACKED_BIT = 0, Length % 8 - 1 do
-							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
 						end
 					end
 				end
@@ -15862,24 +15969,28 @@ local Returns = table.freeze({
 					Value.List = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.List)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -15894,24 +16005,28 @@ local Returns = table.freeze({
 					Value.Fixed = table.create(Length)
 					do
 						local PACKED_OFFSET = BLOCK_START + 1
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.Fixed)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
@@ -16072,24 +16187,28 @@ local Returns = table.freeze({
 					local Element_1 = table.create(Length)
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						if PACKED_BY_ROWS then
+							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Element_1)
+						else
+							local PACKED_WHOLE = Length // 8
+							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+								local PACKED_BASE = PACKED_BYTE * 8
+								Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+								Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+								Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+								Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+								Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+								Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+								Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+								Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+							end
+							if Length % 8 ~= 0 then
+								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+								local PACKED_BASE = PACKED_WHOLE * 8
+								for PACKED_BIT = 0, Length % 8 - 1 do
+									Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+								end
 							end
 						end
 					end
