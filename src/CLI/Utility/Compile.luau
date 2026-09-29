@@ -10,6 +10,7 @@ local Attributes = require("../../Modules/Attributes")
 local Error = require("../../Modules/Error")
 local Generator = require("../../Generator")
 local GetDefinitionFilePath = require("./GetDefinitionFilePath")
+local OutputSize = require("../../Modules/OutputSize")
 local Parser = require("../../Parser")
 local PathParser = require("../../Modules/Path")
 local Report = require("./Report")
@@ -226,6 +227,13 @@ local function Build(Path: string, Options: CompileOptions, Results: Results)
 	end
 
 	local FilesTime = (os.clock() - FilesStart)
+	for _, Output in { { "server", ServerSource }, { "client", ClientSource } } do
+		local Warning = OutputSize.Warning(Output[1], Output[2])
+		if Warning then
+			Message("yellow", Options, `[WARNING]: {Warning}`)
+		end
+	end
+
 	Write(ServerOutput, ServerSource, Options, Results)
 	Write(ClientOutput, ClientSource, Options, Results)
 

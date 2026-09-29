@@ -9,6 +9,7 @@ local ScriptEditorService = game:GetService("ScriptEditorService")
 
 local Attributes = require("@compiler/Modules/Attributes")
 local Generator = require("@compiler/Generator")
+local OutputSize = require("@compiler/Modules/OutputSize")
 local Parser = require("@compiler/Parser")
 
 local Output = {}
@@ -93,6 +94,12 @@ function Output.Generate(File: StringValue, Directory: Instance, Probe: Instance
 	local ServerSource = Generator.Generate("Server", AbstractSyntaxTree)
 	local ClientSource = Generator.Generate("Client", AbstractSyntaxTree)
 	local TypesSource = Generator.GenerateShared(AbstractSyntaxTree)
+	for _, Generated in { { "server", ServerSource }, { "client", ClientSource } } do
+		local Warning = OutputSize.Warning(Generated[1], Generated[2])
+		if Warning then
+			warn(`[BlinkBlox]: {Warning}`)
+		end
+	end
 
 	--> Named `Blink` from before the rename to BlinkBlox, and kept: games require the modules through
 	--> it, and a new name would leave a second folder beside the one their code points at.
