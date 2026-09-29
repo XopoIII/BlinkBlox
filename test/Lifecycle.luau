@@ -264,6 +264,39 @@ RunClosure("The client module ignores AutoStart", function()
 	Same(Client.Connected, false, "Connected with no server")
 end)
 
+---- One module per remote ----
+
+RunClosure("A second VM requiring either module is refused, and made remotes are not archivable", function()
+	--> Every World.Load is a VM of its own, with its own _G, as an Actor is: the scope guard cannot see
+	--> the first copy, and only the claim on the remote stops the second from connecting to it too.
+	local Place = World.new()
+	local ServerPath = Build("ACTOR", "", "Server")
+	local ClientPath = Build("ACTOR", "", "Client")
+	World.Load(Place, ServerPath, "Server")
+
+	local Reliable = Place.Children.ACTOR_BLINK_RELIABLE_REMOTE
+	local Unreliable = Place.Children.ACTOR_BLINK_UNRELIABLE_REMOTE
+	Same(Reliable.Archivable, false, "the reliable remote's Archivable")
+	Same(Unreliable.Archivable, false, "the unreliable remote's Archivable")
+
+	local Loaded, Failure = pcall(World.Load, Place, ServerPath, "Server")
+	Same(Loaded, false, "a second server module loading")
+	Expect(
+		string.find(tostring(Failure), "another Luau VM", 1, true) ~= nil,
+		`the second server failed with "{Failure}"`
+	)
+	Same(Count(Reliable.OnServerEvent.Connections), 1, "reliable server connections")
+
+	World.Load(Place, ClientPath, "Client")
+	Loaded, Failure = pcall(World.Load, Place, ClientPath, "Client")
+	Same(Loaded, false, "a second client module loading")
+	Expect(
+		string.find(tostring(Failure), "another Luau VM", 1, true) ~= nil,
+		`the second client failed with "{Failure}"`
+	)
+	Same(Count(Reliable.OnClientEvent.Connections), 1, "reliable client connections")
+end)
+
 require("./LifecycleOptions")
 require("./LifecycleListeners")
 
