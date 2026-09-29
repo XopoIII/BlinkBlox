@@ -860,7 +860,7 @@ return {
 				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: MapNested
-				local Value = {}
+				local Value = {} :: { [any]: any }
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
@@ -869,7 +869,7 @@ return {
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_1: MapNested
-					local Element_1 = {}
+					local Element_1 = {} :: { [any]: any }
 					local OFFSET_0 = Read(2)
 					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
 					if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end

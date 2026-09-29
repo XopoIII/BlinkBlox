@@ -294,7 +294,7 @@ RunClosure("SetPacketDropHandler follows Casing, and is stubbed in edit mode and
 		local Tree = Isolated.Parse(`option Casing = {Casing}\n{SCHEMA}`)
 		for _, Context in { "Server", "Client" } do
 			local Source = Generator.Generate(Context :: any, Tree)
-			if not string.find(Source, `{Name} = SetPacketDropHandler,`, 1, true) then
+			if not string.find(Source, `{Name} = SetPacketDropHandler`, 1, true) then
 				ErrorPrint(`Failed "Casing": the {Casing} {Context} module does not export {Name}.`)
 			end
 

@@ -18,6 +18,7 @@ local Lifecycle = require("@self/Lifecycle")
 local Limits = require("@self/Limits")
 local Outbound = require("@self/Outbound")
 local Prefabs = require("@self/Prefabs")
+local Returns = require("@self/Returns")
 local Serde = require("@self/Serde")
 --> `option TrafficStats`; every call below emits nothing when it is off.
 local Traffic = require("@self/Traffic")
@@ -190,7 +191,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> read in place rather than through `Read`, a call an event.
 	local DecoderArguments = if State.Context == "Server" then "Player: Player" else ""
 	local function OpenDecode(Name: string): Blocks.Block
-		local Decoder = Blocks.Function(`Decode{Name}`, DecoderArguments, nil, false, true)
+		local Decoder = Blocks.Function(`Decode{Name}`, DecoderArguments, "()", false, true)
 		Decoder:Line("Decoding = -1")
 		Decoder:Line("local Index = buffer.readu8(RecieveBuffer, RecieveCursor)")
 		Decoder:Line("RecieveCursor += 1")
@@ -345,11 +346,10 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	UnreliableConnection = CloseDecode(UnreliableDecoder, UnreliableConnection, "Unreliable")
 
 	State.Noop.Push(`\})`, 0, 1)
-	State.Noop.Push(`return Returns :: {EVENTS_TYPE}`, 0, 1)
+	--> Through `any`: the stub table is as large as the module's API, and a direct cast has the new type
+	--> solver compare it with the module's type field by field, which it gives up on as too complex.
+	State.Noop.Push(`return (Returns :: any) :: {EVENTS_TYPE}`, 0, 1)
 	State.Noop.Push(`end`, 0, 0)
-
-	State.Return.PushFront(`\nlocal Returns = table.freeze(\{`)
-	State.Return.Push(`})`)
 
 	local ScopeValidationBody = {}
 	if State.Context ~= "Shared" then
@@ -416,7 +416,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 				UnreliableConnection.Content
 			)
 		),
-		State.Return.DumpLines(),
+		Returns.Assemble(State.Return.DumpLines()),
 		{ `type {EVENTS_TYPE} = typeof(Returns)\n`, `return Returns :: {EVENTS_TYPE}` }
 	)
 

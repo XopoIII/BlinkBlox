@@ -252,9 +252,9 @@ local ROTATION_HELPERS = {
 --> array (see `Prefabs.Required`) and `PackedBooleanReader` is not "Bits".
 local PACKED_ROWS = {
 	"\n",
-	"local PACKED_ROWS = table.create(256)\n",
+	"local PACKED_ROWS = table.create(256) :: { { boolean } }\n",
 	"for Byte = 0, 255 do\n",
-	"\tlocal Row = table.create(8)\n",
+	"\tlocal Row = table.create(8) :: { boolean }\n",
 	"\tfor Bit = 0, 7 do\n",
 	"\t\tRow[Bit + 1] = bit32.btest(Byte, bit32.lshift(1, Bit))\n",
 	"\tend\n",

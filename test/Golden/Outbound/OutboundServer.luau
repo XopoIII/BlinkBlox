@@ -515,7 +515,7 @@ local EventNames: any = {
     Unreliable = {}
 }
 
-local RATE_TEMPLATE = table.freeze({})
+local RATE_TEMPLATE = table.freeze({} :: {number})
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
@@ -557,7 +557,9 @@ local function OutboundJoin(Player: Player): {number}
     return Budget
 end
 
-Players.PlayerAdded:Connect(OutboundJoin)
+Players.PlayerAdded:Connect(function(Player: Player)
+    OutboundJoin(Player)
+end)
 Players.PlayerRemoving:Connect(function(Player)
     OutboundBudgets[Player] = nil
 end)
@@ -706,7 +708,7 @@ if not RunService:IsRunning() then
 		SetFast = NOOP
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -1995,14 +1997,14 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player)
+local function DecodeReliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
-local function DecodeUnreliable(Player: Player)
+local function DecodeUnreliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -2102,156 +2104,149 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	Chatter = {
-		Fire = function(Player: Player, Value: buffer): ()
-			if OutboundSpent(Player) then return end
-			local BATCH = LoadBatch(Player)
-			SerdesFunctions.WriteEVENT_Chatter(Value)
-			local EVENT_BYTES = SendCursor - BatchStart
-			if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
-				warn(`[BlinkBlox]: Dropped unreliable event "Chatter", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
-				return
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.Chatter = {
+	Fire = function(Player: Player, Value: buffer): ()
+		if OutboundSpent(Player) then return end
+		local BATCH = LoadBatch(Player)
+		SerdesFunctions.WriteEVENT_Chatter(Value)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "Chatter", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, Player, nil, false)
+	end,
+	FireAll = function(Value: buffer): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Chatter(Value)
+		if not CheckUnreliableSize("Chatter") then return end
+		for _, Player in Players:GetPlayers() do
+			if OutboundSpent(Player) then continue end
+			AppendUnreliable(Player)
+		end
+		KeepScratch()
+	end,
+	FireList = function(List: {Player}, Value: buffer): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Chatter(Value)
+		if not CheckUnreliableSize("Chatter") then return end
+		for _, Player in List do
+			if OutboundSpent(Player) then continue end
+			AppendUnreliable(Player)
+		end
+		KeepScratch()
+	end,
+	FireExcept = function(Except: Player, Value: buffer): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Chatter(Value)
+		if not CheckUnreliableSize("Chatter") then return end
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
 			end
-			CommitBatch(BATCH, Player, nil, false)
-		end,
-		FireAll = function(Value: buffer): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Chatter(Value)
-			if not CheckUnreliableSize("Chatter") then return end
-			for _, Player in Players:GetPlayers() do
-				if OutboundSpent(Player) then continue end
-				AppendUnreliable(Player)
+			if OutboundSpent(Player) then continue end
+			AppendUnreliable(Player)
+		end
+		KeepScratch()
+	end,
+}
+Returns.Hit = {
+	Fire = function(Player: Player, Value: number): ()
+		local BATCH = LoadBatch(Player)
+		SerdesFunctions.WriteEVENT_Hit(Value)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "Hit", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, Player, nil, false)
+	end,
+	FireAll = function(Value: number): ()
+		local BATCH = LoadBatch(nil)
+		SerdesFunctions.WriteEVENT_Hit(Value)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "Hit", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, false)
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Hit(Value)
+		if not CheckUnreliableSize("Hit") then return end
+		for _, Player in List do
+			AppendUnreliable(Player)
+		end
+		KeepScratch()
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Hit(Value)
+		if not CheckUnreliableSize("Hit") then return end
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
 			end
-			KeepScratch()
-		end,
-		FireList = function(List: {Player}, Value: buffer): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Chatter(Value)
-			if not CheckUnreliableSize("Chatter") then return end
-			for _, Player in List do
-				if OutboundSpent(Player) then continue end
-				AppendUnreliable(Player)
+			AppendUnreliable(Player)
+		end
+		KeepScratch()
+	end,
+}
+Returns.Score = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_Score(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Score(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Score(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Score(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
 			end
-			KeepScratch()
-		end,
-		FireExcept = function(Except: Player, Value: buffer): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Chatter(Value)
-			if not CheckUnreliableSize("Chatter") then return end
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				if OutboundSpent(Player) then continue end
-				AppendUnreliable(Player)
-			end
-			KeepScratch()
-		end,
-	},
-	Hit = {
-		Fire = function(Player: Player, Value: number): ()
-			local BATCH = LoadBatch(Player)
-			SerdesFunctions.WriteEVENT_Hit(Value)
-			local EVENT_BYTES = SendCursor - BatchStart
-			if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
-				warn(`[BlinkBlox]: Dropped unreliable event "Hit", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
-				return
-			end
-			CommitBatch(BATCH, Player, nil, false)
-		end,
-		FireAll = function(Value: number): ()
-			local BATCH = LoadBatch(nil)
-			SerdesFunctions.WriteEVENT_Hit(Value)
-			local EVENT_BYTES = SendCursor - BatchStart
-			if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
-				warn(`[BlinkBlox]: Dropped unreliable event "Hit", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
-				return
-			end
-			CommitBatch(BATCH, nil, nil, false)
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Hit(Value)
-			if not CheckUnreliableSize("Hit") then return end
-			for _, Player in List do
-				AppendUnreliable(Player)
-			end
-			KeepScratch()
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Hit(Value)
-			if not CheckUnreliableSize("Hit") then return end
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendUnreliable(Player)
-			end
-			KeepScratch()
-		end,
-	},
-	Score = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_Score(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Score(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Score(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Score(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	Crowd = {
-		Set = function(Value: number): () StreamSet(STREAM_2, Value) end,
-		Clear = function(): () StreamClear(STREAM_2) end,
-		Urgent = function(): () STREAM_2.Urgent = true end,
-		SetFast = function(Fast: boolean): () STREAM_2.Fast = Fast end,
-	},
-	Mine = {
-		Set = function(Player: Player, Value: number): () PlayerStreamSet(STREAM_3, Player, Value) end,
-		Clear = function(Player: Player): () PlayerStreamClear(STREAM_3, Player) end,
-		Urgent = function(Player: Player): () PlayerStreamUrgent(STREAM_3, Player) end,
-		SetFast = function(Player: Player, Fast: boolean): () PlayerStreamSetFast(STREAM_3, Player, Fast) end,
-	},
-})
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.Crowd = {
+	Set = function(Value: number): () StreamSet(STREAM_2, Value) end,
+	Clear = function(): () StreamClear(STREAM_2) end,
+	Urgent = function(): () STREAM_2.Urgent = true end,
+	SetFast = function(Fast: boolean): () STREAM_2.Fast = Fast end,
+}
+Returns.Mine = {
+	Set = function(Player: Player, Value: number): () PlayerStreamSet(STREAM_3, Player, Value) end,
+	Clear = function(Player: Player): () PlayerStreamClear(STREAM_3, Player) end,
+	Urgent = function(Player: Player): () PlayerStreamUrgent(STREAM_3, Player) end,
+	SetFast = function(Player: Player, Fast: boolean): () PlayerStreamSetFast(STREAM_3, Player, Fast) end,
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

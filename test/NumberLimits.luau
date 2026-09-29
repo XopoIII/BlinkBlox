@@ -121,7 +121,11 @@ RunClosure("ExportLimits puts the schema's bounds in the server, client and type
 
 	--> The edit-mode stub table keeps the member, as it keeps every other.
 	local Source = Generator.Generate("Server", Parser.new():Parse(SCHEMA))
-	local _, Members = string.gsub(Source, "\n%s*Limits = BLINK_LIMITS,", "")
+	--> The returned table is assigned a member at a time (Generator/Returns.luau); the stub table is
+	--> a constructor.
+	local _, Returned = string.gsub(Source, "\nReturns%.Limits = BLINK_LIMITS\n", "")
+	local _, Stubbed = string.gsub(Source, "\n%s*Limits = BLINK_LIMITS,", "")
+	local Members = Returned + Stubbed
 	assert(Members == 2, `the server module names Limits {Members} times, expected 2 (returned and stubbed)`)
 end)
 

@@ -515,7 +515,7 @@ local EventNames: any = {
     Unreliable = {}
 }
 
-local RATE_TEMPLATE = table.freeze({10, 0, 0, 0, 10, 0, 0, 0})
+local RATE_TEMPLATE = table.freeze({10, 0, 0, 0, 10, 0, 0, 0} :: {number})
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
@@ -645,7 +645,7 @@ if not RunService:IsRunning() then
 		invoke = NOOP
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -1424,7 +1424,7 @@ local function Listen()
 		end
 	end
 	RunService.Heartbeat:Connect(StepReplication)
-	local function DecodeReliable(Player: Player)
+	local function DecodeReliable(Player: Player): ()
 		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 		RecieveCursor += 1
@@ -1432,7 +1432,7 @@ local function Listen()
 		if Index == 1 then
 			local Value: number = SerdesFunctions.ReadEVENT_Ready()
 			if RateAccept(Player, 1, 10, 10, "Ready") == true then
-				local BOUND_LISTENER = Events.Reliable[1]
+				local BOUND_LISTENER = Events.Reliable[1] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Ready"
 					Decoding = -2 - Index
@@ -1493,7 +1493,7 @@ local function Listen()
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	local function DecodeUnreliable(Player: Player)
+	local function DecodeUnreliable(Player: Player): ()
 		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 		RecieveCursor += 1
@@ -1605,178 +1605,170 @@ local function Start()
     Listen()
 end
 
-
-local Returns = table.freeze({
-	stepReplication = StepReplication,
-
-	setRateLimitHandler = SetRateLimitHandler,
-
-	setDecodeErrorHandler = SetDecodeErrorHandler,
-
-	setPacketDropHandler = SetPacketDropHandler,
-
-	setListenerErrorHandler = SetListenerErrorHandler,
-
-	remotes = REMOTE_NAMES,
-
-	start = Start,
-
-	Announce = {
-		fire = function(Player: Player, Value: string): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_Announce(Value)
-			SavePlayerBuffer(Player)
-		end,
-		fireAll = function(Value: string): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Announce(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		fireList = function(List: {Player}, Value: string): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Announce(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
+local Returns = {}
+Returns.stepReplication = StepReplication
+Returns.setRateLimitHandler = SetRateLimitHandler
+Returns.setDecodeErrorHandler = SetDecodeErrorHandler
+Returns.setPacketDropHandler = SetPacketDropHandler
+Returns.setListenerErrorHandler = SetListenerErrorHandler
+Returns.remotes = REMOTE_NAMES
+Returns.start = Start
+Returns.Announce = {
+	fire = function(Player: Player, Value: string): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_Announce(Value)
+		SavePlayerBuffer(Player)
+	end,
+	fireAll = function(Value: string): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Announce(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	fireList = function(List: {Player}, Value: string): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Announce(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	fireExcept = function(Except: Player, Value: string): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Announce(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
 			end
-		end,
-		fireExcept = function(Except: Player, Value: string): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Announce(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	Position = {
-		fire = function(Player: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Position(Value)
-			if not CheckUnreliableSize("Position") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.Position = {
+	fire = function(Player: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Position(Value)
+		if not CheckUnreliableSize("Position") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	fireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Position(Value)
+		if not CheckUnreliableSize("Position") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	fireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Position(Value)
+		if not CheckUnreliableSize("Position") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
 			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		fireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Position(Value)
-			if not CheckUnreliableSize("Position") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		fireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Position(Value)
-			if not CheckUnreliableSize("Position") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	fireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Position(Value)
+		if not CheckUnreliableSize("Position") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
 			end
-		end,
-		fireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Position(Value)
-			if not CheckUnreliableSize("Position") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	Ready = {
-		on = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Reliable[1] ~= nil then
-				warn("[BlinkBlox]: \"Ready\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[1] = Listener
-			local Pending = Queue.Reliable[1]
-			Queue.Reliable[1] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "Ready", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[1] == Listener then
-					Events.Reliable[1] = nil
-				end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.Ready = {
+	on = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Reliable[1] ~= nil then
+			warn("[BlinkBlox]: \"Ready\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[1] = Listener
+		local Pending = Queue.Reliable[1]
+		Queue.Reliable[1] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "Ready", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[1] == Listener then
+				Events.Reliable[1] = nil
 			end
 		end
-	},
-	Price = {
-		on = function(Listener: (Player, number) -> (number)): ()
-			if Events.Reliable[2] ~= nil then
-				warn("[BlinkBlox]: \"Price\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[2] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
-				local ReturnValue: number;
-				local Success, Error = pcall(function ()
-					ReturnValue = Listener(Player, Value)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Price, ReturnValue, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 2)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "Price", Error) then warn(`"Price" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[2] or {}
-				Queue.Reliable[2] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[2](table.unpack(Arguments, 1, Arguments.n))
-				end
+	end
+}
+Returns.Price = {
+	on = function(Listener: (Player, number) -> (number)): ()
+		if Events.Reliable[2] ~= nil then
+			warn("[BlinkBlox]: \"Price\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[2] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
+			local ReturnValue: number;
+			local Success, Error = pcall(function ()
+				ReturnValue = Listener(Player, Value)
 			end)
-		end
-	},
-	Confirm = {
-		invoke = function(Player: Player, Value: number): (boolean)
-			local InvocationIdentifier = InvokePlayer(Player, 3)
 			LoadPlayer(Player)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_Confirm, Value, InvocationIdentifier)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				ReleaseInvocation(PlayerInvocations[Player], InvocationIdentifier)
-				error(Failure, 0)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Price, ReturnValue, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 2)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "Price", Error) then warn(`"Price" encountered an error, {Error}`) end
 			end
 			SavePlayerBuffer(Player)
-			ParkInvocation(PlayerInvocations[Player], InvocationIdentifier, coroutine.running())
-			TimeoutPlayerInvocation(Player, InvocationIdentifier, 10, "Confirm")
-			local Success, ReturnValue: boolean = coroutine.yield()
-			if Success ~= true then
-				error("There was an exception while processing \"Confirm\".")
-			end
-			return ReturnValue
 		end
-	},
-})
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[2] or {}
+			Queue.Reliable[2] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[2](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.Confirm = {
+	invoke = function(Player: Player, Value: number): (boolean)
+		local InvocationIdentifier = InvokePlayer(Player, 3)
+		LoadPlayer(Player)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_Confirm, Value, InvocationIdentifier)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			ReleaseInvocation(PlayerInvocations[Player], InvocationIdentifier)
+			error(Failure, 0)
+		end
+		SavePlayerBuffer(Player)
+		ParkInvocation(PlayerInvocations[Player], InvocationIdentifier, coroutine.running())
+		TimeoutPlayerInvocation(Player, InvocationIdentifier, 10, "Confirm")
+		local Success, ReturnValue: boolean = coroutine.yield()
+		if Success ~= true then
+			error("There was an exception while processing \"Confirm\".")
+		end
+		return ReturnValue
+	end
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

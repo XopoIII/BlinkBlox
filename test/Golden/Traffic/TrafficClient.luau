@@ -674,7 +674,7 @@ function SerdesFunctions.ReadEVENT_Trail(): ({ number })
 	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if not (Length <= 4) then error(`Expected "Length" to be smaller than or equal to 4, got {Length} instead.`) end
 	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	local Value = table.create(Length)
+	local Value = table.create(Length) :: {any}
 		-- Read BLOCK: 1 bytes
 	local ARRAY_START_1 = Read(1 * Length)
 	for Slot_1 = 1, Length do
@@ -759,7 +759,7 @@ if not RunService:IsRunning() then
 		},
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsClient() then
@@ -972,7 +972,7 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable()
+local function DecodeReliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -980,7 +980,7 @@ local function DecodeReliable()
 	if Index == 1 then
 		local Value: number = SerdesFunctions.ReadEVENT_Push()
 		TrafficCounters[16] += 1
-		local BOUND_LISTENER = Events.Reliable[1]
+		local BOUND_LISTENER = Events.Reliable[1] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			Spawn(BOUND_LISTENER, Value)
 		else
@@ -1013,7 +1013,7 @@ local function DecodeReliable()
 		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable()
+local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1119,158 +1119,149 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	GetTrafficStats = GetTrafficStats,
-
-	ResetTrafficStats = ResetTrafficStats,
-
-	Byte = {
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.GetTrafficStats = GetTrafficStats
+Returns.ResetTrafficStats = ResetTrafficStats
+Returns.Byte = {
+	Fire = function(Value: number): ()
+		Begin()
+		local Cursor = SendCursor
+		SerdesFunctions.WriteEVENT_Byte(Value)
+		Commit()
+		TrafficCounters[10] += 1
+	end
+}
+Returns.Push = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		if Events.Reliable[1] ~= nil then
+			warn("[BlinkBlox]: \"Push\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[1] = Listener
+		local Pending = Queue.Reliable[1]
+		Queue.Reliable[1] = {}
+		for _, Arguments in Pending do
+			Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
+		end
+		return function (): ()
+			if Events.Reliable[1] == Listener then
+				Events.Reliable[1] = nil
+			end
+		end
+	end
+}
+Returns.Blip = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[0])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[0] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[0], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[0])
+				table.remove(Listeners, Index)
+				Events.Unreliable[0] = Listeners
+				ListenerEpoch += 1
+			end
+		end
+	end
+}
+Returns.Ping = {
+	Fire = function(Value: number): ()
+		Hold()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Ping, Value)
+		if Sent and CheckUnreliableSize("Ping") then
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			Unreliable:FireServer(Buffer, SendInstances)
+			TrafficCounters[22] += 1
+			TrafficCounters[5] += SendCursor
+			TrafficCounters[6] += 1
+		end
+		Release()
+		if Sent ~= true then
+			error(Failure, 0)
+		end
+	end
+}
+Returns.Seq = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[2])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[2] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[2], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[2])
+				table.remove(Listeners, Index)
+				Events.Unreliable[2] = Listeners
+				ListenerEpoch += 1
+			end
+		end
+	end
+}
+Returns.Note = {
+	Fire = function(Value: string): ()
+		Begin()
+		local Cursor = SendCursor
+		SerdesFunctions.WriteEVENT_Note(Value)
+		Commit()
+		TrafficCounters[29] += SendCursor - Cursor
+		TrafficCounters[30] += 1
+	end
+}
+Returns.Trail = {
+	On = function(Listener: (Value: { number }) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[3])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[3] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[3], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[3])
+				table.remove(Listeners, Index)
+				Events.Unreliable[3] = Listeners
+				ListenerEpoch += 1
+			end
+		end
+	end
+}
+Returns.Ask = {
+	Invoke = function(Value: number): (number)
+		local InvocationIdentifier = ClaimInvocation(Invocations, 3)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_Ask, Value, InvocationIdentifier)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			ReleaseInvocation(Invocations, InvocationIdentifier)
+			error(Failure, 0)
+		end
+		Close(Cursor, Instances)
+		ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
+		TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"Ask" was never answered')
+		local Success, ReturnValue: number = coroutine.yield()
+		if Success ~= true then
+			error("There was an exception while processing \"Ask\".")
+		end
+		return ReturnValue
+	end
+}
+Returns.Inner = {
+	Poll = {
 		Fire = function(Value: number): ()
 			Begin()
 			local Cursor = SendCursor
-			SerdesFunctions.WriteEVENT_Byte(Value)
+			SerdesFunctions.Inner_WriteEVENT_Poll(Value)
 			Commit()
-			TrafficCounters[10] += 1
+			TrafficCounters[38] += 1
 		end
 	},
-	Push = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Reliable[1] ~= nil then
-				warn("[BlinkBlox]: \"Push\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[1] = Listener
-			local Pending = Queue.Reliable[1]
-			Queue.Reliable[1] = {}
-			for _, Arguments in Pending do
-				Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
-			end
-			return function (): ()
-				if Events.Reliable[1] == Listener then
-					Events.Reliable[1] = nil
-				end
-			end
-		end
-	},
-	Blip = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[0])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[0] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[0], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[0])
-					table.remove(Listeners, Index)
-					Events.Unreliable[0] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	Ping = {
-		Fire = function(Value: number): ()
-			Hold()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Ping, Value)
-			if Sent and CheckUnreliableSize("Ping") then
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				Unreliable:FireServer(Buffer, SendInstances)
-				TrafficCounters[22] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-			Release()
-			if Sent ~= true then
-				error(Failure, 0)
-			end
-		end
-	},
-	Seq = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[2])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[2] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[2], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[2])
-					table.remove(Listeners, Index)
-					Events.Unreliable[2] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	Note = {
-		Fire = function(Value: string): ()
-			Begin()
-			local Cursor = SendCursor
-			SerdesFunctions.WriteEVENT_Note(Value)
-			Commit()
-			TrafficCounters[29] += SendCursor - Cursor
-			TrafficCounters[30] += 1
-		end
-	},
-	Trail = {
-		On = function(Listener: (Value: { number }) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[3])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[3] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[3], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[3])
-					table.remove(Listeners, Index)
-					Events.Unreliable[3] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	Ask = {
-		Invoke = function(Value: number): (number)
-			local InvocationIdentifier = ClaimInvocation(Invocations, 3)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_Ask, Value, InvocationIdentifier)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				ReleaseInvocation(Invocations, InvocationIdentifier)
-				error(Failure, 0)
-			end
-			Close(Cursor, Instances)
-			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
-			TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"Ask" was never answered')
-			local Success, ReturnValue: number = coroutine.yield()
-			if Success ~= true then
-				error("There was an exception while processing \"Ask\".")
-			end
-			return ReturnValue
-		end
-	},
-	Inner = {
-		Poll = {
-			Fire = function(Value: number): ()
-				Begin()
-				local Cursor = SendCursor
-				SerdesFunctions.Inner_WriteEVENT_Poll(Value)
-				Commit()
-				TrafficCounters[38] += 1
-			end
-		},
-	},
-})
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

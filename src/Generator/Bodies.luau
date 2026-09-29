@@ -148,7 +148,7 @@ function Bodies.RateTemplate(): { string }
 			table.insert(Entries, `{Slot.Burst}, 0, 0, 0`)
 		end
 
-		RateTemplateBody = { `local RATE_TEMPLATE = table.freeze(\{{table.concat(Entries, ", ")}\})\n` }
+		RateTemplateBody = { `local RATE_TEMPLATE = table.freeze(\{{table.concat(Entries, ", ")}\} :: \{number\})\n` }
 	end
 
 	return RateTemplateBody

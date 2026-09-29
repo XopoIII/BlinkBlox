@@ -640,7 +640,7 @@ if not RunService:IsRunning() then
 		On = NOOP_RETURNING
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsClient() then
@@ -882,14 +882,14 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable()
+local function DecodeReliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	if Index == 0 then
 		local Value: number = SerdesFunctions.ReadEVENT_Score()
-		local BOUND_LISTENER = Events.Reliable[0]
+		local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "Score"
 			Decoding = -2 - Index
@@ -906,14 +906,14 @@ local function DecodeReliable()
 		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable()
+local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	if Index == 0 then
 		local Value: buffer = SerdesFunctions.ReadEVENT_Chatter()
-		local BOUND_LISTENER = Events.Unreliable[0]
+		local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "Chatter"
 			Decoding = -2 - Index
@@ -921,7 +921,7 @@ local function DecodeUnreliable()
 		end
 	elseif Index == 1 then
 		local Value: number = SerdesFunctions.ReadEVENT_Hit()
-		local BOUND_LISTENER = Events.Unreliable[1]
+		local BOUND_LISTENER = Events.Unreliable[1] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "Hit"
 			Decoding = -2 - Index
@@ -931,7 +931,7 @@ local function DecodeUnreliable()
 		local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Crowd()
 		Value2 = UnwrapStamp(Value2)
 		if StreamAccept(2, Value2) == true then
-			local BOUND_LISTENER = Events.Unreliable[2]
+			local BOUND_LISTENER = Events.Unreliable[2] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Crowd"
 				Decoding = -2 - Index
@@ -942,7 +942,7 @@ local function DecodeUnreliable()
 		local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Mine()
 		Value2 = UnwrapStamp(Value2)
 		if StreamAccept(3, Value2) == true then
-			local BOUND_LISTENER = Events.Unreliable[3]
+			local BOUND_LISTENER = Events.Unreliable[3] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Mine"
 				Decoding = -2 - Index
@@ -1004,91 +1004,84 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	Chatter = {
-		On = function(Listener: (Value: buffer) -> ()): () -> ()
-			if Events.Unreliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Chatter\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[0] = Listener
-			return function (): ()
-				if Events.Unreliable[0] == Listener then
-					Events.Unreliable[0] = nil
-				end
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.Chatter = {
+	On = function(Listener: (Value: buffer) -> ()): () -> ()
+		if Events.Unreliable[0] ~= nil then
+			warn("[BlinkBlox]: \"Chatter\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[0] = Listener
+		return function (): ()
+			if Events.Unreliable[0] == Listener then
+				Events.Unreliable[0] = nil
 			end
 		end
-	},
-	Hit = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Unreliable[1] ~= nil then
-				warn("[BlinkBlox]: \"Hit\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[1] = Listener
-			return function (): ()
-				if Events.Unreliable[1] == Listener then
-					Events.Unreliable[1] = nil
-				end
+	end
+}
+Returns.Hit = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		if Events.Unreliable[1] ~= nil then
+			warn("[BlinkBlox]: \"Hit\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[1] = Listener
+		return function (): ()
+			if Events.Unreliable[1] == Listener then
+				Events.Unreliable[1] = nil
 			end
 		end
-	},
-	Score = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Reliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Score\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[0] = Listener
-			local Pending = Queue.Reliable[0]
-			Queue.Reliable[0] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[0] == Listener then
-					Events.Reliable[0] = nil
-				end
+	end
+}
+Returns.Score = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		if Events.Reliable[0] ~= nil then
+			warn("[BlinkBlox]: \"Score\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[0] = Listener
+		local Pending = Queue.Reliable[0]
+		Queue.Reliable[0] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[0] == Listener then
+				Events.Reliable[0] = nil
 			end
 		end
-	},
-	Crowd = {
-		On = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
-			if Events.Unreliable[2] ~= nil then
-				warn("[BlinkBlox]: \"Crowd\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[2] = Listener
-			return function (): ()
-				if Events.Unreliable[2] == Listener then
-					Events.Unreliable[2] = nil
-				end
+	end
+}
+Returns.Crowd = {
+	On = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
+		if Events.Unreliable[2] ~= nil then
+			warn("[BlinkBlox]: \"Crowd\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[2] = Listener
+		return function (): ()
+			if Events.Unreliable[2] == Listener then
+				Events.Unreliable[2] = nil
 			end
 		end
-	},
-	Mine = {
-		On = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
-			if Events.Unreliable[3] ~= nil then
-				warn("[BlinkBlox]: \"Mine\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[3] = Listener
-			return function (): ()
-				if Events.Unreliable[3] == Listener then
-					Events.Unreliable[3] = nil
-				end
+	end
+}
+Returns.Mine = {
+	On = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
+		if Events.Unreliable[3] ~= nil then
+			warn("[BlinkBlox]: \"Mine\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[3] = Listener
+		return function (): ()
+			if Events.Unreliable[3] == Listener then
+				Events.Unreliable[3] = nil
 			end
 		end
-	},
-})
+	end
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

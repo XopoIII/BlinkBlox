@@ -555,7 +555,7 @@ local function ResetTrafficStats()
 		TrafficCounters[Index] = 0
 	end
 end
-local RATE_TEMPLATE = table.freeze({})
+local RATE_TEMPLATE = table.freeze({} :: {number})
 
 --> Sequence numbers for ordered unreliable events, per player and per event, both ways.
 local OrderOut: { [Player]: { number } } = {}
@@ -803,7 +803,7 @@ if not RunService:IsRunning() then
 		},
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -1538,7 +1538,7 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player)
+local function DecodeReliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1606,7 +1606,7 @@ local function DecodeReliable(Player: Player)
 		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable(Player: Player)
+local function DecodeUnreliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1722,378 +1722,369 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	GetTrafficStats = GetTrafficStats,
-
-	ResetTrafficStats = ResetTrafficStats,
-
-	Byte = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Reliable[0])
-			table.insert(Listeners, Listener)
-			Events.Reliable[0] = Listeners
-			local Pending = Queue.Reliable[0]
-			Queue.Reliable[0] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "Byte", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				local Index = table.find(Events.Reliable[0], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Reliable[0])
-					table.remove(Listeners, Index)
-					Events.Reliable[0] = Listeners
-					ListenerEpoch += 1
-				end
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.GetTrafficStats = GetTrafficStats
+Returns.ResetTrafficStats = ResetTrafficStats
+Returns.Byte = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Reliable[0])
+		table.insert(Listeners, Listener)
+		Events.Reliable[0] = Listeners
+		local Pending = Queue.Reliable[0]
+		Queue.Reliable[0] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "Byte", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			local Index = table.find(Events.Reliable[0], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Reliable[0])
+				table.remove(Listeners, Index)
+				Events.Reliable[0] = Listeners
+				ListenerEpoch += 1
 			end
 		end
-	},
-	Push = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadPlayer(Player)
-			local Cursor = SendCursor
-			SerdesFunctions.WriteEVENT_Push(Value)
+	end
+}
+Returns.Push = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadPlayer(Player)
+		local Cursor = SendCursor
+		SerdesFunctions.WriteEVENT_Push(Value)
+		TrafficCounters[14] += 1
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Push(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+		local Reached = #Players:GetPlayers()
+		TrafficCounters[14] += Reached
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Push(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
 			TrafficCounters[14] += 1
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Push(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-			local Reached = #Players:GetPlayers()
-			TrafficCounters[14] += Reached
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Push(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-				TrafficCounters[14] += 1
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Push(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
 			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Push(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-				TrafficCounters[14] += 1
-			end
-		end,
-	},
-	Blip = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Blip(Value)
-			if not CheckUnreliableSize("Blip") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
+			AppendPlayer(Player, Buffer, Size, Instances)
+			TrafficCounters[14] += 1
+		end
+	end,
+}
+Returns.Blip = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Blip(Value)
+		if not CheckUnreliableSize("Blip") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+		TrafficCounters[18] += 1
+		TrafficCounters[5] += SendCursor
+		TrafficCounters[6] += 1
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Blip(Value)
+		if not CheckUnreliableSize("Blip") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+		local Reached = #Players:GetPlayers()
+		TrafficCounters[18] += Reached
+		TrafficCounters[5] += SendCursor * Reached
+		TrafficCounters[6] += Reached
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Blip(Value)
+		if not CheckUnreliableSize("Blip") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 			TrafficCounters[18] += 1
 			TrafficCounters[5] += SendCursor
 			TrafficCounters[6] += 1
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Blip(Value)
-			if not CheckUnreliableSize("Blip") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-			local Reached = #Players:GetPlayers()
-			TrafficCounters[18] += Reached
-			TrafficCounters[5] += SendCursor * Reached
-			TrafficCounters[6] += Reached
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Blip(Value)
-			if not CheckUnreliableSize("Blip") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[18] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Blip(Value)
+		if not CheckUnreliableSize("Blip") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
 			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Blip(Value)
-			if not CheckUnreliableSize("Blip") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[18] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-	},
-	Ping = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[1])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[1] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[1], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[1])
-					table.remove(Listeners, Index)
-					Events.Unreliable[1] = Listeners
-					ListenerEpoch += 1
-				end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+			TrafficCounters[18] += 1
+			TrafficCounters[5] += SendCursor
+			TrafficCounters[6] += 1
+		end
+	end,
+}
+Returns.Ping = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[1])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[1] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[1], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[1])
+				table.remove(Listeners, Index)
+				Events.Unreliable[1] = Listeners
+				ListenerEpoch += 1
 			end
 		end
-	},
-	Seq = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Seq(Value)
-			if not CheckUnreliableSize("Seq") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
+	end
+}
+Returns.Seq = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Seq(Value)
+		if not CheckUnreliableSize("Seq") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+		TrafficCounters[26] += 1
+		TrafficCounters[5] += SendCursor
+		TrafficCounters[6] += 1
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Seq(Value)
+		if not CheckUnreliableSize("Seq") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
 			buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 			TrafficCounters[26] += 1
 			TrafficCounters[5] += SendCursor
 			TrafficCounters[6] += 1
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Seq(Value)
-			if not CheckUnreliableSize("Seq") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[26] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
+		end
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Seq(Value)
+		if not CheckUnreliableSize("Seq") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+			TrafficCounters[26] += 1
+			TrafficCounters[5] += SendCursor
+			TrafficCounters[6] += 1
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Seq(Value)
+		if not CheckUnreliableSize("Seq") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
 			end
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Seq(Value)
-			if not CheckUnreliableSize("Seq") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[26] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Seq(Value)
-			if not CheckUnreliableSize("Seq") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[26] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-	},
-	Note = {
-		On = function(Listener: (Player: Player, Value: string) -> ()): () -> ()
-			local Listeners = table.clone(Events.Reliable[2])
-			table.insert(Listeners, Listener)
-			Events.Reliable[2] = Listeners
-			local Pending = Queue.Reliable[2]
-			Queue.Reliable[2] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "Note", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				local Index = table.find(Events.Reliable[2], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Reliable[2])
-					table.remove(Listeners, Index)
-					Events.Reliable[2] = Listeners
-					ListenerEpoch += 1
-				end
+			buffer.writeu16(Buffer, 1, NextOrder(Player, 2))
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+			TrafficCounters[26] += 1
+			TrafficCounters[5] += SendCursor
+			TrafficCounters[6] += 1
+		end
+	end,
+}
+Returns.Note = {
+	On = function(Listener: (Player: Player, Value: string) -> ()): () -> ()
+		local Listeners = table.clone(Events.Reliable[2])
+		table.insert(Listeners, Listener)
+		Events.Reliable[2] = Listeners
+		local Pending = Queue.Reliable[2]
+		Queue.Reliable[2] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "Note", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			local Index = table.find(Events.Reliable[2], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Reliable[2])
+				table.remove(Listeners, Index)
+				Events.Reliable[2] = Listeners
+				ListenerEpoch += 1
 			end
 		end
-	},
-	Trail = {
-		Fire = function(Player: Player, Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Trail(Value)
-			if not CheckUnreliableSize("Trail") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
+	end
+}
+Returns.Trail = {
+	Fire = function(Player: Player, Value: { number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Trail(Value)
+		if not CheckUnreliableSize("Trail") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+		TrafficCounters[33] += SendCursor
+		TrafficCounters[34] += 1
+		TrafficCounters[5] += SendCursor
+		TrafficCounters[6] += 1
+	end,
+	FireAll = function(Value: { number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Trail(Value)
+		if not CheckUnreliableSize("Trail") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
 			buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
 			Unreliable:FireClient(Player, Buffer, SendInstances)
 			TrafficCounters[33] += SendCursor
 			TrafficCounters[34] += 1
 			TrafficCounters[5] += SendCursor
 			TrafficCounters[6] += 1
-		end,
-		FireAll = function(Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Trail(Value)
-			if not CheckUnreliableSize("Trail") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[33] += SendCursor
-				TrafficCounters[34] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
+		end
+	end,
+	FireList = function(List: {Player}, Value: { number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Trail(Value)
+		if not CheckUnreliableSize("Trail") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+			TrafficCounters[33] += SendCursor
+			TrafficCounters[34] += 1
+			TrafficCounters[5] += SendCursor
+			TrafficCounters[6] += 1
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Trail(Value)
+		if not CheckUnreliableSize("Trail") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
 			end
-		end,
-		FireList = function(List: {Player}, Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Trail(Value)
-			if not CheckUnreliableSize("Trail") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[33] += SendCursor
-				TrafficCounters[34] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Trail(Value)
-			if not CheckUnreliableSize("Trail") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-				TrafficCounters[33] += SendCursor
-				TrafficCounters[34] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-		end,
-	},
-	Ask = {
-		On = function(Listener: (Player, number) -> (number)): ()
-			if Events.Reliable[3] ~= nil then
-				warn("[BlinkBlox]: \"Ask\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[3] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
-				local ReturnValue: number;
-				local Success, Error = pcall(function ()
-					ReturnValue = Listener(Player, Value)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Ask, ReturnValue, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 3)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "Ask", Error) then warn(`"Ask" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[3] or {}
-				Queue.Reliable[3] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[3](table.unpack(Arguments, 1, Arguments.n))
-				end
+			buffer.writeu16(Buffer, 1, NextOrder(Player, 3))
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+			TrafficCounters[33] += SendCursor
+			TrafficCounters[34] += 1
+			TrafficCounters[5] += SendCursor
+			TrafficCounters[6] += 1
+		end
+	end,
+}
+Returns.Ask = {
+	On = function(Listener: (Player, number) -> (number)): ()
+		if Events.Reliable[3] ~= nil then
+			warn("[BlinkBlox]: \"Ask\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[3] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
+			local ReturnValue: number;
+			local Success, Error = pcall(function ()
+				ReturnValue = Listener(Player, Value)
 			end)
+			LoadPlayer(Player)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Ask, ReturnValue, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 3)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "Ask", Error) then warn(`"Ask" encountered an error, {Error}`) end
+			end
+			SavePlayerBuffer(Player)
+		end
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[3] or {}
+			Queue.Reliable[3] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[3](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.Inner = {
+	Poll = {
+		Iter = function(): () -> (number, Player, number)
+			local index = 0
+			local queue = Queue.Reliable[4]
+			return function (): (number, Player, number)
+				index += 1
+				local arguments = Pop(queue)
+				if arguments ~= nil then
+					return index, unpack(arguments :: any, 1, arguments.n)
+				end
+				return nil :: any, nil :: any, nil :: any
+			end
+		end,
+		--- @deprecated v0.14.1 -- Use `Iter` instead.
+		Next = function(): () -> (number, Player, number)
+			local index = 0
+			local queue = Queue.Reliable[4]
+			return function (): (number, Player, number)
+				index += 1
+				local arguments = Pop(queue)
+				if arguments ~= nil then
+					return index, unpack(arguments :: any, 1, arguments.n)
+				end
+				return nil :: any, nil :: any, nil :: any
+			end
 		end
 	},
-	Inner = {
-		Poll = {
-			Iter = function(): () -> (number, Player, number)
-				local index = 0
-				local queue = Queue.Reliable[4]
-				return function (): (number, Player, number)
-					index += 1
-					local arguments = Pop(queue)
-					if arguments ~= nil then
-						return index, unpack(arguments, 1, arguments.n)
-					end
-					return nil :: any, nil :: any, nil :: any
-				end
-			end,
-			--- @deprecated v0.14.1 -- Use `Iter` instead.
-			Next = function(): () -> (number, Player, number)
-				local index = 0
-				local queue = Queue.Reliable[4]
-				return function (): (number, Player, number)
-					index += 1
-					local arguments = Pop(queue)
-					if arguments ~= nil then
-						return index, unpack(arguments, 1, arguments.n)
-					end
-					return nil :: any, nil :: any, nil :: any
-				end
-			end
-		},
-	},
-})
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

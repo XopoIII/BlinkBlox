@@ -515,7 +515,7 @@ local EventNames: any = {
     Unreliable = {}
 }
 
-local RATE_TEMPLATE = table.freeze({})
+local RATE_TEMPLATE = table.freeze({} :: {number})
 
 --> Sequence numbers for ordered unreliable events, per player and per event, both ways.
 local OrderOut: { [Player]: { number } } = {}
@@ -767,7 +767,7 @@ if not RunService:IsRunning() then
 		},
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -2058,14 +2058,14 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player)
+local function DecodeReliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
-local function DecodeUnreliable(Player: Player)
+local function DecodeUnreliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -2165,85 +2165,78 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 end)
 
-
-local Returns = table.freeze({
-	stepReplication = StepReplication,
-
-	setRateLimitHandler = SetRateLimitHandler,
-
-	setDecodeErrorHandler = SetDecodeErrorHandler,
-
-	setPacketDropHandler = SetPacketDropHandler,
-
-	setListenerErrorHandler = SetListenerErrorHandler,
-
-	remotes = REMOTE_NAMES,
-
-	Heads = {
-		set = function(Value: { { Id: number, Head: Vector3, Back: boolean } }): () StreamSet(STREAM_0, Value) end,
-		clear = function(): () StreamClear(STREAM_0) end,
-		urgent = function(): () STREAM_0.Urgent = true end,
-		setFast = function(Fast: boolean): () STREAM_0.Fast = Fast end,
-	},
-	Aim = {
-		fire = function(Player: Player, Value: Vector3): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Aim(Value)
-			if not CheckUnreliableSize("Aim") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
+local Returns = {}
+Returns.stepReplication = StepReplication
+Returns.setRateLimitHandler = SetRateLimitHandler
+Returns.setDecodeErrorHandler = SetDecodeErrorHandler
+Returns.setPacketDropHandler = SetPacketDropHandler
+Returns.setListenerErrorHandler = SetListenerErrorHandler
+Returns.remotes = REMOTE_NAMES
+Returns.Heads = {
+	set = function(Value: { { Id: number, Head: Vector3, Back: boolean } }): () StreamSet(STREAM_0, Value) end,
+	clear = function(): () StreamClear(STREAM_0) end,
+	urgent = function(): () STREAM_0.Urgent = true end,
+	setFast = function(Fast: boolean): () STREAM_0.Fast = Fast end,
+}
+Returns.Aim = {
+	fire = function(Player: Player, Value: Vector3): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Aim(Value)
+		if not CheckUnreliableSize("Aim") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	fireAll = function(Value: Vector3): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Aim(Value)
+		if not CheckUnreliableSize("Aim") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
 			buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
 			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		fireAll = function(Value: Vector3): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Aim(Value)
-			if not CheckUnreliableSize("Aim") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	fireList = function(List: {Player}, Value: Vector3): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Aim(Value)
+		if not CheckUnreliableSize("Aim") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	fireExcept = function(Except: Player, Value: Vector3): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Aim(Value)
+		if not CheckUnreliableSize("Aim") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
 			end
-		end,
-		fireList = function(List: {Player}, Value: Vector3): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Aim(Value)
-			if not CheckUnreliableSize("Aim") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		fireExcept = function(Except: Player, Value: Vector3): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Aim(Value)
-			if not CheckUnreliableSize("Aim") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
+			buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.World = {
+	Clock = {
+		set = function(Value: number): () StreamSet(STREAM_2, Value) end,
+		clear = function(): () StreamClear(STREAM_2) end,
+		urgent = function(): () STREAM_2.Urgent = true end,
+		setFast = function(Fast: boolean): () STREAM_2.Fast = Fast end,
 	},
-	World = {
-		Clock = {
-			set = function(Value: number): () StreamSet(STREAM_2, Value) end,
-			clear = function(): () StreamClear(STREAM_2) end,
-			urgent = function(): () STREAM_2.Urgent = true end,
-			setFast = function(Fast: boolean): () STREAM_2.Fast = Fast end,
-		},
-	},
-})
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

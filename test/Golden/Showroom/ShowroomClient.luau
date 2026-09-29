@@ -678,7 +678,7 @@ if not RunService:IsRunning() or not ConnectRemotes() then
 		on = NOOP_RETURNING
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsClient() then
@@ -889,7 +889,7 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable()
+local function DecodeReliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -957,14 +957,14 @@ local function DecodeReliable()
 		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable()
+local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	if Index == 0 then
 		local Value: number = SerdesFunctions.ReadEVENT_Position()
-		local BOUND_LISTENER = Events.Unreliable[0]
+		local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "Position"
 			Decoding = -2 - Index
@@ -1025,121 +1025,113 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 end)
 
-
-local Returns = table.freeze({
-	stepReplication = StepReplication,
-
-	setRateLimitHandler = SetRateLimitHandler,
-
-	setDecodeErrorHandler = SetDecodeErrorHandler,
-
-	setPacketDropHandler = SetPacketDropHandler,
-
-	setListenerErrorHandler = SetListenerErrorHandler,
-
-	remotes = REMOTE_NAMES,
-
-	connected = true,
-
-	Announce = {
-		on = function(Listener: (Value: string) -> ()): () -> ()
-			local Listeners = table.clone(Events.Reliable[0])
-			table.insert(Listeners, Listener)
-			Events.Reliable[0] = Listeners
-			local Pending = Queue.Reliable[0]
-			Queue.Reliable[0] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				local Index = table.find(Events.Reliable[0], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Reliable[0])
-					table.remove(Listeners, Index)
-					Events.Reliable[0] = Listeners
-					ListenerEpoch += 1
-				end
+local Returns = {}
+Returns.stepReplication = StepReplication
+Returns.setRateLimitHandler = SetRateLimitHandler
+Returns.setDecodeErrorHandler = SetDecodeErrorHandler
+Returns.setPacketDropHandler = SetPacketDropHandler
+Returns.setListenerErrorHandler = SetListenerErrorHandler
+Returns.remotes = REMOTE_NAMES
+Returns.connected = true
+Returns.Announce = {
+	on = function(Listener: (Value: string) -> ()): () -> ()
+		local Listeners = table.clone(Events.Reliable[0])
+		table.insert(Listeners, Listener)
+		Events.Reliable[0] = Listeners
+		local Pending = Queue.Reliable[0]
+		Queue.Reliable[0] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			local Index = table.find(Events.Reliable[0], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Reliable[0])
+				table.remove(Listeners, Index)
+				Events.Reliable[0] = Listeners
+				ListenerEpoch += 1
 			end
 		end
-	},
-	Position = {
-		on = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Unreliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Position\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[0] = Listener
-			return function (): ()
-				if Events.Unreliable[0] == Listener then
-					Events.Unreliable[0] = nil
-				end
+	end
+}
+Returns.Position = {
+	on = function(Listener: (Value: number) -> ()): () -> ()
+		if Events.Unreliable[0] ~= nil then
+			warn("[BlinkBlox]: \"Position\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[0] = Listener
+		return function (): ()
+			if Events.Unreliable[0] == Listener then
+				Events.Unreliable[0] = nil
 			end
 		end
-	},
-	Ready = {
-		fire = function(Value: number): ()
-			Begin()
-			SerdesFunctions.WriteEVENT_Ready(Value)
-			Commit()
+	end
+}
+Returns.Ready = {
+	fire = function(Value: number): ()
+		Begin()
+		SerdesFunctions.WriteEVENT_Ready(Value)
+		Commit()
+	end
+}
+Returns.Price = {
+	invoke = function(Value: number): (number)
+		local InvocationIdentifier = ClaimInvocation(Invocations, 2)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_Price, Value, InvocationIdentifier)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			ReleaseInvocation(Invocations, InvocationIdentifier)
+			error(Failure, 0)
 		end
-	},
-	Price = {
-		invoke = function(Value: number): (number)
-			local InvocationIdentifier = ClaimInvocation(Invocations, 2)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_Price, Value, InvocationIdentifier)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				ReleaseInvocation(Invocations, InvocationIdentifier)
-				error(Failure, 0)
-			end
-			Close(Cursor, Instances)
-			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
-			TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"Price" was never answered')
-			local Success, ReturnValue: number = coroutine.yield()
-			if Success ~= true then
-				error("There was an exception while processing \"Price\".")
-			end
-			return ReturnValue
+		Close(Cursor, Instances)
+		ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
+		TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"Price" was never answered')
+		local Success, ReturnValue: number = coroutine.yield()
+		if Success ~= true then
+			error("There was an exception while processing \"Price\".")
 		end
-	},
-	Confirm = {
-		on = function(Listener: (number) -> (boolean)): ()
-			if Events.Reliable[3] ~= nil then
-				warn("[BlinkBlox]: \"Confirm\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[3] = function(Value: number, InvocationIdentifier: number): ()
-				local ReturnValue: boolean;
-				local Success, Error = pcall(function ()
-					ReturnValue = Listener(Value)
-				end)
-				Settle()
-				local ReplyStart, ReplyInstances = SendCursor, #SendInstances
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Confirm, ReturnValue, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 3)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					warn(`"Confirm" encountered an error, {Error}`)
-				end
-				Close(ReplyStart, ReplyInstances)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[3] or {}
-				Queue.Reliable[3] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[3](table.unpack(Arguments, 1, Arguments.n))
-				end
+		return ReturnValue
+	end
+}
+Returns.Confirm = {
+	on = function(Listener: (number) -> (boolean)): ()
+		if Events.Reliable[3] ~= nil then
+			warn("[BlinkBlox]: \"Confirm\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[3] = function(Value: number, InvocationIdentifier: number): ()
+			local ReturnValue: boolean;
+			local Success, Error = pcall(function ()
+				ReturnValue = Listener(Value)
 			end)
+			Settle()
+			local ReplyStart, ReplyInstances = SendCursor, #SendInstances
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Confirm, ReturnValue, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 3)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				warn(`"Confirm" encountered an error, {Error}`)
+			end
+			Close(ReplyStart, ReplyInstances)
 		end
-	},
-})
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[3] or {}
+			Queue.Reliable[3] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[3](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

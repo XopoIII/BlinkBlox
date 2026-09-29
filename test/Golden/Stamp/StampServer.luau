@@ -515,7 +515,7 @@ local EventNames: any = {
     Unreliable = {}
 }
 
-local RATE_TEMPLATE = table.freeze({2, 0, 0, 0, 30, 0, 0, 0})
+local RATE_TEMPLATE = table.freeze({2, 0, 0, 0, 30, 0, 0, 0} :: {number})
 
 --> Sequence numbers for ordered unreliable events, per player and per event, both ways.
 local OrderOut: { [Player]: { number } } = {}
@@ -709,7 +709,7 @@ if not RunService:IsRunning() then
 		SetFast = NOOP
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -1784,7 +1784,7 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player)
+local function DecodeReliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1793,7 +1793,7 @@ local function DecodeReliable(Player: Player)
 		local Value1: number = SerdesFunctions.ReadEVENT_Swing()
 		Value1 = ClampStamp(Value1, 0.25)
 		if RateAccept(Player, 1, 2, 2, "Swing") == true then
-			local BOUND_LISTENER = Events.Reliable[0]
+			local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Swing"
 				Decoding = -2 - Index
@@ -1808,7 +1808,7 @@ local function DecodeReliable(Player: Player)
 		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable(Player: Player)
+local function DecodeUnreliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1925,61 +1925,54 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	Swing = {
-		On = function(Listener: (Player: Player, SentAt: number) -> ()): () -> ()
-			if Events.Reliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Swing\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[0] = Listener
-			local Pending = Queue.Reliable[0]
-			Queue.Reliable[0] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "Swing", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[0] == Listener then
-					Events.Reliable[0] = nil
-				end
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.Swing = {
+	On = function(Listener: (Player: Player, SentAt: number) -> ()): () -> ()
+		if Events.Reliable[0] ~= nil then
+			warn("[BlinkBlox]: \"Swing\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[0] = Listener
+		local Pending = Queue.Reliable[0]
+		Queue.Reliable[0] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "Swing", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[0] == Listener then
+				Events.Reliable[0] = nil
 			end
 		end
-	},
-	Aim = {
-		On = function(Listener: (Player: Player, Target: number, At: Vector3, SentAt: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[0])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[0] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[0], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[0])
-					table.remove(Listeners, Index)
-					Events.Unreliable[0] = Listeners
-					ListenerEpoch += 1
-				end
+	end
+}
+Returns.Aim = {
+	On = function(Listener: (Player: Player, Target: number, At: Vector3, SentAt: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[0])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[0] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[0], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[0])
+				table.remove(Listeners, Index)
+				Events.Unreliable[0] = Listeners
+				ListenerEpoch += 1
 			end
 		end
-	},
-	Trust = {
-		Set = function(Player: Player, Value: { Gap: number, Bucket: number }): () PlayerStreamSet(STREAM_1, Player, Value) end,
-		Clear = function(Player: Player): () PlayerStreamClear(STREAM_1, Player) end,
-		Urgent = function(Player: Player): () PlayerStreamUrgent(STREAM_1, Player) end,
-		SetFast = function(Player: Player, Fast: boolean): () PlayerStreamSetFast(STREAM_1, Player, Fast) end,
-	},
-})
+	end
+}
+Returns.Trust = {
+	Set = function(Player: Player, Value: { Gap: number, Bucket: number }): () PlayerStreamSet(STREAM_1, Player, Value) end,
+	Clear = function(Player: Player): () PlayerStreamClear(STREAM_1, Player) end,
+	Urgent = function(Player: Player): () PlayerStreamUrgent(STREAM_1, Player) end,
+	SetFast = function(Player: Player, Fast: boolean): () PlayerStreamSetFast(STREAM_1, Player, Fast) end,
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

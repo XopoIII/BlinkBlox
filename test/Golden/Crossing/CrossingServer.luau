@@ -555,7 +555,7 @@ local function ResetTrafficStats()
 		TrafficCounters[Index] = 0
 	end
 end
-local RATE_TEMPLATE = table.freeze({10, 0, 0, 0})
+local RATE_TEMPLATE = table.freeze({10, 0, 0, 0} :: {number})
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
@@ -730,7 +730,7 @@ if not RunService:IsRunning() then
 		on = NOOP_RETURNING
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -2072,7 +2072,7 @@ local function Listen()
 		end
 	end
 	RunService.Heartbeat:Connect(StepReplication)
-	local function DecodeReliable(Player: Player)
+	local function DecodeReliable(Player: Player): ()
 		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 		RecieveCursor += 1
@@ -2081,7 +2081,7 @@ local function Listen()
 			local Value: number = SerdesFunctions.ReadEVENT_Ready()
 			TrafficCounters[20] += 1
 			if RateAccept(Player, 1, 10, 10, "Ready") == true then
-				local BOUND_LISTENER = Events.Reliable[0]
+				local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Ready"
 					Decoding = -2 - Index
@@ -2096,7 +2096,7 @@ local function Listen()
 			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	local function DecodeUnreliable(Player: Player)
+	local function DecodeUnreliable(Player: Player): ()
 		Decoding = -1
 		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 		RecieveCursor += 1
@@ -2212,59 +2212,48 @@ local function Start()
     Listen()
 end
 
-
-local Returns = table.freeze({
-	step_replication = StepReplication,
-
-	set_rate_limit_handler = SetRateLimitHandler,
-
-	set_decode_error_handler = SetDecodeErrorHandler,
-
-	set_packet_drop_handler = SetPacketDropHandler,
-
-	set_listener_error_handler = SetListenerErrorHandler,
-
-	remotes = REMOTE_NAMES,
-
-	start = Start,
-
-	get_traffic_stats = GetTrafficStats,
-
-	reset_traffic_stats = ResetTrafficStats,
-
-	limits = BLINK_LIMITS,
-
-	Crawls = {
-		set = function(Value: { { Id: number, Speed: number, Heat: number } }): () StreamSet(STREAM_0, Value) end,
-		clear = function(): () StreamClear(STREAM_0) end,
-		urgent = function(): () STREAM_0.Urgent = true end,
-		set_fast = function(Fast: boolean): () STREAM_0.Fast = Fast end,
-	},
-	Tick = {
-		set = function(Value: number): () StreamSet(STREAM_1, Value) end,
-		clear = function(): () StreamClear(STREAM_1) end,
-		urgent = function(): () STREAM_1.Urgent = true end,
-		set_fast = function(Fast: boolean): () STREAM_1.Fast = Fast end,
-	},
-	Ready = {
-		on = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Reliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Ready\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[0] = Listener
-			local Pending = Queue.Reliable[0]
-			Queue.Reliable[0] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "Ready", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[0] == Listener then
-					Events.Reliable[0] = nil
-				end
+local Returns = {}
+Returns.step_replication = StepReplication
+Returns.set_rate_limit_handler = SetRateLimitHandler
+Returns.set_decode_error_handler = SetDecodeErrorHandler
+Returns.set_packet_drop_handler = SetPacketDropHandler
+Returns.set_listener_error_handler = SetListenerErrorHandler
+Returns.remotes = REMOTE_NAMES
+Returns.start = Start
+Returns.get_traffic_stats = GetTrafficStats
+Returns.reset_traffic_stats = ResetTrafficStats
+Returns.limits = BLINK_LIMITS
+Returns.Crawls = {
+	set = function(Value: { { Id: number, Speed: number, Heat: number } }): () StreamSet(STREAM_0, Value) end,
+	clear = function(): () StreamClear(STREAM_0) end,
+	urgent = function(): () STREAM_0.Urgent = true end,
+	set_fast = function(Fast: boolean): () STREAM_0.Fast = Fast end,
+}
+Returns.Tick = {
+	set = function(Value: number): () StreamSet(STREAM_1, Value) end,
+	clear = function(): () StreamClear(STREAM_1) end,
+	urgent = function(): () STREAM_1.Urgent = true end,
+	set_fast = function(Fast: boolean): () STREAM_1.Fast = Fast end,
+}
+Returns.Ready = {
+	on = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Reliable[0] ~= nil then
+			warn("[BlinkBlox]: \"Ready\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[0] = Listener
+		local Pending = Queue.Reliable[0]
+		Queue.Reliable[0] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "Ready", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[0] == Listener then
+				Events.Reliable[0] = nil
 			end
 		end
-	},
-})
+	end
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

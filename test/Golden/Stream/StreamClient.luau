@@ -579,7 +579,7 @@ function SerdesFunctions.ReadEVENT_Heads(): ({ { Id: number, Head: Vector3, Back
 		local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		if not (Length <= 16) then error(`Expected "Length" to be smaller than or equal to 16, got {Length} instead.`) end
 		if Length * 11 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value1 = table.create(Length)
+		Value1 = table.create(Length) :: {any}
 			-- Read BLOCK: 11 bytes
 		local ARRAY_START_2 = Read(11 * Length)
 		local BITFIELD_3_0
@@ -726,7 +726,7 @@ if not RunService:IsRunning() then
 		},
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsClient() then
@@ -968,14 +968,14 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable()
+local function DecodeReliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
-local function DecodeUnreliable()
+local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -984,7 +984,7 @@ local function DecodeUnreliable()
 		local Value1: { { Id: number, Head: Vector3, Back: boolean } }?, Value2: number = SerdesFunctions.ReadEVENT_Heads()
 		Value2 = UnwrapStamp(Value2)
 		if StreamAccept(0, Value2) == true then
-			local BOUND_LISTENER = Events.Unreliable[0]
+			local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Heads"
 				Decoding = -2 - Index
@@ -1064,78 +1064,71 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 end)
 
-
-local Returns = table.freeze({
-	stepReplication = StepReplication,
-
-	setRateLimitHandler = SetRateLimitHandler,
-
-	setDecodeErrorHandler = SetDecodeErrorHandler,
-
-	setPacketDropHandler = SetPacketDropHandler,
-
-	setListenerErrorHandler = SetListenerErrorHandler,
-
-	remotes = REMOTE_NAMES,
-
-	Heads = {
-		on = function(Listener: (Value: { { Id: number, Head: Vector3, Back: boolean } }?, ServerTime: number) -> ()): () -> ()
-			if Events.Unreliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Heads\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+local Returns = {}
+Returns.stepReplication = StepReplication
+Returns.setRateLimitHandler = SetRateLimitHandler
+Returns.setDecodeErrorHandler = SetDecodeErrorHandler
+Returns.setPacketDropHandler = SetPacketDropHandler
+Returns.setListenerErrorHandler = SetListenerErrorHandler
+Returns.remotes = REMOTE_NAMES
+Returns.Heads = {
+	on = function(Listener: (Value: { { Id: number, Head: Vector3, Back: boolean } }?, ServerTime: number) -> ()): () -> ()
+		if Events.Unreliable[0] ~= nil then
+			warn("[BlinkBlox]: \"Heads\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[0] = Listener
+		return function (): ()
+			if Events.Unreliable[0] == Listener then
+				Events.Unreliable[0] = nil
 			end
-			Events.Unreliable[0] = Listener
+		end
+	end
+}
+Returns.Aim = {
+	iter = function(): () -> (number, Vector3)
+		local index = 0
+		local queue = Queue.Unreliable[1]
+		return function (): (number, Vector3)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any
+		end
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	next = function(): () -> (number, Vector3)
+		local index = 0
+		local queue = Queue.Unreliable[1]
+		return function (): (number, Vector3)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any
+		end
+	end
+}
+Returns.World = {
+	Clock = {
+		on = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
+			local Listeners = table.clone(Events.Unreliable[2])
+			table.insert(Listeners, Listener)
+			Events.Unreliable[2] = Listeners
 			return function (): ()
-				if Events.Unreliable[0] == Listener then
-					Events.Unreliable[0] = nil
+				local Index = table.find(Events.Unreliable[2], Listener)
+				if Index ~= nil then
+					local Listeners = table.clone(Events.Unreliable[2])
+					table.remove(Listeners, Index)
+					Events.Unreliable[2] = Listeners
+					ListenerEpoch += 1
 				end
 			end
 		end
 	},
-	Aim = {
-		iter = function(): () -> (number, Vector3)
-			local index = 0
-			local queue = Queue.Unreliable[1]
-			return function (): (number, Vector3)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
-			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		next = function(): () -> (number, Vector3)
-			local index = 0
-			local queue = Queue.Unreliable[1]
-			return function (): (number, Vector3)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
-			end
-		end
-	},
-	World = {
-		Clock = {
-			on = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
-				local Listeners = table.clone(Events.Unreliable[2])
-				table.insert(Listeners, Listener)
-				Events.Unreliable[2] = Listeners
-				return function (): ()
-					local Index = table.find(Events.Unreliable[2], Listener)
-					if Index ~= nil then
-						local Listeners = table.clone(Events.Unreliable[2])
-						table.remove(Listeners, Index)
-						Events.Unreliable[2] = Listeners
-						ListenerEpoch += 1
-					end
-				end
-			end
-		},
-	},
-})
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

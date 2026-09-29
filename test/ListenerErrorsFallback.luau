@@ -215,7 +215,7 @@ return function(Pair: Isolated.Pair, Kit: Kit)
 				local Tree = Isolated.Parse(`option Casing = {Casing}\n{Schema}`)
 				for _, Context in { "Server", "Client" } do
 					local Source = Generator.Generate(Context :: any, Tree)
-					if not string.find(Source, `{Name} = SetListenerErrorHandler,`, 1, true) then
+					if not string.find(Source, `{Name} = SetListenerErrorHandler`, 1, true) then
 						ErrorPrint(`Failed "Casing": the {Casing} {Context} module does not export {Name}.`)
 					end
 

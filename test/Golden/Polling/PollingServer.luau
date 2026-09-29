@@ -515,7 +515,7 @@ local EventNames: any = {
     Unreliable = {}
 }
 
-local RATE_TEMPLATE = table.freeze({})
+local RATE_TEMPLATE = table.freeze({} :: {number})
 local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Reliable[0] = CreateQueue()
@@ -556,7 +556,7 @@ if not RunService:IsRunning() then
 		next = NOOP_RETURNING
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -1289,7 +1289,7 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player)
+local function DecodeReliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1308,7 +1308,7 @@ local function DecodeReliable(Player: Player)
 		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable(Player: Player)
+local function DecodeUnreliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1408,74 +1408,67 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 end)
 
-
-local Returns = table.freeze({
-	step_replication = StepReplication,
-
-	set_rate_limit_handler = SetRateLimitHandler,
-
-	set_decode_error_handler = SetDecodeErrorHandler,
-
-	set_packet_drop_handler = SetPacketDropHandler,
-
-	set_listener_error_handler = SetListenerErrorHandler,
-
-	remotes = REMOTE_NAMES,
-
-	PollingEvent = {
-		iter = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[0]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
+local Returns = {}
+Returns.step_replication = StepReplication
+Returns.set_rate_limit_handler = SetRateLimitHandler
+Returns.set_decode_error_handler = SetDecodeErrorHandler
+Returns.set_packet_drop_handler = SetPacketDropHandler
+Returns.set_listener_error_handler = SetListenerErrorHandler
+Returns.remotes = REMOTE_NAMES
+Returns.PollingEvent = {
+	iter = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Reliable[0]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
 			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		next = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[0]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
+			return nil :: any, nil :: any, nil :: any
 		end
-	},
-	ImplicitPollingEvent = {
-		iter = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[1]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	next = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Reliable[0]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
 			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		next = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[1]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
+			return nil :: any, nil :: any, nil :: any
 		end
-	},
-})
+	end
+}
+Returns.ImplicitPollingEvent = {
+	iter = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Reliable[1]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	next = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Reliable[1]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

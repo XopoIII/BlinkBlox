@@ -572,9 +572,9 @@ local function UnpackRotation(X: number, Y: number, Z: number, Index: number, A:
 	return CFrame.new(X, Y, Z, A, B, C, D)
 end
 
-local PACKED_ROWS = table.create(256)
+local PACKED_ROWS = table.create(256) :: { { boolean } }
 for Byte = 0, 255 do
-	local Row = table.create(8)
+	local Row = table.create(8) :: { boolean }
 	for Bit = 0, 7 do
 		Row[Bit + 1] = bit32.btest(Byte, bit32.lshift(1, Bit))
 	end
@@ -629,7 +629,7 @@ local MissingInstance = false
 --> What an event's reader raises to refuse its event; see CloseDecode.
 local MISSING_SIGNAL = table.freeze({})
 local MISSING_INSTANCE = "An Instance it carried did not arrive: it is not streamed in or not replicated to this side, or it was destroyed before the packet came. Only this event was dropped."
-local RATE_TEMPLATE = table.freeze({10, 0, 0, 0, 10, 0, 0, 0, 2, 0, 0, 0})
+local RATE_TEMPLATE = table.freeze({10, 0, 0, 0, 10, 0, 0, 0, 2, 0, 0, 0} :: {number})
 
 --> Sequence numbers for ordered unreliable events, per player and per event, both ways.
 local OrderOut: { [Player]: { number } } = {}
@@ -1010,7 +1010,7 @@ function SerdesFunctions.ReadEVENT_UnreliableInstances(): (buffer, { Instance })
 	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if not (Length <= 4) then error(`Expected "Length" to be smaller than or equal to 4, got {Length} instead.`) end
 	if Length > 256 - RecieveInstanceCursor then error(`Expected "Value2" to fit in the {256 - RecieveInstanceCursor} values a packet may carry beside it, got a length of {Length} instead.`) end
-	local Value2 = table.create(Length)
+	local Value2 = table.create(Length) :: {any}
 	for Slot_1 = 1, Length do
 		-- Item_1: UnreliableInstances
 		RecieveInstanceCursor += 1
@@ -1159,7 +1159,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		-- Value.Nested.Array: Array
 		-- START ARRAY
 		local Length = 10
-		Value.Nested.Array = table.create(Length)
+		Value.Nested.Array = table.create(Length) :: {any}
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_1 = Read(1 * Length)
 		for Slot_1 = 1, Length do
@@ -1177,7 +1177,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
 		local Length = 2
-		Value.Nested.OptionalArray = table.create(Length)
+		Value.Nested.OptionalArray = table.create(Length) :: {any}
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_2 = Read(1 * Length)
 		for Slot_2 = 1, Length do
@@ -1192,7 +1192,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 	end
 	do
 		-- Value.Map: Map
-		Value.Map = {}
+		Value.Map = {} :: { [any]: any }
 		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
 		if Elements_1 * 9 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Map" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 		for _ = 1, Elements_1 do
@@ -1217,7 +1217,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		-- START ARRAY
 		local Length = ReadVarLength()
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value.Struct.Array = table.create(Length)
+		Value.Struct.Array = table.create(Length) :: {any}
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_1 = Read(1 * Length)
 		for Slot_1 = 1, Length do
@@ -1236,7 +1236,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		-- START ARRAY
 		local Length = ReadVarLength()
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Optional" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value.Struct.Optional = table.create(Length)
+		Value.Struct.Optional = table.create(Length) :: {any}
 		for Slot_2 = 1, Length do
 			-- Item_2: B
 			local Length = ReadVarLength()
@@ -1330,7 +1330,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		-- Value.Nested.Array: Array
 		-- START ARRAY
 		local Length = 10
-		Value.Nested.Array = table.create(Length)
+		Value.Nested.Array = table.create(Length) :: {any}
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_1 = Read(1 * Length)
 		for Slot_1 = 1, Length do
@@ -1348,7 +1348,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
 		local Length = 2
-		Value.Nested.OptionalArray = table.create(Length)
+		Value.Nested.OptionalArray = table.create(Length) :: {any}
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_2 = Read(1 * Length)
 		for Slot_2 = 1, Length do
@@ -1363,7 +1363,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 	end
 	do
 		-- Value.Map: Map
-		Value.Map = {}
+		Value.Map = {} :: { [any]: any }
 		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
 		if Elements_1 * 9 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Map" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 		for _ = 1, Elements_1 do
@@ -1388,7 +1388,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		-- START ARRAY
 		local Length = ReadVarLength()
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Array" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value.Struct.Array = table.create(Length)
+		Value.Struct.Array = table.create(Length) :: {any}
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_1 = Read(1 * Length)
 		for Slot_1 = 1, Length do
@@ -1407,7 +1407,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		-- START ARRAY
 		local Length = ReadVarLength()
 		if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Struct.Optional" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value.Struct.Optional = table.create(Length)
+		Value.Struct.Optional = table.create(Length) :: {any}
 		for Slot_2 = 1, Length do
 			-- Item_2: B
 			local Length = ReadVarLength()
@@ -2200,7 +2200,7 @@ function SerdesFunctions.ReadEVENT_Booleans(): ({ boolean })
 	-- START ARRAY
 	local Length = ReadVarLength()
 	if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	local Value = table.create(Length)
+	local Value = table.create(Length) :: {any}
 	do
 		local PACKED_OFFSET = Read((Length + 7) // 8)
 		if PACKED_BY_ROWS then
@@ -4016,7 +4016,7 @@ if not RunService:IsRunning() then
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if Length * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 3 bytes
 				local ARRAY_START_1 = Read(3 * Length)
 				for Slot_1 = 1, Length do
@@ -4696,7 +4696,7 @@ if not RunService:IsRunning() then
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if not (Length <= 8) then error(`Expected "Length" to be smaller than or equal to 8, got {Length} instead.`) end
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
 				for Slot_1 = 1, Length do
@@ -5645,7 +5645,7 @@ if not RunService:IsRunning() then
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if Length * 19 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 19 bytes
 				local ARRAY_START_1 = Read(19 * Length)
 				for Slot_1 = 1, Length do
@@ -5764,19 +5764,19 @@ if not RunService:IsRunning() then
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				for Slot_1 = 1, Length do
 					-- Item_1: MultiDimensionalArray
 					-- START ARRAY
 					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Item_1 = table.create(Length)
+					local Item_1 = table.create(Length) :: {any}
 					for Slot_2 = 1, Length do
 						-- Item_2: MultiDimensionalArray
 						-- START ARRAY
 						local Length = ReadVarLength()
 						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-						local Item_2 = table.create(Length)
+						local Item_2 = table.create(Length) :: {any}
 							-- Read BLOCK: 1 bytes
 						local ARRAY_START_3 = Read(1 * Length)
 						for Slot_3 = 1, Length do
@@ -6011,7 +6011,7 @@ if not RunService:IsRunning() then
 				-- Value: SizeFixedArray
 				-- START ARRAY
 				local Length = 4
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
 				for Slot_1 = 1, Length do
@@ -6081,7 +6081,7 @@ if not RunService:IsRunning() then
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if not (Length <= 10) then error(`Expected "Length" to be smaller than or equal to 10, got {Length} instead.`) end
 				if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 2 bytes
 				local ARRAY_START_1 = Read(2 * Length)
 				for Slot_1 = 1, Length do
@@ -6444,7 +6444,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeMap
-				local Value = {}
+				local Value = {} :: { [any]: any }
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
@@ -6523,7 +6523,7 @@ if not RunService:IsRunning() then
 				local Length = LengthOffset + 300
 				if not (Length <= 400) then error(`Expected "Length" to be smaller than or equal to 400, got {Length} instead.`) end
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
 				for Slot_1 = 1, Length do
@@ -7345,7 +7345,7 @@ if not RunService:IsRunning() then
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
 					if PACKED_BY_ROWS then
@@ -7454,7 +7454,7 @@ if not RunService:IsRunning() then
 				-- Value: PackedFixed
 				-- START ARRAY
 				local Length = 10
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				do
 					local PACKED_OFFSET = BLOCK_START + 0
 					if PACKED_BY_ROWS then
@@ -7567,7 +7567,7 @@ if not RunService:IsRunning() then
 				local Length = LengthOffset + 3
 				if not (Length <= 20) then error(`Expected "Length" to be smaller than or equal to 20, got {Length} instead.`) end
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
 					if PACKED_BY_ROWS then
@@ -7679,13 +7679,13 @@ if not RunService:IsRunning() then
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				for Slot_1 = 1, Length do
 					-- Item_1: PackedNested
 					-- START ARRAY
 					local Length = ReadVarLength()
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Item_1 = table.create(Length)
+					local Item_1 = table.create(Length) :: {any}
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
 						if PACKED_BY_ROWS then
@@ -7804,7 +7804,7 @@ if not RunService:IsRunning() then
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
 					if PACKED_BY_ROWS then
@@ -7921,7 +7921,7 @@ if not RunService:IsRunning() then
 					-- START ARRAY
 					local Length = ReadVarLength()
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.List = table.create(Length)
+					Value.List = table.create(Length) :: {any}
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
 						if PACKED_BY_ROWS then
@@ -7957,7 +7957,7 @@ if not RunService:IsRunning() then
 					-- Value.Fixed: Fixed
 					-- START ARRAY
 					local Length = 3
-					Value.Fixed = table.create(Length)
+					Value.Fixed = table.create(Length) :: {any}
 					do
 						local PACKED_OFFSET = BLOCK_START + 1
 						if PACKED_BY_ROWS then
@@ -8128,7 +8128,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedMap
-				local Value = {}
+				local Value = {} :: { [any]: any }
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Elements_1 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
@@ -8140,7 +8140,7 @@ if not RunService:IsRunning() then
 					-- START ARRAY
 					local Length = ReadVarLength()
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Element_1 = table.create(Length)
+					local Element_1 = table.create(Length) :: {any}
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
 						if PACKED_BY_ROWS then
@@ -8268,7 +8268,7 @@ if not RunService:IsRunning() then
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
 				local BITFIELD_2_0
@@ -8381,7 +8381,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: MapNested
-				local Value = {}
+				local Value = {} :: { [any]: any }
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
@@ -8390,7 +8390,7 @@ if not RunService:IsRunning() then
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_1: MapNested
-					local Element_1 = {}
+					local Element_1 = {} :: { [any]: any }
 					local OFFSET_0 = Read(2)
 					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
 					if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
@@ -9070,7 +9070,7 @@ if not RunService:IsRunning() then
 				-- Value: OptionalHoles
 				-- START ARRAY
 				local Length = 3
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
 				local BITFIELD_2_0
@@ -10541,7 +10541,7 @@ if not RunService:IsRunning() then
 					local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
 					if not (Length <= 4) then error(`Expected "Length" to be smaller than or equal to 4, got {Length} instead.`) end
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.C" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.C = table.create(Length)
+					Value.C = table.create(Length) :: {any}
 						-- Read BLOCK: 1 bytes
 					local ARRAY_START_1 = Read(1 * Length)
 					for Slot_1 = 1, Length do
@@ -10632,7 +10632,7 @@ if not RunService:IsRunning() then
 		end
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -11365,7 +11365,7 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player)
+local function DecodeReliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -11375,7 +11375,7 @@ local function DecodeReliable(Player: Player)
 			if Index == 0 then
 				local Value: number = SerdesFunctions.ReadEVENT_RateLimited()
 				if RateAccept(Player, 1, 5, 10, "RateLimited") == true then
-					local BOUND_LISTENER = Events.Reliable[0]
+					local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
 					if BOUND_LISTENER ~= nil then
 						SerdesEvent = "RateLimited"
 						Decoding = -2 - Index
@@ -11464,7 +11464,7 @@ local function DecodeReliable(Player: Player)
 		else
 			if Index == 9 then
 				local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyEvent()
-				local BOUND_LISTENER = Events.Reliable[9]
+				local BOUND_LISTENER = Events.Reliable[9] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "ClientEmptyEvent"
 					Decoding = -2 - Index
@@ -11514,7 +11514,7 @@ local function DecodeReliable(Player: Player)
 				end
 			elseif Index == 20 then
 				local Value: { boolean } = SerdesFunctions.ReadEVENT_Booleans()
-				local BOUND_LISTENER = Events.Reliable[20]
+				local BOUND_LISTENER = Events.Reliable[20] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					Spawn(RunListener, "Booleans", BOUND_LISTENER, Player, Value)
 				else
@@ -11524,7 +11524,7 @@ local function DecodeReliable(Player: Player)
 				end
 			elseif Index == 32 then
 				local Value: number = SerdesFunctions.ReadEVENT_ReliableClient()
-				local BOUND_LISTENER = Events.Reliable[32]
+				local BOUND_LISTENER = Events.Reliable[32] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "ReliableClient"
 					Decoding = -2 - Index
@@ -11591,7 +11591,7 @@ local function DecodeReliable(Player: Player)
 		if Index < 55 then
 			if Index == 47 then
 				local Value: any = SerdesFunctions.ReadEVENT_UnknownInbound()
-				local BOUND_LISTENER = Events.Reliable[47]
+				local BOUND_LISTENER = Events.Reliable[47] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "UnknownInbound"
 					Decoding = -2 - Index
@@ -11659,7 +11659,7 @@ local function DecodeReliable(Player: Player)
 				if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 			elseif Index == 53 then
 				local Value: number = SerdesFunctions.ReadEVENT_RangedFromClient()
-				local BOUND_LISTENER = Events.Reliable[53]
+				local BOUND_LISTENER = Events.Reliable[53] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "RangedFromClient"
 					Decoding = -2 - Index
@@ -11671,7 +11671,7 @@ local function DecodeReliable(Player: Player)
 				end
 			elseif Index == 54 then
 				local Value: Vector3 = SerdesFunctions.ReadEVENT_RangedVectorFromClient()
-				local BOUND_LISTENER = Events.Reliable[54]
+				local BOUND_LISTENER = Events.Reliable[54] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "RangedVectorFromClient"
 					Decoding = -2 - Index
@@ -11706,7 +11706,7 @@ local function DecodeReliable(Player: Player)
 				end
 			elseif Index == 56 then
 				local Value: number = SerdesFunctions.ReadEVENT_PlainFromClient()
-				local BOUND_LISTENER = Events.Reliable[56]
+				local BOUND_LISTENER = Events.Reliable[56] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "PlainFromClient"
 					Decoding = -2 - Index
@@ -11718,7 +11718,7 @@ local function DecodeReliable(Player: Player)
 				end
 			elseif Index == 57 then
 				local Value: nil = SerdesFunctions.ReadEVENT_Unlistened()
-				local BOUND_LISTENER = Events.Reliable[57]
+				local BOUND_LISTENER = Events.Reliable[57] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					Spawn(RunListener, "Unlistened", BOUND_LISTENER, Player, Value)
 				else
@@ -11747,7 +11747,7 @@ local function DecodeReliable(Player: Player)
 				end
 			elseif Index == 60 then
 				local Value: number = SerdesFunctions.ReadEVENT_RangedFloat32()
-				local BOUND_LISTENER = Events.Reliable[60]
+				local BOUND_LISTENER = Events.Reliable[60] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "RangedFloat32"
 					Decoding = -2 - Index
@@ -11759,7 +11759,7 @@ local function DecodeReliable(Player: Player)
 				end
 			elseif Index == 61 then
 				local Value: number = SerdesFunctions.ReadEVENT_RangedFloat16()
-				local BOUND_LISTENER = Events.Reliable[61]
+				local BOUND_LISTENER = Events.Reliable[61] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "RangedFloat16"
 					Decoding = -2 - Index
@@ -11771,7 +11771,7 @@ local function DecodeReliable(Player: Player)
 				end
 			elseif Index == 64 then
 				local Value: number = SerdesFunctions.ReadEVENT_RangedFloat24()
-				local BOUND_LISTENER = Events.Reliable[64]
+				local BOUND_LISTENER = Events.Reliable[64] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "RangedFloat24"
 					Decoding = -2 - Index
@@ -11787,7 +11787,7 @@ local function DecodeReliable(Player: Player)
 		end
 	end
 end
-local function DecodeUnreliable(Player: Player)
+local function DecodeUnreliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -11798,7 +11798,7 @@ local function DecodeUnreliable(Player: Player)
 		local OrderIdentifier = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 		local Value: number = SerdesFunctions.ReadEVENT_OrderedPosition()
 		if OrderAccept(Player, 1, OrderIdentifier) == true then
-			local BOUND_LISTENER = Events.Unreliable[1]
+			local BOUND_LISTENER = Events.Unreliable[1] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "OrderedPosition"
 				Decoding = -2 - Index
@@ -11807,7 +11807,7 @@ local function DecodeUnreliable(Player: Player)
 		end
 	elseif Index == 2 then
 		local Value: string = SerdesFunctions.ReadEVENT_UnreliableOversize()
-		local BOUND_LISTENER = Events.Unreliable[2]
+		local BOUND_LISTENER = Events.Unreliable[2] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "UnreliableOversize"
 			Decoding = -2 - Index
@@ -11815,7 +11815,7 @@ local function DecodeUnreliable(Player: Player)
 		end
 	elseif Index == 3 then
 		local Value1: buffer, Value2: { Instance } = SerdesFunctions.ReadEVENT_UnreliableInstances()
-		local BOUND_LISTENER = Events.Unreliable[3]
+		local BOUND_LISTENER = Events.Unreliable[3] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "UnreliableInstances"
 			Decoding = -2 - Index
@@ -11833,7 +11833,7 @@ local function DecodeUnreliable(Player: Player)
 		end
 	elseif Index == 8 then
 		local Value: nil = SerdesFunctions.ReadEVENT_ClientEmptyUnreliableEvent()
-		local BOUND_LISTENER = Events.Unreliable[8]
+		local BOUND_LISTENER = Events.Unreliable[8] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "ClientEmptyUnreliableEvent"
 			Decoding = -2 - Index
@@ -11841,7 +11841,7 @@ local function DecodeUnreliable(Player: Player)
 		end
 	elseif Index == 16 then
 		local Value: number = SerdesFunctions.ReadEVENT_UnreliableClient()
-		local BOUND_LISTENER = Events.Unreliable[16]
+		local BOUND_LISTENER = Events.Unreliable[16] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "UnreliableClient"
 			Decoding = -2 - Index
@@ -11849,7 +11849,7 @@ local function DecodeUnreliable(Player: Player)
 		end
 	elseif Index == 18 then
 		local Value: number = SerdesFunctions.ReadEVENT_RangedUnreliableFromClient()
-		local BOUND_LISTENER = Events.Unreliable[18]
+		local BOUND_LISTENER = Events.Unreliable[18] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "RangedUnreliableFromClient"
 			Decoding = -2 - Index
@@ -11962,9276 +11962,9269 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	Indexers = {
-		TestEvent = {
-			Fire = function(Player: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-				LoadScratch()
-				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-				if not CheckUnreliableSize("TestEvent") then return end
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				KeepScratch()
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.Indexers = {
+	TestEvent = {
+		Fire = function(Player: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+			LoadScratch()
+			SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+			if not CheckUnreliableSize("TestEvent") then return end
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end,
+		FireAll = function(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+			LoadScratch()
+			SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+			if not CheckUnreliableSize("TestEvent") then return end
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
+			Unreliable:FireAllClients(Buffer, SendInstances)
+		end,
+		FireList = function(List: {Player}, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+			LoadScratch()
+			SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+			if not CheckUnreliableSize("TestEvent") then return end
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
+			for _, Player in List do
 				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end,
-			FireAll = function(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-				LoadScratch()
-				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-				if not CheckUnreliableSize("TestEvent") then return end
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				KeepScratch()
-				Unreliable:FireAllClients(Buffer, SendInstances)
-			end,
-			FireList = function(List: {Player}, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-				LoadScratch()
-				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-				if not CheckUnreliableSize("TestEvent") then return end
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				KeepScratch()
-				for _, Player in List do
-					Unreliable:FireClient(Player, Buffer, SendInstances)
+			end
+		end,
+		FireExcept = function(Except: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+			LoadScratch()
+			SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+			if not CheckUnreliableSize("TestEvent") then return end
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			KeepScratch()
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
 				end
-			end,
-			FireExcept = function(Except: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-				LoadScratch()
-				SerdesFunctions.Indexers_WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-				if not CheckUnreliableSize("TestEvent") then return end
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				KeepScratch()
-				for _, Player in Players:GetPlayers() do
-					if Player == Except then
-						continue
+				Unreliable:FireClient(Player, Buffer, SendInstances)
+			end
+		end,
+	},
+}
+Returns.Source = {
+	Source2 = {
+	},
+}
+Returns.ImportA = {
+	Source2 = {
+	},
+}
+Returns.Byte = {
+	Read = function(Buffer: buffer): (Byte)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Byte)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Byte
+			local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: Byte
+	end,
+	Write = function(Value: Byte): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: Byte
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.Color = {
+	Read = function(Buffer: buffer): (Color)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Color)
+			-- Read BLOCK: 3 bytes
+			local BLOCK_START = Read(3)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Color
+			local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: Color
+	end,
+	Write = function(Value: Color): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- Value: Color
+			if typeof(Value) ~= "Color3" then
+				error(`Expected Value to be of type Color3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local Color = Value
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, math.clamp(math.round(Color.G * 255), 0, 255))
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, math.clamp(math.round(Color.B * 255), 0, 255))
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.ColorArray = {
+	Read = function(Buffer: buffer): (ColorArray)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (ColorArray)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: ColorArray
+			-- START ARRAY
+			local Length = ReadVarLength()
+			if Length * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length) :: {any}
+				-- Read BLOCK: 3 bytes
+			local ARRAY_START_1 = Read(3 * Length)
+			for Slot_1 = 1, Length do
+				-- Item_1: ColorArray
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				-- Read 1
+				local OPERATION_OFFSET_1 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				-- Read 1
+				local OPERATION_OFFSET_2 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local Item_1 = Color3.fromRGB(buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0), buffer.readu8(RecieveBuffer, OPERATION_OFFSET_1), buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2))
+				Value[Slot_1] = Item_1
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: ColorArray
+	end,
+	Write = function(Value: ColorArray): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Value: ColorArray
+			-- START ARRAY
+			if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
+			WriteVarLength(#Value)
+				-- Allocate BLOCK: 3 bytes
+			local ARRAY_START_1 = Allocate(3 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: ColorArray
+				if typeof(Item_1) ~= "Color3" then
+					error(`Expected Item_1 to be of type Color3, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Color = Item_1
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, math.clamp(math.round(Color.R * 255), 0, 255))
+				-- Allocate 1
+				local OPERATION_OFFSET_1 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, math.clamp(math.round(Color.G * 255), 0, 255))
+				-- Allocate 1
+				local OPERATION_OFFSET_2 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_2, math.clamp(math.round(Color.B * 255), 0, 255))
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.DateSeconds = {
+	Read = function(Buffer: buffer): (DateSeconds)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (DateSeconds)
+			-- Read BLOCK: 8 bytes
+			local BLOCK_START = Read(8)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: DateSeconds
+			local Value = DateTime.fromUnixTimestamp(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: DateSeconds
+	end,
+	Write = function(Value: DateSeconds): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 8 bytes
+			local BLOCK_START = Allocate(8)
+			-- Value: DateSeconds
+			if typeof(Value) ~= "DateTime" then
+				error(`Expected Value to be of type DateTime, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local DateTime = Value
+			buffer.writef64(SendBuffer, BLOCK_START + 0, DateTime.UnixTimestamp)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.DateMilliseconds = {
+	Read = function(Buffer: buffer): (DateMilliseconds)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (DateMilliseconds)
+			-- Read BLOCK: 8 bytes
+			local BLOCK_START = Read(8)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: DateMilliseconds
+			local Value = DateTime.fromUnixTimestampMillis(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: DateMilliseconds
+	end,
+	Write = function(Value: DateMilliseconds): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 8 bytes
+			local BLOCK_START = Allocate(8)
+			-- Value: DateMilliseconds
+			if typeof(Value) ~= "DateTime" then
+				error(`Expected Value to be of type DateTime, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local DateTimeMillis = Value
+			buffer.writef64(SendBuffer, BLOCK_START + 0, DateTimeMillis.UnixTimestampMillis)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.BrickkColor = {
+	Read = function(Buffer: buffer): (BrickkColor)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (BrickkColor)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: BrickkColor
+			local Value = BrickColor.new(buffer.readu16(RecieveBuffer, BLOCK_START + 0))
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: BrickkColor
+	end,
+	Write = function(Value: BrickkColor): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: BrickkColor
+			if typeof(Value) ~= "BrickColor" then
+				error(`Expected Value to be of type BrickColor, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local BrickColor = Value
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, BrickColor.Number)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.ExactRange = {
+	Read = function(Buffer: buffer): (ExactRange)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (ExactRange)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: ExactRange
+			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: ExactRange
+	end,
+	Write = function(Value: ExactRange): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Value: ExactRange
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.DecimalRange = {
+	Read = function(Buffer: buffer): (DecimalRange)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (DecimalRange)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: DecimalRange
+			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: DecimalRange
+	end,
+	Write = function(Value: DecimalRange): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Value: DecimalRange
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.NegativeRange = {
+	Read = function(Buffer: buffer): (NegativeRange)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (NegativeRange)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: NegativeRange
+			local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
+			if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: NegativeRange
+	end,
+	Write = function(Value: NegativeRange): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: NegativeRange
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
+			buffer.writei8(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.UnboundUpper = {
+	Read = function(Buffer: buffer): (UnboundUpper)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (UnboundUpper)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: UnboundUpper
+			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: UnboundUpper
+	end,
+	Write = function(Value: UnboundUpper): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Value: UnboundUpper
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.UnboundLower = {
+	Read = function(Buffer: buffer): (UnboundLower)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (UnboundLower)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: UnboundLower
+			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: UnboundLower
+	end,
+	Write = function(Value: UnboundLower): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Value: UnboundLower
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.RangedVector = {
+	Read = function(Buffer: buffer): (RangedVector)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (RangedVector)
+			-- Read BLOCK: 12 bytes
+			local BLOCK_START = Read(12)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: RangedVector
+			local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+			local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+			local Value = Vector3.new(X, Y, Z)
+			if not (Value.Magnitude >= 0) then error(`Expected magnitude of "Value" to be larger than or equal to 0, got {Value.Magnitude} instead.`) end
+			if not (Value.Magnitude <= 1) then error(`Expected magnitude of "Value" to be smaller than or equal to 1, got {Value.Magnitude} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: RangedVector
+	end,
+	Write = function(Value: RangedVector): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 12 bytes
+			local BLOCK_START = Allocate(12)
+			-- Value: RangedVector
+			if typeof(Value) ~= "Vector3" then
+				error(`Expected Value to be of type Vector3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value.Magnitude >= 0) then error(`Expected magnitude of "Value" to be larger than or equal to 0, got {Value.Magnitude} instead.`) end
+			if not (Value.Magnitude <= 1) then error(`Expected magnitude of "Value" to be smaller than or equal to 1, got {Value.Magnitude} instead.`) end
+			local Vector = Value
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.RangedFields = {
+	Read = function(Buffer: buffer): (RangedFields)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (RangedFields)
+			-- Read BLOCK: 12 bytes
+			local BLOCK_START = Read(12)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: RangedFields
+			local Value = {Health = false, Angle = false, Level = false, Weight = false, Seven = false, Full = false} :: any
+			do
+				-- Value.Health: Health
+				local Checked = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				if not (Checked <= 100) then error(`Expected "Value.Health" to be smaller than or equal to 100, got {Checked} instead.`) end
+				Value.Health = Checked
+			end
+			do
+				-- Value.Angle: Angle
+				local Checked = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+				if not (Checked >= -180) then error(`Expected "Value.Angle" to be larger than or equal to -180, got {Checked} instead.`) end
+				if not (Checked <= 180) then error(`Expected "Value.Angle" to be smaller than or equal to 180, got {Checked} instead.`) end
+				Value.Angle = Checked
+			end
+			do
+				-- Value.Level: Level
+				local Checked = buffer.readi16(RecieveBuffer, BLOCK_START + 5)
+				if not (Checked >= -5) then error(`Expected "Value.Level" to be larger than or equal to -5, got {Checked} instead.`) end
+				if not (Checked <= 5) then error(`Expected "Value.Level" to be smaller than or equal to 5, got {Checked} instead.`) end
+				Value.Level = Checked
+			end
+			do
+				-- Value.Weight: Weight
+				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 7)
+				local Checked
+				local MantissaExponent = Encoded % 0x8000
+				if MantissaExponent == 0b0_11111_0000000000  then
+					if Encoded // 0x8000 == 1 then
+						Checked = -math.huge
+					else
+						Checked = math.huge
 					end
-					Unreliable:FireClient(Player, Buffer, SendInstances)
+				elseif MantissaExponent > 0b0_11111_0000000000 then
+					Checked = 0 / 0
+				elseif MantissaExponent == 0b0_00000_0000000000   then
+					Checked = if Encoded == 0 then 0 else -0
+				else
+					local Mantissa = MantissaExponent % 0x400
+					local Exponent = MantissaExponent // 0x400
+					local Fraction;
+					if Exponent == 0 then
+						Fraction = Mantissa / 0x400
+					else
+						Fraction = Mantissa / 0x800 + 0.5
+					end
+					local Result = math.ldexp(Fraction, Exponent - 14)
+					Checked = if Encoded // 0x8000 == 1 then -Result else Result
 				end
-			end,
-		},
-	},
-	Source = {
-		Source2 = {
-		},
-	},
-	ImportA = {
-		Source2 = {
-		},
-	},
-	Byte = {
-		Read = function(Buffer: buffer): (Byte)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (Byte)
+				if not (Checked >= 0) then error(`Expected "Value.Weight" to be larger than or equal to 0, got {Checked} instead.`) end
+				if not (Checked <= 1) then error(`Expected "Value.Weight" to be smaller than or equal to 1, got {Checked} instead.`) end
+				Value.Weight = Checked
+			end
+			do
+				-- Value.Seven: Seven
+				local Checked = buffer.readu8(RecieveBuffer, BLOCK_START + 9)
+				if Checked ~= 7 then error(`Expected "Value.Seven" to be equal to 7, got {Checked} instead.`) end
+				Value.Seven = Checked
+			end
+			-- Value.Full: Full
+			Value.Full = buffer.readu16(RecieveBuffer, BLOCK_START + 10)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: RangedFields
+	end,
+	Write = function(Value: RangedFields): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 12 bytes
+			local BLOCK_START = Allocate(12)
+			-- Value: RangedFields
+			-- Value.Health: Health
+			if typeof(Value.Health) ~= "number" then
+				error(`Expected Value.Health to be of type number, got {type(Value.Health)} instead.{if type(Value.Health) == "table" or type(Value.Health) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value.Health >= 0) then error(`Expected "Value.Health" to be larger than or equal to 0, got {Value.Health} instead.`) end
+			if not (Value.Health <= 100) then error(`Expected "Value.Health" to be smaller than or equal to 100, got {Value.Health} instead.`) end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Health)
+			-- Value.Angle: Angle
+			if typeof(Value.Angle) ~= "number" then
+				error(`Expected Value.Angle to be of type number, got {type(Value.Angle)} instead.{if type(Value.Angle) == "table" or type(Value.Angle) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value.Angle >= -180) then error(`Expected "Value.Angle" to be larger than or equal to -180, got {Value.Angle} instead.`) end
+			if not (Value.Angle <= 180) then error(`Expected "Value.Angle" to be smaller than or equal to 180, got {Value.Angle} instead.`) end
+			buffer.writef32(SendBuffer, BLOCK_START + 1, Value.Angle)
+			-- Value.Level: Level
+			if typeof(Value.Level) ~= "number" then
+				error(`Expected Value.Level to be of type number, got {type(Value.Level)} instead.{if type(Value.Level) == "table" or type(Value.Level) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value.Level >= -5) then error(`Expected "Value.Level" to be larger than or equal to -5, got {Value.Level} instead.`) end
+			if not (Value.Level <= 5) then error(`Expected "Value.Level" to be smaller than or equal to 5, got {Value.Level} instead.`) end
+			buffer.writei16(SendBuffer, BLOCK_START + 5, Value.Level)
+			-- Value.Weight: Weight
+			if typeof(Value.Weight) ~= "number" then
+				error(`Expected Value.Weight to be of type number, got {type(Value.Weight)} instead.{if type(Value.Weight) == "table" or type(Value.Weight) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value.Weight >= 0) then error(`Expected "Value.Weight" to be larger than or equal to 0, got {Value.Weight} instead.`) end
+			if not (Value.Weight <= 1) then error(`Expected "Value.Weight" to be smaller than or equal to 1, got {Value.Weight} instead.`) end
+			if Value.Weight > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b0_11111_0000000000)
+			elseif Value.Weight < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b1_11111_0000000000)
+			elseif Value.Weight ~= Value.Weight then
+				buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b1_11111_0000000001)
+			elseif Value.Weight == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 7, if 1 / Value.Weight < 0 then 0x8000 else 0)
+			else
+				local float = Value.Weight
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800)
+				local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 7, Result)
+			end
+			-- Value.Seven: Seven
+			if typeof(Value.Seven) ~= "number" then
+				error(`Expected Value.Seven to be of type number, got {type(Value.Seven)} instead.{if type(Value.Seven) == "table" or type(Value.Seven) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.Seven ~= 7 then error(`Expected "Value.Seven" to be equal to 7, got {Value.Seven} instead.`) end
+			buffer.writeu8(SendBuffer, BLOCK_START + 9, Value.Seven)
+			-- Value.Full: Full
+			if typeof(Value.Full) ~= "number" then
+				error(`Expected Value.Full to be of type number, got {type(Value.Full)} instead.{if type(Value.Full) == "table" or type(Value.Full) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value.Full >= 0) then error(`Expected "Value.Full" to be larger than or equal to 0, got {Value.Full} instead.`) end
+			if not (Value.Full <= 65535) then error(`Expected "Value.Full" to be smaller than or equal to 65535, got {Value.Full} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 10, Value.Full)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.RangedList = {
+	Read = function(Buffer: buffer): (RangedList)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (RangedList)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: RangedList
+			-- START ARRAY
+			local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if not (Length <= 8) then error(`Expected "Length" to be smaller than or equal to 8, got {Length} instead.`) end
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length) :: {any}
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_1 = Read(1 * Length)
+			for Slot_1 = 1, Length do
+				-- Item_1: RangedList
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local Item_1 = buffer.readi8(RecieveBuffer, OPERATION_OFFSET_0)
+				if not (Item_1 >= -3) then error(`Expected "Item_1" to be larger than or equal to -3, got {Item_1} instead.`) end
+				if not (Item_1 <= 3) then error(`Expected "Item_1" to be smaller than or equal to 3, got {Item_1} instead.`) end
+				Value[Slot_1] = Item_1
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: RangedList
+	end,
+	Write = function(Value: RangedList): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: RangedList
+			-- START ARRAY
+			if not (#Value <= 8) then error(`Expected "#Value" to be smaller than or equal to 8, got {#Value} instead.`) end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, #Value)
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: RangedList
+				if typeof(Item_1) ~= "number" then
+					error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				if not (Item_1 >= -3) then error(`Expected "Item_1" to be larger than or equal to -3, got {Item_1} instead.`) end
+				if not (Item_1 <= 3) then error(`Expected "Item_1" to be smaller than or equal to 3, got {Item_1} instead.`) end
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writei8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.Quantized = {
+	Read = function(Buffer: buffer): (Quantized)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Quantized)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Quantized
+			local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if not (Value <= 200) then error(`Expected "Value" to be smaller than or equal to 200, got {Value} instead.`) end
+			Value = (Value - 100) / 100
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: Quantized
+	end,
+	Write = function(Value: Quantized): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: Quantized
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value * 100) + 100
+			if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to -1 in steps of 0.01, got {Value} instead.`) end
+			if not (Fixed <= 200) then error(`Expected "Value" to be smaller than or equal to 1 in steps of 0.01, got {Value} instead.`) end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.QuantizedWide = {
+	Read = function(Buffer: buffer): (QuantizedWide)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (QuantizedWide)
+			-- Read BLOCK: 3 bytes
+			local BLOCK_START = Read(3)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: QuantizedWide
+			local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+			if not (Value <= 2048000) then error(`Expected "Value" to be smaller than or equal to 2048000, got {Value} instead.`) end
+			Value = Value / 1000
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: QuantizedWide
+	end,
+	Write = function(Value: QuantizedWide): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- Value: QuantizedWide
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value * 1000)
+			if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.001, got {Value} instead.`) end
+			if not (Fixed <= 2048000) then error(`Expected "Value" to be smaller than or equal to 2048 in steps of 0.001, got {Value} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Fixed, 16))
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.QuantizedSaturated = {
+	Read = function(Buffer: buffer): (QuantizedSaturated)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (QuantizedSaturated)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: QuantizedSaturated
+			local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if not (Value <= 20) then error(`Expected "Value" to be smaller than or equal to 20, got {Value} instead.`) end
+			Value = (Value + 20) / 2
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: QuantizedSaturated
+	end,
+	Write = function(Value: QuantizedSaturated): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: QuantizedSaturated
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value * 2) - 20
+			if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 20 then Fixed = 20 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.QuantizedFields = {
+	Read = function(Buffer: buffer): (QuantizedFields)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (QuantizedFields)
+			-- Read BLOCK: 3 bytes
+			local BLOCK_START = Read(3)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: QuantizedFields
+			local Value = {Aim = false, Height = false} :: any
+			-- Value.Aim: Aim
+			Value.Aim = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if not (Value.Aim <= 200) then error(`Expected "Value.Aim" to be smaller than or equal to 200, got {Value.Aim} instead.`) end
+			Value.Aim = (Value.Aim - 100) / 100
+			-- Value.Height: Height
+			Value.Height = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
+			if not (Value.Height <= 400) then error(`Expected "Value.Height" to be smaller than or equal to 400, got {Value.Height} instead.`) end
+			Value.Height = (Value.Height + 400) / 4
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: QuantizedFields
+	end,
+	Write = function(Value: QuantizedFields): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- Value: QuantizedFields
+			do
+				-- Value.Aim: Aim
+				if typeof(Value.Aim) ~= "number" then
+					error(`Expected Value.Aim to be of type number, got {type(Value.Aim)} instead.`)
+				end
+				local Fixed = math.round(Value.Aim * 100) + 100
+				if not (Fixed >= 0) then error(`Expected "Value.Aim" to be larger than or equal to -1 in steps of 0.01, got {Value.Aim} instead.`) end
+				if not (Fixed <= 200) then error(`Expected "Value.Aim" to be smaller than or equal to 1 in steps of 0.01, got {Value.Aim} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+			end
+			do
+				-- Value.Height: Height
+				if typeof(Value.Height) ~= "number" then
+					error(`Expected Value.Height to be of type number, got {type(Value.Height)} instead.`)
+				end
+				local Fixed = math.round(Value.Height * 4) - 400
+				if not (Fixed >= 0) then error(`Expected "Value.Height" to be larger than or equal to 100 in steps of 0.25, got {Value.Height} instead.`) end
+				if not (Fixed <= 400) then error(`Expected "Value.Height" to be smaller than or equal to 200 in steps of 0.25, got {Value.Height} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, Fixed)
+			end
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.Buffer = {
+	Read = function(Buffer: buffer): (Buffer)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Buffer)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Buffer
+			local Length = ReadVarLength()
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = buffer.create(Length)
+			buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: Buffer
+	end,
+	Write = function(Value: Buffer): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Value: Buffer
+			if typeof(Value) ~= "buffer" then
+				error(`Expected Value to be of type buffer, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local Length = buffer.len(Value)
+			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+			WriteVarLength(Length)
+			Allocate(Length)
+			buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.ExactBuffer = {
+	Read = function(Buffer: buffer): (ExactBuffer)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (ExactBuffer)
+			-- Read BLOCK: 9 bytes
+			local BLOCK_START = Read(9)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: ExactBuffer
+			local Value = buffer.create(9)
+			buffer.copy(Value, 0, RecieveBuffer, BLOCK_START + 0, 9)
+			if buffer.len(Value) ~= 9 then error(`Expected size of "Value" to be equal to 9, got {buffer.len(Value)} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: ExactBuffer
+	end,
+	Write = function(Value: ExactBuffer): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 9 bytes
+			local BLOCK_START = Allocate(9)
+			-- Value: ExactBuffer
+			if typeof(Value) ~= "buffer" then
+				error(`Expected Value to be of type buffer, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if buffer.len(Value) ~= 9 then error(`Expected size of "Value" to be equal to 9, got {buffer.len(Value)} instead.`) end
+			buffer.copy(SendBuffer, BLOCK_START + 0, Value, 0, 9)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.BoundedBuffer = {
+	Read = function(Buffer: buffer): (BoundedBuffer)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (BoundedBuffer)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: BoundedBuffer
+			local Length = ReadVarLength()
+			if Length > 1000 then error(`Expected size of "Value" to be smaller than or equal to 1000, got {Length} instead.`) end
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = buffer.create(Length)
+			buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: BoundedBuffer
+	end,
+	Write = function(Value: BoundedBuffer): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Value: BoundedBuffer
+			if typeof(Value) ~= "buffer" then
+				error(`Expected Value to be of type buffer, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if buffer.len(Value) < 0 then error(`Expected size of "Value" to be larger than or equal to 0, got {buffer.len(Value)} instead.`) end
+			if buffer.len(Value) > 1000 then error(`Expected size of "Value" to be smaller than or equal to 1000, got {buffer.len(Value)} instead.`) end
+			local Length = buffer.len(Value)
+			if not (Length <= 1000) then error(`Expected "Length" to be smaller than or equal to 1000, got {Length} instead.`) end
+			WriteVarLength(Length)
+			Allocate(Length)
+			buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.PlainCFrame = {
+	Read = function(Buffer: buffer): (PlainCFrame)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (PlainCFrame)
+			-- Read BLOCK: 24 bytes
+			local BLOCK_START = Read(24)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: PlainCFrame
+			local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+			local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+			local Position = Vector3.new(X, Y, Z)
+			local rX = buffer.readf32(RecieveBuffer, BLOCK_START + 12)
+			local rY = buffer.readf32(RecieveBuffer, BLOCK_START + 16)
+			local rZ = buffer.readf32(RecieveBuffer, BLOCK_START + 20)
+			local Value = CFrame.new(Position) * CFrame.fromOrientation(rX, rY, rZ)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: PlainCFrame
+	end,
+	Write = function(Value: PlainCFrame): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 24 bytes
+			local BLOCK_START = Allocate(24)
+			-- Value: PlainCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local Vector = Value.Position
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
+			local rX, rY, rZ = Value:ToOrientation()
+			buffer.writef32(SendBuffer, BLOCK_START + 12, rX)
+			buffer.writef32(SendBuffer, BLOCK_START + 16, rY)
+			buffer.writef32(SendBuffer, BLOCK_START + 20, rZ)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.QuatCFrame = {
+	Read = function(Buffer: buffer): (QuatCFrame)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (QuatCFrame)
+			-- Read BLOCK: 19 bytes
+			local BLOCK_START = Read(19)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: QuatCFrame
+			local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+			local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+			local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 12)
+			local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 13)
+			local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 15)
+			local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 17)
+			local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: QuatCFrame
+	end,
+	Write = function(Value: QuatCFrame): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 19 bytes
+			local BLOCK_START = Allocate(19)
+			-- Value: QuatCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local Position = Value.Position
+			local QIndex, QA, QB, QC = PackRotation(Value)
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Position.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 4, Position.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 8, Position.Z)
+			buffer.writeu8(SendBuffer, BLOCK_START + 12, QIndex)
+			buffer.writei16(SendBuffer, BLOCK_START + 13, QA)
+			buffer.writei16(SendBuffer, BLOCK_START + 15, QB)
+			buffer.writei16(SendBuffer, BLOCK_START + 17, QC)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.QuatHalfCFrame = {
+	Read = function(Buffer: buffer): (QuatHalfCFrame)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (QuatHalfCFrame)
+			-- Read BLOCK: 13 bytes
+			local BLOCK_START = Read(13)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: QuatHalfCFrame
+			local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			local X
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					X = -math.huge
+				else
+					X = math.huge
+				end
+			elseif MantissaExponent > 0b0_11111_0000000000 then
+				X = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				X = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				X = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+			local Y
+			MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Y = -math.huge
+				else
+					Y = math.huge
+				end
+			elseif MantissaExponent > 0b0_11111_0000000000 then
+				Y = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Y = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Y = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+			local Z
+			MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Z = -math.huge
+				else
+					Z = math.huge
+				end
+			elseif MantissaExponent > 0b0_11111_0000000000 then
+				Z = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Z = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Z = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
+			local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 7)
+			local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 9)
+			local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 11)
+			local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: QuatHalfCFrame
+	end,
+	Write = function(Value: QuatHalfCFrame): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 13 bytes
+			local BLOCK_START = Allocate(13)
+			-- Value: QuatHalfCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local Position = Value.Position
+			local QIndex, QA, QB, QC = PackRotation(Value)
+			if Position.X > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+			elseif Position.X < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+			elseif Position.X ~= Position.X then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+			elseif Position.X == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Position.X < 0 then 0x8000 else 0)
+			else
+				local float = Position.X
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800)
+				local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+			end
+			if Position.Y > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b0_11111_0000000000)
+			elseif Position.Y < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000000)
+			elseif Position.Y ~= Position.Y then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000001)
+			elseif Position.Y == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, if 1 / Position.Y < 0 then 0x8000 else 0)
+			else
+				local float = Position.Y
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800)
+				local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, Result)
+			end
+			if Position.Z > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b0_11111_0000000000)
+			elseif Position.Z < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000000)
+			elseif Position.Z ~= Position.Z then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000001)
+			elseif Position.Z == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, if 1 / Position.Z < 0 then 0x8000 else 0)
+			else
+				local float = Position.Z
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800)
+				local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, Result)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 6, QIndex)
+			buffer.writei16(SendBuffer, BLOCK_START + 7, QA)
+			buffer.writei16(SendBuffer, BLOCK_START + 9, QB)
+			buffer.writei16(SendBuffer, BLOCK_START + 11, QC)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.QuatFirstCFrame = {
+	Read = function(Buffer: buffer): (QuatFirstCFrame)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (QuatFirstCFrame)
+			-- Read BLOCK: 13 bytes
+			local BLOCK_START = Read(13)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: QuatFirstCFrame
+			local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			local X
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					X = -math.huge
+				else
+					X = math.huge
+				end
+			elseif MantissaExponent > 0b0_11111_0000000000 then
+				X = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				X = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				X = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+			local Y
+			MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Y = -math.huge
+				else
+					Y = math.huge
+				end
+			elseif MantissaExponent > 0b0_11111_0000000000 then
+				Y = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Y = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Y = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+			local Z
+			MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Z = -math.huge
+				else
+					Z = math.huge
+				end
+			elseif MantissaExponent > 0b0_11111_0000000000 then
+				Z = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Z = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Z = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
+			local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 7)
+			local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 9)
+			local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 11)
+			local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: QuatFirstCFrame
+	end,
+	Write = function(Value: QuatFirstCFrame): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 13 bytes
+			local BLOCK_START = Allocate(13)
+			-- Value: QuatFirstCFrame
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local Position = Value.Position
+			local QIndex, QA, QB, QC = PackRotation(Value)
+			if Position.X > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+			elseif Position.X < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+			elseif Position.X ~= Position.X then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+			elseif Position.X == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Position.X < 0 then 0x8000 else 0)
+			else
+				local float = Position.X
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800)
+				local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+			end
+			if Position.Y > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b0_11111_0000000000)
+			elseif Position.Y < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000000)
+			elseif Position.Y ~= Position.Y then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000001)
+			elseif Position.Y == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, if 1 / Position.Y < 0 then 0x8000 else 0)
+			else
+				local float = Position.Y
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800)
+				local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 2, Result)
+			end
+			if Position.Z > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b0_11111_0000000000)
+			elseif Position.Z < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000000)
+			elseif Position.Z ~= Position.Z then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000001)
+			elseif Position.Z == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, if 1 / Position.Z < 0 then 0x8000 else 0)
+			else
+				local float = Position.Z
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800)
+				local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 4, Result)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 6, QIndex)
+			buffer.writei16(SendBuffer, BLOCK_START + 7, QA)
+			buffer.writei16(SendBuffer, BLOCK_START + 9, QB)
+			buffer.writei16(SendBuffer, BLOCK_START + 11, QC)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.QuatCFrames = {
+	Read = function(Buffer: buffer): (QuatCFrames)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (QuatCFrames)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: QuatCFrames
+			-- START ARRAY
+			local Length = ReadVarLength()
+			if Length * 19 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length) :: {any}
+				-- Read BLOCK: 19 bytes
+			local ARRAY_START_1 = Read(19 * Length)
+			for Slot_1 = 1, Length do
+				-- Item_1: QuatCFrames
+				-- Read 4
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				local X = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_0)
+				-- Read 4
+				local OPERATION_OFFSET_1 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				local Y = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_1)
+				-- Read 4
+				local OPERATION_OFFSET_2 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				local Z = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_2)
+				-- Read 1
+				local OPERATION_OFFSET_3 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local QIndex = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_3)
+				-- Read 2
+				local OPERATION_OFFSET_4 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local QA = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_4)
+				-- Read 2
+				local OPERATION_OFFSET_5 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local QB = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_5)
+				-- Read 2
+				local OPERATION_OFFSET_6 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local QC = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_6)
+				local Item_1 = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+				Value[Slot_1] = Item_1
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: QuatCFrames
+	end,
+	Write = function(Value: QuatCFrames): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Value: QuatCFrames
+			-- START ARRAY
+			if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
+			WriteVarLength(#Value)
+				-- Allocate BLOCK: 19 bytes
+			local ARRAY_START_1 = Allocate(19 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: QuatCFrames
+				if typeof(Item_1) ~= "CFrame" then
+					error(`Expected Item_1 to be of type CFrame, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Position = Item_1.Position
+				local QIndex, QA, QB, QC = PackRotation(Item_1)
+				-- Allocate 4
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				buffer.writef32(SendBuffer, OPERATION_OFFSET_0, Position.X)
+				-- Allocate 4
+				local OPERATION_OFFSET_1 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				buffer.writef32(SendBuffer, OPERATION_OFFSET_1, Position.Y)
+				-- Allocate 4
+				local OPERATION_OFFSET_2 = ARRAY_START_1
+				ARRAY_START_1 += 4
+				buffer.writef32(SendBuffer, OPERATION_OFFSET_2, Position.Z)
+				-- Allocate 1
+				local OPERATION_OFFSET_3 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_3, QIndex)
+				-- Allocate 2
+				local OPERATION_OFFSET_4 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writei16(SendBuffer, OPERATION_OFFSET_4, QA)
+				-- Allocate 2
+				local OPERATION_OFFSET_5 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writei16(SendBuffer, OPERATION_OFFSET_5, QB)
+				-- Allocate 2
+				local OPERATION_OFFSET_6 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writei16(SendBuffer, OPERATION_OFFSET_6, QC)
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.MultiDimensionalArray = {
+	Read = function(Buffer: buffer): (MultiDimensionalArray)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (MultiDimensionalArray)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: MultiDimensionalArray
+			-- START ARRAY
+			local Length = ReadVarLength()
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length) :: {any}
+			for Slot_1 = 1, Length do
+				-- Item_1: MultiDimensionalArray
+				-- START ARRAY
+				local Length = ReadVarLength()
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Item_1 = table.create(Length) :: {any}
+				for Slot_2 = 1, Length do
+					-- Item_2: MultiDimensionalArray
+					-- START ARRAY
+					local Length = ReadVarLength()
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					local Item_2 = table.create(Length) :: {any}
+						-- Read BLOCK: 1 bytes
+					local ARRAY_START_3 = Read(1 * Length)
+					for Slot_3 = 1, Length do
+						-- Item_3: MultiDimensionalArray
+						-- Read 1
+						local OPERATION_OFFSET_0 = ARRAY_START_3
+						ARRAY_START_3 += 1
+						local Item_3 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+						Item_2[Slot_3] = Item_3
+					end
+					-- END ARRAY
+					Item_1[Slot_2] = Item_2
+				end
+				-- END ARRAY
+				Value[Slot_1] = Item_1
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: MultiDimensionalArray
+	end,
+	Write = function(Value: MultiDimensionalArray): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Value: MultiDimensionalArray
+			-- START ARRAY
+			if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
+			WriteVarLength(#Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: MultiDimensionalArray
+				-- START ARRAY
+				if not (#Item_1 <= 65535) then error(`Expected "#Item_1" to be smaller than or equal to 65535, got {#Item_1} instead.`) end
+				WriteVarLength(#Item_1)
+				for Index = 1, #Item_1 do
+					local Item_2 = Item_1[Index]
+					-- Item_2: MultiDimensionalArray
+					-- START ARRAY
+					if not (#Item_2 <= 65535) then error(`Expected "#Item_2" to be smaller than or equal to 65535, got {#Item_2} instead.`) end
+					WriteVarLength(#Item_2)
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_3 = Allocate(1 * #Item_2)
+					for Index = 1, #Item_2 do
+						local Item_3 = Item_2[Index]
+						-- Item_3: MultiDimensionalArray
+						if typeof(Item_3) ~= "number" then
+							error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.{if type(Item_3) == "table" or type(Item_3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_3
+						ARRAY_START_3 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_3)
+					end
+					-- END ARRAY
+				end
+				-- END ARRAY
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SizeByte = {
+	Read = function(Buffer: buffer): (SizeByte)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SizeByte)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SizeByte
+			local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SizeByte
+	end,
+	Write = function(Value: SizeByte): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: SizeByte
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SizeFixedString = {
+	Read = function(Buffer: buffer): (SizeFixedString)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SizeFixedString)
+			-- Read BLOCK: 8 bytes
+			local BLOCK_START = Read(8)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SizeFixedString
+			local Value = buffer.readstring(RecieveBuffer, BLOCK_START + 0, 8)
+			if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SizeFixedString
+	end,
+	Write = function(Value: SizeFixedString): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 8 bytes
+			local BLOCK_START = Allocate(8)
+			-- Value: SizeFixedString
+			if typeof(Value) ~= "string" then
+				error(`Expected Value to be of type string, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
+			buffer.writestring(SendBuffer, BLOCK_START + 0, Value, 8)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SizeBoundedString = {
+	Read = function(Buffer: buffer): (SizeBoundedString)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SizeBoundedString)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SizeBoundedString
+			local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if Length > 64 then error(`Expected length of "Value" to be smaller than or equal to 64, got {Length} instead.`) end
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SizeBoundedString
+	end,
+	Write = function(Value: SizeBoundedString): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: SizeBoundedString
+			if typeof(Value) ~= "string" then
+				error(`Expected Value to be of type string, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if #Value < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {#Value} instead.`) end
+			if #Value > 64 then error(`Expected length of "Value" to be smaller than or equal to 64, got {#Value} instead.`) end
+			local Length = #Value
+			if not (Length <= 64) then error(`Expected "Length" to be smaller than or equal to 64, got {Length} instead.`) end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Length)
+			Allocate(Length)
+			buffer.writestring(SendBuffer, SendOffset, Value, Length)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SizeFixedArray = {
+	Read = function(Buffer: buffer): (SizeFixedArray)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SizeFixedArray)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SizeFixedArray
+			-- START ARRAY
+			local Length = 4
+			local Value = table.create(Length) :: {any}
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_1 = Read(1 * Length)
+			for Slot_1 = 1, Length do
+				-- Item_1: SizeFixedArray
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				Value[Slot_1] = Item_1
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SizeFixedArray
+	end,
+	Write = function(Value: SizeFixedArray): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Value: SizeFixedArray
+			-- START ARRAY
+			if #Value ~= 4 then error(`Expected length of "Value" to be equal to 4, got {#Value} instead.`) end
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * 4)
+			for Index = 1, 4 do
+				local Item_1 = Value[Index]
+				-- Item_1: SizeFixedArray
+				if typeof(Item_1) ~= "number" then
+					error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SizeBoundedArray = {
+	Read = function(Buffer: buffer): (SizeBoundedArray)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SizeBoundedArray)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SizeBoundedArray
+			-- START ARRAY
+			local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if not (Length <= 10) then error(`Expected "Length" to be smaller than or equal to 10, got {Length} instead.`) end
+			if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length) :: {any}
+				-- Read BLOCK: 2 bytes
+			local ARRAY_START_1 = Read(2 * Length)
+			for Slot_1 = 1, Length do
+				-- Item_1: SizeBoundedArray
+				-- Read 2
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				local Item_1 = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+				Value[Slot_1] = Item_1
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SizeBoundedArray
+	end,
+	Write = function(Value: SizeBoundedArray): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: SizeBoundedArray
+			-- START ARRAY
+			if not (#Value <= 10) then error(`Expected "#Value" to be smaller than or equal to 10, got {#Value} instead.`) end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, #Value)
+				-- Allocate BLOCK: 2 bytes
+			local ARRAY_START_1 = Allocate(2 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: SizeBoundedArray
+				if typeof(Item_1) ~= "number" then
+					error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				-- Allocate 2
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 2
+				buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, Item_1)
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SizeOptionalByte = {
+	Read = function(Buffer: buffer): (SizeOptionalByte)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SizeOptionalByte)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SizeOptionalByte
+			local Value
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if bit32.btest(BITFIELD_1_0, 0x01) then
 				-- Read BLOCK: 1 bytes
 				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: Byte
-				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+				-- Value: SizeOptionalByte
+				Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 			end
-			return Result :: Byte
-		end,
-		Write = function(Value: Byte): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SizeOptionalByte
+	end,
+	Write = function(Value: SizeOptionalByte): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			local BITFIELD_1_0
+			-- Value: SizeOptionalByte
+			BITFIELD_1_0 = 0
+			if Value ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value ~= nil then
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
-				-- Value: Byte
+				-- Value: SizeOptionalByte
 				if typeof(Value) ~= "number" then
 					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
 			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	Color = {
-		Read = function(Buffer: buffer): (Color)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (Color)
-				-- Read BLOCK: 3 bytes
-				local BLOCK_START = Read(3)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: Color
-				local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+		return Result
+	end
+}
+Returns.SizeVector = {
+	Read = function(Buffer: buffer): (SizeVector)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SizeVector)
+			-- Read BLOCK: 12 bytes
+			local BLOCK_START = Read(12)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SizeVector
+			local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+			local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+			local Value = Vector3.new(X, Y, Z)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SizeVector
+	end,
+	Write = function(Value: SizeVector): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 12 bytes
+			local BLOCK_START = Allocate(12)
+			-- Value: SizeVector
+			if typeof(Value) ~= "Vector3" then
+				error(`Expected Value to be of type Vector3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
-			return Result :: Color
-		end,
-		Write = function(Value: Color): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 3 bytes
-				local BLOCK_START = Allocate(3)
-				-- Value: Color
-				if typeof(Value) ~= "Color3" then
-					error(`Expected Value to be of type Color3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				local Color = Value
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
-				buffer.writeu8(SendBuffer, BLOCK_START + 1, math.clamp(math.round(Color.G * 255), 0, 255))
-				buffer.writeu8(SendBuffer, BLOCK_START + 2, math.clamp(math.round(Color.B * 255), 0, 255))
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
+			local Vector = Value
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	ColorArray = {
-		Read = function(Buffer: buffer): (ColorArray)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (ColorArray)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: ColorArray
-				-- START ARRAY
-				local Length = ReadVarLength()
-				if Length * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
-					-- Read BLOCK: 3 bytes
-				local ARRAY_START_1 = Read(3 * Length)
-				for Slot_1 = 1, Length do
-					-- Item_1: ColorArray
-					-- Read 1
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					-- Read 1
-					local OPERATION_OFFSET_1 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					-- Read 1
-					local OPERATION_OFFSET_2 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					local Item_1 = Color3.fromRGB(buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0), buffer.readu8(RecieveBuffer, OPERATION_OFFSET_1), buffer.readu8(RecieveBuffer, OPERATION_OFFSET_2))
-					Value[Slot_1] = Item_1
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+		return Result
+	end
+}
+Returns.SizeStruct = {
+	Read = function(Buffer: buffer): (SizeStruct)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SizeStruct)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SizeStruct
+			local Value = {A = false, B = false, C = false} :: any
+			-- Value.A: A
+			Value.A = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Value.B: B
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			Value.B = bit32.btest(BITFIELD_1_0, 0x01)
+			-- Value.C: C
+			Value.C = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SizeStruct
+	end,
+	Write = function(Value: SizeStruct): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			local BITFIELD_1_0
+			-- Value: SizeStruct
+			-- Value.A: A
+			if typeof(Value.A) ~= "number" then
+				error(`Expected Value.A to be of type number, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
-			return Result :: ColorArray
-		end,
-		Write = function(Value: ColorArray): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Value: ColorArray
-				-- START ARRAY
-				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				WriteVarLength(#Value)
-					-- Allocate BLOCK: 3 bytes
-				local ARRAY_START_1 = Allocate(3 * #Value)
-				for Index = 1, #Value do
-					local Item_1 = Value[Index]
-					-- Item_1: ColorArray
-					if typeof(Item_1) ~= "Color3" then
-						error(`Expected Item_1 to be of type Color3, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					local Color = Item_1
-					-- Allocate 1
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, math.clamp(math.round(Color.R * 255), 0, 255))
-					-- Allocate 1
-					local OPERATION_OFFSET_1 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, math.clamp(math.round(Color.G * 255), 0, 255))
-					-- Allocate 1
-					local OPERATION_OFFSET_2 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					buffer.writeu8(SendBuffer, OPERATION_OFFSET_2, math.clamp(math.round(Color.B * 255), 0, 255))
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.A)
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
+			BITFIELD_1_0 = 0
+			if Value.B then BITFIELD_1_0 += 0x01 end
+			-- Value.C: C
+			if typeof(Value.C) ~= "number" then
+				error(`Expected Value.C to be of type number, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu16(SendBuffer, BLOCK_START + 2, Value.C)
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	DateSeconds = {
-		Read = function(Buffer: buffer): (DateSeconds)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (DateSeconds)
-				-- Read BLOCK: 8 bytes
-				local BLOCK_START = Read(8)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: DateSeconds
-				local Value = DateTime.fromUnixTimestamp(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+		return Result
+	end
+}
+Returns.SizeEnum = {
+	Read = function(Buffer: buffer): (SizeEnum)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SizeEnum)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SizeEnum
+			local Value = true :: any
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Index = bit32.extract(BITFIELD_1_0, 0, 2)
+			if Index == 0 then
+				Value = "A"
+			elseif Index == 1 then
+				Value = "B"
+			elseif Index == 2 then
+				Value = "C"
+			else
+				error(`Unexpected enum: {Index}`)
 			end
-			return Result :: DateSeconds
-		end,
-		Write = function(Value: DateSeconds): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 8 bytes
-				local BLOCK_START = Allocate(8)
-				-- Value: DateSeconds
-				if typeof(Value) ~= "DateTime" then
-					error(`Expected Value to be of type DateTime, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				local DateTime = Value
-				buffer.writef64(SendBuffer, BLOCK_START + 0, DateTime.UnixTimestamp)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SizeEnum
+	end,
+	Write = function(Value: SizeEnum): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			local BITFIELD_1_0
+			-- Value: SizeEnum
+			BITFIELD_1_0 = 0
+			if Value == "A" then
+			elseif Value == "B" then
+				BITFIELD_1_0 += 1
+			elseif Value == "C" then
+				BITFIELD_1_0 += 2
+			else
+				error(`Unexpected enum: {Value}, expected one of "A" or "B" or "C".`)
 			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	DateMilliseconds = {
-		Read = function(Buffer: buffer): (DateMilliseconds)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (DateMilliseconds)
-				-- Read BLOCK: 8 bytes
-				local BLOCK_START = Read(8)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: DateMilliseconds
-				local Value = DateTime.fromUnixTimestampMillis(buffer.readf64(RecieveBuffer, BLOCK_START + 0))
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: DateMilliseconds
-		end,
-		Write = function(Value: DateMilliseconds): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 8 bytes
-				local BLOCK_START = Allocate(8)
-				-- Value: DateMilliseconds
-				if typeof(Value) ~= "DateTime" then
-					error(`Expected Value to be of type DateTime, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				local DateTimeMillis = Value
-				buffer.writef64(SendBuffer, BLOCK_START + 0, DateTimeMillis.UnixTimestampMillis)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
+		return Result
+	end
+}
+Returns.SizeFlags = {
+	Read = function(Buffer: buffer): (SizeFlags)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SizeFlags)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SizeFlags
+			local Value = {}
+			local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.F1 = bit32.btest(SET_BITS, 0x1);
+			Value.F2 = bit32.btest(SET_BITS, 0x2);
+			Value.F3 = bit32.btest(SET_BITS, 0x4);
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SizeFlags
+	end,
+	Write = function(Value: SizeFlags): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: SizeFlags
+			local SET_BITS = 0
+			if Value.F1 == true then SET_BITS += 0x1 end
+			if Value.F2 == true then SET_BITS += 0x2 end
+			if Value.F3 == true then SET_BITS += 0x4 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, SET_BITS)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	BrickkColor = {
-		Read = function(Buffer: buffer): (BrickkColor)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (BrickkColor)
+		return Result
+	end
+}
+Returns.SizeMap = {
+	Read = function(Buffer: buffer): (SizeMap)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SizeMap)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SizeMap
+			local Value = {} :: { [any]: any }
+			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
+			for _ = 1, Elements_1 do
+				-- Key_1: SizeMap
+				local OFFSET_0 = Read(1)
+				local Key_1 = buffer.readu8(RecieveBuffer, OFFSET_0)
+				-- Element_1: SizeMap
+				local OFFSET_1 = Read(2)
+				local Element_1 = buffer.readu16(RecieveBuffer, OFFSET_1)
+				Value[Key_1] = Element_1
+			end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SizeMap
+	end,
+	Write = function(Value: SizeMap): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: SizeMap
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: SizeMap
+				if typeof(Key_1) ~= "number" then
+					error(`Expected Key_1 to be of type number, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local OFFSET_0 = Allocate(1)
+				buffer.writeu8(SendBuffer, OFFSET_0, Key_1)
+				-- Element_1: SizeMap
+				if typeof(Element_1) ~= "number" then
+					error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.{if type(Element_1) == "table" or type(Element_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local OFFSET_1 = Allocate(2)
+				buffer.writeu16(SendBuffer, OFFSET_1, Element_1)
+			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.OrderedPosition = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Unreliable[1] ~= nil then
+			warn("[BlinkBlox]: \"OrderedPosition\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[1] = Listener
+		return function (): ()
+			if Events.Unreliable[1] == Listener then
+				Events.Unreliable[1] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: number): ()
+		local BOUND_LISTENER = Events.Unreliable[1] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "OrderedPosition"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "OrderedPosition", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+	end
+}
+Returns.OffsetArray = {
+	Read = function(Buffer: buffer): (OffsetArray)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (OffsetArray)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: OffsetArray
+			-- START ARRAY
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 300
+			if not (Length <= 400) then error(`Expected "Length" to be smaller than or equal to 400, got {Length} instead.`) end
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length) :: {any}
+				-- Read BLOCK: 1 bytes
+			local ARRAY_START_1 = Read(1 * Length)
+			for Slot_1 = 1, Length do
+				-- Item_1: OffsetArray
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				Value[Slot_1] = Item_1
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: OffsetArray
+	end,
+	Write = function(Value: OffsetArray): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: OffsetArray
+			-- START ARRAY
+			if not (#Value >= 300) then error(`Expected "#Value" to be larger than or equal to 300, got {#Value} instead.`) end
+			if not (#Value <= 400) then error(`Expected "#Value" to be smaller than or equal to 400, got {#Value} instead.`) end
+			local LengthOffset = #Value - 300
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * #Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: OffsetArray
+				if typeof(Item_1) ~= "number" then
+					error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.OffsetString = {
+	Read = function(Buffer: buffer): (OffsetString)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (OffsetString)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: OffsetString
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 300
+			if Length > 400 then error(`Expected length of "Value" to be smaller than or equal to 400, got {Length} instead.`) end
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: OffsetString
+	end,
+	Write = function(Value: OffsetString): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: OffsetString
+			if typeof(Value) ~= "string" then
+				error(`Expected Value to be of type string, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if #Value < 300 then error(`Expected length of "Value" to be larger than or equal to 300, got {#Value} instead.`) end
+			if #Value > 400 then error(`Expected length of "Value" to be smaller than or equal to 400, got {#Value} instead.`) end
+			local Length = #Value
+			if not (Length >= 300) then error(`Expected "Length" to be larger than or equal to 300, got {Length} instead.`) end
+			if not (Length <= 400) then error(`Expected "Length" to be smaller than or equal to 400, got {Length} instead.`) end
+			local LengthOffset = Length - 300
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+			Allocate(Length)
+			buffer.writestring(SendBuffer, SendOffset, Value, Length)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.OffsetBuffer = {
+	Read = function(Buffer: buffer): (OffsetBuffer)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (OffsetBuffer)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: OffsetBuffer
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 300
+			if Length > 400 then error(`Expected size of "Value" to be smaller than or equal to 400, got {Length} instead.`) end
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = buffer.create(Length)
+			buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: OffsetBuffer
+	end,
+	Write = function(Value: OffsetBuffer): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: OffsetBuffer
+			if typeof(Value) ~= "buffer" then
+				error(`Expected Value to be of type buffer, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if buffer.len(Value) < 300 then error(`Expected size of "Value" to be larger than or equal to 300, got {buffer.len(Value)} instead.`) end
+			if buffer.len(Value) > 400 then error(`Expected size of "Value" to be smaller than or equal to 400, got {buffer.len(Value)} instead.`) end
+			local Length = buffer.len(Value)
+			if not (Length >= 300) then error(`Expected "Length" to be larger than or equal to 300, got {Length} instead.`) end
+			if not (Length <= 400) then error(`Expected "Length" to be smaller than or equal to 400, got {Length} instead.`) end
+			local LengthOffset = Length - 300
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+			Allocate(Length)
+			buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.BitsOne = {
+	Read = function(Buffer: buffer): (BitsOne)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (BitsOne)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: BitsOne
+			local Value = {A = false} :: any
+			-- Value.A: A
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_1_0, 0x01)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: BitsOne
+	end,
+	Write = function(Value: BitsOne): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			local BITFIELD_1_0
+			-- Value: BitsOne
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			BITFIELD_1_0 = 0
+			if Value.A then BITFIELD_1_0 += 0x01 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.BitsSeven = {
+	Read = function(Buffer: buffer): (BitsSeven)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (BitsSeven)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: BitsSeven
+			local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false} :: any
+			-- Value.A: A
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_1_0, 0x01)
+			-- Value.B: B
+			Value.B = bit32.btest(BITFIELD_1_0, 0x02)
+			-- Value.C: C
+			Value.C = bit32.btest(BITFIELD_1_0, 0x04)
+			-- Value.D: D
+			Value.D = bit32.btest(BITFIELD_1_0, 0x08)
+			-- Value.E: E
+			Value.E = bit32.btest(BITFIELD_1_0, 0x10)
+			-- Value.F: F
+			Value.F = bit32.btest(BITFIELD_1_0, 0x20)
+			-- Value.G: G
+			Value.G = bit32.btest(BITFIELD_1_0, 0x40)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: BitsSeven
+	end,
+	Write = function(Value: BitsSeven): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			local BITFIELD_1_0
+			-- Value: BitsSeven
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			BITFIELD_1_0 = 0
+			if Value.A then BITFIELD_1_0 += 0x01 end
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.B then BITFIELD_1_0 += 0x02 end
+			-- Value.C: C
+			if typeof(Value.C) ~= "boolean" then
+				error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.C then BITFIELD_1_0 += 0x04 end
+			-- Value.D: D
+			if typeof(Value.D) ~= "boolean" then
+				error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.{if type(Value.D) == "table" or type(Value.D) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.D then BITFIELD_1_0 += 0x08 end
+			-- Value.E: E
+			if typeof(Value.E) ~= "boolean" then
+				error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.{if type(Value.E) == "table" or type(Value.E) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.E then BITFIELD_1_0 += 0x10 end
+			-- Value.F: F
+			if typeof(Value.F) ~= "boolean" then
+				error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.{if type(Value.F) == "table" or type(Value.F) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.F then BITFIELD_1_0 += 0x20 end
+			-- Value.G: G
+			if typeof(Value.G) ~= "boolean" then
+				error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.{if type(Value.G) == "table" or type(Value.G) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.G then BITFIELD_1_0 += 0x40 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.BitsEight = {
+	Read = function(Buffer: buffer): (BitsEight)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (BitsEight)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: BitsEight
+			local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false} :: any
+			-- Value.A: A
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_1_0, 0x01)
+			-- Value.B: B
+			Value.B = bit32.btest(BITFIELD_1_0, 0x02)
+			-- Value.C: C
+			Value.C = bit32.btest(BITFIELD_1_0, 0x04)
+			-- Value.D: D
+			Value.D = bit32.btest(BITFIELD_1_0, 0x08)
+			-- Value.E: E
+			Value.E = bit32.btest(BITFIELD_1_0, 0x10)
+			-- Value.F: F
+			Value.F = bit32.btest(BITFIELD_1_0, 0x20)
+			-- Value.G: G
+			Value.G = bit32.btest(BITFIELD_1_0, 0x40)
+			-- Value.H: H
+			Value.H = bit32.btest(BITFIELD_1_0, 0x80)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: BitsEight
+	end,
+	Write = function(Value: BitsEight): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			local BITFIELD_1_0
+			-- Value: BitsEight
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			BITFIELD_1_0 = 0
+			if Value.A then BITFIELD_1_0 += 0x01 end
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.B then BITFIELD_1_0 += 0x02 end
+			-- Value.C: C
+			if typeof(Value.C) ~= "boolean" then
+				error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.C then BITFIELD_1_0 += 0x04 end
+			-- Value.D: D
+			if typeof(Value.D) ~= "boolean" then
+				error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.{if type(Value.D) == "table" or type(Value.D) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.D then BITFIELD_1_0 += 0x08 end
+			-- Value.E: E
+			if typeof(Value.E) ~= "boolean" then
+				error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.{if type(Value.E) == "table" or type(Value.E) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.E then BITFIELD_1_0 += 0x10 end
+			-- Value.F: F
+			if typeof(Value.F) ~= "boolean" then
+				error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.{if type(Value.F) == "table" or type(Value.F) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.F then BITFIELD_1_0 += 0x20 end
+			-- Value.G: G
+			if typeof(Value.G) ~= "boolean" then
+				error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.{if type(Value.G) == "table" or type(Value.G) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.G then BITFIELD_1_0 += 0x40 end
+			-- Value.H: H
+			if typeof(Value.H) ~= "boolean" then
+				error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.{if type(Value.H) == "table" or type(Value.H) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.H then BITFIELD_1_0 += 0x80 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.BitsNine = {
+	Read = function(Buffer: buffer): (BitsNine)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (BitsNine)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local BITFIELD_1_1
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: BitsNine
+			local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false} :: any
+			-- Value.A: A
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_1_0, 0x01)
+			-- Value.B: B
+			Value.B = bit32.btest(BITFIELD_1_0, 0x02)
+			-- Value.C: C
+			Value.C = bit32.btest(BITFIELD_1_0, 0x04)
+			-- Value.D: D
+			Value.D = bit32.btest(BITFIELD_1_0, 0x08)
+			-- Value.E: E
+			Value.E = bit32.btest(BITFIELD_1_0, 0x10)
+			-- Value.F: F
+			Value.F = bit32.btest(BITFIELD_1_0, 0x20)
+			-- Value.G: G
+			Value.G = bit32.btest(BITFIELD_1_0, 0x40)
+			-- Value.H: H
+			Value.H = bit32.btest(BITFIELD_1_0, 0x80)
+			-- Value.I: I
+			BITFIELD_1_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			Value.I = bit32.btest(BITFIELD_1_1, 0x01)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: BitsNine
+	end,
+	Write = function(Value: BitsNine): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			local BITFIELD_1_1
+			local BITFIELD_1_0
+			-- Value: BitsNine
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			BITFIELD_1_0 = 0
+			if Value.A then BITFIELD_1_0 += 0x01 end
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.B then BITFIELD_1_0 += 0x02 end
+			-- Value.C: C
+			if typeof(Value.C) ~= "boolean" then
+				error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.C then BITFIELD_1_0 += 0x04 end
+			-- Value.D: D
+			if typeof(Value.D) ~= "boolean" then
+				error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.{if type(Value.D) == "table" or type(Value.D) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.D then BITFIELD_1_0 += 0x08 end
+			-- Value.E: E
+			if typeof(Value.E) ~= "boolean" then
+				error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.{if type(Value.E) == "table" or type(Value.E) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.E then BITFIELD_1_0 += 0x10 end
+			-- Value.F: F
+			if typeof(Value.F) ~= "boolean" then
+				error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.{if type(Value.F) == "table" or type(Value.F) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.F then BITFIELD_1_0 += 0x20 end
+			-- Value.G: G
+			if typeof(Value.G) ~= "boolean" then
+				error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.{if type(Value.G) == "table" or type(Value.G) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.G then BITFIELD_1_0 += 0x40 end
+			-- Value.H: H
+			if typeof(Value.H) ~= "boolean" then
+				error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.{if type(Value.H) == "table" or type(Value.H) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.H then BITFIELD_1_0 += 0x80 end
+			-- Value.I: I
+			if typeof(Value.I) ~= "boolean" then
+				error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.{if type(Value.I) == "table" or type(Value.I) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+			BITFIELD_1_1 = 0
+			if Value.I then BITFIELD_1_1 += 0x01 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_1)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.BitsSeventeen = {
+	Read = function(Buffer: buffer): (BitsSeventeen)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (BitsSeventeen)
+			-- Read BLOCK: 3 bytes
+			local BLOCK_START = Read(3)
+			local BITFIELD_1_2
+			local BITFIELD_1_1
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: BitsSeventeen
+			local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false, J = false, K = false, L = false, M = false, N = false, O = false, P = false, Q = false} :: any
+			-- Value.A: A
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_1_0, 0x01)
+			-- Value.B: B
+			Value.B = bit32.btest(BITFIELD_1_0, 0x02)
+			-- Value.C: C
+			Value.C = bit32.btest(BITFIELD_1_0, 0x04)
+			-- Value.D: D
+			Value.D = bit32.btest(BITFIELD_1_0, 0x08)
+			-- Value.E: E
+			Value.E = bit32.btest(BITFIELD_1_0, 0x10)
+			-- Value.F: F
+			Value.F = bit32.btest(BITFIELD_1_0, 0x20)
+			-- Value.G: G
+			Value.G = bit32.btest(BITFIELD_1_0, 0x40)
+			-- Value.H: H
+			Value.H = bit32.btest(BITFIELD_1_0, 0x80)
+			-- Value.I: I
+			BITFIELD_1_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			Value.I = bit32.btest(BITFIELD_1_1, 0x01)
+			-- Value.J: J
+			Value.J = bit32.btest(BITFIELD_1_1, 0x02)
+			-- Value.K: K
+			Value.K = bit32.btest(BITFIELD_1_1, 0x04)
+			-- Value.L: L
+			Value.L = bit32.btest(BITFIELD_1_1, 0x08)
+			-- Value.M: M
+			Value.M = bit32.btest(BITFIELD_1_1, 0x10)
+			-- Value.N: N
+			Value.N = bit32.btest(BITFIELD_1_1, 0x20)
+			-- Value.O: O
+			Value.O = bit32.btest(BITFIELD_1_1, 0x40)
+			-- Value.P: P
+			Value.P = bit32.btest(BITFIELD_1_1, 0x80)
+			-- Value.Q: Q
+			BITFIELD_1_2 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+			Value.Q = bit32.btest(BITFIELD_1_2, 0x01)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: BitsSeventeen
+	end,
+	Write = function(Value: BitsSeventeen): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			local BITFIELD_1_2
+			local BITFIELD_1_1
+			local BITFIELD_1_0
+			-- Value: BitsSeventeen
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			BITFIELD_1_0 = 0
+			if Value.A then BITFIELD_1_0 += 0x01 end
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.B then BITFIELD_1_0 += 0x02 end
+			-- Value.C: C
+			if typeof(Value.C) ~= "boolean" then
+				error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.C then BITFIELD_1_0 += 0x04 end
+			-- Value.D: D
+			if typeof(Value.D) ~= "boolean" then
+				error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.{if type(Value.D) == "table" or type(Value.D) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.D then BITFIELD_1_0 += 0x08 end
+			-- Value.E: E
+			if typeof(Value.E) ~= "boolean" then
+				error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.{if type(Value.E) == "table" or type(Value.E) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.E then BITFIELD_1_0 += 0x10 end
+			-- Value.F: F
+			if typeof(Value.F) ~= "boolean" then
+				error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.{if type(Value.F) == "table" or type(Value.F) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.F then BITFIELD_1_0 += 0x20 end
+			-- Value.G: G
+			if typeof(Value.G) ~= "boolean" then
+				error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.{if type(Value.G) == "table" or type(Value.G) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.G then BITFIELD_1_0 += 0x40 end
+			-- Value.H: H
+			if typeof(Value.H) ~= "boolean" then
+				error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.{if type(Value.H) == "table" or type(Value.H) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.H then BITFIELD_1_0 += 0x80 end
+			-- Value.I: I
+			if typeof(Value.I) ~= "boolean" then
+				error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.{if type(Value.I) == "table" or type(Value.I) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+			BITFIELD_1_1 = 0
+			if Value.I then BITFIELD_1_1 += 0x01 end
+			-- Value.J: J
+			if typeof(Value.J) ~= "boolean" then
+				error(`Expected Value.J to be of type boolean, got {type(Value.J)} instead.{if type(Value.J) == "table" or type(Value.J) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.J then BITFIELD_1_1 += 0x02 end
+			-- Value.K: K
+			if typeof(Value.K) ~= "boolean" then
+				error(`Expected Value.K to be of type boolean, got {type(Value.K)} instead.{if type(Value.K) == "table" or type(Value.K) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.K then BITFIELD_1_1 += 0x04 end
+			-- Value.L: L
+			if typeof(Value.L) ~= "boolean" then
+				error(`Expected Value.L to be of type boolean, got {type(Value.L)} instead.{if type(Value.L) == "table" or type(Value.L) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.L then BITFIELD_1_1 += 0x08 end
+			-- Value.M: M
+			if typeof(Value.M) ~= "boolean" then
+				error(`Expected Value.M to be of type boolean, got {type(Value.M)} instead.{if type(Value.M) == "table" or type(Value.M) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.M then BITFIELD_1_1 += 0x10 end
+			-- Value.N: N
+			if typeof(Value.N) ~= "boolean" then
+				error(`Expected Value.N to be of type boolean, got {type(Value.N)} instead.{if type(Value.N) == "table" or type(Value.N) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.N then BITFIELD_1_1 += 0x20 end
+			-- Value.O: O
+			if typeof(Value.O) ~= "boolean" then
+				error(`Expected Value.O to be of type boolean, got {type(Value.O)} instead.{if type(Value.O) == "table" or type(Value.O) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.O then BITFIELD_1_1 += 0x40 end
+			-- Value.P: P
+			if typeof(Value.P) ~= "boolean" then
+				error(`Expected Value.P to be of type boolean, got {type(Value.P)} instead.{if type(Value.P) == "table" or type(Value.P) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.P then BITFIELD_1_1 += 0x80 end
+			-- Value.Q: Q
+			if typeof(Value.Q) ~= "boolean" then
+				error(`Expected Value.Q to be of type boolean, got {type(Value.Q)} instead.{if type(Value.Q) == "table" or type(Value.Q) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_1)
+			BITFIELD_1_2 = 0
+			if Value.Q then BITFIELD_1_2 += 0x01 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_1_2)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.BitsMixed = {
+	Read = function(Buffer: buffer): (BitsMixed)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (BitsMixed)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: BitsMixed
+			local Value = {A = false, C = false} :: any
+			-- Value.A: A
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_1_0, 0x01)
+			-- Value.B: B
+			if bit32.btest(BITFIELD_1_0, 0x02) then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				-- Value.B: B
+				Value.B = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			end
+			-- Value.C: C
+			Value.C = bit32.btest(BITFIELD_1_0, 0x04)
+			-- Value.D: D
+			if bit32.btest(BITFIELD_1_0, 0x08) then
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: BrickkColor
-				local Value = BrickColor.new(buffer.readu16(RecieveBuffer, BLOCK_START + 0))
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+				-- Value.D: D
+				Value.D = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 			end
-			return Result :: BrickkColor
-		end,
-		Write = function(Value: BrickkColor): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: BitsMixed
+	end,
+	Write = function(Value: BitsMixed): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			local BITFIELD_1_0
+			-- Value: BitsMixed
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			BITFIELD_1_0 = 0
+			if Value.A then BITFIELD_1_0 += 0x01 end
+			-- Value.B: B
+			if Value.B ~= nil then BITFIELD_1_0 += 0x02 end
+			if Value.B ~= nil then
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value.B: B
+				if typeof(Value.B) ~= "number" then
+					error(`Expected Value.B to be of type number, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.B)
+			end
+			-- Value.C: C
+			if typeof(Value.C) ~= "boolean" then
+				error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.C then BITFIELD_1_0 += 0x04 end
+			-- Value.D: D
+			if Value.D ~= nil then BITFIELD_1_0 += 0x08 end
+			if Value.D ~= nil then
 				-- Allocate BLOCK: 2 bytes
 				local BLOCK_START = Allocate(2)
-				-- Value: BrickkColor
-				if typeof(Value) ~= "BrickColor" then
-					error(`Expected Value to be of type BrickColor, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				-- Value.D: D
+				if typeof(Value.D) ~= "number" then
+					error(`Expected Value.D to be of type number, got {type(Value.D)} instead.{if type(Value.D) == "table" or type(Value.D) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
-				local BrickColor = Value
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, BrickColor.Number)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Value.D)
 			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	ExactRange = {
-		Read = function(Buffer: buffer): (ExactRange)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (ExactRange)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: ExactRange
-				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: ExactRange
-		end,
-		Write = function(Value: ExactRange): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				-- Value: ExactRange
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	DecimalRange = {
-		Read = function(Buffer: buffer): (DecimalRange)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (DecimalRange)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: DecimalRange
-				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
-				if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: DecimalRange
-		end,
-		Write = function(Value: DecimalRange): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				-- Value: DecimalRange
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
-				if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	NegativeRange = {
-		Read = function(Buffer: buffer): (NegativeRange)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (NegativeRange)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: NegativeRange
-				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
-				if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: NegativeRange
-		end,
-		Write = function(Value: NegativeRange): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: NegativeRange
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
-				if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
-				buffer.writei8(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	UnboundUpper = {
-		Read = function(Buffer: buffer): (UnboundUpper)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (UnboundUpper)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: UnboundUpper
-				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: UnboundUpper
-		end,
-		Write = function(Value: UnboundUpper): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				-- Value: UnboundUpper
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	UnboundLower = {
-		Read = function(Buffer: buffer): (UnboundLower)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (UnboundLower)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: UnboundLower
-				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: UnboundLower
-		end,
-		Write = function(Value: UnboundLower): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				-- Value: UnboundLower
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	RangedVector = {
-		Read = function(Buffer: buffer): (RangedVector)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (RangedVector)
-				-- Read BLOCK: 12 bytes
-				local BLOCK_START = Read(12)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: RangedVector
-				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
-				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
-				local Value = Vector3.new(X, Y, Z)
-				if not (Value.Magnitude >= 0) then error(`Expected magnitude of "Value" to be larger than or equal to 0, got {Value.Magnitude} instead.`) end
-				if not (Value.Magnitude <= 1) then error(`Expected magnitude of "Value" to be smaller than or equal to 1, got {Value.Magnitude} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: RangedVector
-		end,
-		Write = function(Value: RangedVector): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 12 bytes
-				local BLOCK_START = Allocate(12)
-				-- Value: RangedVector
-				if typeof(Value) ~= "Vector3" then
-					error(`Expected Value to be of type Vector3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value.Magnitude >= 0) then error(`Expected magnitude of "Value" to be larger than or equal to 0, got {Value.Magnitude} instead.`) end
-				if not (Value.Magnitude <= 1) then error(`Expected magnitude of "Value" to be smaller than or equal to 1, got {Value.Magnitude} instead.`) end
-				local Vector = Value
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
-				buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
-				buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	RangedFields = {
-		Read = function(Buffer: buffer): (RangedFields)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (RangedFields)
-				-- Read BLOCK: 12 bytes
-				local BLOCK_START = Read(12)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: RangedFields
-				local Value = {Health = false, Angle = false, Level = false, Weight = false, Seven = false, Full = false} :: any
-				do
-					-- Value.Health: Health
-					local Checked = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					if not (Checked <= 100) then error(`Expected "Value.Health" to be smaller than or equal to 100, got {Checked} instead.`) end
-					Value.Health = Checked
-				end
-				do
-					-- Value.Angle: Angle
-					local Checked = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-					if not (Checked >= -180) then error(`Expected "Value.Angle" to be larger than or equal to -180, got {Checked} instead.`) end
-					if not (Checked <= 180) then error(`Expected "Value.Angle" to be smaller than or equal to 180, got {Checked} instead.`) end
-					Value.Angle = Checked
-				end
-				do
-					-- Value.Level: Level
-					local Checked = buffer.readi16(RecieveBuffer, BLOCK_START + 5)
-					if not (Checked >= -5) then error(`Expected "Value.Level" to be larger than or equal to -5, got {Checked} instead.`) end
-					if not (Checked <= 5) then error(`Expected "Value.Level" to be smaller than or equal to 5, got {Checked} instead.`) end
-					Value.Level = Checked
-				end
-				do
-					-- Value.Weight: Weight
-					local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 7)
-					local Checked
-					local MantissaExponent = Encoded % 0x8000
-					if MantissaExponent == 0b0_11111_0000000000  then
-						if Encoded // 0x8000 == 1 then
-							Checked = -math.huge
-						else
-							Checked = math.huge
-						end
-					elseif MantissaExponent > 0b0_11111_0000000000 then
-						Checked = 0 / 0
-					elseif MantissaExponent == 0b0_00000_0000000000   then
-						Checked = if Encoded == 0 then 0 else -0
-					else
-						local Mantissa = MantissaExponent % 0x400
-						local Exponent = MantissaExponent // 0x400
-						local Fraction;
-						if Exponent == 0 then
-							Fraction = Mantissa / 0x400
-						else
-							Fraction = Mantissa / 0x800 + 0.5
-						end
-						local Result = math.ldexp(Fraction, Exponent - 14)
-						Checked = if Encoded // 0x8000 == 1 then -Result else Result
-					end
-					if not (Checked >= 0) then error(`Expected "Value.Weight" to be larger than or equal to 0, got {Checked} instead.`) end
-					if not (Checked <= 1) then error(`Expected "Value.Weight" to be smaller than or equal to 1, got {Checked} instead.`) end
-					Value.Weight = Checked
-				end
-				do
-					-- Value.Seven: Seven
-					local Checked = buffer.readu8(RecieveBuffer, BLOCK_START + 9)
-					if Checked ~= 7 then error(`Expected "Value.Seven" to be equal to 7, got {Checked} instead.`) end
-					Value.Seven = Checked
-				end
-				-- Value.Full: Full
-				Value.Full = buffer.readu16(RecieveBuffer, BLOCK_START + 10)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: RangedFields
-		end,
-		Write = function(Value: RangedFields): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 12 bytes
-				local BLOCK_START = Allocate(12)
-				-- Value: RangedFields
-				-- Value.Health: Health
-				if typeof(Value.Health) ~= "number" then
-					error(`Expected Value.Health to be of type number, got {type(Value.Health)} instead.{if type(Value.Health) == "table" or type(Value.Health) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value.Health >= 0) then error(`Expected "Value.Health" to be larger than or equal to 0, got {Value.Health} instead.`) end
-				if not (Value.Health <= 100) then error(`Expected "Value.Health" to be smaller than or equal to 100, got {Value.Health} instead.`) end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Health)
-				-- Value.Angle: Angle
-				if typeof(Value.Angle) ~= "number" then
-					error(`Expected Value.Angle to be of type number, got {type(Value.Angle)} instead.{if type(Value.Angle) == "table" or type(Value.Angle) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value.Angle >= -180) then error(`Expected "Value.Angle" to be larger than or equal to -180, got {Value.Angle} instead.`) end
-				if not (Value.Angle <= 180) then error(`Expected "Value.Angle" to be smaller than or equal to 180, got {Value.Angle} instead.`) end
-				buffer.writef32(SendBuffer, BLOCK_START + 1, Value.Angle)
-				-- Value.Level: Level
-				if typeof(Value.Level) ~= "number" then
-					error(`Expected Value.Level to be of type number, got {type(Value.Level)} instead.{if type(Value.Level) == "table" or type(Value.Level) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value.Level >= -5) then error(`Expected "Value.Level" to be larger than or equal to -5, got {Value.Level} instead.`) end
-				if not (Value.Level <= 5) then error(`Expected "Value.Level" to be smaller than or equal to 5, got {Value.Level} instead.`) end
-				buffer.writei16(SendBuffer, BLOCK_START + 5, Value.Level)
-				-- Value.Weight: Weight
-				if typeof(Value.Weight) ~= "number" then
-					error(`Expected Value.Weight to be of type number, got {type(Value.Weight)} instead.{if type(Value.Weight) == "table" or type(Value.Weight) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value.Weight >= 0) then error(`Expected "Value.Weight" to be larger than or equal to 0, got {Value.Weight} instead.`) end
-				if not (Value.Weight <= 1) then error(`Expected "Value.Weight" to be smaller than or equal to 1, got {Value.Weight} instead.`) end
-				if Value.Weight > 65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b0_11111_0000000000)
-				elseif Value.Weight < -65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b1_11111_0000000000)
-				elseif Value.Weight ~= Value.Weight then
-					buffer.writeu16(SendBuffer, BLOCK_START + 7, 0b1_11111_0000000001)
-				elseif Value.Weight == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 7, if 1 / Value.Weight < 0 then 0x8000 else 0)
+		return Result
+	end
+}
+Returns.PackedBooleans = {
+	Read = function(Buffer: buffer): (PackedBooleans)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (PackedBooleans)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: PackedBooleans
+			-- START ARRAY
+			local Length = ReadVarLength()
+			if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length) :: {any}
+			do
+				local PACKED_OFFSET = Read((Length + 7) // 8)
+				if PACKED_BY_ROWS then
+					PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
 				else
-					local float = Value.Weight
-					local Abosulte = math.abs(float)
-					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
-					local RoundedValue = (Abosulte // Interval) * Interval
-					local Fraction, Exponent = math.frexp(RoundedValue)
-					Exponent += 14
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800)
-					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
-						+ if float < 0 then 0x8000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 7, Result)
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						end
+					end
 				end
-				-- Value.Seven: Seven
-				if typeof(Value.Seven) ~= "number" then
-					error(`Expected Value.Seven to be of type number, got {type(Value.Seven)} instead.{if type(Value.Seven) == "table" or type(Value.Seven) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.Seven ~= 7 then error(`Expected "Value.Seven" to be equal to 7, got {Value.Seven} instead.`) end
-				buffer.writeu8(SendBuffer, BLOCK_START + 9, Value.Seven)
-				-- Value.Full: Full
-				if typeof(Value.Full) ~= "number" then
-					error(`Expected Value.Full to be of type number, got {type(Value.Full)} instead.{if type(Value.Full) == "table" or type(Value.Full) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value.Full >= 0) then error(`Expected "Value.Full" to be larger than or equal to 0, got {Value.Full} instead.`) end
-				if not (Value.Full <= 65535) then error(`Expected "Value.Full" to be smaller than or equal to 65535, got {Value.Full} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 10, Value.Full)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
 			end
-			return Result
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	RangedList = {
-		Read = function(Buffer: buffer): (RangedList)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (RangedList)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: RangedList
+		return Result :: PackedBooleans
+	end,
+	Write = function(Value: PackedBooleans): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Value: PackedBooleans
+			-- START ARRAY
+			if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
+			WriteVarLength(#Value)
+			do
+				local PACKED_LENGTH = #Value
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_WHOLE = PACKED_LENGTH // 8
+				for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+					local PACKED_BASE = PACKED_BYTE * 8
+					local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+					local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+					if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+						for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+							local PACKED_ITEM = Value[PACKED_INDEX]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						end
+					end
+					local PACKED_BITS = 0
+					if PACKED_1 then PACKED_BITS += 1 end
+					if PACKED_2 then PACKED_BITS += 2 end
+					if PACKED_3 then PACKED_BITS += 4 end
+					if PACKED_4 then PACKED_BITS += 8 end
+					if PACKED_5 then PACKED_BITS += 16 end
+					if PACKED_6 then PACKED_BITS += 32 end
+					if PACKED_7 then PACKED_BITS += 64 end
+					if PACKED_8 then PACKED_BITS += 128 end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					local PACKED_BASE = PACKED_WHOLE * 8
+					local PACKED_BITS = 0
+					for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+						local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+					end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.PackedFixed = {
+	Read = function(Buffer: buffer): (PackedFixed)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (PackedFixed)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: PackedFixed
+			-- START ARRAY
+			local Length = 10
+			local Value = table.create(Length) :: {any}
+			do
+				local PACKED_OFFSET = BLOCK_START + 0
+				if PACKED_BY_ROWS then
+					PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+				else
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						end
+					end
+				end
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: PackedFixed
+	end,
+	Write = function(Value: PackedFixed): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: PackedFixed
+			-- START ARRAY
+			if #Value ~= 10 then error(`Expected length of "Value" to be equal to 10, got {#Value} instead.`) end
+			do
+				local PACKED_LENGTH = 10
+				local PACKED_OFFSET = BLOCK_START + 0
+				local PACKED_WHOLE = PACKED_LENGTH // 8
+				for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+					local PACKED_BASE = PACKED_BYTE * 8
+					local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+					local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+					if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+						for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+							local PACKED_ITEM = Value[PACKED_INDEX]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						end
+					end
+					local PACKED_BITS = 0
+					if PACKED_1 then PACKED_BITS += 1 end
+					if PACKED_2 then PACKED_BITS += 2 end
+					if PACKED_3 then PACKED_BITS += 4 end
+					if PACKED_4 then PACKED_BITS += 8 end
+					if PACKED_5 then PACKED_BITS += 16 end
+					if PACKED_6 then PACKED_BITS += 32 end
+					if PACKED_7 then PACKED_BITS += 64 end
+					if PACKED_8 then PACKED_BITS += 128 end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					local PACKED_BASE = PACKED_WHOLE * 8
+					local PACKED_BITS = 0
+					for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+						local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+					end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.PackedRanged = {
+	Read = function(Buffer: buffer): (PackedRanged)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (PackedRanged)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: PackedRanged
+			-- START ARRAY
+			local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Length = LengthOffset + 3
+			if not (Length <= 20) then error(`Expected "Length" to be smaller than or equal to 20, got {Length} instead.`) end
+			if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length) :: {any}
+			do
+				local PACKED_OFFSET = Read((Length + 7) // 8)
+				if PACKED_BY_ROWS then
+					PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+				else
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						end
+					end
+				end
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: PackedRanged
+	end,
+	Write = function(Value: PackedRanged): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: PackedRanged
+			-- START ARRAY
+			if not (#Value >= 3) then error(`Expected "#Value" to be larger than or equal to 3, got {#Value} instead.`) end
+			if not (#Value <= 20) then error(`Expected "#Value" to be smaller than or equal to 20, got {#Value} instead.`) end
+			local LengthOffset = #Value - 3
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+			do
+				local PACKED_LENGTH = #Value
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_WHOLE = PACKED_LENGTH // 8
+				for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+					local PACKED_BASE = PACKED_BYTE * 8
+					local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+					local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+					if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+						for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+							local PACKED_ITEM = Value[PACKED_INDEX]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						end
+					end
+					local PACKED_BITS = 0
+					if PACKED_1 then PACKED_BITS += 1 end
+					if PACKED_2 then PACKED_BITS += 2 end
+					if PACKED_3 then PACKED_BITS += 4 end
+					if PACKED_4 then PACKED_BITS += 8 end
+					if PACKED_5 then PACKED_BITS += 16 end
+					if PACKED_6 then PACKED_BITS += 32 end
+					if PACKED_7 then PACKED_BITS += 64 end
+					if PACKED_8 then PACKED_BITS += 128 end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					local PACKED_BASE = PACKED_WHOLE * 8
+					local PACKED_BITS = 0
+					for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+						local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+					end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.PackedNested = {
+	Read = function(Buffer: buffer): (PackedNested)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (PackedNested)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: PackedNested
+			-- START ARRAY
+			local Length = ReadVarLength()
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length) :: {any}
+			for Slot_1 = 1, Length do
+				-- Item_1: PackedNested
 				-- START ARRAY
-				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if not (Length <= 8) then error(`Expected "Length" to be smaller than or equal to 8, got {Length} instead.`) end
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
-					-- Read BLOCK: 1 bytes
-				local ARRAY_START_1 = Read(1 * Length)
-				for Slot_1 = 1, Length do
-					-- Item_1: RangedList
-					-- Read 1
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					local Item_1 = buffer.readi8(RecieveBuffer, OPERATION_OFFSET_0)
-					if not (Item_1 >= -3) then error(`Expected "Item_1" to be larger than or equal to -3, got {Item_1} instead.`) end
-					if not (Item_1 <= 3) then error(`Expected "Item_1" to be smaller than or equal to 3, got {Item_1} instead.`) end
-					Value[Slot_1] = Item_1
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: RangedList
-		end,
-		Write = function(Value: RangedList): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: RangedList
-				-- START ARRAY
-				if not (#Value <= 8) then error(`Expected "#Value" to be smaller than or equal to 8, got {#Value} instead.`) end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, #Value)
-					-- Allocate BLOCK: 1 bytes
-				local ARRAY_START_1 = Allocate(1 * #Value)
-				for Index = 1, #Value do
-					local Item_1 = Value[Index]
-					-- Item_1: RangedList
-					if typeof(Item_1) ~= "number" then
-						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					if not (Item_1 >= -3) then error(`Expected "Item_1" to be larger than or equal to -3, got {Item_1} instead.`) end
-					if not (Item_1 <= 3) then error(`Expected "Item_1" to be smaller than or equal to 3, got {Item_1} instead.`) end
-					-- Allocate 1
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					buffer.writei8(SendBuffer, OPERATION_OFFSET_0, Item_1)
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	Quantized = {
-		Read = function(Buffer: buffer): (Quantized)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (Quantized)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: Quantized
-				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if not (Value <= 200) then error(`Expected "Value" to be smaller than or equal to 200, got {Value} instead.`) end
-				Value = (Value - 100) / 100
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: Quantized
-		end,
-		Write = function(Value: Quantized): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: Quantized
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value * 100) + 100
-				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to -1 in steps of 0.01, got {Value} instead.`) end
-				if not (Fixed <= 200) then error(`Expected "Value" to be smaller than or equal to 1 in steps of 0.01, got {Value} instead.`) end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	QuantizedWide = {
-		Read = function(Buffer: buffer): (QuantizedWide)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (QuantizedWide)
-				-- Read BLOCK: 3 bytes
-				local BLOCK_START = Read(3)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: QuantizedWide
-				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
-				if not (Value <= 2048000) then error(`Expected "Value" to be smaller than or equal to 2048000, got {Value} instead.`) end
-				Value = Value / 1000
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: QuantizedWide
-		end,
-		Write = function(Value: QuantizedWide): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 3 bytes
-				local BLOCK_START = Allocate(3)
-				-- Value: QuantizedWide
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value * 1000)
-				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.001, got {Value} instead.`) end
-				if not (Fixed <= 2048000) then error(`Expected "Value" to be smaller than or equal to 2048 in steps of 0.001, got {Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
-				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Fixed, 16))
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	QuantizedSaturated = {
-		Read = function(Buffer: buffer): (QuantizedSaturated)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (QuantizedSaturated)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: QuantizedSaturated
-				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if not (Value <= 20) then error(`Expected "Value" to be smaller than or equal to 20, got {Value} instead.`) end
-				Value = (Value + 20) / 2
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: QuantizedSaturated
-		end,
-		Write = function(Value: QuantizedSaturated): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: QuantizedSaturated
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value * 2) - 20
-				if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 20 then Fixed = 20 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	QuantizedFields = {
-		Read = function(Buffer: buffer): (QuantizedFields)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (QuantizedFields)
-				-- Read BLOCK: 3 bytes
-				local BLOCK_START = Read(3)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: QuantizedFields
-				local Value = {Aim = false, Height = false} :: any
-				-- Value.Aim: Aim
-				Value.Aim = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if not (Value.Aim <= 200) then error(`Expected "Value.Aim" to be smaller than or equal to 200, got {Value.Aim} instead.`) end
-				Value.Aim = (Value.Aim - 100) / 100
-				-- Value.Height: Height
-				Value.Height = buffer.readu16(RecieveBuffer, BLOCK_START + 1)
-				if not (Value.Height <= 400) then error(`Expected "Value.Height" to be smaller than or equal to 400, got {Value.Height} instead.`) end
-				Value.Height = (Value.Height + 400) / 4
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: QuantizedFields
-		end,
-		Write = function(Value: QuantizedFields): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 3 bytes
-				local BLOCK_START = Allocate(3)
-				-- Value: QuantizedFields
-				do
-					-- Value.Aim: Aim
-					if typeof(Value.Aim) ~= "number" then
-						error(`Expected Value.Aim to be of type number, got {type(Value.Aim)} instead.`)
-					end
-					local Fixed = math.round(Value.Aim * 100) + 100
-					if not (Fixed >= 0) then error(`Expected "Value.Aim" to be larger than or equal to -1 in steps of 0.01, got {Value.Aim} instead.`) end
-					if not (Fixed <= 200) then error(`Expected "Value.Aim" to be smaller than or equal to 1 in steps of 0.01, got {Value.Aim} instead.`) end
-					buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
-				end
-				do
-					-- Value.Height: Height
-					if typeof(Value.Height) ~= "number" then
-						error(`Expected Value.Height to be of type number, got {type(Value.Height)} instead.`)
-					end
-					local Fixed = math.round(Value.Height * 4) - 400
-					if not (Fixed >= 0) then error(`Expected "Value.Height" to be larger than or equal to 100 in steps of 0.25, got {Value.Height} instead.`) end
-					if not (Fixed <= 400) then error(`Expected "Value.Height" to be smaller than or equal to 200 in steps of 0.25, got {Value.Height} instead.`) end
-					buffer.writeu16(SendBuffer, BLOCK_START + 1, Fixed)
-				end
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	Buffer = {
-		Read = function(Buffer: buffer): (Buffer)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (Buffer)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: Buffer
 				local Length = ReadVarLength()
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = buffer.create(Length)
-				buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: Buffer
-		end,
-		Write = function(Value: Buffer): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Value: Buffer
-				if typeof(Value) ~= "buffer" then
-					error(`Expected Value to be of type buffer, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Item_1 = table.create(Length) :: {any}
+				do
+					local PACKED_OFFSET = Read((Length + 7) // 8)
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Item_1)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
+						end
+					end
 				end
-				local Length = buffer.len(Value)
+				-- END ARRAY
+				Value[Slot_1] = Item_1
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: PackedNested
+	end,
+	Write = function(Value: PackedNested): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Value: PackedNested
+			-- START ARRAY
+			if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
+			WriteVarLength(#Value)
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: PackedNested
+				-- START ARRAY
+				if not (#Item_1 <= 65535) then error(`Expected "#Item_1" to be smaller than or equal to 65535, got {#Item_1} instead.`) end
+				WriteVarLength(#Item_1)
+				do
+					local PACKED_LENGTH = #Item_1
+					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Item_1[PACKED_BASE + 1], Item_1[PACKED_BASE + 2], Item_1[PACKED_BASE + 3], Item_1[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Item_1[PACKED_BASE + 5], Item_1[PACKED_BASE + 6], Item_1[PACKED_BASE + 7], Item_1[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Item_1[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							end
+						end
+						local PACKED_BITS = 0
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
+					end
+					if PACKED_LENGTH % 8 ~= 0 then
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							local PACKED_ITEM = Item_1[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
+					end
+				end
+				-- END ARRAY
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.PackedThroughAlias = {
+	Read = function(Buffer: buffer): (PackedThroughAlias)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (PackedThroughAlias)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: PackedThroughAlias
+			-- START ARRAY
+			local Length = ReadVarLength()
+			if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length) :: {any}
+			do
+				local PACKED_OFFSET = Read((Length + 7) // 8)
+				if PACKED_BY_ROWS then
+					PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
+				else
+					local PACKED_WHOLE = Length // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+						local PACKED_BASE = PACKED_BYTE * 8
+						Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+						Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+						Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+						Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+						Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+						Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+						Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+						Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+					end
+					if Length % 8 ~= 0 then
+						local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+						local PACKED_BASE = PACKED_WHOLE * 8
+						for PACKED_BIT = 0, Length % 8 - 1 do
+							Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+						end
+					end
+				end
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: PackedThroughAlias
+	end,
+	Write = function(Value: PackedThroughAlias): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Value: PackedThroughAlias
+			-- START ARRAY
+			if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
+			WriteVarLength(#Value)
+			do
+				local PACKED_LENGTH = #Value
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_WHOLE = PACKED_LENGTH // 8
+				for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+					local PACKED_BASE = PACKED_BYTE * 8
+					local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+					local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+					if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+						for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+							local PACKED_ITEM = Value[PACKED_INDEX]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						end
+					end
+					local PACKED_BITS = 0
+					if PACKED_1 then PACKED_BITS += 1 end
+					if PACKED_2 then PACKED_BITS += 2 end
+					if PACKED_3 then PACKED_BITS += 4 end
+					if PACKED_4 then PACKED_BITS += 8 end
+					if PACKED_5 then PACKED_BITS += 16 end
+					if PACKED_6 then PACKED_BITS += 32 end
+					if PACKED_7 then PACKED_BITS += 64 end
+					if PACKED_8 then PACKED_BITS += 128 end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					local PACKED_BASE = PACKED_WHOLE * 8
+					local PACKED_BITS = 0
+					for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+						local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+					end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.PackedBeside = {
+	Read = function(Buffer: buffer): (PackedBeside)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (PackedBeside)
+			-- Read BLOCK: 3 bytes
+			local BLOCK_START = Read(3)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: PackedBeside
+			local Value = {A = false, List = false, B = false, Fixed = false, C = false} :: any
+			-- Value.A: A
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value.A = bit32.btest(BITFIELD_1_0, 0x01)
+			do
+				-- Value.List: List
+				-- START ARRAY
+				local Length = ReadVarLength()
+				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Value.List = table.create(Length) :: {any}
+				do
+					local PACKED_OFFSET = Read((Length + 7) // 8)
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.List)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
+						end
+					end
+				end
+				-- END ARRAY
+			end
+			-- Value.B: B
+			Value.B = bit32.btest(BITFIELD_1_0, 0x02)
+			do
+				-- Value.Fixed: Fixed
+				-- START ARRAY
+				local Length = 3
+				Value.Fixed = table.create(Length) :: {any}
+				do
+					local PACKED_OFFSET = BLOCK_START + 1
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.Fixed)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
+						end
+					end
+				end
+				-- END ARRAY
+			end
+			-- Value.C: C
+			Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: PackedBeside
+	end,
+	Write = function(Value: PackedBeside): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			local BITFIELD_1_0
+			-- Value: PackedBeside
+			-- Value.A: A
+			if typeof(Value.A) ~= "boolean" then
+				error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			BITFIELD_1_0 = 0
+			if Value.A then BITFIELD_1_0 += 0x01 end
+			-- Value.List: List
+			-- START ARRAY
+			if not (#Value.List <= 65535) then error(`Expected "#Value.List" to be smaller than or equal to 65535, got {#Value.List} instead.`) end
+			WriteVarLength(#Value.List)
+			do
+				local PACKED_LENGTH = #Value.List
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_WHOLE = PACKED_LENGTH // 8
+				for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+					local PACKED_BASE = PACKED_BYTE * 8
+					local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value.List[PACKED_BASE + 1], Value.List[PACKED_BASE + 2], Value.List[PACKED_BASE + 3], Value.List[PACKED_BASE + 4]
+					local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value.List[PACKED_BASE + 5], Value.List[PACKED_BASE + 6], Value.List[PACKED_BASE + 7], Value.List[PACKED_BASE + 8]
+					if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+						for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+							local PACKED_ITEM = Value.List[PACKED_INDEX]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						end
+					end
+					local PACKED_BITS = 0
+					if PACKED_1 then PACKED_BITS += 1 end
+					if PACKED_2 then PACKED_BITS += 2 end
+					if PACKED_3 then PACKED_BITS += 4 end
+					if PACKED_4 then PACKED_BITS += 8 end
+					if PACKED_5 then PACKED_BITS += 16 end
+					if PACKED_6 then PACKED_BITS += 32 end
+					if PACKED_7 then PACKED_BITS += 64 end
+					if PACKED_8 then PACKED_BITS += 128 end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					local PACKED_BASE = PACKED_WHOLE * 8
+					local PACKED_BITS = 0
+					for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+						local PACKED_ITEM = Value.List[PACKED_BASE + PACKED_BIT + 1]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+					end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Value.B: B
+			if typeof(Value.B) ~= "boolean" then
+				error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value.B then BITFIELD_1_0 += 0x02 end
+			-- Value.Fixed: Fixed
+			-- START ARRAY
+			if #Value.Fixed ~= 3 then error(`Expected length of "Value.Fixed" to be equal to 3, got {#Value.Fixed} instead.`) end
+			do
+				local PACKED_LENGTH = 3
+				local PACKED_OFFSET = BLOCK_START + 1
+				local PACKED_WHOLE = PACKED_LENGTH // 8
+				for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+					local PACKED_BASE = PACKED_BYTE * 8
+					local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value.Fixed[PACKED_BASE + 1], Value.Fixed[PACKED_BASE + 2], Value.Fixed[PACKED_BASE + 3], Value.Fixed[PACKED_BASE + 4]
+					local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value.Fixed[PACKED_BASE + 5], Value.Fixed[PACKED_BASE + 6], Value.Fixed[PACKED_BASE + 7], Value.Fixed[PACKED_BASE + 8]
+					if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+						for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+							local PACKED_ITEM = Value.Fixed[PACKED_INDEX]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						end
+					end
+					local PACKED_BITS = 0
+					if PACKED_1 then PACKED_BITS += 1 end
+					if PACKED_2 then PACKED_BITS += 2 end
+					if PACKED_3 then PACKED_BITS += 4 end
+					if PACKED_4 then PACKED_BITS += 8 end
+					if PACKED_5 then PACKED_BITS += 16 end
+					if PACKED_6 then PACKED_BITS += 32 end
+					if PACKED_7 then PACKED_BITS += 64 end
+					if PACKED_8 then PACKED_BITS += 128 end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					local PACKED_BASE = PACKED_WHOLE * 8
+					local PACKED_BITS = 0
+					for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+						local PACKED_ITEM = Value.Fixed[PACKED_BASE + PACKED_BIT + 1]
+						if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+					end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+			-- Value.C: C
+			if typeof(Value.C) ~= "number" then
+				error(`Expected Value.C to be of type number, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.C)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.PackedMap = {
+	Read = function(Buffer: buffer): (PackedMap)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (PackedMap)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: PackedMap
+			local Value = {} :: { [any]: any }
+			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if Elements_1 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
+			for _ = 1, Elements_1 do
+				-- Key_1: PackedMap
+				local Length = ReadVarLength()
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				-- Element_1: PackedMap
+				-- START ARRAY
+				local Length = ReadVarLength()
+				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Element_1 = table.create(Length) :: {any}
+				do
+					local PACKED_OFFSET = Read((Length + 7) // 8)
+					if PACKED_BY_ROWS then
+						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Element_1)
+					else
+						local PACKED_WHOLE = Length // 8
+						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
+							local PACKED_BASE = PACKED_BYTE * 8
+							Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
+							Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
+							Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
+							Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
+							Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
+							Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
+							Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
+							Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
+						end
+						if Length % 8 ~= 0 then
+							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
+							local PACKED_BASE = PACKED_WHOLE * 8
+							for PACKED_BIT = 0, Length % 8 - 1 do
+								Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
+							end
+						end
+					end
+				end
+				-- END ARRAY
+				Value[Key_1] = Element_1
+			end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: PackedMap
+	end,
+	Write = function(Value: PackedMap): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: PackedMap
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: PackedMap
+				if typeof(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Length = #Key_1
 				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 				WriteVarLength(Length)
 				Allocate(Length)
-				buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	ExactBuffer = {
-		Read = function(Buffer: buffer): (ExactBuffer)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (ExactBuffer)
-				-- Read BLOCK: 9 bytes
-				local BLOCK_START = Read(9)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: ExactBuffer
-				local Value = buffer.create(9)
-				buffer.copy(Value, 0, RecieveBuffer, BLOCK_START + 0, 9)
-				if buffer.len(Value) ~= 9 then error(`Expected size of "Value" to be equal to 9, got {buffer.len(Value)} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: ExactBuffer
-		end,
-		Write = function(Value: ExactBuffer): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 9 bytes
-				local BLOCK_START = Allocate(9)
-				-- Value: ExactBuffer
-				if typeof(Value) ~= "buffer" then
-					error(`Expected Value to be of type buffer, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if buffer.len(Value) ~= 9 then error(`Expected size of "Value" to be equal to 9, got {buffer.len(Value)} instead.`) end
-				buffer.copy(SendBuffer, BLOCK_START + 0, Value, 0, 9)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	BoundedBuffer = {
-		Read = function(Buffer: buffer): (BoundedBuffer)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (BoundedBuffer)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: BoundedBuffer
-				local Length = ReadVarLength()
-				if Length > 1000 then error(`Expected size of "Value" to be smaller than or equal to 1000, got {Length} instead.`) end
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = buffer.create(Length)
-				buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: BoundedBuffer
-		end,
-		Write = function(Value: BoundedBuffer): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Value: BoundedBuffer
-				if typeof(Value) ~= "buffer" then
-					error(`Expected Value to be of type buffer, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if buffer.len(Value) < 0 then error(`Expected size of "Value" to be larger than or equal to 0, got {buffer.len(Value)} instead.`) end
-				if buffer.len(Value) > 1000 then error(`Expected size of "Value" to be smaller than or equal to 1000, got {buffer.len(Value)} instead.`) end
-				local Length = buffer.len(Value)
-				if not (Length <= 1000) then error(`Expected "Length" to be smaller than or equal to 1000, got {Length} instead.`) end
-				WriteVarLength(Length)
-				Allocate(Length)
-				buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	PlainCFrame = {
-		Read = function(Buffer: buffer): (PlainCFrame)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (PlainCFrame)
-				-- Read BLOCK: 24 bytes
-				local BLOCK_START = Read(24)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: PlainCFrame
-				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
-				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
-				local Position = Vector3.new(X, Y, Z)
-				local rX = buffer.readf32(RecieveBuffer, BLOCK_START + 12)
-				local rY = buffer.readf32(RecieveBuffer, BLOCK_START + 16)
-				local rZ = buffer.readf32(RecieveBuffer, BLOCK_START + 20)
-				local Value = CFrame.new(Position) * CFrame.fromOrientation(rX, rY, rZ)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: PlainCFrame
-		end,
-		Write = function(Value: PlainCFrame): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 24 bytes
-				local BLOCK_START = Allocate(24)
-				-- Value: PlainCFrame
-				if typeof(Value) ~= "CFrame" then
-					error(`Expected Value to be of type CFrame, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				local Vector = Value.Position
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
-				buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
-				buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
-				local rX, rY, rZ = Value:ToOrientation()
-				buffer.writef32(SendBuffer, BLOCK_START + 12, rX)
-				buffer.writef32(SendBuffer, BLOCK_START + 16, rY)
-				buffer.writef32(SendBuffer, BLOCK_START + 20, rZ)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	QuatCFrame = {
-		Read = function(Buffer: buffer): (QuatCFrame)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (QuatCFrame)
-				-- Read BLOCK: 19 bytes
-				local BLOCK_START = Read(19)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: QuatCFrame
-				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
-				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
-				local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 12)
-				local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 13)
-				local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 15)
-				local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 17)
-				local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: QuatCFrame
-		end,
-		Write = function(Value: QuatCFrame): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 19 bytes
-				local BLOCK_START = Allocate(19)
-				-- Value: QuatCFrame
-				if typeof(Value) ~= "CFrame" then
-					error(`Expected Value to be of type CFrame, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				local Position = Value.Position
-				local QIndex, QA, QB, QC = PackRotation(Value)
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Position.X)
-				buffer.writef32(SendBuffer, BLOCK_START + 4, Position.Y)
-				buffer.writef32(SendBuffer, BLOCK_START + 8, Position.Z)
-				buffer.writeu8(SendBuffer, BLOCK_START + 12, QIndex)
-				buffer.writei16(SendBuffer, BLOCK_START + 13, QA)
-				buffer.writei16(SendBuffer, BLOCK_START + 15, QB)
-				buffer.writei16(SendBuffer, BLOCK_START + 17, QC)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	QuatHalfCFrame = {
-		Read = function(Buffer: buffer): (QuatHalfCFrame)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (QuatHalfCFrame)
-				-- Read BLOCK: 13 bytes
-				local BLOCK_START = Read(13)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: QuatHalfCFrame
-				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				local X
-				local MantissaExponent = Encoded % 0x8000
-				if MantissaExponent == 0b0_11111_0000000000  then
-					if Encoded // 0x8000 == 1 then
-						X = -math.huge
-					else
-						X = math.huge
-					end
-				elseif MantissaExponent > 0b0_11111_0000000000 then
-					X = 0 / 0
-				elseif MantissaExponent == 0b0_00000_0000000000   then
-					X = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x400
-					local Exponent = MantissaExponent // 0x400
-					local Fraction;
-					if Exponent == 0 then
-						Fraction = Mantissa / 0x400
-					else
-						Fraction = Mantissa / 0x800 + 0.5
-					end
-					local Result = math.ldexp(Fraction, Exponent - 14)
-					X = if Encoded // 0x8000 == 1 then -Result else Result
-				end
-				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
-				local Y
-				MantissaExponent = Encoded % 0x8000
-				if MantissaExponent == 0b0_11111_0000000000  then
-					if Encoded // 0x8000 == 1 then
-						Y = -math.huge
-					else
-						Y = math.huge
-					end
-				elseif MantissaExponent > 0b0_11111_0000000000 then
-					Y = 0 / 0
-				elseif MantissaExponent == 0b0_00000_0000000000   then
-					Y = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x400
-					local Exponent = MantissaExponent // 0x400
-					local Fraction;
-					if Exponent == 0 then
-						Fraction = Mantissa / 0x400
-					else
-						Fraction = Mantissa / 0x800 + 0.5
-					end
-					local Result = math.ldexp(Fraction, Exponent - 14)
-					Y = if Encoded // 0x8000 == 1 then -Result else Result
-				end
-				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
-				local Z
-				MantissaExponent = Encoded % 0x8000
-				if MantissaExponent == 0b0_11111_0000000000  then
-					if Encoded // 0x8000 == 1 then
-						Z = -math.huge
-					else
-						Z = math.huge
-					end
-				elseif MantissaExponent > 0b0_11111_0000000000 then
-					Z = 0 / 0
-				elseif MantissaExponent == 0b0_00000_0000000000   then
-					Z = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x400
-					local Exponent = MantissaExponent // 0x400
-					local Fraction;
-					if Exponent == 0 then
-						Fraction = Mantissa / 0x400
-					else
-						Fraction = Mantissa / 0x800 + 0.5
-					end
-					local Result = math.ldexp(Fraction, Exponent - 14)
-					Z = if Encoded // 0x8000 == 1 then -Result else Result
-				end
-				local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
-				local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 7)
-				local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 9)
-				local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 11)
-				local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: QuatHalfCFrame
-		end,
-		Write = function(Value: QuatHalfCFrame): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 13 bytes
-				local BLOCK_START = Allocate(13)
-				-- Value: QuatHalfCFrame
-				if typeof(Value) ~= "CFrame" then
-					error(`Expected Value to be of type CFrame, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				local Position = Value.Position
-				local QIndex, QA, QB, QC = PackRotation(Value)
-				if Position.X > 65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
-				elseif Position.X < -65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
-				elseif Position.X ~= Position.X then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
-				elseif Position.X == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Position.X < 0 then 0x8000 else 0)
-				else
-					local float = Position.X
-					local Abosulte = math.abs(float)
-					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
-					local RoundedValue = (Abosulte // Interval) * Interval
-					local Fraction, Exponent = math.frexp(RoundedValue)
-					Exponent += 14
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800)
-					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
-						+ if float < 0 then 0x8000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
-				end
-				if Position.Y > 65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b0_11111_0000000000)
-				elseif Position.Y < -65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000000)
-				elseif Position.Y ~= Position.Y then
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000001)
-				elseif Position.Y == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, if 1 / Position.Y < 0 then 0x8000 else 0)
-				else
-					local float = Position.Y
-					local Abosulte = math.abs(float)
-					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
-					local RoundedValue = (Abosulte // Interval) * Interval
-					local Fraction, Exponent = math.frexp(RoundedValue)
-					Exponent += 14
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800)
-					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
-						+ if float < 0 then 0x8000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, Result)
-				end
-				if Position.Z > 65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b0_11111_0000000000)
-				elseif Position.Z < -65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000000)
-				elseif Position.Z ~= Position.Z then
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000001)
-				elseif Position.Z == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, if 1 / Position.Z < 0 then 0x8000 else 0)
-				else
-					local float = Position.Z
-					local Abosulte = math.abs(float)
-					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
-					local RoundedValue = (Abosulte // Interval) * Interval
-					local Fraction, Exponent = math.frexp(RoundedValue)
-					Exponent += 14
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800)
-					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
-						+ if float < 0 then 0x8000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, Result)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 6, QIndex)
-				buffer.writei16(SendBuffer, BLOCK_START + 7, QA)
-				buffer.writei16(SendBuffer, BLOCK_START + 9, QB)
-				buffer.writei16(SendBuffer, BLOCK_START + 11, QC)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	QuatFirstCFrame = {
-		Read = function(Buffer: buffer): (QuatFirstCFrame)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (QuatFirstCFrame)
-				-- Read BLOCK: 13 bytes
-				local BLOCK_START = Read(13)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: QuatFirstCFrame
-				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				local X
-				local MantissaExponent = Encoded % 0x8000
-				if MantissaExponent == 0b0_11111_0000000000  then
-					if Encoded // 0x8000 == 1 then
-						X = -math.huge
-					else
-						X = math.huge
-					end
-				elseif MantissaExponent > 0b0_11111_0000000000 then
-					X = 0 / 0
-				elseif MantissaExponent == 0b0_00000_0000000000   then
-					X = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x400
-					local Exponent = MantissaExponent // 0x400
-					local Fraction;
-					if Exponent == 0 then
-						Fraction = Mantissa / 0x400
-					else
-						Fraction = Mantissa / 0x800 + 0.5
-					end
-					local Result = math.ldexp(Fraction, Exponent - 14)
-					X = if Encoded // 0x8000 == 1 then -Result else Result
-				end
-				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
-				local Y
-				MantissaExponent = Encoded % 0x8000
-				if MantissaExponent == 0b0_11111_0000000000  then
-					if Encoded // 0x8000 == 1 then
-						Y = -math.huge
-					else
-						Y = math.huge
-					end
-				elseif MantissaExponent > 0b0_11111_0000000000 then
-					Y = 0 / 0
-				elseif MantissaExponent == 0b0_00000_0000000000   then
-					Y = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x400
-					local Exponent = MantissaExponent // 0x400
-					local Fraction;
-					if Exponent == 0 then
-						Fraction = Mantissa / 0x400
-					else
-						Fraction = Mantissa / 0x800 + 0.5
-					end
-					local Result = math.ldexp(Fraction, Exponent - 14)
-					Y = if Encoded // 0x8000 == 1 then -Result else Result
-				end
-				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
-				local Z
-				MantissaExponent = Encoded % 0x8000
-				if MantissaExponent == 0b0_11111_0000000000  then
-					if Encoded // 0x8000 == 1 then
-						Z = -math.huge
-					else
-						Z = math.huge
-					end
-				elseif MantissaExponent > 0b0_11111_0000000000 then
-					Z = 0 / 0
-				elseif MantissaExponent == 0b0_00000_0000000000   then
-					Z = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x400
-					local Exponent = MantissaExponent // 0x400
-					local Fraction;
-					if Exponent == 0 then
-						Fraction = Mantissa / 0x400
-					else
-						Fraction = Mantissa / 0x800 + 0.5
-					end
-					local Result = math.ldexp(Fraction, Exponent - 14)
-					Z = if Encoded // 0x8000 == 1 then -Result else Result
-				end
-				local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
-				local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 7)
-				local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 9)
-				local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 11)
-				local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: QuatFirstCFrame
-		end,
-		Write = function(Value: QuatFirstCFrame): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 13 bytes
-				local BLOCK_START = Allocate(13)
-				-- Value: QuatFirstCFrame
-				if typeof(Value) ~= "CFrame" then
-					error(`Expected Value to be of type CFrame, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				local Position = Value.Position
-				local QIndex, QA, QB, QC = PackRotation(Value)
-				if Position.X > 65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
-				elseif Position.X < -65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
-				elseif Position.X ~= Position.X then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
-				elseif Position.X == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Position.X < 0 then 0x8000 else 0)
-				else
-					local float = Position.X
-					local Abosulte = math.abs(float)
-					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
-					local RoundedValue = (Abosulte // Interval) * Interval
-					local Fraction, Exponent = math.frexp(RoundedValue)
-					Exponent += 14
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800)
-					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
-						+ if float < 0 then 0x8000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
-				end
-				if Position.Y > 65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b0_11111_0000000000)
-				elseif Position.Y < -65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000000)
-				elseif Position.Y ~= Position.Y then
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, 0b1_11111_0000000001)
-				elseif Position.Y == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, if 1 / Position.Y < 0 then 0x8000 else 0)
-				else
-					local float = Position.Y
-					local Abosulte = math.abs(float)
-					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
-					local RoundedValue = (Abosulte // Interval) * Interval
-					local Fraction, Exponent = math.frexp(RoundedValue)
-					Exponent += 14
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800)
-					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
-						+ if float < 0 then 0x8000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 2, Result)
-				end
-				if Position.Z > 65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b0_11111_0000000000)
-				elseif Position.Z < -65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000000)
-				elseif Position.Z ~= Position.Z then
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, 0b1_11111_0000000001)
-				elseif Position.Z == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, if 1 / Position.Z < 0 then 0x8000 else 0)
-				else
-					local float = Position.Z
-					local Abosulte = math.abs(float)
-					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
-					local RoundedValue = (Abosulte // Interval) * Interval
-					local Fraction, Exponent = math.frexp(RoundedValue)
-					Exponent += 14
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800)
-					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
-						+ if float < 0 then 0x8000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 4, Result)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 6, QIndex)
-				buffer.writei16(SendBuffer, BLOCK_START + 7, QA)
-				buffer.writei16(SendBuffer, BLOCK_START + 9, QB)
-				buffer.writei16(SendBuffer, BLOCK_START + 11, QC)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	QuatCFrames = {
-		Read = function(Buffer: buffer): (QuatCFrames)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (QuatCFrames)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: QuatCFrames
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+				-- Element_1: PackedMap
 				-- START ARRAY
-				local Length = ReadVarLength()
-				if Length * 19 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
-					-- Read BLOCK: 19 bytes
-				local ARRAY_START_1 = Read(19 * Length)
-				for Slot_1 = 1, Length do
-					-- Item_1: QuatCFrames
-					-- Read 4
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 4
-					local X = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_0)
-					-- Read 4
-					local OPERATION_OFFSET_1 = ARRAY_START_1
-					ARRAY_START_1 += 4
-					local Y = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_1)
-					-- Read 4
-					local OPERATION_OFFSET_2 = ARRAY_START_1
-					ARRAY_START_1 += 4
-					local Z = buffer.readf32(RecieveBuffer, OPERATION_OFFSET_2)
-					-- Read 1
-					local OPERATION_OFFSET_3 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					local QIndex = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_3)
-					-- Read 2
-					local OPERATION_OFFSET_4 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					local QA = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_4)
-					-- Read 2
-					local OPERATION_OFFSET_5 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					local QB = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_5)
-					-- Read 2
-					local OPERATION_OFFSET_6 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					local QC = buffer.readi16(RecieveBuffer, OPERATION_OFFSET_6)
-					local Item_1 = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
-					Value[Slot_1] = Item_1
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: QuatCFrames
-		end,
-		Write = function(Value: QuatCFrames): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Value: QuatCFrames
-				-- START ARRAY
-				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				WriteVarLength(#Value)
-					-- Allocate BLOCK: 19 bytes
-				local ARRAY_START_1 = Allocate(19 * #Value)
-				for Index = 1, #Value do
-					local Item_1 = Value[Index]
-					-- Item_1: QuatCFrames
-					if typeof(Item_1) ~= "CFrame" then
-						error(`Expected Item_1 to be of type CFrame, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					local Position = Item_1.Position
-					local QIndex, QA, QB, QC = PackRotation(Item_1)
-					-- Allocate 4
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 4
-					buffer.writef32(SendBuffer, OPERATION_OFFSET_0, Position.X)
-					-- Allocate 4
-					local OPERATION_OFFSET_1 = ARRAY_START_1
-					ARRAY_START_1 += 4
-					buffer.writef32(SendBuffer, OPERATION_OFFSET_1, Position.Y)
-					-- Allocate 4
-					local OPERATION_OFFSET_2 = ARRAY_START_1
-					ARRAY_START_1 += 4
-					buffer.writef32(SendBuffer, OPERATION_OFFSET_2, Position.Z)
-					-- Allocate 1
-					local OPERATION_OFFSET_3 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					buffer.writeu8(SendBuffer, OPERATION_OFFSET_3, QIndex)
-					-- Allocate 2
-					local OPERATION_OFFSET_4 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					buffer.writei16(SendBuffer, OPERATION_OFFSET_4, QA)
-					-- Allocate 2
-					local OPERATION_OFFSET_5 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					buffer.writei16(SendBuffer, OPERATION_OFFSET_5, QB)
-					-- Allocate 2
-					local OPERATION_OFFSET_6 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					buffer.writei16(SendBuffer, OPERATION_OFFSET_6, QC)
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	MultiDimensionalArray = {
-		Read = function(Buffer: buffer): (MultiDimensionalArray)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (MultiDimensionalArray)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: MultiDimensionalArray
-				-- START ARRAY
-				local Length = ReadVarLength()
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
-				for Slot_1 = 1, Length do
-					-- Item_1: MultiDimensionalArray
-					-- START ARRAY
-					local Length = ReadVarLength()
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Item_1 = table.create(Length)
-					for Slot_2 = 1, Length do
-						-- Item_2: MultiDimensionalArray
-						-- START ARRAY
-						local Length = ReadVarLength()
-						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-						local Item_2 = table.create(Length)
-							-- Read BLOCK: 1 bytes
-						local ARRAY_START_3 = Read(1 * Length)
-						for Slot_3 = 1, Length do
-							-- Item_3: MultiDimensionalArray
-							-- Read 1
-							local OPERATION_OFFSET_0 = ARRAY_START_3
-							ARRAY_START_3 += 1
-							local Item_3 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-							Item_2[Slot_3] = Item_3
-						end
-						-- END ARRAY
-						Item_1[Slot_2] = Item_2
-					end
-					-- END ARRAY
-					Value[Slot_1] = Item_1
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: MultiDimensionalArray
-		end,
-		Write = function(Value: MultiDimensionalArray): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Value: MultiDimensionalArray
-				-- START ARRAY
-				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				WriteVarLength(#Value)
-				for Index = 1, #Value do
-					local Item_1 = Value[Index]
-					-- Item_1: MultiDimensionalArray
-					-- START ARRAY
-					if not (#Item_1 <= 65535) then error(`Expected "#Item_1" to be smaller than or equal to 65535, got {#Item_1} instead.`) end
-					WriteVarLength(#Item_1)
-					for Index = 1, #Item_1 do
-						local Item_2 = Item_1[Index]
-						-- Item_2: MultiDimensionalArray
-						-- START ARRAY
-						if not (#Item_2 <= 65535) then error(`Expected "#Item_2" to be smaller than or equal to 65535, got {#Item_2} instead.`) end
-						WriteVarLength(#Item_2)
-							-- Allocate BLOCK: 1 bytes
-						local ARRAY_START_3 = Allocate(1 * #Item_2)
-						for Index = 1, #Item_2 do
-							local Item_3 = Item_2[Index]
-							-- Item_3: MultiDimensionalArray
-							if typeof(Item_3) ~= "number" then
-								error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.{if type(Item_3) == "table" or type(Item_3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				if not (#Element_1 <= 65535) then error(`Expected "#Element_1" to be smaller than or equal to 65535, got {#Element_1} instead.`) end
+				WriteVarLength(#Element_1)
+				do
+					local PACKED_LENGTH = #Element_1
+					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+					local PACKED_WHOLE = PACKED_LENGTH // 8
+					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+						local PACKED_BASE = PACKED_BYTE * 8
+						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Element_1[PACKED_BASE + 1], Element_1[PACKED_BASE + 2], Element_1[PACKED_BASE + 3], Element_1[PACKED_BASE + 4]
+						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Element_1[PACKED_BASE + 5], Element_1[PACKED_BASE + 6], Element_1[PACKED_BASE + 7], Element_1[PACKED_BASE + 8]
+						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
+							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+								local PACKED_ITEM = Element_1[PACKED_INDEX]
+								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
 							end
-							-- Allocate 1
-							local OPERATION_OFFSET_0 = ARRAY_START_3
-							ARRAY_START_3 += 1
-							buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_3)
 						end
-						-- END ARRAY
+						local PACKED_BITS = 0
+						if PACKED_1 then PACKED_BITS += 1 end
+						if PACKED_2 then PACKED_BITS += 2 end
+						if PACKED_3 then PACKED_BITS += 4 end
+						if PACKED_4 then PACKED_BITS += 8 end
+						if PACKED_5 then PACKED_BITS += 16 end
+						if PACKED_6 then PACKED_BITS += 32 end
+						if PACKED_7 then PACKED_BITS += 64 end
+						if PACKED_8 then PACKED_BITS += 128 end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
 					end
-					-- END ARRAY
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SizeByte = {
-		Read = function(Buffer: buffer): (SizeByte)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SizeByte)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SizeByte
-				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SizeByte
-		end,
-		Write = function(Value: SizeByte): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: SizeByte
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SizeFixedString = {
-		Read = function(Buffer: buffer): (SizeFixedString)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SizeFixedString)
-				-- Read BLOCK: 8 bytes
-				local BLOCK_START = Read(8)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SizeFixedString
-				local Value = buffer.readstring(RecieveBuffer, BLOCK_START + 0, 8)
-				if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SizeFixedString
-		end,
-		Write = function(Value: SizeFixedString): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 8 bytes
-				local BLOCK_START = Allocate(8)
-				-- Value: SizeFixedString
-				if typeof(Value) ~= "string" then
-					error(`Expected Value to be of type string, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
-				buffer.writestring(SendBuffer, BLOCK_START + 0, Value, 8)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SizeBoundedString = {
-		Read = function(Buffer: buffer): (SizeBoundedString)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SizeBoundedString)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SizeBoundedString
-				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if Length > 64 then error(`Expected length of "Value" to be smaller than or equal to 64, got {Length} instead.`) end
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SizeBoundedString
-		end,
-		Write = function(Value: SizeBoundedString): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: SizeBoundedString
-				if typeof(Value) ~= "string" then
-					error(`Expected Value to be of type string, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if #Value < 0 then error(`Expected length of "Value" to be larger than or equal to 0, got {#Value} instead.`) end
-				if #Value > 64 then error(`Expected length of "Value" to be smaller than or equal to 64, got {#Value} instead.`) end
-				local Length = #Value
-				if not (Length <= 64) then error(`Expected "Length" to be smaller than or equal to 64, got {Length} instead.`) end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Length)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value, Length)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SizeFixedArray = {
-		Read = function(Buffer: buffer): (SizeFixedArray)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SizeFixedArray)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SizeFixedArray
-				-- START ARRAY
-				local Length = 4
-				local Value = table.create(Length)
-					-- Read BLOCK: 1 bytes
-				local ARRAY_START_1 = Read(1 * Length)
-				for Slot_1 = 1, Length do
-					-- Item_1: SizeFixedArray
-					-- Read 1
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					Value[Slot_1] = Item_1
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SizeFixedArray
-		end,
-		Write = function(Value: SizeFixedArray): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Value: SizeFixedArray
-				-- START ARRAY
-				if #Value ~= 4 then error(`Expected length of "Value" to be equal to 4, got {#Value} instead.`) end
-					-- Allocate BLOCK: 1 bytes
-				local ARRAY_START_1 = Allocate(1 * 4)
-				for Index = 1, 4 do
-					local Item_1 = Value[Index]
-					-- Item_1: SizeFixedArray
-					if typeof(Item_1) ~= "number" then
-						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					if PACKED_LENGTH % 8 ~= 0 then
+						local PACKED_BASE = PACKED_WHOLE * 8
+						local PACKED_BITS = 0
+						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+							local PACKED_ITEM = Element_1[PACKED_BASE + PACKED_BIT + 1]
+							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+						end
+						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
 					end
-					-- Allocate 1
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
 				end
 				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
 			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	SizeBoundedArray = {
-		Read = function(Buffer: buffer): (SizeBoundedArray)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SizeBoundedArray)
+		return Result
+	end
+}
+Returns.PackedOptional = {
+	Read = function(Buffer: buffer): (PackedOptional)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (PackedOptional)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: PackedOptional
+			-- START ARRAY
+			local Length = ReadVarLength()
+			if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+			local Value = table.create(Length) :: {any}
 				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SizeBoundedArray
-				-- START ARRAY
-				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if not (Length <= 10) then error(`Expected "Length" to be smaller than or equal to 10, got {Length} instead.`) end
-				if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
-					-- Read BLOCK: 2 bytes
-				local ARRAY_START_1 = Read(2 * Length)
-				for Slot_1 = 1, Length do
-					-- Item_1: SizeBoundedArray
-					-- Read 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					local Item_1 = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
-					Value[Slot_1] = Item_1
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SizeBoundedArray
-		end,
-		Write = function(Value: SizeBoundedArray): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: SizeBoundedArray
-				-- START ARRAY
-				if not (#Value <= 10) then error(`Expected "#Value" to be smaller than or equal to 10, got {#Value} instead.`) end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, #Value)
-					-- Allocate BLOCK: 2 bytes
-				local ARRAY_START_1 = Allocate(2 * #Value)
-				for Index = 1, #Value do
-					local Item_1 = Value[Index]
-					-- Item_1: SizeBoundedArray
-					if typeof(Item_1) ~= "number" then
-						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					-- Allocate 2
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 2
-					buffer.writeu16(SendBuffer, OPERATION_OFFSET_0, Item_1)
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SizeOptionalByte = {
-		Read = function(Buffer: buffer): (SizeOptionalByte)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SizeOptionalByte)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SizeOptionalByte
-				local Value
-				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if bit32.btest(BITFIELD_1_0, 0x01) then
+			local ARRAY_START_1 = Read(1 * Length)
+			local BITFIELD_2_0
+			for Slot_1 = 1, Length do
+				-- Item_1: PackedOptional
+				local Item_1
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				BITFIELD_2_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				if bit32.btest(BITFIELD_2_0, 0x01) then
 					-- Read BLOCK: 1 bytes
 					local BLOCK_START = Read(1)
-					-- Value: SizeOptionalByte
-					Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					local BITFIELD_3_0
+					-- Item_1: PackedOptional
+					BITFIELD_3_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+					Item_1 = bit32.btest(BITFIELD_3_0, 0x01)
 				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+				Value[Slot_1] = Item_1
 			end
-			return Result :: SizeOptionalByte
-		end,
-		Write = function(Value: SizeOptionalByte): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: PackedOptional
+	end,
+	Write = function(Value: PackedOptional): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Value: PackedOptional
+			-- START ARRAY
+			if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
+			WriteVarLength(#Value)
 				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				local BITFIELD_1_0
-				-- Value: SizeOptionalByte
-				BITFIELD_1_0 = 0
-				if Value ~= nil then BITFIELD_1_0 += 0x01 end
-				if Value ~= nil then
+			local ARRAY_START_1 = Allocate(1 * #Value)
+			local BITFIELD_2_0_OFFSET
+			local BITFIELD_2_0
+			for Index = 1, #Value do
+				local Item_1 = Value[Index]
+				-- Item_1: PackedOptional
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				BITFIELD_2_0 = 0
+				BITFIELD_2_0_OFFSET = OPERATION_OFFSET_0
+				if Item_1 ~= nil then BITFIELD_2_0 += 0x01 end
+				if Item_1 ~= nil then
 					-- Allocate BLOCK: 1 bytes
 					local BLOCK_START = Allocate(1)
-					-- Value: SizeOptionalByte
-					if typeof(Value) ~= "number" then
-						error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					local BITFIELD_3_0
+					-- Item_1: PackedOptional
+					if typeof(Item_1) ~= "boolean" then
+						error(`Expected Item_1 to be of type boolean, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
-					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
+					BITFIELD_3_0 = 0
+					if Item_1 then BITFIELD_3_0 += 0x01 end
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_3_0)
 				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
+				buffer.writeu8(SendBuffer, BITFIELD_2_0_OFFSET, BITFIELD_2_0)
 			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	SizeVector = {
-		Read = function(Buffer: buffer): (SizeVector)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SizeVector)
-				-- Read BLOCK: 12 bytes
-				local BLOCK_START = Read(12)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SizeVector
-				local X = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
-				local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
-				local Value = Vector3.new(X, Y, Z)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+		return Result
+	end
+}
+Returns.RateLimited = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Reliable[0] ~= nil then
+			warn("[BlinkBlox]: \"RateLimited\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[0] = Listener
+		local Pending = Queue.Reliable[0]
+		Queue.Reliable[0] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "RateLimited", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[0] == Listener then
+				Events.Reliable[0] = nil
 			end
-			return Result :: SizeVector
+		end
+	end,
+	Predict = function(Player: Player, Value: number): ()
+		local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "RateLimited"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "RateLimited", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		else
+			if #Queue.Reliable[0] < 256 then
+				table.insert(Queue.Reliable[0], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.RateLimitedPoll = {
+	Iter = function(): () -> (number, Player, number)
+		local index = 0
+		local queue = Queue.Reliable[1]
+		return function (): (number, Player, number)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	Next = function(): () -> (number, Player, number)
+		local index = 0
+		local queue = Queue.Reliable[1]
+		return function (): (number, Player, number)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end
+}
+Returns.UnreliableOversize = {
+	On = function(Listener: (Player: Player, Value: string) -> ()): () -> ()
+		if Events.Unreliable[2] ~= nil then
+			warn("[BlinkBlox]: \"UnreliableOversize\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[2] = Listener
+		return function (): ()
+			if Events.Unreliable[2] == Listener then
+				Events.Unreliable[2] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: string): ()
+		local BOUND_LISTENER = Events.Unreliable[2] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "UnreliableOversize"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "UnreliableOversize", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+	end
+}
+Returns.UnreliableInstances = {
+	On = function(Listener: (Player: Player, Value1: buffer, Value2: { Instance }) -> ()): () -> ()
+		if Events.Unreliable[3] ~= nil then
+			warn("[BlinkBlox]: \"UnreliableInstances\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[3] = Listener
+		return function (): ()
+			if Events.Unreliable[3] == Listener then
+				Events.Unreliable[3] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value1: buffer, Value2: { Instance }): ()
+		local BOUND_LISTENER = Events.Unreliable[3] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "UnreliableInstances"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value1, Value2)
+			if not ListenerRan and not ListenerFailed(Player, "UnreliableInstances", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+	end
+}
+Returns.RateLimitedCall = {
+	On = function(Listener: (Player, number) -> (number)): ()
+		if Events.Reliable[2] ~= nil then
+			warn("[BlinkBlox]: \"RateLimitedCall\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[2] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
+			local ReturnValue: number;
+			local Success, Error = pcall(function ()
+				ReturnValue = Listener(Player, Value)
+			end)
+			LoadPlayer(Player)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_RateLimitedCall, ReturnValue, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 2)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "RateLimitedCall", Error) then warn(`"RateLimitedCall" encountered an error, {Error}`) end
+			end
+			SavePlayerBuffer(Player)
+		end
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[2] or {}
+			Queue.Reliable[2] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[2](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.ConcurrentCall = {
+	On = function(Listener: (Player, number) -> (number)): ()
+		if Events.Reliable[3] ~= nil then
+			warn("[BlinkBlox]: \"ConcurrentCall\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[3] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
+			local ReturnValue: number;
+			local Success, Error = pcall(function ()
+				ReturnValue = Listener(Player, Value)
+			end)
+			LoadPlayer(Player)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_ConcurrentCall, ReturnValue, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 3)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "ConcurrentCall", Error) then warn(`"ConcurrentCall" encountered an error, {Error}`) end
+			end
+			ConcurrencyRelease(Player, 3)
+			SavePlayerBuffer(Player)
+		end
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[3] or {}
+			Queue.Reliable[3] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[3](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.MapNested = {
+	Read = function(Buffer: buffer): (MapNested)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (MapNested)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: MapNested
+			local Value = {} :: { [any]: any }
+			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
+			for _ = 1, Elements_1 do
+				-- Key_1: MapNested
+				local Length = ReadVarLength()
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				-- Element_1: MapNested
+				local Element_1 = {} :: { [any]: any }
+				local OFFSET_0 = Read(2)
+				local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
+				if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
+				for _ = 1, Elements_2 do
+					-- Key_2: MapSimple
+					local Length = ReadVarLength()
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+					-- Element_2: MapSimple
+					local OFFSET_0 = Read(1)
+					local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_0)
+					Element_1[Key_2] = Element_2
+				end
+				Value[Key_1] = Element_1
+			end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: MapNested
+	end,
+	Write = function(Value: MapNested): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: MapNested
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: MapNested
+				if typeof(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Length = #Key_1
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				WriteVarLength(Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+				-- Element_1: MapNested
+				local OFFSET_0 = Allocate(2)
+				local Elements_2 = 0
+				for Key_2, Element_2 in Element_1 do
+					Elements_2 += 1
+					-- Key_2: MapSimple
+					if typeof(Key_2) ~= "string" then
+						error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.{if type(Key_2) == "table" or type(Key_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Key_2
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
+					-- Element_2: MapSimple
+					if typeof(Element_2) ~= "number" then
+						error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.{if type(Element_2) == "table" or type(Element_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local OFFSET_0 = Allocate(1)
+					buffer.writeu8(SendBuffer, OFFSET_0, Element_2)
+				end
+				if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
+				buffer.writeu16(SendBuffer, OFFSET_0, Elements_2)
+			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.Standalone = {
+	Read = function(Buffer: buffer): (Standalone)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Standalone)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Standalone
+			local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
+			-- Value.One: One
+			Value.One = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Value.Two: Two
+			Value.Two = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			-- Value.Three: Three
+			Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+			do
+				-- Value.Event: Event
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+				local Tag = bit32.extract(BITFIELD_1_0, 0, 2)
+				Value.Event = true :: any
+				if Tag == 0 then
+					-- Read BLOCK: 8 bytes
+					local BLOCK_START = Read(8)
+					-- Value.Event: Join
+					Value.Event = {Name = false, UserId = false} :: any
+					do
+						-- Value.Event.Name: Name
+						local Length = ReadVarLength()
+						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+						Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
+					end
+					-- Value.Event.UserId: UserId
+					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+					Value.Event.Type = "Join"
+				elseif Tag == 1 then
+					-- Read BLOCK: 8 bytes
+					local BLOCK_START = Read(8)
+					-- Value.Event: Chat
+					Value.Event = {UserId = false, Message = false} :: any
+					-- Value.Event.UserId: UserId
+					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+					do
+						-- Value.Event.Message: Message
+						local Length = ReadVarLength()
+						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+						Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
+					end
+					Value.Event.Type = "Chat"
+				elseif Tag == 2 then
+					-- Read BLOCK: 8 bytes
+					local BLOCK_START = Read(8)
+					-- Value.Event: Leave
+					Value.Event = {UserId = false} :: any
+					-- Value.Event.UserId: UserId
+					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+					Value.Event.Type = "Leave"
+				else
+					error(`Unexpected variant: {Tag}`)
+				end
+			end
+			-- Value.Nested: Nested
+			Value.Nested = {Four = false, Five = false} :: any
+			do
+				-- Value.Nested.Four: Four
+				local Length = ReadVarLength()
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			end
+			do
+				-- Value.Nested.Five: Five
+				local Length = ReadVarLength()
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: Standalone
+	end,
+	Write = function(Value: Standalone): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			local BITFIELD_1_0
+			-- Value: Standalone
+			-- Value.One: One
+			if typeof(Value.One) ~= "number" then
+				error(`Expected Value.One to be of type number, got {type(Value.One)} instead.{if type(Value.One) == "table" or type(Value.One) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.One)
+			-- Value.Two: Two
+			if typeof(Value.Two) ~= "number" then
+				error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.{if type(Value.Two) == "table" or type(Value.Two) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Two)
+			-- Value.Three: Three
+			if typeof(Value.Three) ~= "number" then
+				error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.{if type(Value.Three) == "table" or type(Value.Three) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
+			-- Value.Event: Event
+			BITFIELD_1_0 = 0
+			if Value.Event.Type == "Join" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				-- Value.Event: Join
+				do
+					-- Value.Event.Name: Name
+					if typeof(Value.Event.Name) ~= "string" then
+						error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.{if type(Value.Event.Name) == "table" or type(Value.Event.Name) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Value.Event.Name
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
+				end
+				-- Value.Event.UserId: UserId
+				if typeof(Value.Event.UserId) ~= "number" then
+					error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
+			elseif Value.Event.Type == "Chat" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				BITFIELD_1_0 += 1
+				-- Value.Event: Chat
+				-- Value.Event.UserId: UserId
+				if typeof(Value.Event.UserId) ~= "number" then
+					error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
+				do
+					-- Value.Event.Message: Message
+					if typeof(Value.Event.Message) ~= "string" then
+						error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.{if type(Value.Event.Message) == "table" or type(Value.Event.Message) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Value.Event.Message
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
+				end
+			elseif Value.Event.Type == "Leave" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				BITFIELD_1_0 += 2
+				-- Value.Event: Leave
+				-- Value.Event.UserId: UserId
+				if typeof(Value.Event.UserId) ~= "number" then
+					error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
+			else
+				error(`Unexpected variant: {Value.Event.Type}`)
+			end
+			-- Value.Nested: Nested
+			do
+				-- Value.Nested.Four: Four
+				if typeof(Value.Nested.Four) ~= "string" then
+					error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.{if type(Value.Nested.Four) == "table" or type(Value.Nested.Four) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Length = #Value.Nested.Four
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				WriteVarLength(Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
+			end
+			do
+				-- Value.Nested.Five: Five
+				if typeof(Value.Nested.Five) ~= "string" then
+					error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.{if type(Value.Nested.Five) == "table" or type(Value.Nested.Five) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Length = #Value.Nested.Five
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				WriteVarLength(Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SendOccupiedCell = {
+	Fire = function(Player: Player, Value: Vector3): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: Vector3): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: Vector3): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: Vector3): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.ClientPollEvent = {
+	Iter = function(): () -> (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+		local index = 0
+		local queue = Queue.Reliable[5]
+		return function (): (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	Next = function(): () -> (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+		local index = 0
+		local queue = Queue.Reliable[5]
+		return function (): (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end
+}
+Returns.ClientUnreliablePollEvent = {
+	Iter = function(): () -> (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+		local index = 0
+		local queue = Queue.Unreliable[4]
+		return function (): (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	Next = function(): () -> (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+		local index = 0
+		local queue = Queue.Unreliable[4]
+		return function (): (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end
+}
+Returns.ClientEmptyPollEvent = {
+	Iter = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Reliable[6]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	Next = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Reliable[6]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end
+}
+Returns.ClientEmptyUnreliablePollEvent = {
+	Iter = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Unreliable[5]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	Next = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Unreliable[5]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end
+}
+Returns.ServerPollEvent = {
+	Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.ServerUnreliablePollEvent = {
+	Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+		if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+		if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+		if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
+		if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.ServerEmptyPollEvent = {
+	Fire = function(Player: Player, Value: nil): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.ServerEmptyUnreliablePollEvent = {
+	Fire = function(Player: Player, Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+		if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+		if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	FireList = function(List: {Player}, Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+		if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
+		if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.ClientEmptyEvent = {
+	On = function(Listener: (Player: Player, Value: nil) -> ()): () -> ()
+		if Events.Reliable[9] ~= nil then
+			warn("[BlinkBlox]: \"ClientEmptyEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[9] = Listener
+		local Pending = Queue.Reliable[9]
+		Queue.Reliable[9] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "ClientEmptyEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[9] == Listener then
+				Events.Reliable[9] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: nil): ()
+		local BOUND_LISTENER = Events.Reliable[9] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "ClientEmptyEvent"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "ClientEmptyEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		else
+			if #Queue.Reliable[9] < 256 then
+				table.insert(Queue.Reliable[9], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.ClientEmptyUnreliableEvent = {
+	On = function(Listener: (Player: Player, Value: nil) -> ()): () -> ()
+		if Events.Unreliable[8] ~= nil then
+			warn("[BlinkBlox]: \"ClientEmptyUnreliableEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[8] = Listener
+		return function (): ()
+			if Events.Unreliable[8] == Listener then
+				Events.Unreliable[8] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: nil): ()
+		local BOUND_LISTENER = Events.Unreliable[8] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "ClientEmptyUnreliableEvent"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "ClientEmptyUnreliableEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+	end
+}
+Returns.EmptyEvent = {
+	Fire = function(Player: Player, Value: nil): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_EmptyEvent(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_EmptyEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_EmptyEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_EmptyEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.EmptyUnreliableEvent = {
+	Fire = function(Player: Player, Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+		if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+		if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	FireList = function(List: {Player}, Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+		if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: nil): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
+		if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.EmptyFunction = {
+	On = function(Listener: (Player, nil) -> (nil)): ()
+		if Events.Reliable[11] ~= nil then
+			warn("[BlinkBlox]: \"EmptyFunction\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[11] = function(Player: Player, Value: nil, InvocationIdentifier: number): ()
+			local ReturnValue: nil;
+			local Success, Error = pcall(function ()
+				ReturnValue = Listener(Player, Value)
+			end)
+			LoadPlayer(Player)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_EmptyFunction, ReturnValue, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 11)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "EmptyFunction", Error) then warn(`"EmptyFunction" encountered an error, {Error}`) end
+			end
+			SavePlayerBuffer(Player)
+		end
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[11] or {}
+			Queue.Reliable[11] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[11](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.UnitFunction = {
+	On = function(Listener: (Player, nil) -> (nil)): ()
+		if Events.Reliable[12] ~= nil then
+			warn("[BlinkBlox]: \"UnitFunction\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[12] = function(Player: Player, Value: nil, InvocationIdentifier: number): ()
+			local Value: nil;
+			local Success, Error = pcall(function ()
+				Value = Listener(Player, Value)
+			end)
+			LoadPlayer(Player)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_UnitFunction, Value, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 12)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "UnitFunction", Error) then warn(`"UnitFunction" encountered an error, {Error}`) end
+			end
+			SavePlayerBuffer(Player)
+		end
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[12] or {}
+			Queue.Reliable[12] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[12](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.Flags8 = {
+	Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_Flags8(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags8(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags8(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags8(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.Flags16 = {
+	Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_Flags16(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags16(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags16(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags16(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.Flags32 = {
+	Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_Flags32(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags32(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags32(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags32(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.Flags33 = {
+	Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_Flags33(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags33(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags33(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Flags33(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.DynamicMap = {
+	Fire = function(Player: Player, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_DynamicMap(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: {[number]: { Static: number, Dynamic: buffer }}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_DynamicMap(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_DynamicMap(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_DynamicMap(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.DynamicArray = {
+	Fire = function(Player: Player, Value: { { Static: number, Dynamic: buffer } }): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_DynamicArray(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: { { Static: number, Dynamic: buffer } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_DynamicArray(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: { { Static: number, Dynamic: buffer } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_DynamicArray(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { { Static: number, Dynamic: buffer } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_DynamicArray(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.PlayerEvent = {
+	Fire = function(Player: Player, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_PlayerEvent(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_PlayerEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_PlayerEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_PlayerEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.Booleans = {
+	On = function(Listener: (Player: Player, Value: { boolean }) -> ()): () -> ()
+		if Events.Reliable[20] ~= nil then
+			warn("[BlinkBlox]: \"Booleans\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[20] = Listener
+		local Pending = Queue.Reliable[20]
+		Queue.Reliable[20] = {}
+		for _, Arguments in Pending do
+			Spawn(RunListener, "Booleans", Listener, table.unpack(Arguments, 1, Arguments.n))
+		end
+		return function (): ()
+			if Events.Reliable[20] == Listener then
+				Events.Reliable[20] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: { boolean }): ()
+		local BOUND_LISTENER = Events.Reliable[20] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			Spawn(RunListener, "Booleans", BOUND_LISTENER, Player, Value)
+		else
+			if #Queue.Reliable[20] < 256 then
+				table.insert(Queue.Reliable[20], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.Generic = {
+	Fire = function(Player: Player, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_Generic(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Generic(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Generic(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Generic(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.GenericArray = {
+	Fire = function(Player: Player, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_GenericArray(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_GenericArray(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_GenericArray(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_GenericArray(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.Unknown = {
+	Fire = function(Player: Player, Value: any): ()
+		LoadPlayer(Player)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Unknown, Value)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			error(Failure, 0)
+		end
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: any): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Unknown(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: any): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Unknown(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: any): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Unknown(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.MapEvent = {
+	Fire = function(Player: Player, Value: {[string]: number}): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_MapEvent(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: {[string]: number}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: {[string]: number}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: {[string]: number}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.MapStructEvent = {
+	Fire = function(Player: Player, Value: { Map: {[string]: number} }): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_MapStructEvent(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: { Map: {[string]: number} }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapStructEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: { Map: {[string]: number} }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapStructEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { Map: {[string]: number} }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapStructEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.MapComplexEvent = {
+	Fire = function(Player: Player, Value: {[string]: { number }}): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: {[string]: { number }}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: {[string]: { number }}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: {[string]: { number }}): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.MapReferenceEvent = {
+	Fire = function(Player: Player, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.ArrayPrimitive = {
+	Fire = function(Player: Player, Value: { number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+		if not CheckUnreliableSize("ArrayPrimitive") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value: { number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+		if not CheckUnreliableSize("ArrayPrimitive") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	FireList = function(List: {Player}, Value: { number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+		if not CheckUnreliableSize("ArrayPrimitive") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
+		if not CheckUnreliableSize("ArrayPrimitive") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.OptionalPrimitive = {
+	Fire = function(Player: Player, Value: number?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+		if not CheckUnreliableSize("OptionalPrimitive") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value: number?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+		if not CheckUnreliableSize("OptionalPrimitive") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	FireList = function(List: {Player}, Value: number?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+		if not CheckUnreliableSize("OptionalPrimitive") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
+		if not CheckUnreliableSize("OptionalPrimitive") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.ManyReliableSync = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.ManyReliableAsync = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.ManyUnreliableSync = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+		if not CheckUnreliableSize("ManyUnreliableSync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+		if not CheckUnreliableSize("ManyUnreliableSync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+		if not CheckUnreliableSize("ManyUnreliableSync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
+		if not CheckUnreliableSize("ManyUnreliableSync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.ManyUnreliableAsync = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+		if not CheckUnreliableSize("ManyUnreliableAsync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+		if not CheckUnreliableSize("ManyUnreliableAsync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+		if not CheckUnreliableSize("ManyUnreliableAsync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
+		if not CheckUnreliableSize("ManyUnreliableAsync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.ReliableServer = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_ReliableServer(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReliableServer(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReliableServer(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReliableServer(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.ReliableServerAsync = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.ReliableClient = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Reliable[32] ~= nil then
+			warn("[BlinkBlox]: \"ReliableClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[32] = Listener
+		local Pending = Queue.Reliable[32]
+		Queue.Reliable[32] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "ReliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[32] == Listener then
+				Events.Reliable[32] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: number): ()
+		local BOUND_LISTENER = Events.Reliable[32] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "ReliableClient"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "ReliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		else
+			if #Queue.Reliable[32] < 256 then
+				table.insert(Queue.Reliable[32], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.UnreliableServer = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+		if not CheckUnreliableSize("UnreliableServer") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+		if not CheckUnreliableSize("UnreliableServer") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+		if not CheckUnreliableSize("UnreliableServer") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_UnreliableServer(Value)
+		if not CheckUnreliableSize("UnreliableServer") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.UnreliableServerAsync = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+		if not CheckUnreliableSize("UnreliableServerAsync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+		if not CheckUnreliableSize("UnreliableServerAsync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+		if not CheckUnreliableSize("UnreliableServerAsync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
+		if not CheckUnreliableSize("UnreliableServerAsync") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.UnreliableClient = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Unreliable[16] ~= nil then
+			warn("[BlinkBlox]: \"UnreliableClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[16] = Listener
+		return function (): ()
+			if Events.Unreliable[16] == Listener then
+				Events.Unreliable[16] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: number): ()
+		local BOUND_LISTENER = Events.Unreliable[16] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "UnreliableClient"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "UnreliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+	end
+}
+Returns.InstanceAny = {
+	Fire = function(Player: Player, Value: Instance): ()
+		LoadPlayer(Player)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceAny, Value)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			error(Failure, 0)
+		end
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: Instance): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceAny(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: Instance): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceAny(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: Instance): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceAny(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.InstanceOfType = {
+	Fire = function(Player: Player, Value: Sound): ()
+		LoadPlayer(Player)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOfType, Value)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			error(Failure, 0)
+		end
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: Sound): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceOfType(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: Sound): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceOfType(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: Sound): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceOfType(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.InstanceOptional = {
+	Fire = function(Player: Player, Value: Instance?): ()
+		LoadPlayer(Player)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOptional, Value)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			error(Failure, 0)
+		end
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: Instance?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceOptional(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: Instance?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceOptional(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: Instance?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceOptional(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.InstanceOfClassWithDigit = {
+	Fire = function(Player: Player, Value: Motor6D): ()
+		LoadPlayer(Player)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit, Value)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			error(Failure, 0)
+		end
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: Motor6D): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: Motor6D): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: Motor6D): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.Reference = {
+	Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_Reference(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Reference(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Reference(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Reference(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.ReferenceArray = {
+	Fire = function(Player: Player, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_ReferenceArray(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReferenceArray(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReferenceArray(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReferenceArray(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.ReferenceOptional = {
+	Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.RemoteFunction = {
+	On = function(Listener: (Player, number) -> (number)): ()
+		if Events.Reliable[40] ~= nil then
+			warn("[BlinkBlox]: \"RemoteFunction\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[40] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
+			local ReturnValue: number;
+			local Success, Error = pcall(function ()
+				ReturnValue = Listener(Player, Value)
+			end)
+			LoadPlayer(Player)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_RemoteFunction, ReturnValue, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 40)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "RemoteFunction", Error) then warn(`"RemoteFunction" encountered an error, {Error}`) end
+			end
+			SavePlayerBuffer(Player)
+		end
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[40] or {}
+			Queue.Reliable[40] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[40](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.Tuple = {
+	Fire = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
+		LoadPlayer(Player)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Tuple, Value1, Value2, Value3, Value4, Value5, Value6)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			error(Failure, 0)
+		end
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.TupleUnreliable = {
+	Fire = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+		if not CheckUnreliableSize("TupleUnreliable") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+		if not CheckUnreliableSize("TupleUnreliable") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	FireList = function(List: {Player}, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+		if not CheckUnreliableSize("TupleUnreliable") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
+		if not CheckUnreliableSize("TupleUnreliable") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.TupleFunction = {
+	On = function(Listener: (Player, number, ("A" | "B" | "C" | "D"), number?, Instance, Instance?) -> (Instance?, Instance, number?, ("A" | "B" | "C" | "D"), number)): ()
+		if Events.Reliable[42] ~= nil then
+			warn("[BlinkBlox]: \"TupleFunction\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[42] = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, InvocationIdentifier: number): ()
+			local ReturnValue1: Instance?, ReturnValue2: Instance, ReturnValue3: number?, ReturnValue4: ("A" | "B" | "C" | "D"), ReturnValue5: number;
+			local Success, Error = pcall(function ()
+				ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5 = Listener(Player, Value1, Value2, Value3, Value4, Value5)
+			end)
+			LoadPlayer(Player)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_TupleFunction, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 42)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "TupleFunction", Error) then warn(`"TupleFunction" encountered an error, {Error}`) end
+			end
+			SavePlayerBuffer(Player)
+		end
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[42] or {}
+			Queue.Reliable[42] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[42](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.AnotherScope = {
+	InScopeEvent = {
+		Fire = function(Player: Player, Value: number): ()
+			LoadPlayer(Player)
+			SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
+			SavePlayerBuffer(Player)
 		end,
-		Write = function(Value: SizeVector): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 12 bytes
-				local BLOCK_START = Allocate(12)
-				-- Value: SizeVector
-				if typeof(Value) ~= "Vector3" then
-					error(`Expected Value to be of type Vector3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				local Vector = Value
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Vector.X)
-				buffer.writef32(SendBuffer, BLOCK_START + 4, Vector.Y)
-				buffer.writef32(SendBuffer, BLOCK_START + 8, Vector.Z)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SizeStruct = {
-		Read = function(Buffer: buffer): (SizeStruct)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SizeStruct)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SizeStruct
-				local Value = {A = false, B = false, C = false} :: any
-				-- Value.A: A
-				Value.A = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				-- Value.B: B
-				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				Value.B = bit32.btest(BITFIELD_1_0, 0x01)
-				-- Value.C: C
-				Value.C = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SizeStruct
+		FireAll = function(Value: number): ()
+			LoadScratch()
+			SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
+			AppendShared(Buffer, Size, Instances)
 		end,
-		Write = function(Value: SizeStruct): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				local BITFIELD_1_0
-				-- Value: SizeStruct
-				-- Value.A: A
-				if typeof(Value.A) ~= "number" then
-					error(`Expected Value.A to be of type number, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.A)
-				-- Value.B: B
-				if typeof(Value.B) ~= "boolean" then
-					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				BITFIELD_1_0 = 0
-				if Value.B then BITFIELD_1_0 += 0x01 end
-				-- Value.C: C
-				if typeof(Value.C) ~= "number" then
-					error(`Expected Value.C to be of type number, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu16(SendBuffer, BLOCK_START + 2, Value.C)
-				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
+		FireList = function(List: {Player}, Value: number): ()
+			LoadScratch()
+			SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
+			for _, Player in List do
+				AppendPlayer(Player, Buffer, Size, Instances)
 			end
-			return Result
-		end
+		end,
+		FireExcept = function(Except: Player, Value: number): ()
+			LoadScratch()
+			SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
+				end
+				AppendPlayer(Player, Buffer, Size, Instances)
+			end
+		end,
 	},
-	SizeEnum = {
-		Read = function(Buffer: buffer): (SizeEnum)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SizeEnum)
+	ScopeWithinAnotherScope = {
+		InAnotherScopeEvent = {
+			Fire = function(Player: Player, Value: number): ()
+				LoadPlayer(Player)
+				SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
+				SavePlayerBuffer(Player)
+			end,
+			FireAll = function(Value: number): ()
+				LoadScratch()
+				SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
+				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
+				AppendShared(Buffer, Size, Instances)
+			end,
+			FireList = function(List: {Player}, Value: number): ()
+				LoadScratch()
+				SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
+				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
+				for _, Player in List do
+					AppendPlayer(Player, Buffer, Size, Instances)
+				end
+			end,
+			FireExcept = function(Except: Player, Value: number): ()
+				LoadScratch()
+				SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
+				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+				KeepScratch()
+				for _, Player in Players:GetPlayers() do
+					if Player == Except then
+						continue
+					end
+					AppendPlayer(Player, Buffer, Size, Instances)
+				end
+			end,
+		},
+	},
+}
+Returns.ExampleScope = {
+	InScopeEvent = {
+		Fire = function(Player: Player, Value: number): ()
+			LoadPlayer(Player)
+			SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
+			SavePlayerBuffer(Player)
+		end,
+		FireAll = function(Value: number): ()
+			LoadScratch()
+			SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
+			AppendShared(Buffer, Size, Instances)
+		end,
+		FireList = function(List: {Player}, Value: number): ()
+			LoadScratch()
+			SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
+			for _, Player in List do
+				AppendPlayer(Player, Buffer, Size, Instances)
+			end
+		end,
+		FireExcept = function(Except: Player, Value: number): ()
+			LoadScratch()
+			SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
+				end
+				AppendPlayer(Player, Buffer, Size, Instances)
+			end
+		end,
+	},
+}
+Returns.Issue33 = {
+	Event = {
+		Fire = function(Player: Player, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
+			LoadPlayer(Player)
+			SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
+			SavePlayerBuffer(Player)
+		end,
+		FireAll = function(Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
+			LoadScratch()
+			SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
+			AppendShared(Buffer, Size, Instances)
+		end,
+		FireList = function(List: {Player}, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
+			LoadScratch()
+			SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
+			for _, Player in List do
+				AppendPlayer(Player, Buffer, Size, Instances)
+			end
+		end,
+		FireExcept = function(Except: Player, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
+			LoadScratch()
+			SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
+			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+			KeepScratch()
+			for _, Player in Players:GetPlayers() do
+				if Player == Except then
+					continue
+				end
+				AppendPlayer(Player, Buffer, Size, Instances)
+			end
+		end,
+	},
+}
+Returns.UnknownInbound = {
+	On = function(Listener: (Player: Player, Value: any) -> ()): () -> ()
+		if Events.Reliable[47] ~= nil then
+			warn("[BlinkBlox]: \"UnknownInbound\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[47] = Listener
+		local Pending = Queue.Reliable[47]
+		Queue.Reliable[47] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "UnknownInbound", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[47] == Listener then
+				Events.Reliable[47] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: any): ()
+		local BOUND_LISTENER = Events.Reliable[47] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "UnknownInbound"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "UnknownInbound", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		else
+			if #Queue.Reliable[47] < 256 then
+				table.insert(Queue.Reliable[47], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.NamedTuple = {
+	Fire = function(Player: Player, chefId: number, dish: string, portions: number?): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(chefId: number, dish: string, portions: number?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, chefId: number, dish: string, portions: number?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, chefId: number, dish: string, portions: number?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.NamedTupleFunction = {
+	On = function(Listener: (Player, number, string) -> (number, string)): ()
+		if Events.Reliable[49] ~= nil then
+			warn("[BlinkBlox]: \"NamedTupleFunction\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[49] = function(Player: Player, Value1: number, Value2: string, InvocationIdentifier: number): ()
+			local ReturnValue1: number, ReturnValue2: string;
+			local Success, Error = pcall(function ()
+				ReturnValue1, ReturnValue2 = Listener(Player, Value1, Value2)
+			end)
+			LoadPlayer(Player)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_NamedTupleFunction, ReturnValue1, ReturnValue2, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 49)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "NamedTupleFunction", Error) then warn(`"NamedTupleFunction" encountered an error, {Error}`) end
+			end
+			SavePlayerBuffer(Player)
+		end
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[49] or {}
+			Queue.Reliable[49] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[49](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.PartiallyNamedTuple = {
+	Fire = function(Player: Player, Value1: number, named: string, Value3: number): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value1: number, named: string, Value3: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value1: number, named: string, Value3: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value1: number, named: string, Value3: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.NeverAnswered = {
+	On = function(Listener: (Player, number) -> (number)): ()
+		if Events.Reliable[51] ~= nil then
+			warn("[BlinkBlox]: \"NeverAnswered\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[51] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
+			local ReturnValue: number;
+			local Success, Error = pcall(function ()
+				ReturnValue = Listener(Player, Value)
+			end)
+			LoadPlayer(Player)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_NeverAnswered, ReturnValue, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 51)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "NeverAnswered", Error) then warn(`"NeverAnswered" encountered an error, {Error}`) end
+			end
+			SavePlayerBuffer(Player)
+		end
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[51] or {}
+			Queue.Reliable[51] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[51](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.AskClient = {
+	Invoke = function(Player: Player, Value: number): (number)
+		local InvocationIdentifier = InvokePlayer(Player, 52)
+		LoadPlayer(Player)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_AskClient, Value, InvocationIdentifier)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			ReleaseInvocation(PlayerInvocations[Player], InvocationIdentifier)
+			error(Failure, 0)
+		end
+		SavePlayerBuffer(Player)
+		ParkInvocation(PlayerInvocations[Player], InvocationIdentifier, coroutine.running())
+		TimeoutPlayerInvocation(Player, InvocationIdentifier, 3, "AskClient")
+		local Success, ReturnValue: number = coroutine.yield()
+		if Success ~= true then
+			error("There was an exception while processing \"AskClient\".")
+		end
+		return ReturnValue
+	end
+}
+Returns.RangedFromClient = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Reliable[53] ~= nil then
+			warn("[BlinkBlox]: \"RangedFromClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[53] = Listener
+		local Pending = Queue.Reliable[53]
+		Queue.Reliable[53] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "RangedFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[53] == Listener then
+				Events.Reliable[53] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: number): ()
+		local BOUND_LISTENER = Events.Reliable[53] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "RangedFromClient"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "RangedFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		else
+			if #Queue.Reliable[53] < 256 then
+				table.insert(Queue.Reliable[53], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.RangedUnreliableFromClient = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Unreliable[18] ~= nil then
+			warn("[BlinkBlox]: \"RangedUnreliableFromClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[18] = Listener
+		return function (): ()
+			if Events.Unreliable[18] == Listener then
+				Events.Unreliable[18] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: number): ()
+		local BOUND_LISTENER = Events.Unreliable[18] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "RangedUnreliableFromClient"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "RangedUnreliableFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+	end
+}
+Returns.RangedVectorFromClient = {
+	On = function(Listener: (Player: Player, Value: Vector3) -> ()): () -> ()
+		if Events.Reliable[54] ~= nil then
+			warn("[BlinkBlox]: \"RangedVectorFromClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[54] = Listener
+		local Pending = Queue.Reliable[54]
+		Queue.Reliable[54] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "RangedVectorFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[54] == Listener then
+				Events.Reliable[54] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: Vector3): ()
+		local BOUND_LISTENER = Events.Reliable[54] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "RangedVectorFromClient"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "RangedVectorFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		else
+			if #Queue.Reliable[54] < 256 then
+				table.insert(Queue.Reliable[54], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.BadlyAnswered = {
+	On = function(Listener: (Player, number) -> (number)): ()
+		if Events.Reliable[55] ~= nil then
+			warn("[BlinkBlox]: \"BadlyAnswered\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[55] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
+			local ReturnValue: number;
+			local Success, Error = pcall(function ()
+				ReturnValue = Listener(Player, Value)
+			end)
+			LoadPlayer(Player)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_BadlyAnswered, ReturnValue, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 55)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "BadlyAnswered", Error) then warn(`"BadlyAnswered" encountered an error, {Error}`) end
+			end
+			SavePlayerBuffer(Player)
+		end
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[55] or {}
+			Queue.Reliable[55] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[55](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.PlainFromClient = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Reliable[56] ~= nil then
+			warn("[BlinkBlox]: \"PlainFromClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[56] = Listener
+		local Pending = Queue.Reliable[56]
+		Queue.Reliable[56] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "PlainFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[56] == Listener then
+				Events.Reliable[56] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: number): ()
+		local BOUND_LISTENER = Events.Reliable[56] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "PlainFromClient"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "PlainFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		else
+			if #Queue.Reliable[56] < 256 then
+				table.insert(Queue.Reliable[56], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.Unlistened = {
+	On = function(Listener: (Player: Player, Value: nil) -> ()): () -> ()
+		if Events.Reliable[57] ~= nil then
+			warn("[BlinkBlox]: \"Unlistened\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[57] = Listener
+		local Pending = Queue.Reliable[57]
+		Queue.Reliable[57] = {}
+		for _, Arguments in Pending do
+			Spawn(RunListener, "Unlistened", Listener, table.unpack(Arguments, 1, Arguments.n))
+		end
+		return function (): ()
+			if Events.Reliable[57] == Listener then
+				Events.Reliable[57] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: nil): ()
+		local BOUND_LISTENER = Events.Reliable[57] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			Spawn(RunListener, "Unlistened", BOUND_LISTENER, Player, Value)
+		else
+			if #Queue.Reliable[57] < 256 then
+				table.insert(Queue.Reliable[57], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.Unanswered = {
+	On = function(Listener: (Player, nil) -> (nil)): ()
+		if Events.Reliable[58] ~= nil then
+			warn("[BlinkBlox]: \"Unanswered\" already has a listener. A function keeps only the newest one.")
+		end
+		Events.Reliable[58] = function(Player: Player, Value: nil, InvocationIdentifier: number): ()
+			local ReturnValue: nil;
+			local Success, Error = pcall(function ()
+				ReturnValue = Listener(Player, Value)
+			end)
+			LoadPlayer(Player)
+			if Success == true then
+				local Cursor, Instances = Mark()
+				Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Unanswered, ReturnValue, InvocationIdentifier)
+				if Success ~= true then
+					Rollback(Cursor, Instances)
+				end
+			end
+			if Success ~= true then
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 58)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				if not ListenerFailed(Player, "Unanswered", Error) then warn(`"Unanswered" encountered an error, {Error}`) end
+			end
+			SavePlayerBuffer(Player)
+		end
+		Spawn(function (): ()
+			local EventQueue = Queue.Reliable[58] or {}
+			Queue.Reliable[58] = nil
+			for Index, Arguments in EventQueue do
+				Events.Reliable[58](table.unpack(Arguments, 1, Arguments.n))
+			end
+		end)
+	end
+}
+Returns.QueuedHoles = {
+	Fire = function(Player: Player, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.OrderedToClient = {
+	Fire = function(Player: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_OrderedToClient(Value)
+		if not CheckUnreliableSize("OrderedToClient") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		buffer.writeu16(Buffer, 1, NextOrder(Player, 19))
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_OrderedToClient(Value)
+		if not CheckUnreliableSize("OrderedToClient") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			buffer.writeu16(Buffer, 1, NextOrder(Player, 19))
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireList = function(List: {Player}, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_OrderedToClient(Value)
+		if not CheckUnreliableSize("OrderedToClient") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
+			buffer.writeu16(Buffer, 1, NextOrder(Player, 19))
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_OrderedToClient(Value)
+		if not CheckUnreliableSize("OrderedToClient") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			buffer.writeu16(Buffer, 1, NextOrder(Player, 19))
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+Returns.OptionalHoles = {
+	Read = function(Buffer: buffer): (OptionalHoles)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (OptionalHoles)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: OptionalHoles
+			-- START ARRAY
+			local Length = 3
+			local Value = table.create(Length) :: {any}
 				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SizeEnum
-				local Value = true :: any
-				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				local Index = bit32.extract(BITFIELD_1_0, 0, 2)
+			local ARRAY_START_1 = Read(1 * Length)
+			local BITFIELD_2_0
+			for Slot_1 = 1, Length do
+				-- Item_1: OptionalHoles
+				local Item_1
+				-- Read 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				BITFIELD_2_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
+				if bit32.btest(BITFIELD_2_0, 0x01) then
+					-- Read BLOCK: 1 bytes
+					local BLOCK_START = Read(1)
+					-- Item_1: OptionalHoles
+					Item_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				end
+				Value[Slot_1] = Item_1
+			end
+			-- END ARRAY
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: OptionalHoles
+	end,
+	Write = function(Value: OptionalHoles): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Value: OptionalHoles
+			-- START ARRAY
+			for Key in Value do if type(Key) == "number" and Key > 3 then error(`Expected "Value" to hold at most 3 elements, got one at index {Key} instead.`) end end
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * 3)
+			local BITFIELD_2_0_OFFSET
+			local BITFIELD_2_0
+			for Index = 1, 3 do
+				local Item_1 = Value[Index]
+				-- Item_1: OptionalHoles
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				BITFIELD_2_0 = 0
+				BITFIELD_2_0_OFFSET = OPERATION_OFFSET_0
+				if Item_1 ~= nil then BITFIELD_2_0 += 0x01 end
+				if Item_1 ~= nil then
+					-- Allocate BLOCK: 1 bytes
+					local BLOCK_START = Allocate(1)
+					-- Item_1: OptionalHoles
+					if typeof(Item_1) ~= "number" then
+						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, Item_1)
+				end
+				buffer.writeu8(SendBuffer, BITFIELD_2_0_OFFSET, BITFIELD_2_0)
+			end
+			-- END ARRAY
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.HalfFloat = {
+	Read = function(Buffer: buffer): (HalfFloat)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (HalfFloat)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: HalfFloat
+			local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			local Value
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Value = -math.huge
+				else
+					Value = math.huge
+				end
+			elseif MantissaExponent > 0b0_11111_0000000000 then
+				Value = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Value = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Value = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: HalfFloat
+	end,
+	Write = function(Value: HalfFloat): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: HalfFloat
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+			elseif Value < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+			elseif Value ~= Value then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+			elseif Value == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value < 0 then 0x8000 else 0)
+			else
+				local float = Value
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800)
+				local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+			end
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.Float24 = {
+	Read = function(Buffer: buffer): (Float24)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Float24)
+			-- Read BLOCK: 3 bytes
+			local BLOCK_START = Read(3)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Float24
+			local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+			local Value
+			local MantissaExponent = Encoded % 0x800000
+			if MantissaExponent == 0x7E0000 then
+				Value = if Encoded >= 0x800000 then -math.huge else math.huge
+			elseif MantissaExponent > 0x7E0000 then
+				Value = 0 / 0
+			elseif MantissaExponent == 0 then
+				Value = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x20000
+				local Exponent = MantissaExponent // 0x20000
+				local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+				local Result = math.ldexp(Fraction, Exponent - 30)
+				Value = if Encoded >= 0x800000 then -Result else Result
+			end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: Float24
+	end,
+	Write = function(Value: Float24): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- Value: Float24
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if Value ~= Value then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
+			elseif Value == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Value < 0 then 0x80 else 0)
+			else
+				local float = Value
+				local Fraction, Exponent = math.frexp(math.abs(float))
+				Exponent += 30
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+					else Fraction * 0x40000)
+				local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+					+ if float < 0 then 0x800000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
+			end
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.Unsigned24 = {
+	Read = function(Buffer: buffer): (Unsigned24)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Unsigned24)
+			-- Read BLOCK: 3 bytes
+			local BLOCK_START = Read(3)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Unsigned24
+			local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: Unsigned24
+	end,
+	Write = function(Value: Unsigned24): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- Value: Unsigned24
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Value)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Value, 16))
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.Signed24 = {
+	Read = function(Buffer: buffer): (Signed24)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Signed24)
+			-- Read BLOCK: 3 bytes
+			local BLOCK_START = Read(3)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Signed24
+			local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: Signed24
+	end,
+	Write = function(Value: Signed24): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- Value: Signed24
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Value)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Value, 16))
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.Vector24 = {
+	Read = function(Buffer: buffer): (Vector24)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Vector24)
+			-- Read BLOCK: 9 bytes
+			local BLOCK_START = Read(9)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Vector24
+			local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+			local X
+			local MantissaExponent = Encoded % 0x800000
+			if MantissaExponent == 0x7E0000 then
+				X = if Encoded >= 0x800000 then -math.huge else math.huge
+			elseif MantissaExponent > 0x7E0000 then
+				X = 0 / 0
+			elseif MantissaExponent == 0 then
+				X = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x20000
+				local Exponent = MantissaExponent // 0x20000
+				local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+				local Result = math.ldexp(Fraction, Exponent - 30)
+				X = if Encoded >= 0x800000 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
+			local Y
+			MantissaExponent = Encoded % 0x800000
+			if MantissaExponent == 0x7E0000 then
+				Y = if Encoded >= 0x800000 then -math.huge else math.huge
+			elseif MantissaExponent > 0x7E0000 then
+				Y = 0 / 0
+			elseif MantissaExponent == 0 then
+				Y = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x20000
+				local Exponent = MantissaExponent // 0x20000
+				local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+				local Result = math.ldexp(Fraction, Exponent - 30)
+				Y = if Encoded >= 0x800000 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
+			local Z
+			MantissaExponent = Encoded % 0x800000
+			if MantissaExponent == 0x7E0000 then
+				Z = if Encoded >= 0x800000 then -math.huge else math.huge
+			elseif MantissaExponent > 0x7E0000 then
+				Z = 0 / 0
+			elseif MantissaExponent == 0 then
+				Z = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x20000
+				local Exponent = MantissaExponent // 0x20000
+				local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+				local Result = math.ldexp(Fraction, Exponent - 30)
+				Z = if Encoded >= 0x800000 then -Result else Result
+			end
+			local Value = Vector3.new(X, Y, Z)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: Vector24
+	end,
+	Write = function(Value: Vector24): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 9 bytes
+			local BLOCK_START = Allocate(9)
+			-- Value: Vector24
+			if typeof(Value) ~= "Vector3" then
+				error(`Expected Value to be of type Vector3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local Vector = Value
+			if Vector.X ~= Vector.X then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
+			elseif Vector.X == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Vector.X < 0 then 0x80 else 0)
+			else
+				local float = Vector.X
+				local Fraction, Exponent = math.frexp(math.abs(float))
+				Exponent += 30
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+					else Fraction * 0x40000)
+				local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+					+ if float < 0 then 0x800000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
+			end
+			if Vector.Y ~= Vector.Y then
+				buffer.writeu16(SendBuffer, BLOCK_START + 3, 0x0001)
+				buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, 0xFE)
+			elseif Vector.Y == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 3, 0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, if 1 / Vector.Y < 0 then 0x80 else 0)
+			else
+				local float = Vector.Y
+				local Fraction, Exponent = math.frexp(math.abs(float))
+				Exponent += 30
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+					else Fraction * 0x40000)
+				local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+					+ if float < 0 then 0x800000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 3, Result)
+				buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, bit32.rshift(Result, 16))
+			end
+			if Vector.Z ~= Vector.Z then
+				buffer.writeu16(SendBuffer, BLOCK_START + 6, 0x0001)
+				buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, 0xFE)
+			elseif Vector.Z == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 6, 0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, if 1 / Vector.Z < 0 then 0x80 else 0)
+			else
+				local float = Vector.Z
+				local Fraction, Exponent = math.frexp(math.abs(float))
+				Exponent += 30
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+					else Fraction * 0x40000)
+				local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+					+ if float < 0 then 0x800000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 6, Result)
+				buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, bit32.rshift(Result, 16))
+			end
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.QuatCFrame24 = {
+	Read = function(Buffer: buffer): (QuatCFrame24)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (QuatCFrame24)
+			-- Read BLOCK: 16 bytes
+			local BLOCK_START = Read(16)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: QuatCFrame24
+			local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+			local X
+			local MantissaExponent = Encoded % 0x800000
+			if MantissaExponent == 0x7E0000 then
+				X = if Encoded >= 0x800000 then -math.huge else math.huge
+			elseif MantissaExponent > 0x7E0000 then
+				X = 0 / 0
+			elseif MantissaExponent == 0 then
+				X = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x20000
+				local Exponent = MantissaExponent // 0x20000
+				local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+				local Result = math.ldexp(Fraction, Exponent - 30)
+				X = if Encoded >= 0x800000 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
+			local Y
+			MantissaExponent = Encoded % 0x800000
+			if MantissaExponent == 0x7E0000 then
+				Y = if Encoded >= 0x800000 then -math.huge else math.huge
+			elseif MantissaExponent > 0x7E0000 then
+				Y = 0 / 0
+			elseif MantissaExponent == 0 then
+				Y = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x20000
+				local Exponent = MantissaExponent // 0x20000
+				local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+				local Result = math.ldexp(Fraction, Exponent - 30)
+				Y = if Encoded >= 0x800000 then -Result else Result
+			end
+			Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
+			local Z
+			MantissaExponent = Encoded % 0x800000
+			if MantissaExponent == 0x7E0000 then
+				Z = if Encoded >= 0x800000 then -math.huge else math.huge
+			elseif MantissaExponent > 0x7E0000 then
+				Z = 0 / 0
+			elseif MantissaExponent == 0 then
+				Z = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x20000
+				local Exponent = MantissaExponent // 0x20000
+				local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
+				local Result = math.ldexp(Fraction, Exponent - 30)
+				Z = if Encoded >= 0x800000 then -Result else Result
+			end
+			local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 9)
+			local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 10)
+			local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 12)
+			local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 14)
+			local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: QuatCFrame24
+	end,
+	Write = function(Value: QuatCFrame24): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 16 bytes
+			local BLOCK_START = Allocate(16)
+			-- Value: QuatCFrame24
+			if typeof(Value) ~= "CFrame" then
+				error(`Expected Value to be of type CFrame, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local Position = Value.Position
+			local QIndex, QA, QB, QC = PackRotation(Value)
+			if Position.X ~= Position.X then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
+			elseif Position.X == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Position.X < 0 then 0x80 else 0)
+			else
+				local float = Position.X
+				local Fraction, Exponent = math.frexp(math.abs(float))
+				Exponent += 30
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+					else Fraction * 0x40000)
+				local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+					+ if float < 0 then 0x800000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
+			end
+			if Position.Y ~= Position.Y then
+				buffer.writeu16(SendBuffer, BLOCK_START + 3, 0x0001)
+				buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, 0xFE)
+			elseif Position.Y == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 3, 0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, if 1 / Position.Y < 0 then 0x80 else 0)
+			else
+				local float = Position.Y
+				local Fraction, Exponent = math.frexp(math.abs(float))
+				Exponent += 30
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+					else Fraction * 0x40000)
+				local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+					+ if float < 0 then 0x800000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 3, Result)
+				buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, bit32.rshift(Result, 16))
+			end
+			if Position.Z ~= Position.Z then
+				buffer.writeu16(SendBuffer, BLOCK_START + 6, 0x0001)
+				buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, 0xFE)
+			elseif Position.Z == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 6, 0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, if 1 / Position.Z < 0 then 0x80 else 0)
+			else
+				local float = Position.Z
+				local Fraction, Exponent = math.frexp(math.abs(float))
+				Exponent += 30
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+					else Fraction * 0x40000)
+				local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+					+ if float < 0 then 0x800000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 6, Result)
+				buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, bit32.rshift(Result, 16))
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 9, QIndex)
+			buffer.writei16(SendBuffer, BLOCK_START + 10, QA)
+			buffer.writei16(SendBuffer, BLOCK_START + 12, QB)
+			buffer.writei16(SendBuffer, BLOCK_START + 14, QC)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.RangedFloat32 = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Reliable[60] ~= nil then
+			warn("[BlinkBlox]: \"RangedFloat32\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[60] = Listener
+		local Pending = Queue.Reliable[60]
+		Queue.Reliable[60] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "RangedFloat32", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[60] == Listener then
+				Events.Reliable[60] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: number): ()
+		local BOUND_LISTENER = Events.Reliable[60] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "RangedFloat32"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "RangedFloat32", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		else
+			if #Queue.Reliable[60] < 256 then
+				table.insert(Queue.Reliable[60], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.RangedFloat16 = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Reliable[61] ~= nil then
+			warn("[BlinkBlox]: \"RangedFloat16\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[61] = Listener
+		local Pending = Queue.Reliable[61]
+		Queue.Reliable[61] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "RangedFloat16", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[61] == Listener then
+				Events.Reliable[61] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: number): ()
+		local BOUND_LISTENER = Events.Reliable[61] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "RangedFloat16"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "RangedFloat16", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		else
+			if #Queue.Reliable[61] < 256 then
+				table.insert(Queue.Reliable[61], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.NamedLength = {
+	Fire = function(Player: Player, s: string, Length: number): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_NamedLength(s, Length)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(s: string, Length: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_NamedLength(s, Length)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, s: string, Length: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_NamedLength(s, Length)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, s: string, Length: number): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_NamedLength(s, Length)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.LengthFirst = {
+	Fire = function(Player: Player, Length: number, s: string): ()
+		LoadPlayer(Player)
+		SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
+		SavePlayerBuffer(Player)
+	end,
+	FireAll = function(Length: number, s: string): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		AppendShared(Buffer, Size, Instances)
+	end,
+	FireList = function(List: {Player}, Length: number, s: string): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in List do
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+	FireExcept = function(Except: Player, Length: number, s: string): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
+		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
+			end
+			AppendPlayer(Player, Buffer, Size, Instances)
+		end
+	end,
+}
+Returns.FlagCarrier = {
+	Read = function(Buffer: buffer): (FlagCarrier)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (FlagCarrier)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: FlagCarrier
+			local Value = {Flags = false, Text = false, Kind = false} :: any
+			do
+				-- Value.Flags: Flags
+				Value.Flags = {}
+				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				Value.Flags.Length = bit32.btest(SET_BITS, 0x1);
+				Value.Flags.Index = bit32.btest(SET_BITS, 0x2);
+			end
+			do
+				-- Value.Text: Text
+				local Length = ReadVarLength()
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Text" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Value.Text = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			end
+			do
+				-- Value.Kind: Kind
+				Value.Kind = true :: any
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				local Index = bit32.extract(BITFIELD_1_0, 0, 1)
 				if Index == 0 then
-					Value = "A"
+					Value.Kind = "A"
 				elseif Index == 1 then
-					Value = "B"
-				elseif Index == 2 then
-					Value = "C"
+					Value.Kind = "B"
 				else
 					error(`Unexpected enum: {Index}`)
 				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
 			end
-			return Result :: SizeEnum
-		end,
-		Write = function(Value: SizeEnum): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				local BITFIELD_1_0
-				-- Value: SizeEnum
-				BITFIELD_1_0 = 0
-				if Value == "A" then
-				elseif Value == "B" then
-					BITFIELD_1_0 += 1
-				elseif Value == "C" then
-					BITFIELD_1_0 += 2
-				else
-					error(`Unexpected enum: {Value}, expected one of "A" or "B" or "C".`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	SizeFlags = {
-		Read = function(Buffer: buffer): (SizeFlags)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SizeFlags)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SizeFlags
-				local Value = {}
-				local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.F1 = bit32.btest(SET_BITS, 0x1);
-				Value.F2 = bit32.btest(SET_BITS, 0x2);
-				Value.F3 = bit32.btest(SET_BITS, 0x4);
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SizeFlags
-		end,
-		Write = function(Value: SizeFlags): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: SizeFlags
+		return Result :: FlagCarrier
+	end,
+	Write = function(Value: FlagCarrier): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			local BITFIELD_1_0
+			-- Value: FlagCarrier
+			do
+				-- Value.Flags: Flags
 				local SET_BITS = 0
-				if Value.F1 == true then SET_BITS += 0x1 end
-				if Value.F2 == true then SET_BITS += 0x2 end
-				if Value.F3 == true then SET_BITS += 0x4 end
+				if Value.Flags.Length == true then SET_BITS += 0x1 end
+				if Value.Flags.Index == true then SET_BITS += 0x2 end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, SET_BITS)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
 			end
+			do
+				-- Value.Text: Text
+				if typeof(Value.Text) ~= "string" then
+					error(`Expected Value.Text to be of type string, got {type(Value.Text)} instead.{if type(Value.Text) == "table" or type(Value.Text) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Length = #Value.Text
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				WriteVarLength(Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Value.Text, Length)
+			end
+			-- Value.Kind: Kind
+			BITFIELD_1_0 = 0
+			if Value.Kind == "A" then
+			elseif Value.Kind == "B" then
+				BITFIELD_1_0 += 1
+			else
+				error(`Unexpected enum: {Value.Kind}, expected one of "A" or "B".`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	SizeMap = {
-		Read = function(Buffer: buffer): (SizeMap)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SizeMap)
+		return Result
+	end
+}
+Returns.RangedFloat24 = {
+	On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
+		if Events.Reliable[64] ~= nil then
+			warn("[BlinkBlox]: \"RangedFloat24\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[64] = Listener
+		local Pending = Queue.Reliable[64]
+		Queue.Reliable[64] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "RangedFloat24", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[64] == Listener then
+				Events.Reliable[64] = nil
+			end
+		end
+	end,
+	Predict = function(Player: Player, Value: number): ()
+		local BOUND_LISTENER = Events.Reliable[64] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "RangedFloat24"
+			local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
+			if not ListenerRan and not ListenerFailed(Player, "RangedFloat24", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		else
+			if #Queue.Reliable[64] < 256 then
+				table.insert(Queue.Reliable[64], table.pack(Player, Value))
+			end
+		end
+	end
+}
+Returns.FixedTenths = {
+	Read = function(Buffer: buffer): (FixedTenths)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (FixedTenths)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: FixedTenths
+			local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			Value = Value / 10
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: FixedTenths
+	end,
+	Write = function(Value: FixedTenths): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: FixedTenths
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value * 10)
+			if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.1, got {Value} instead.`) end
+			if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 6553.5 in steps of 0.1, got {Value} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.FixedRanged = {
+	Read = function(Buffer: buffer): (FixedRanged)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (FixedRanged)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: FixedRanged
+			local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			Value = Value / 10
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: FixedRanged
+	end,
+	Write = function(Value: FixedRanged): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: FixedRanged
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value * 10)
+			if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.1, got {Value} instead.`) end
+			if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 6553.5 in steps of 0.1, got {Value} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.FixedSigned = {
+	Read = function(Buffer: buffer): (FixedSigned)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (FixedSigned)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: FixedSigned
+			local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
+			if not (Value >= -400) then error(`Expected "Value" to be larger than or equal to -400, got {Value} instead.`) end
+			if not (Value <= 400) then error(`Expected "Value" to be smaller than or equal to 400, got {Value} instead.`) end
+			Value = Value / 4
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: FixedSigned
+	end,
+	Write = function(Value: FixedSigned): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: FixedSigned
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value * 4)
+			if not (Fixed >= -400) then error(`Expected "Value" to be larger than or equal to -100 in steps of 0.25, got {Value} instead.`) end
+			if not (Fixed <= 400) then error(`Expected "Value" to be smaller than or equal to 100 in steps of 0.25, got {Value} instead.`) end
+			buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.FixedCoarse = {
+	Read = function(Buffer: buffer): (FixedCoarse)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (FixedCoarse)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: FixedCoarse
+			local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			Value = Value * 2.5
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: FixedCoarse
+	end,
+	Write = function(Value: FixedCoarse): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: FixedCoarse
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value / 2.5)
+			if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 2.5, got {Value} instead.`) end
+			if not (Fixed <= 255) then error(`Expected "Value" to be smaller than or equal to 637.5 in steps of 2.5, got {Value} instead.`) end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.FixedTriple = {
+	Read = function(Buffer: buffer): (FixedTriple)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (FixedTriple)
+			-- Read BLOCK: 3 bytes
+			local BLOCK_START = Read(3)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: FixedTriple
+			local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
+			Value = Value / 1000
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: FixedTriple
+	end,
+	Write = function(Value: FixedTriple): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- Value: FixedTriple
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value * 1000)
+			if not (Fixed >= -8388608) then error(`Expected "Value" to be larger than or equal to -8388.608 in steps of 0.001, got {Value} instead.`) end
+			if not (Fixed <= 8388607) then error(`Expected "Value" to be smaller than or equal to 8388.607 in steps of 0.001, got {Value} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Fixed, 16))
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.FixedWide = {
+	Read = function(Buffer: buffer): (FixedWide)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (FixedWide)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: FixedWide
+			local Value = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
+			if not (Value <= 100000) then error(`Expected "Value" to be smaller than or equal to 100000, got {Value} instead.`) end
+			Value = Value / 100
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: FixedWide
+	end,
+	Write = function(Value: FixedWide): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Value: FixedWide
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value * 100)
+			if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.01, got {Value} instead.`) end
+			if not (Fixed <= 100000) then error(`Expected "Value" to be smaller than or equal to 1000 in steps of 0.01, got {Value} instead.`) end
+			buffer.writeu32(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.FixedWhole = {
+	Read = function(Buffer: buffer): (FixedWhole)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (FixedWhole)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: FixedWhole
+			local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: FixedWhole
+	end,
+	Write = function(Value: FixedWhole): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: FixedWhole
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value)
+			if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 1, got {Value} instead.`) end
+			if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 65535 in steps of 1, got {Value} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SaturatedCount = {
+	Read = function(Buffer: buffer): (SaturatedCount)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SaturatedCount)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SaturatedCount
+			local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if not (Value >= 1) then error(`Expected "Value" to be larger than or equal to 1, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SaturatedCount
+	end,
+	Write = function(Value: SaturatedCount): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: SaturatedCount
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value)
+			if not (Fixed >= 1) then Fixed = 1 elseif Fixed > 255 then Fixed = 255 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SaturatedSigned = {
+	Read = function(Buffer: buffer): (SaturatedSigned)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SaturatedSigned)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SaturatedSigned
+			local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
+			if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+			if not (Value <= 5) then error(`Expected "Value" to be smaller than or equal to 5, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SaturatedSigned
+	end,
+	Write = function(Value: SaturatedSigned): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: SaturatedSigned
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value)
+			if Fixed ~= Fixed then Fixed = 0 elseif Fixed < -5 then Fixed = -5 elseif Fixed > 5 then Fixed = 5 end
+			buffer.writei8(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SaturatedNegative = {
+	Read = function(Buffer: buffer): (SaturatedNegative)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SaturatedNegative)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SaturatedNegative
+			local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
+			if not (Value >= -10) then error(`Expected "Value" to be larger than or equal to -10, got {Value} instead.`) end
+			if not (Value <= -5) then error(`Expected "Value" to be smaller than or equal to -5, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SaturatedNegative
+	end,
+	Write = function(Value: SaturatedNegative): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: SaturatedNegative
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value)
+			if Fixed ~= Fixed then Fixed = -5 elseif Fixed < -10 then Fixed = -10 elseif Fixed > -5 then Fixed = -5 end
+			buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SaturatedTenths = {
+	Read = function(Buffer: buffer): (SaturatedTenths)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SaturatedTenths)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SaturatedTenths
+			local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if not (Value <= 1000) then error(`Expected "Value" to be smaller than or equal to 1000, got {Value} instead.`) end
+			Value = Value / 10
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SaturatedTenths
+	end,
+	Write = function(Value: SaturatedTenths): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: SaturatedTenths
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = math.round(Value * 10)
+			if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 1000 then Fixed = 1000 end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SaturatedHalf = {
+	Read = function(Buffer: buffer): (SaturatedHalf)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SaturatedHalf)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SaturatedHalf
+			local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			local Value
+			local MantissaExponent = Encoded % 0x8000
+			if MantissaExponent == 0b0_11111_0000000000  then
+				if Encoded // 0x8000 == 1 then
+					Value = -math.huge
+				else
+					Value = math.huge
+				end
+			elseif MantissaExponent > 0b0_11111_0000000000 then
+				Value = 0 / 0
+			elseif MantissaExponent == 0b0_00000_0000000000   then
+				Value = if Encoded == 0 then 0 else -0
+			else
+				local Mantissa = MantissaExponent % 0x400
+				local Exponent = MantissaExponent // 0x400
+				local Fraction;
+				if Exponent == 0 then
+					Fraction = Mantissa / 0x400
+				else
+					Fraction = Mantissa / 0x800 + 0.5
+				end
+				local Result = math.ldexp(Fraction, Exponent - 14)
+				Value = if Encoded // 0x8000 == 1 then -Result else Result
+			end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SaturatedHalf
+	end,
+	Write = function(Value: SaturatedHalf): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: SaturatedHalf
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = Value
+			if Fixed ~= Fixed then Fixed = 0 elseif Fixed < -65504 then Fixed = -65504 elseif Fixed > 65504 then Fixed = 65504 end
+			if Fixed > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+			elseif Fixed < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+			elseif Fixed ~= Fixed then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+			elseif Fixed == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Fixed < 0 then 0x8000 else 0)
+			else
+				local float = Fixed
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800)
+				local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+			end
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.SaturatedUnit = {
+	Read = function(Buffer: buffer): (SaturatedUnit)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (SaturatedUnit)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: SaturatedUnit
+			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+			if not (Value <= 1) then error(`Expected "Value" to be smaller than or equal to 1, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: SaturatedUnit
+	end,
+	Write = function(Value: SaturatedUnit): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Value: SaturatedUnit
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			end
+			local Fixed = Value
+			if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 1 then Fixed = 1 end
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Fixed)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.FixedStruct = {
+	Read = function(Buffer: buffer): (FixedStruct)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (FixedStruct)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: FixedStruct
+			local Value = {A = false, C = false} :: any
+			-- Value.A: A
+			Value.A = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			Value.A = Value.A / 10
+			-- Value.B: B
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+			if bit32.btest(BITFIELD_1_0, 0x01) then
 				-- Read BLOCK: 2 bytes
 				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SizeMap
-				local Value = {}
-				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
-				for _ = 1, Elements_1 do
-					-- Key_1: SizeMap
-					local OFFSET_0 = Read(1)
-					local Key_1 = buffer.readu8(RecieveBuffer, OFFSET_0)
-					-- Element_1: SizeMap
-					local OFFSET_1 = Read(2)
-					local Element_1 = buffer.readu16(RecieveBuffer, OFFSET_1)
-					Value[Key_1] = Element_1
-				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+				-- Value.B: B
+				Value.B = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
+				if not (Value.B >= -20) then error(`Expected "Value.B" to be larger than or equal to -20, got {Value.B} instead.`) end
+				if not (Value.B <= 20) then error(`Expected "Value.B" to be smaller than or equal to 20, got {Value.B} instead.`) end
+				Value.B = Value.B / 2
 			end
-			return Result :: SizeMap
-		end,
-		Write = function(Value: SizeMap): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: SizeMap
-				local Elements_1 = 0
-				for Key_1, Element_1 in Value do
-					Elements_1 += 1
-					-- Key_1: SizeMap
-					if typeof(Key_1) ~= "number" then
-						error(`Expected Key_1 to be of type number, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					local OFFSET_0 = Allocate(1)
-					buffer.writeu8(SendBuffer, OFFSET_0, Key_1)
-					-- Element_1: SizeMap
-					if typeof(Element_1) ~= "number" then
-						error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.{if type(Element_1) == "table" or type(Element_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					local OFFSET_1 = Allocate(2)
-					buffer.writeu16(SendBuffer, OFFSET_1, Element_1)
-				end
-				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	OrderedPosition = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Unreliable[1] ~= nil then
-				warn("[BlinkBlox]: \"OrderedPosition\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[1] = Listener
-			return function (): ()
-				if Events.Unreliable[1] == Listener then
-					Events.Unreliable[1] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: number): ()
-			local BOUND_LISTENER = Events.Unreliable[1]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "OrderedPosition"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "OrderedPosition", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		end
-	},
-	OffsetArray = {
-		Read = function(Buffer: buffer): (OffsetArray)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (OffsetArray)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: OffsetArray
+			do
+				-- Value.C: C
 				-- START ARRAY
-				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				local Length = LengthOffset + 300
-				if not (Length <= 400) then error(`Expected "Length" to be smaller than or equal to 400, got {Length} instead.`) end
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+				if not (Length <= 4) then error(`Expected "Length" to be smaller than or equal to 4, got {Length} instead.`) end
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.C" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Value.C = table.create(Length) :: {any}
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
 				for Slot_1 = 1, Length do
-					-- Item_1: OffsetArray
+					-- Item_1: C
 					-- Read 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
 					local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					Value[Slot_1] = Item_1
+					Value.C[Slot_1] = Item_1
 				end
 				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
 			end
-			return Result :: OffsetArray
-		end,
-		Write = function(Value: OffsetArray): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: OffsetArray
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: FixedStruct
+	end,
+	Write = function(Value: FixedStruct): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			local BITFIELD_1_0
+			-- Value: FixedStruct
+			do
+				-- Value.A: A
+				if typeof(Value.A) ~= "number" then
+					error(`Expected Value.A to be of type number, got {type(Value.A)} instead.`)
+				end
+				local Fixed = math.round(Value.A * 10)
+				if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 65535 then Fixed = 65535 end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
+			end
+			-- Value.B: B
+			BITFIELD_1_0 = 0
+			if Value.B ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value.B ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value.B: B
+				if typeof(Value.B) ~= "number" then
+					error(`Expected Value.B to be of type number, got {type(Value.B)} instead.`)
+				end
+				local Fixed = math.round(Value.B * 2)
+				if not (Fixed >= -20) then error(`Expected "Value.B" to be larger than or equal to -10 in steps of 0.5, got {Value.B} instead.`) end
+				if not (Fixed <= 20) then error(`Expected "Value.B" to be smaller than or equal to 10 in steps of 0.5, got {Value.B} instead.`) end
+				buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
+			end
+			do
+				-- Value.C: C
 				-- START ARRAY
-				if not (#Value >= 300) then error(`Expected "#Value" to be larger than or equal to 300, got {#Value} instead.`) end
-				if not (#Value <= 400) then error(`Expected "#Value" to be smaller than or equal to 400, got {#Value} instead.`) end
-				local LengthOffset = #Value - 300
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
+				if not (#Value.C <= 4) then error(`Expected "#Value.C" to be smaller than or equal to 4, got {#Value.C} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 3, #Value.C)
 					-- Allocate BLOCK: 1 bytes
-				local ARRAY_START_1 = Allocate(1 * #Value)
-				for Index = 1, #Value do
-					local Item_1 = Value[Index]
-					-- Item_1: OffsetArray
+				local ARRAY_START_1 = Allocate(1 * #Value.C)
+				for Index = 1, #Value.C do
+					local Item_1 = Value.C[Index]
+					-- Item_1: C
 					if typeof(Item_1) ~= "number" then
-						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
 					end
+					local Fixed = math.round(Item_1)
+					if not (Fixed >= 0) then error(`Expected "Item_1" to be larger than or equal to 0 in steps of 1, got {Item_1} instead.`) end
+					if not (Fixed <= 255) then error(`Expected "Item_1" to be smaller than or equal to 255 in steps of 1, got {Item_1} instead.`) end
 					-- Allocate 1
 					local OPERATION_OFFSET_0 = ARRAY_START_1
 					ARRAY_START_1 += 1
-					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Fixed)
 				end
 				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
 			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
-		end
-	},
-	OffsetString = {
-		Read = function(Buffer: buffer): (OffsetString)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (OffsetString)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: OffsetString
-				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				local Length = LengthOffset + 300
-				if Length > 400 then error(`Expected length of "Value" to be smaller than or equal to 400, got {Length} instead.`) end
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: OffsetString
-		end,
-		Write = function(Value: OffsetString): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: OffsetString
-				if typeof(Value) ~= "string" then
-					error(`Expected Value to be of type string, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if #Value < 300 then error(`Expected length of "Value" to be larger than or equal to 300, got {#Value} instead.`) end
-				if #Value > 400 then error(`Expected length of "Value" to be smaller than or equal to 400, got {#Value} instead.`) end
-				local Length = #Value
-				if not (Length >= 300) then error(`Expected "Length" to be larger than or equal to 300, got {Length} instead.`) end
-				if not (Length <= 400) then error(`Expected "Length" to be smaller than or equal to 400, got {Length} instead.`) end
-				local LengthOffset = Length - 300
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
-				Allocate(Length)
-				buffer.writestring(SendBuffer, SendOffset, Value, Length)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	OffsetBuffer = {
-		Read = function(Buffer: buffer): (OffsetBuffer)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (OffsetBuffer)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: OffsetBuffer
-				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				local Length = LengthOffset + 300
-				if Length > 400 then error(`Expected size of "Value" to be smaller than or equal to 400, got {Length} instead.`) end
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = buffer.create(Length)
-				buffer.copy(Value, 0, RecieveBuffer, Read(Length), Length)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: OffsetBuffer
-		end,
-		Write = function(Value: OffsetBuffer): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: OffsetBuffer
-				if typeof(Value) ~= "buffer" then
-					error(`Expected Value to be of type buffer, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if buffer.len(Value) < 300 then error(`Expected size of "Value" to be larger than or equal to 300, got {buffer.len(Value)} instead.`) end
-				if buffer.len(Value) > 400 then error(`Expected size of "Value" to be smaller than or equal to 400, got {buffer.len(Value)} instead.`) end
-				local Length = buffer.len(Value)
-				if not (Length >= 300) then error(`Expected "Length" to be larger than or equal to 300, got {Length} instead.`) end
-				if not (Length <= 400) then error(`Expected "Length" to be smaller than or equal to 400, got {Length} instead.`) end
-				local LengthOffset = Length - 300
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
-				Allocate(Length)
-				buffer.copy(SendBuffer, SendOffset, Value, 0, Length)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	BitsOne = {
-		Read = function(Buffer: buffer): (BitsOne)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (BitsOne)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: BitsOne
-				local Value = {A = false} :: any
-				-- Value.A: A
-				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: BitsOne
-		end,
-		Write = function(Value: BitsOne): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				local BITFIELD_1_0
-				-- Value: BitsOne
-				-- Value.A: A
-				if typeof(Value.A) ~= "boolean" then
-					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				BITFIELD_1_0 = 0
-				if Value.A then BITFIELD_1_0 += 0x01 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	BitsSeven = {
-		Read = function(Buffer: buffer): (BitsSeven)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (BitsSeven)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: BitsSeven
-				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false} :: any
-				-- Value.A: A
-				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
-				-- Value.B: B
-				Value.B = bit32.btest(BITFIELD_1_0, 0x02)
-				-- Value.C: C
-				Value.C = bit32.btest(BITFIELD_1_0, 0x04)
-				-- Value.D: D
-				Value.D = bit32.btest(BITFIELD_1_0, 0x08)
-				-- Value.E: E
-				Value.E = bit32.btest(BITFIELD_1_0, 0x10)
-				-- Value.F: F
-				Value.F = bit32.btest(BITFIELD_1_0, 0x20)
-				-- Value.G: G
-				Value.G = bit32.btest(BITFIELD_1_0, 0x40)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: BitsSeven
-		end,
-		Write = function(Value: BitsSeven): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				local BITFIELD_1_0
-				-- Value: BitsSeven
-				-- Value.A: A
-				if typeof(Value.A) ~= "boolean" then
-					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				BITFIELD_1_0 = 0
-				if Value.A then BITFIELD_1_0 += 0x01 end
-				-- Value.B: B
-				if typeof(Value.B) ~= "boolean" then
-					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.B then BITFIELD_1_0 += 0x02 end
-				-- Value.C: C
-				if typeof(Value.C) ~= "boolean" then
-					error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.C then BITFIELD_1_0 += 0x04 end
-				-- Value.D: D
-				if typeof(Value.D) ~= "boolean" then
-					error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.{if type(Value.D) == "table" or type(Value.D) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.D then BITFIELD_1_0 += 0x08 end
-				-- Value.E: E
-				if typeof(Value.E) ~= "boolean" then
-					error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.{if type(Value.E) == "table" or type(Value.E) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.E then BITFIELD_1_0 += 0x10 end
-				-- Value.F: F
-				if typeof(Value.F) ~= "boolean" then
-					error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.{if type(Value.F) == "table" or type(Value.F) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.F then BITFIELD_1_0 += 0x20 end
-				-- Value.G: G
-				if typeof(Value.G) ~= "boolean" then
-					error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.{if type(Value.G) == "table" or type(Value.G) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.G then BITFIELD_1_0 += 0x40 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	BitsEight = {
-		Read = function(Buffer: buffer): (BitsEight)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (BitsEight)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: BitsEight
-				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false} :: any
-				-- Value.A: A
-				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
-				-- Value.B: B
-				Value.B = bit32.btest(BITFIELD_1_0, 0x02)
-				-- Value.C: C
-				Value.C = bit32.btest(BITFIELD_1_0, 0x04)
-				-- Value.D: D
-				Value.D = bit32.btest(BITFIELD_1_0, 0x08)
-				-- Value.E: E
-				Value.E = bit32.btest(BITFIELD_1_0, 0x10)
-				-- Value.F: F
-				Value.F = bit32.btest(BITFIELD_1_0, 0x20)
-				-- Value.G: G
-				Value.G = bit32.btest(BITFIELD_1_0, 0x40)
-				-- Value.H: H
-				Value.H = bit32.btest(BITFIELD_1_0, 0x80)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: BitsEight
-		end,
-		Write = function(Value: BitsEight): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				local BITFIELD_1_0
-				-- Value: BitsEight
-				-- Value.A: A
-				if typeof(Value.A) ~= "boolean" then
-					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				BITFIELD_1_0 = 0
-				if Value.A then BITFIELD_1_0 += 0x01 end
-				-- Value.B: B
-				if typeof(Value.B) ~= "boolean" then
-					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.B then BITFIELD_1_0 += 0x02 end
-				-- Value.C: C
-				if typeof(Value.C) ~= "boolean" then
-					error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.C then BITFIELD_1_0 += 0x04 end
-				-- Value.D: D
-				if typeof(Value.D) ~= "boolean" then
-					error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.{if type(Value.D) == "table" or type(Value.D) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.D then BITFIELD_1_0 += 0x08 end
-				-- Value.E: E
-				if typeof(Value.E) ~= "boolean" then
-					error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.{if type(Value.E) == "table" or type(Value.E) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.E then BITFIELD_1_0 += 0x10 end
-				-- Value.F: F
-				if typeof(Value.F) ~= "boolean" then
-					error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.{if type(Value.F) == "table" or type(Value.F) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.F then BITFIELD_1_0 += 0x20 end
-				-- Value.G: G
-				if typeof(Value.G) ~= "boolean" then
-					error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.{if type(Value.G) == "table" or type(Value.G) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.G then BITFIELD_1_0 += 0x40 end
-				-- Value.H: H
-				if typeof(Value.H) ~= "boolean" then
-					error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.{if type(Value.H) == "table" or type(Value.H) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.H then BITFIELD_1_0 += 0x80 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	BitsNine = {
-		Read = function(Buffer: buffer): (BitsNine)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (BitsNine)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local BITFIELD_1_1
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: BitsNine
-				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false} :: any
-				-- Value.A: A
-				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
-				-- Value.B: B
-				Value.B = bit32.btest(BITFIELD_1_0, 0x02)
-				-- Value.C: C
-				Value.C = bit32.btest(BITFIELD_1_0, 0x04)
-				-- Value.D: D
-				Value.D = bit32.btest(BITFIELD_1_0, 0x08)
-				-- Value.E: E
-				Value.E = bit32.btest(BITFIELD_1_0, 0x10)
-				-- Value.F: F
-				Value.F = bit32.btest(BITFIELD_1_0, 0x20)
-				-- Value.G: G
-				Value.G = bit32.btest(BITFIELD_1_0, 0x40)
-				-- Value.H: H
-				Value.H = bit32.btest(BITFIELD_1_0, 0x80)
-				-- Value.I: I
-				BITFIELD_1_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				Value.I = bit32.btest(BITFIELD_1_1, 0x01)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: BitsNine
-		end,
-		Write = function(Value: BitsNine): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				local BITFIELD_1_1
-				local BITFIELD_1_0
-				-- Value: BitsNine
-				-- Value.A: A
-				if typeof(Value.A) ~= "boolean" then
-					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				BITFIELD_1_0 = 0
-				if Value.A then BITFIELD_1_0 += 0x01 end
-				-- Value.B: B
-				if typeof(Value.B) ~= "boolean" then
-					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.B then BITFIELD_1_0 += 0x02 end
-				-- Value.C: C
-				if typeof(Value.C) ~= "boolean" then
-					error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.C then BITFIELD_1_0 += 0x04 end
-				-- Value.D: D
-				if typeof(Value.D) ~= "boolean" then
-					error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.{if type(Value.D) == "table" or type(Value.D) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.D then BITFIELD_1_0 += 0x08 end
-				-- Value.E: E
-				if typeof(Value.E) ~= "boolean" then
-					error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.{if type(Value.E) == "table" or type(Value.E) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.E then BITFIELD_1_0 += 0x10 end
-				-- Value.F: F
-				if typeof(Value.F) ~= "boolean" then
-					error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.{if type(Value.F) == "table" or type(Value.F) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.F then BITFIELD_1_0 += 0x20 end
-				-- Value.G: G
-				if typeof(Value.G) ~= "boolean" then
-					error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.{if type(Value.G) == "table" or type(Value.G) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.G then BITFIELD_1_0 += 0x40 end
-				-- Value.H: H
-				if typeof(Value.H) ~= "boolean" then
-					error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.{if type(Value.H) == "table" or type(Value.H) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.H then BITFIELD_1_0 += 0x80 end
-				-- Value.I: I
-				if typeof(Value.I) ~= "boolean" then
-					error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.{if type(Value.I) == "table" or type(Value.I) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
-				BITFIELD_1_1 = 0
-				if Value.I then BITFIELD_1_1 += 0x01 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_1)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	BitsSeventeen = {
-		Read = function(Buffer: buffer): (BitsSeventeen)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (BitsSeventeen)
-				-- Read BLOCK: 3 bytes
-				local BLOCK_START = Read(3)
-				local BITFIELD_1_2
-				local BITFIELD_1_1
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: BitsSeventeen
-				local Value = {A = false, B = false, C = false, D = false, E = false, F = false, G = false, H = false, I = false, J = false, K = false, L = false, M = false, N = false, O = false, P = false, Q = false} :: any
-				-- Value.A: A
-				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
-				-- Value.B: B
-				Value.B = bit32.btest(BITFIELD_1_0, 0x02)
-				-- Value.C: C
-				Value.C = bit32.btest(BITFIELD_1_0, 0x04)
-				-- Value.D: D
-				Value.D = bit32.btest(BITFIELD_1_0, 0x08)
-				-- Value.E: E
-				Value.E = bit32.btest(BITFIELD_1_0, 0x10)
-				-- Value.F: F
-				Value.F = bit32.btest(BITFIELD_1_0, 0x20)
-				-- Value.G: G
-				Value.G = bit32.btest(BITFIELD_1_0, 0x40)
-				-- Value.H: H
-				Value.H = bit32.btest(BITFIELD_1_0, 0x80)
-				-- Value.I: I
-				BITFIELD_1_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				Value.I = bit32.btest(BITFIELD_1_1, 0x01)
-				-- Value.J: J
-				Value.J = bit32.btest(BITFIELD_1_1, 0x02)
-				-- Value.K: K
-				Value.K = bit32.btest(BITFIELD_1_1, 0x04)
-				-- Value.L: L
-				Value.L = bit32.btest(BITFIELD_1_1, 0x08)
-				-- Value.M: M
-				Value.M = bit32.btest(BITFIELD_1_1, 0x10)
-				-- Value.N: N
-				Value.N = bit32.btest(BITFIELD_1_1, 0x20)
-				-- Value.O: O
-				Value.O = bit32.btest(BITFIELD_1_1, 0x40)
-				-- Value.P: P
-				Value.P = bit32.btest(BITFIELD_1_1, 0x80)
-				-- Value.Q: Q
-				BITFIELD_1_2 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				Value.Q = bit32.btest(BITFIELD_1_2, 0x01)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: BitsSeventeen
-		end,
-		Write = function(Value: BitsSeventeen): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 3 bytes
-				local BLOCK_START = Allocate(3)
-				local BITFIELD_1_2
-				local BITFIELD_1_1
-				local BITFIELD_1_0
-				-- Value: BitsSeventeen
-				-- Value.A: A
-				if typeof(Value.A) ~= "boolean" then
-					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				BITFIELD_1_0 = 0
-				if Value.A then BITFIELD_1_0 += 0x01 end
-				-- Value.B: B
-				if typeof(Value.B) ~= "boolean" then
-					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.B then BITFIELD_1_0 += 0x02 end
-				-- Value.C: C
-				if typeof(Value.C) ~= "boolean" then
-					error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.C then BITFIELD_1_0 += 0x04 end
-				-- Value.D: D
-				if typeof(Value.D) ~= "boolean" then
-					error(`Expected Value.D to be of type boolean, got {type(Value.D)} instead.{if type(Value.D) == "table" or type(Value.D) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.D then BITFIELD_1_0 += 0x08 end
-				-- Value.E: E
-				if typeof(Value.E) ~= "boolean" then
-					error(`Expected Value.E to be of type boolean, got {type(Value.E)} instead.{if type(Value.E) == "table" or type(Value.E) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.E then BITFIELD_1_0 += 0x10 end
-				-- Value.F: F
-				if typeof(Value.F) ~= "boolean" then
-					error(`Expected Value.F to be of type boolean, got {type(Value.F)} instead.{if type(Value.F) == "table" or type(Value.F) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.F then BITFIELD_1_0 += 0x20 end
-				-- Value.G: G
-				if typeof(Value.G) ~= "boolean" then
-					error(`Expected Value.G to be of type boolean, got {type(Value.G)} instead.{if type(Value.G) == "table" or type(Value.G) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.G then BITFIELD_1_0 += 0x40 end
-				-- Value.H: H
-				if typeof(Value.H) ~= "boolean" then
-					error(`Expected Value.H to be of type boolean, got {type(Value.H)} instead.{if type(Value.H) == "table" or type(Value.H) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.H then BITFIELD_1_0 += 0x80 end
-				-- Value.I: I
-				if typeof(Value.I) ~= "boolean" then
-					error(`Expected Value.I to be of type boolean, got {type(Value.I)} instead.{if type(Value.I) == "table" or type(Value.I) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
-				BITFIELD_1_1 = 0
-				if Value.I then BITFIELD_1_1 += 0x01 end
-				-- Value.J: J
-				if typeof(Value.J) ~= "boolean" then
-					error(`Expected Value.J to be of type boolean, got {type(Value.J)} instead.{if type(Value.J) == "table" or type(Value.J) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.J then BITFIELD_1_1 += 0x02 end
-				-- Value.K: K
-				if typeof(Value.K) ~= "boolean" then
-					error(`Expected Value.K to be of type boolean, got {type(Value.K)} instead.{if type(Value.K) == "table" or type(Value.K) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.K then BITFIELD_1_1 += 0x04 end
-				-- Value.L: L
-				if typeof(Value.L) ~= "boolean" then
-					error(`Expected Value.L to be of type boolean, got {type(Value.L)} instead.{if type(Value.L) == "table" or type(Value.L) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.L then BITFIELD_1_1 += 0x08 end
-				-- Value.M: M
-				if typeof(Value.M) ~= "boolean" then
-					error(`Expected Value.M to be of type boolean, got {type(Value.M)} instead.{if type(Value.M) == "table" or type(Value.M) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.M then BITFIELD_1_1 += 0x10 end
-				-- Value.N: N
-				if typeof(Value.N) ~= "boolean" then
-					error(`Expected Value.N to be of type boolean, got {type(Value.N)} instead.{if type(Value.N) == "table" or type(Value.N) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.N then BITFIELD_1_1 += 0x20 end
-				-- Value.O: O
-				if typeof(Value.O) ~= "boolean" then
-					error(`Expected Value.O to be of type boolean, got {type(Value.O)} instead.{if type(Value.O) == "table" or type(Value.O) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.O then BITFIELD_1_1 += 0x40 end
-				-- Value.P: P
-				if typeof(Value.P) ~= "boolean" then
-					error(`Expected Value.P to be of type boolean, got {type(Value.P)} instead.{if type(Value.P) == "table" or type(Value.P) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.P then BITFIELD_1_1 += 0x80 end
-				-- Value.Q: Q
-				if typeof(Value.Q) ~= "boolean" then
-					error(`Expected Value.Q to be of type boolean, got {type(Value.Q)} instead.{if type(Value.Q) == "table" or type(Value.Q) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_1)
-				BITFIELD_1_2 = 0
-				if Value.Q then BITFIELD_1_2 += 0x01 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_1_2)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	BitsMixed = {
-		Read = function(Buffer: buffer): (BitsMixed)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (BitsMixed)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: BitsMixed
-				local Value = {A = false, C = false} :: any
-				-- Value.A: A
-				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
-				-- Value.B: B
-				if bit32.btest(BITFIELD_1_0, 0x02) then
-					-- Read BLOCK: 1 bytes
-					local BLOCK_START = Read(1)
-					-- Value.B: B
-					Value.B = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				end
-				-- Value.C: C
-				Value.C = bit32.btest(BITFIELD_1_0, 0x04)
-				-- Value.D: D
-				if bit32.btest(BITFIELD_1_0, 0x08) then
-					-- Read BLOCK: 2 bytes
-					local BLOCK_START = Read(2)
-					-- Value.D: D
-					Value.D = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: BitsMixed
-		end,
-		Write = function(Value: BitsMixed): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				local BITFIELD_1_0
-				-- Value: BitsMixed
-				-- Value.A: A
-				if typeof(Value.A) ~= "boolean" then
-					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				BITFIELD_1_0 = 0
-				if Value.A then BITFIELD_1_0 += 0x01 end
-				-- Value.B: B
-				if Value.B ~= nil then BITFIELD_1_0 += 0x02 end
-				if Value.B ~= nil then
-					-- Allocate BLOCK: 1 bytes
-					local BLOCK_START = Allocate(1)
-					-- Value.B: B
-					if typeof(Value.B) ~= "number" then
-						error(`Expected Value.B to be of type number, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.B)
-				end
-				-- Value.C: C
-				if typeof(Value.C) ~= "boolean" then
-					error(`Expected Value.C to be of type boolean, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.C then BITFIELD_1_0 += 0x04 end
-				-- Value.D: D
-				if Value.D ~= nil then BITFIELD_1_0 += 0x08 end
-				if Value.D ~= nil then
-					-- Allocate BLOCK: 2 bytes
-					local BLOCK_START = Allocate(2)
-					-- Value.D: D
-					if typeof(Value.D) ~= "number" then
-						error(`Expected Value.D to be of type number, got {type(Value.D)} instead.{if type(Value.D) == "table" or type(Value.D) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Value.D)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	PackedBooleans = {
-		Read = function(Buffer: buffer): (PackedBooleans)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (PackedBooleans)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: PackedBooleans
-				-- START ARRAY
-				local Length = ReadVarLength()
-				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
-				do
-					local PACKED_OFFSET = Read((Length + 7) // 8)
-					if PACKED_BY_ROWS then
-						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
-					else
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
-							end
-						end
-					end
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: PackedBooleans
-		end,
-		Write = function(Value: PackedBooleans): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Value: PackedBooleans
-				-- START ARRAY
-				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				WriteVarLength(#Value)
-				do
-					local PACKED_LENGTH = #Value
-					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_WHOLE = PACKED_LENGTH // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BASE = PACKED_BYTE * 8
-						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
-						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
-						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
-							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
-								local PACKED_ITEM = Value[PACKED_INDEX]
-								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							end
-						end
-						local PACKED_BITS = 0
-						if PACKED_1 then PACKED_BITS += 1 end
-						if PACKED_2 then PACKED_BITS += 2 end
-						if PACKED_3 then PACKED_BITS += 4 end
-						if PACKED_4 then PACKED_BITS += 8 end
-						if PACKED_5 then PACKED_BITS += 16 end
-						if PACKED_6 then PACKED_BITS += 32 end
-						if PACKED_7 then PACKED_BITS += 64 end
-						if PACKED_8 then PACKED_BITS += 128 end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
-					end
-					if PACKED_LENGTH % 8 ~= 0 then
-						local PACKED_BASE = PACKED_WHOLE * 8
-						local PACKED_BITS = 0
-						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
-						end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
-					end
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	PackedFixed = {
-		Read = function(Buffer: buffer): (PackedFixed)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (PackedFixed)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: PackedFixed
-				-- START ARRAY
-				local Length = 10
-				local Value = table.create(Length)
-				do
-					local PACKED_OFFSET = BLOCK_START + 0
-					if PACKED_BY_ROWS then
-						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
-					else
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
-							end
-						end
-					end
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: PackedFixed
-		end,
-		Write = function(Value: PackedFixed): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: PackedFixed
-				-- START ARRAY
-				if #Value ~= 10 then error(`Expected length of "Value" to be equal to 10, got {#Value} instead.`) end
-				do
-					local PACKED_LENGTH = 10
-					local PACKED_OFFSET = BLOCK_START + 0
-					local PACKED_WHOLE = PACKED_LENGTH // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BASE = PACKED_BYTE * 8
-						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
-						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
-						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
-							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
-								local PACKED_ITEM = Value[PACKED_INDEX]
-								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							end
-						end
-						local PACKED_BITS = 0
-						if PACKED_1 then PACKED_BITS += 1 end
-						if PACKED_2 then PACKED_BITS += 2 end
-						if PACKED_3 then PACKED_BITS += 4 end
-						if PACKED_4 then PACKED_BITS += 8 end
-						if PACKED_5 then PACKED_BITS += 16 end
-						if PACKED_6 then PACKED_BITS += 32 end
-						if PACKED_7 then PACKED_BITS += 64 end
-						if PACKED_8 then PACKED_BITS += 128 end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
-					end
-					if PACKED_LENGTH % 8 ~= 0 then
-						local PACKED_BASE = PACKED_WHOLE * 8
-						local PACKED_BITS = 0
-						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
-						end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
-					end
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	PackedRanged = {
-		Read = function(Buffer: buffer): (PackedRanged)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (PackedRanged)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: PackedRanged
-				-- START ARRAY
-				local LengthOffset = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				local Length = LengthOffset + 3
-				if not (Length <= 20) then error(`Expected "Length" to be smaller than or equal to 20, got {Length} instead.`) end
-				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
-				do
-					local PACKED_OFFSET = Read((Length + 7) // 8)
-					if PACKED_BY_ROWS then
-						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
-					else
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
-							end
-						end
-					end
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: PackedRanged
-		end,
-		Write = function(Value: PackedRanged): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: PackedRanged
-				-- START ARRAY
-				if not (#Value >= 3) then error(`Expected "#Value" to be larger than or equal to 3, got {#Value} instead.`) end
-				if not (#Value <= 20) then error(`Expected "#Value" to be smaller than or equal to 20, got {#Value} instead.`) end
-				local LengthOffset = #Value - 3
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, LengthOffset)
-				do
-					local PACKED_LENGTH = #Value
-					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_WHOLE = PACKED_LENGTH // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BASE = PACKED_BYTE * 8
-						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
-						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
-						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
-							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
-								local PACKED_ITEM = Value[PACKED_INDEX]
-								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							end
-						end
-						local PACKED_BITS = 0
-						if PACKED_1 then PACKED_BITS += 1 end
-						if PACKED_2 then PACKED_BITS += 2 end
-						if PACKED_3 then PACKED_BITS += 4 end
-						if PACKED_4 then PACKED_BITS += 8 end
-						if PACKED_5 then PACKED_BITS += 16 end
-						if PACKED_6 then PACKED_BITS += 32 end
-						if PACKED_7 then PACKED_BITS += 64 end
-						if PACKED_8 then PACKED_BITS += 128 end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
-					end
-					if PACKED_LENGTH % 8 ~= 0 then
-						local PACKED_BASE = PACKED_WHOLE * 8
-						local PACKED_BITS = 0
-						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
-						end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
-					end
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	PackedNested = {
-		Read = function(Buffer: buffer): (PackedNested)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (PackedNested)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: PackedNested
-				-- START ARRAY
-				local Length = ReadVarLength()
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
-				for Slot_1 = 1, Length do
-					-- Item_1: PackedNested
-					-- START ARRAY
-					local Length = ReadVarLength()
-					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Item_1 = table.create(Length)
-					do
-						local PACKED_OFFSET = Read((Length + 7) // 8)
-						if PACKED_BY_ROWS then
-							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Item_1)
-						else
-							local PACKED_WHOLE = Length // 8
-							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-								local PACKED_BASE = PACKED_BYTE * 8
-								Item_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-								Item_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-								Item_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-								Item_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-								Item_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-								Item_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-								Item_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-								Item_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-							end
-							if Length % 8 ~= 0 then
-								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-								local PACKED_BASE = PACKED_WHOLE * 8
-								for PACKED_BIT = 0, Length % 8 - 1 do
-									Item_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
-								end
-							end
-						end
-					end
-					-- END ARRAY
-					Value[Slot_1] = Item_1
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: PackedNested
-		end,
-		Write = function(Value: PackedNested): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Value: PackedNested
-				-- START ARRAY
-				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				WriteVarLength(#Value)
-				for Index = 1, #Value do
-					local Item_1 = Value[Index]
-					-- Item_1: PackedNested
-					-- START ARRAY
-					if not (#Item_1 <= 65535) then error(`Expected "#Item_1" to be smaller than or equal to 65535, got {#Item_1} instead.`) end
-					WriteVarLength(#Item_1)
-					do
-						local PACKED_LENGTH = #Item_1
-						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-						local PACKED_WHOLE = PACKED_LENGTH // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BASE = PACKED_BYTE * 8
-							local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Item_1[PACKED_BASE + 1], Item_1[PACKED_BASE + 2], Item_1[PACKED_BASE + 3], Item_1[PACKED_BASE + 4]
-							local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Item_1[PACKED_BASE + 5], Item_1[PACKED_BASE + 6], Item_1[PACKED_BASE + 7], Item_1[PACKED_BASE + 8]
-							if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
-								for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
-									local PACKED_ITEM = Item_1[PACKED_INDEX]
-									if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-								end
-							end
-							local PACKED_BITS = 0
-							if PACKED_1 then PACKED_BITS += 1 end
-							if PACKED_2 then PACKED_BITS += 2 end
-							if PACKED_3 then PACKED_BITS += 4 end
-							if PACKED_4 then PACKED_BITS += 8 end
-							if PACKED_5 then PACKED_BITS += 16 end
-							if PACKED_6 then PACKED_BITS += 32 end
-							if PACKED_7 then PACKED_BITS += 64 end
-							if PACKED_8 then PACKED_BITS += 128 end
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
-						end
-						if PACKED_LENGTH % 8 ~= 0 then
-							local PACKED_BASE = PACKED_WHOLE * 8
-							local PACKED_BITS = 0
-							for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-								local PACKED_ITEM = Item_1[PACKED_BASE + PACKED_BIT + 1]
-								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Item_1[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-								if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
-							end
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
-						end
-					end
-					-- END ARRAY
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	PackedThroughAlias = {
-		Read = function(Buffer: buffer): (PackedThroughAlias)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (PackedThroughAlias)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: PackedThroughAlias
-				-- START ARRAY
-				local Length = ReadVarLength()
-				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
-				do
-					local PACKED_OFFSET = Read((Length + 7) // 8)
-					if PACKED_BY_ROWS then
-						PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value)
-					else
-						local PACKED_WHOLE = Length // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-							local PACKED_BASE = PACKED_BYTE * 8
-							Value[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-							Value[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-							Value[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-							Value[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-							Value[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-							Value[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-							Value[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-							Value[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-						end
-						if Length % 8 ~= 0 then
-							local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-							local PACKED_BASE = PACKED_WHOLE * 8
-							for PACKED_BIT = 0, Length % 8 - 1 do
-								Value[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
-							end
-						end
-					end
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: PackedThroughAlias
-		end,
-		Write = function(Value: PackedThroughAlias): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Value: PackedThroughAlias
-				-- START ARRAY
-				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				WriteVarLength(#Value)
-				do
-					local PACKED_LENGTH = #Value
-					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_WHOLE = PACKED_LENGTH // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BASE = PACKED_BYTE * 8
-						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
-						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
-						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
-							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
-								local PACKED_ITEM = Value[PACKED_INDEX]
-								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							end
-						end
-						local PACKED_BITS = 0
-						if PACKED_1 then PACKED_BITS += 1 end
-						if PACKED_2 then PACKED_BITS += 2 end
-						if PACKED_3 then PACKED_BITS += 4 end
-						if PACKED_4 then PACKED_BITS += 8 end
-						if PACKED_5 then PACKED_BITS += 16 end
-						if PACKED_6 then PACKED_BITS += 32 end
-						if PACKED_7 then PACKED_BITS += 64 end
-						if PACKED_8 then PACKED_BITS += 128 end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
-					end
-					if PACKED_LENGTH % 8 ~= 0 then
-						local PACKED_BASE = PACKED_WHOLE * 8
-						local PACKED_BITS = 0
-						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
-						end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
-					end
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	PackedBeside = {
-		Read = function(Buffer: buffer): (PackedBeside)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (PackedBeside)
-				-- Read BLOCK: 3 bytes
-				local BLOCK_START = Read(3)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: PackedBeside
-				local Value = {A = false, List = false, B = false, Fixed = false, C = false} :: any
-				-- Value.A: A
-				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value.A = bit32.btest(BITFIELD_1_0, 0x01)
-				do
-					-- Value.List: List
-					-- START ARRAY
-					local Length = ReadVarLength()
-					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.List = table.create(Length)
-					do
-						local PACKED_OFFSET = Read((Length + 7) // 8)
-						if PACKED_BY_ROWS then
-							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.List)
-						else
-							local PACKED_WHOLE = Length // 8
-							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-								local PACKED_BASE = PACKED_BYTE * 8
-								Value.List[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-								Value.List[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-								Value.List[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-								Value.List[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-								Value.List[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-								Value.List[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-								Value.List[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-								Value.List[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-							end
-							if Length % 8 ~= 0 then
-								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-								local PACKED_BASE = PACKED_WHOLE * 8
-								for PACKED_BIT = 0, Length % 8 - 1 do
-									Value.List[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
-								end
-							end
-						end
-					end
-					-- END ARRAY
-				end
-				-- Value.B: B
-				Value.B = bit32.btest(BITFIELD_1_0, 0x02)
-				do
-					-- Value.Fixed: Fixed
-					-- START ARRAY
-					local Length = 3
-					Value.Fixed = table.create(Length)
-					do
-						local PACKED_OFFSET = BLOCK_START + 1
-						if PACKED_BY_ROWS then
-							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Value.Fixed)
-						else
-							local PACKED_WHOLE = Length // 8
-							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-								local PACKED_BASE = PACKED_BYTE * 8
-								Value.Fixed[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-								Value.Fixed[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-								Value.Fixed[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-								Value.Fixed[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-								Value.Fixed[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-								Value.Fixed[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-								Value.Fixed[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-								Value.Fixed[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-							end
-							if Length % 8 ~= 0 then
-								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-								local PACKED_BASE = PACKED_WHOLE * 8
-								for PACKED_BIT = 0, Length % 8 - 1 do
-									Value.Fixed[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
-								end
-							end
-						end
-					end
-					-- END ARRAY
-				end
-				-- Value.C: C
-				Value.C = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: PackedBeside
-		end,
-		Write = function(Value: PackedBeside): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 3 bytes
-				local BLOCK_START = Allocate(3)
-				local BITFIELD_1_0
-				-- Value: PackedBeside
-				-- Value.A: A
-				if typeof(Value.A) ~= "boolean" then
-					error(`Expected Value.A to be of type boolean, got {type(Value.A)} instead.{if type(Value.A) == "table" or type(Value.A) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				BITFIELD_1_0 = 0
-				if Value.A then BITFIELD_1_0 += 0x01 end
-				-- Value.List: List
-				-- START ARRAY
-				if not (#Value.List <= 65535) then error(`Expected "#Value.List" to be smaller than or equal to 65535, got {#Value.List} instead.`) end
-				WriteVarLength(#Value.List)
-				do
-					local PACKED_LENGTH = #Value.List
-					local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-					local PACKED_WHOLE = PACKED_LENGTH // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BASE = PACKED_BYTE * 8
-						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value.List[PACKED_BASE + 1], Value.List[PACKED_BASE + 2], Value.List[PACKED_BASE + 3], Value.List[PACKED_BASE + 4]
-						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value.List[PACKED_BASE + 5], Value.List[PACKED_BASE + 6], Value.List[PACKED_BASE + 7], Value.List[PACKED_BASE + 8]
-						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
-							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
-								local PACKED_ITEM = Value.List[PACKED_INDEX]
-								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							end
-						end
-						local PACKED_BITS = 0
-						if PACKED_1 then PACKED_BITS += 1 end
-						if PACKED_2 then PACKED_BITS += 2 end
-						if PACKED_3 then PACKED_BITS += 4 end
-						if PACKED_4 then PACKED_BITS += 8 end
-						if PACKED_5 then PACKED_BITS += 16 end
-						if PACKED_6 then PACKED_BITS += 32 end
-						if PACKED_7 then PACKED_BITS += 64 end
-						if PACKED_8 then PACKED_BITS += 128 end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
-					end
-					if PACKED_LENGTH % 8 ~= 0 then
-						local PACKED_BASE = PACKED_WHOLE * 8
-						local PACKED_BITS = 0
-						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							local PACKED_ITEM = Value.List[PACKED_BASE + PACKED_BIT + 1]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.List[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
-						end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
-					end
-				end
-				-- END ARRAY
-				-- Value.B: B
-				if typeof(Value.B) ~= "boolean" then
-					error(`Expected Value.B to be of type boolean, got {type(Value.B)} instead.{if type(Value.B) == "table" or type(Value.B) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value.B then BITFIELD_1_0 += 0x02 end
-				-- Value.Fixed: Fixed
-				-- START ARRAY
-				if #Value.Fixed ~= 3 then error(`Expected length of "Value.Fixed" to be equal to 3, got {#Value.Fixed} instead.`) end
-				do
-					local PACKED_LENGTH = 3
-					local PACKED_OFFSET = BLOCK_START + 1
-					local PACKED_WHOLE = PACKED_LENGTH // 8
-					for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-						local PACKED_BASE = PACKED_BYTE * 8
-						local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value.Fixed[PACKED_BASE + 1], Value.Fixed[PACKED_BASE + 2], Value.Fixed[PACKED_BASE + 3], Value.Fixed[PACKED_BASE + 4]
-						local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value.Fixed[PACKED_BASE + 5], Value.Fixed[PACKED_BASE + 6], Value.Fixed[PACKED_BASE + 7], Value.Fixed[PACKED_BASE + 8]
-						if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
-							for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
-								local PACKED_ITEM = Value.Fixed[PACKED_INDEX]
-								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							end
-						end
-						local PACKED_BITS = 0
-						if PACKED_1 then PACKED_BITS += 1 end
-						if PACKED_2 then PACKED_BITS += 2 end
-						if PACKED_3 then PACKED_BITS += 4 end
-						if PACKED_4 then PACKED_BITS += 8 end
-						if PACKED_5 then PACKED_BITS += 16 end
-						if PACKED_6 then PACKED_BITS += 32 end
-						if PACKED_7 then PACKED_BITS += 64 end
-						if PACKED_8 then PACKED_BITS += 128 end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
-					end
-					if PACKED_LENGTH % 8 ~= 0 then
-						local PACKED_BASE = PACKED_WHOLE * 8
-						local PACKED_BITS = 0
-						for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-							local PACKED_ITEM = Value.Fixed[PACKED_BASE + PACKED_BIT + 1]
-							if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Value.Fixed[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-							if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
-						end
-						buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
-					end
-				end
-				-- END ARRAY
-				-- Value.C: C
-				if typeof(Value.C) ~= "number" then
-					error(`Expected Value.C to be of type number, got {type(Value.C)} instead.{if type(Value.C) == "table" or type(Value.C) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.C)
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	PackedMap = {
-		Read = function(Buffer: buffer): (PackedMap)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (PackedMap)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: PackedMap
-				local Value = {}
-				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				if Elements_1 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
-				for _ = 1, Elements_1 do
-					-- Key_1: PackedMap
-					local Length = ReadVarLength()
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Element_1: PackedMap
-					-- START ARRAY
-					local Length = ReadVarLength()
-					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Element_1 = table.create(Length)
-					do
-						local PACKED_OFFSET = Read((Length + 7) // 8)
-						if PACKED_BY_ROWS then
-							PackedRows(RecieveBuffer, PACKED_OFFSET, Length, Element_1)
-						else
-							local PACKED_WHOLE = Length // 8
-							for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_BYTE)
-								local PACKED_BASE = PACKED_BYTE * 8
-								Element_1[PACKED_BASE + 1] = bit32.btest(PACKED_BITS, 1)
-								Element_1[PACKED_BASE + 2] = bit32.btest(PACKED_BITS, 2)
-								Element_1[PACKED_BASE + 3] = bit32.btest(PACKED_BITS, 4)
-								Element_1[PACKED_BASE + 4] = bit32.btest(PACKED_BITS, 8)
-								Element_1[PACKED_BASE + 5] = bit32.btest(PACKED_BITS, 16)
-								Element_1[PACKED_BASE + 6] = bit32.btest(PACKED_BITS, 32)
-								Element_1[PACKED_BASE + 7] = bit32.btest(PACKED_BITS, 64)
-								Element_1[PACKED_BASE + 8] = bit32.btest(PACKED_BITS, 128)
-							end
-							if Length % 8 ~= 0 then
-								local PACKED_BITS = buffer.readu8(RecieveBuffer, PACKED_OFFSET + PACKED_WHOLE)
-								local PACKED_BASE = PACKED_WHOLE * 8
-								for PACKED_BIT = 0, Length % 8 - 1 do
-									Element_1[PACKED_BASE + PACKED_BIT + 1] = bit32.btest(PACKED_BITS, bit32.lshift(1, PACKED_BIT))
-								end
-							end
-						end
-					end
-					-- END ARRAY
-					Value[Key_1] = Element_1
-				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: PackedMap
-		end,
-		Write = function(Value: PackedMap): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: PackedMap
-				local Elements_1 = 0
-				for Key_1, Element_1 in Value do
-					Elements_1 += 1
-					-- Key_1: PackedMap
-					if typeof(Key_1) ~= "string" then
-						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					local Length = #Key_1
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					WriteVarLength(Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
-					-- Element_1: PackedMap
-					-- START ARRAY
-					if not (#Element_1 <= 65535) then error(`Expected "#Element_1" to be smaller than or equal to 65535, got {#Element_1} instead.`) end
-					WriteVarLength(#Element_1)
-					do
-						local PACKED_LENGTH = #Element_1
-						local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
-						local PACKED_WHOLE = PACKED_LENGTH // 8
-						for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
-							local PACKED_BASE = PACKED_BYTE * 8
-							local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Element_1[PACKED_BASE + 1], Element_1[PACKED_BASE + 2], Element_1[PACKED_BASE + 3], Element_1[PACKED_BASE + 4]
-							local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Element_1[PACKED_BASE + 5], Element_1[PACKED_BASE + 6], Element_1[PACKED_BASE + 7], Element_1[PACKED_BASE + 8]
-							if typeof(PACKED_1) ~= "boolean" or typeof(PACKED_2) ~= "boolean" or typeof(PACKED_3) ~= "boolean" or typeof(PACKED_4) ~= "boolean" or typeof(PACKED_5) ~= "boolean" or typeof(PACKED_6) ~= "boolean" or typeof(PACKED_7) ~= "boolean" or typeof(PACKED_8) ~= "boolean" then
-								for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
-									local PACKED_ITEM = Element_1[PACKED_INDEX]
-									if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-								end
-							end
-							local PACKED_BITS = 0
-							if PACKED_1 then PACKED_BITS += 1 end
-							if PACKED_2 then PACKED_BITS += 2 end
-							if PACKED_3 then PACKED_BITS += 4 end
-							if PACKED_4 then PACKED_BITS += 8 end
-							if PACKED_5 then PACKED_BITS += 16 end
-							if PACKED_6 then PACKED_BITS += 32 end
-							if PACKED_7 then PACKED_BITS += 64 end
-							if PACKED_8 then PACKED_BITS += 128 end
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
-						end
-						if PACKED_LENGTH % 8 ~= 0 then
-							local PACKED_BASE = PACKED_WHOLE * 8
-							local PACKED_BITS = 0
-							for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
-								local PACKED_ITEM = Element_1[PACKED_BASE + PACKED_BIT + 1]
-								if typeof(PACKED_ITEM) ~= "boolean" then error(`Expected Element_1[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
-								if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
-							end
-							buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
-						end
-					end
-					-- END ARRAY
-				end
-				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	PackedOptional = {
-		Read = function(Buffer: buffer): (PackedOptional)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (PackedOptional)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: PackedOptional
-				-- START ARRAY
-				local Length = ReadVarLength()
-				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
-					-- Read BLOCK: 1 bytes
-				local ARRAY_START_1 = Read(1 * Length)
-				local BITFIELD_2_0
-				for Slot_1 = 1, Length do
-					-- Item_1: PackedOptional
-					local Item_1
-					-- Read 1
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					BITFIELD_2_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_2_0, 0x01) then
-						-- Read BLOCK: 1 bytes
-						local BLOCK_START = Read(1)
-						local BITFIELD_3_0
-						-- Item_1: PackedOptional
-						BITFIELD_3_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-						Item_1 = bit32.btest(BITFIELD_3_0, 0x01)
-					end
-					Value[Slot_1] = Item_1
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: PackedOptional
-		end,
-		Write = function(Value: PackedOptional): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Value: PackedOptional
-				-- START ARRAY
-				if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
-				WriteVarLength(#Value)
-					-- Allocate BLOCK: 1 bytes
-				local ARRAY_START_1 = Allocate(1 * #Value)
-				local BITFIELD_2_0_OFFSET
-				local BITFIELD_2_0
-				for Index = 1, #Value do
-					local Item_1 = Value[Index]
-					-- Item_1: PackedOptional
-					-- Allocate 1
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					BITFIELD_2_0 = 0
-					BITFIELD_2_0_OFFSET = OPERATION_OFFSET_0
-					if Item_1 ~= nil then BITFIELD_2_0 += 0x01 end
-					if Item_1 ~= nil then
-						-- Allocate BLOCK: 1 bytes
-						local BLOCK_START = Allocate(1)
-						local BITFIELD_3_0
-						-- Item_1: PackedOptional
-						if typeof(Item_1) ~= "boolean" then
-							error(`Expected Item_1 to be of type boolean, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-						end
-						BITFIELD_3_0 = 0
-						if Item_1 then BITFIELD_3_0 += 0x01 end
-						buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_3_0)
-					end
-					buffer.writeu8(SendBuffer, BITFIELD_2_0_OFFSET, BITFIELD_2_0)
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	RateLimited = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Reliable[0] ~= nil then
-				warn("[BlinkBlox]: \"RateLimited\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[0] = Listener
-			local Pending = Queue.Reliable[0]
-			Queue.Reliable[0] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "RateLimited", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[0] == Listener then
-					Events.Reliable[0] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: number): ()
-			local BOUND_LISTENER = Events.Reliable[0]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "RateLimited"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "RateLimited", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[0] < 256 then
-					table.insert(Queue.Reliable[0], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	RateLimitedPoll = {
-		Iter = function(): () -> (number, Player, number)
-			local index = 0
-			local queue = Queue.Reliable[1]
-			return function (): (number, Player, number)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		Next = function(): () -> (number, Player, number)
-			local index = 0
-			local queue = Queue.Reliable[1]
-			return function (): (number, Player, number)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
-		end
-	},
-	UnreliableOversize = {
-		On = function(Listener: (Player: Player, Value: string) -> ()): () -> ()
-			if Events.Unreliable[2] ~= nil then
-				warn("[BlinkBlox]: \"UnreliableOversize\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[2] = Listener
-			return function (): ()
-				if Events.Unreliable[2] == Listener then
-					Events.Unreliable[2] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: string): ()
-			local BOUND_LISTENER = Events.Unreliable[2]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "UnreliableOversize"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "UnreliableOversize", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		end
-	},
-	UnreliableInstances = {
-		On = function(Listener: (Player: Player, Value1: buffer, Value2: { Instance }) -> ()): () -> ()
-			if Events.Unreliable[3] ~= nil then
-				warn("[BlinkBlox]: \"UnreliableInstances\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[3] = Listener
-			return function (): ()
-				if Events.Unreliable[3] == Listener then
-					Events.Unreliable[3] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value1: buffer, Value2: { Instance }): ()
-			local BOUND_LISTENER = Events.Unreliable[3]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "UnreliableInstances"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value1, Value2)
-				if not ListenerRan and not ListenerFailed(Player, "UnreliableInstances", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		end
-	},
-	RateLimitedCall = {
-		On = function(Listener: (Player, number) -> (number)): ()
-			if Events.Reliable[2] ~= nil then
-				warn("[BlinkBlox]: \"RateLimitedCall\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[2] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
-				local ReturnValue: number;
-				local Success, Error = pcall(function ()
-					ReturnValue = Listener(Player, Value)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_RateLimitedCall, ReturnValue, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 2)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "RateLimitedCall", Error) then warn(`"RateLimitedCall" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[2] or {}
-				Queue.Reliable[2] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[2](table.unpack(Arguments, 1, Arguments.n))
-				end
-			end)
-		end
-	},
-	ConcurrentCall = {
-		On = function(Listener: (Player, number) -> (number)): ()
-			if Events.Reliable[3] ~= nil then
-				warn("[BlinkBlox]: \"ConcurrentCall\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[3] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
-				local ReturnValue: number;
-				local Success, Error = pcall(function ()
-					ReturnValue = Listener(Player, Value)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_ConcurrentCall, ReturnValue, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 3)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "ConcurrentCall", Error) then warn(`"ConcurrentCall" encountered an error, {Error}`) end
-				end
-				ConcurrencyRelease(Player, 3)
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[3] or {}
-				Queue.Reliable[3] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[3](table.unpack(Arguments, 1, Arguments.n))
-				end
-			end)
-		end
-	},
-	MapNested = {
-		Read = function(Buffer: buffer): (MapNested)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (MapNested)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: MapNested
-				local Value = {}
-				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
-				for _ = 1, Elements_1 do
-					-- Key_1: MapNested
-					local Length = ReadVarLength()
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Element_1: MapNested
-					local Element_1 = {}
-					local OFFSET_0 = Read(2)
-					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
-					if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
-					for _ = 1, Elements_2 do
-						-- Key_2: MapSimple
-						local Length = ReadVarLength()
-						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-						local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-						-- Element_2: MapSimple
-						local OFFSET_0 = Read(1)
-						local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_0)
-						Element_1[Key_2] = Element_2
-					end
-					Value[Key_1] = Element_1
-				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: MapNested
-		end,
-		Write = function(Value: MapNested): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: MapNested
-				local Elements_1 = 0
-				for Key_1, Element_1 in Value do
-					Elements_1 += 1
-					-- Key_1: MapNested
-					if typeof(Key_1) ~= "string" then
-						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					local Length = #Key_1
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					WriteVarLength(Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
-					-- Element_1: MapNested
-					local OFFSET_0 = Allocate(2)
-					local Elements_2 = 0
-					for Key_2, Element_2 in Element_1 do
-						Elements_2 += 1
-						-- Key_2: MapSimple
-						if typeof(Key_2) ~= "string" then
-							error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.{if type(Key_2) == "table" or type(Key_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-						end
-						local Length = #Key_2
-						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						WriteVarLength(Length)
-						Allocate(Length)
-						buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
-						-- Element_2: MapSimple
-						if typeof(Element_2) ~= "number" then
-							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.{if type(Element_2) == "table" or type(Element_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-						end
-						local OFFSET_0 = Allocate(1)
-						buffer.writeu8(SendBuffer, OFFSET_0, Element_2)
-					end
-					if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
-					buffer.writeu16(SendBuffer, OFFSET_0, Elements_2)
-				end
-				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	Standalone = {
-		Read = function(Buffer: buffer): (Standalone)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (Standalone)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: Standalone
-				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
-				-- Value.One: One
-				Value.One = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				-- Value.Two: Two
-				Value.Two = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				-- Value.Three: Three
-				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				do
-					-- Value.Event: Event
-					BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-					local Tag = bit32.extract(BITFIELD_1_0, 0, 2)
-					Value.Event = true :: any
-					if Tag == 0 then
-						-- Read BLOCK: 8 bytes
-						local BLOCK_START = Read(8)
-						-- Value.Event: Join
-						Value.Event = {Name = false, UserId = false} :: any
-						do
-							-- Value.Event.Name: Name
-							local Length = ReadVarLength()
-							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-							Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
-						end
-						-- Value.Event.UserId: UserId
-						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-						Value.Event.Type = "Join"
-					elseif Tag == 1 then
-						-- Read BLOCK: 8 bytes
-						local BLOCK_START = Read(8)
-						-- Value.Event: Chat
-						Value.Event = {UserId = false, Message = false} :: any
-						-- Value.Event.UserId: UserId
-						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-						do
-							-- Value.Event.Message: Message
-							local Length = ReadVarLength()
-							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-							Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
-						end
-						Value.Event.Type = "Chat"
-					elseif Tag == 2 then
-						-- Read BLOCK: 8 bytes
-						local BLOCK_START = Read(8)
-						-- Value.Event: Leave
-						Value.Event = {UserId = false} :: any
-						-- Value.Event.UserId: UserId
-						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-						Value.Event.Type = "Leave"
-					else
-						error(`Unexpected variant: {Tag}`)
-					end
-				end
-				-- Value.Nested: Nested
-				Value.Nested = {Four = false, Five = false} :: any
-				do
-					-- Value.Nested.Four: Four
-					local Length = ReadVarLength()
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				end
-				do
-					-- Value.Nested.Five: Five
-					local Length = ReadVarLength()
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: Standalone
-		end,
-		Write = function(Value: Standalone): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				local BITFIELD_1_0
-				-- Value: Standalone
-				-- Value.One: One
-				if typeof(Value.One) ~= "number" then
-					error(`Expected Value.One to be of type number, got {type(Value.One)} instead.{if type(Value.One) == "table" or type(Value.One) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.One)
-				-- Value.Two: Two
-				if typeof(Value.Two) ~= "number" then
-					error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.{if type(Value.Two) == "table" or type(Value.Two) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Two)
-				-- Value.Three: Three
-				if typeof(Value.Three) ~= "number" then
-					error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.{if type(Value.Three) == "table" or type(Value.Three) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
-				-- Value.Event: Event
-				BITFIELD_1_0 = 0
-				if Value.Event.Type == "Join" then
-					-- Allocate BLOCK: 8 bytes
-					local BLOCK_START = Allocate(8)
-					-- Value.Event: Join
-					do
-						-- Value.Event.Name: Name
-						if typeof(Value.Event.Name) ~= "string" then
-							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.{if type(Value.Event.Name) == "table" or type(Value.Event.Name) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-						end
-						local Length = #Value.Event.Name
-						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						WriteVarLength(Length)
-						Allocate(Length)
-						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
-					end
-					-- Value.Event.UserId: UserId
-					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
-				elseif Value.Event.Type == "Chat" then
-					-- Allocate BLOCK: 8 bytes
-					local BLOCK_START = Allocate(8)
-					BITFIELD_1_0 += 1
-					-- Value.Event: Chat
-					-- Value.Event.UserId: UserId
-					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
-					do
-						-- Value.Event.Message: Message
-						if typeof(Value.Event.Message) ~= "string" then
-							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.{if type(Value.Event.Message) == "table" or type(Value.Event.Message) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-						end
-						local Length = #Value.Event.Message
-						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						WriteVarLength(Length)
-						Allocate(Length)
-						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
-					end
-				elseif Value.Event.Type == "Leave" then
-					-- Allocate BLOCK: 8 bytes
-					local BLOCK_START = Allocate(8)
-					BITFIELD_1_0 += 2
-					-- Value.Event: Leave
-					-- Value.Event.UserId: UserId
-					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
-				else
-					error(`Unexpected variant: {Value.Event.Type}`)
-				end
-				-- Value.Nested: Nested
-				do
-					-- Value.Nested.Four: Four
-					if typeof(Value.Nested.Four) ~= "string" then
-						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.{if type(Value.Nested.Four) == "table" or type(Value.Nested.Four) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					local Length = #Value.Nested.Four
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					WriteVarLength(Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
-				end
-				do
-					-- Value.Nested.Five: Five
-					if typeof(Value.Nested.Five) ~= "string" then
-						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.{if type(Value.Nested.Five) == "table" or type(Value.Nested.Five) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					local Length = #Value.Nested.Five
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					WriteVarLength(Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SendOccupiedCell = {
-		Fire = function(Player: Player, Value: Vector3): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: Vector3): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: Vector3): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: Vector3): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	ClientPollEvent = {
-		Iter = function(): () -> (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
-			local index = 0
-			local queue = Queue.Reliable[5]
-			return function (): (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		Next = function(): () -> (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
-			local index = 0
-			local queue = Queue.Reliable[5]
-			return function (): (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
-		end
-	},
-	ClientUnreliablePollEvent = {
-		Iter = function(): () -> (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
-			local index = 0
-			local queue = Queue.Unreliable[4]
-			return function (): (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		Next = function(): () -> (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
-			local index = 0
-			local queue = Queue.Unreliable[4]
-			return function (): (number, Player, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } })
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
-		end
-	},
-	ClientEmptyPollEvent = {
-		Iter = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[6]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		Next = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[6]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
-		end
-	},
-	ClientEmptyUnreliablePollEvent = {
-		Iter = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Unreliable[5]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		Next = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Unreliable[5]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
-		end
-	},
-	ServerPollEvent = {
-		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	ServerUnreliablePollEvent = {
-		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
-			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
-			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
-			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
-			if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	ServerEmptyPollEvent = {
-		Fire = function(Player: Player, Value: nil): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	ServerEmptyUnreliablePollEvent = {
-		Fire = function(Player: Player, Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
-			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
-			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		FireList = function(List: {Player}, Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
-			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
-			if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	ClientEmptyEvent = {
-		On = function(Listener: (Player: Player, Value: nil) -> ()): () -> ()
-			if Events.Reliable[9] ~= nil then
-				warn("[BlinkBlox]: \"ClientEmptyEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[9] = Listener
-			local Pending = Queue.Reliable[9]
-			Queue.Reliable[9] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "ClientEmptyEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[9] == Listener then
-					Events.Reliable[9] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: nil): ()
-			local BOUND_LISTENER = Events.Reliable[9]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "ClientEmptyEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "ClientEmptyEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[9] < 256 then
-					table.insert(Queue.Reliable[9], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	ClientEmptyUnreliableEvent = {
-		On = function(Listener: (Player: Player, Value: nil) -> ()): () -> ()
-			if Events.Unreliable[8] ~= nil then
-				warn("[BlinkBlox]: \"ClientEmptyUnreliableEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[8] = Listener
-			return function (): ()
-				if Events.Unreliable[8] == Listener then
-					Events.Unreliable[8] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: nil): ()
-			local BOUND_LISTENER = Events.Unreliable[8]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "ClientEmptyUnreliableEvent"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "ClientEmptyUnreliableEvent", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		end
-	},
-	EmptyEvent = {
-		Fire = function(Player: Player, Value: nil): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_EmptyEvent(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_EmptyEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_EmptyEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_EmptyEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	EmptyUnreliableEvent = {
-		Fire = function(Player: Player, Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
-			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
-			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		FireList = function(List: {Player}, Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
-			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: nil): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
-			if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	EmptyFunction = {
-		On = function(Listener: (Player, nil) -> (nil)): ()
-			if Events.Reliable[11] ~= nil then
-				warn("[BlinkBlox]: \"EmptyFunction\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[11] = function(Player: Player, Value: nil, InvocationIdentifier: number): ()
-				local ReturnValue: nil;
-				local Success, Error = pcall(function ()
-					ReturnValue = Listener(Player, Value)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_EmptyFunction, ReturnValue, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 11)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "EmptyFunction", Error) then warn(`"EmptyFunction" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[11] or {}
-				Queue.Reliable[11] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[11](table.unpack(Arguments, 1, Arguments.n))
-				end
-			end)
-		end
-	},
-	UnitFunction = {
-		On = function(Listener: (Player, nil) -> (nil)): ()
-			if Events.Reliable[12] ~= nil then
-				warn("[BlinkBlox]: \"UnitFunction\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[12] = function(Player: Player, Value: nil, InvocationIdentifier: number): ()
-				local Value: nil;
-				local Success, Error = pcall(function ()
-					Value = Listener(Player, Value)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_UnitFunction, Value, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 12)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "UnitFunction", Error) then warn(`"UnitFunction" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[12] or {}
-				Queue.Reliable[12] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[12](table.unpack(Arguments, 1, Arguments.n))
-				end
-			end)
-		end
-	},
-	Flags8 = {
-		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_Flags8(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags8(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags8(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags8(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	Flags16 = {
-		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_Flags16(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags16(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags16(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags16(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	Flags32 = {
-		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_Flags32(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags32(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags32(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags32(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	Flags33 = {
-		Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_Flags33(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags33(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags33(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Flags33(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	DynamicMap = {
-		Fire = function(Player: Player, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_DynamicMap(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: {[number]: { Static: number, Dynamic: buffer }}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_DynamicMap(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_DynamicMap(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_DynamicMap(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	DynamicArray = {
-		Fire = function(Player: Player, Value: { { Static: number, Dynamic: buffer } }): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_DynamicArray(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: { { Static: number, Dynamic: buffer } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_DynamicArray(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: { { Static: number, Dynamic: buffer } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_DynamicArray(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { { Static: number, Dynamic: buffer } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_DynamicArray(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	PlayerEvent = {
-		Fire = function(Player: Player, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_PlayerEvent(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_PlayerEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_PlayerEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_PlayerEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	Booleans = {
-		On = function(Listener: (Player: Player, Value: { boolean }) -> ()): () -> ()
-			if Events.Reliable[20] ~= nil then
-				warn("[BlinkBlox]: \"Booleans\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[20] = Listener
-			local Pending = Queue.Reliable[20]
-			Queue.Reliable[20] = {}
-			for _, Arguments in Pending do
-				Spawn(RunListener, "Booleans", Listener, table.unpack(Arguments, 1, Arguments.n))
-			end
-			return function (): ()
-				if Events.Reliable[20] == Listener then
-					Events.Reliable[20] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: { boolean }): ()
-			local BOUND_LISTENER = Events.Reliable[20]
-			if BOUND_LISTENER ~= nil then
-				Spawn(RunListener, "Booleans", BOUND_LISTENER, Player, Value)
-			else
-				if #Queue.Reliable[20] < 256 then
-					table.insert(Queue.Reliable[20], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	Generic = {
-		Fire = function(Player: Player, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_Generic(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Generic(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Generic(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Generic(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	GenericArray = {
-		Fire = function(Player: Player, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_GenericArray(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_GenericArray(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_GenericArray(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_GenericArray(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	Unknown = {
-		Fire = function(Player: Player, Value: any): ()
-			LoadPlayer(Player)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Unknown, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: any): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Unknown(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: any): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Unknown(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: any): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Unknown(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	MapEvent = {
-		Fire = function(Player: Player, Value: {[string]: number}): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_MapEvent(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: {[string]: number}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: {[string]: number}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: {[string]: number}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	MapStructEvent = {
-		Fire = function(Player: Player, Value: { Map: {[string]: number} }): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_MapStructEvent(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: { Map: {[string]: number} }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapStructEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: { Map: {[string]: number} }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapStructEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { Map: {[string]: number} }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapStructEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	MapComplexEvent = {
-		Fire = function(Player: Player, Value: {[string]: { number }}): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: {[string]: { number }}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: {[string]: { number }}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: {[string]: { number }}): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	MapReferenceEvent = {
-		Fire = function(Player: Player, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	ArrayPrimitive = {
-		Fire = function(Player: Player, Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
-			if not CheckUnreliableSize("ArrayPrimitive") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
-			if not CheckUnreliableSize("ArrayPrimitive") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		FireList = function(List: {Player}, Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
-			if not CheckUnreliableSize("ArrayPrimitive") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
-			if not CheckUnreliableSize("ArrayPrimitive") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	OptionalPrimitive = {
-		Fire = function(Player: Player, Value: number?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
-			if not CheckUnreliableSize("OptionalPrimitive") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value: number?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
-			if not CheckUnreliableSize("OptionalPrimitive") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		FireList = function(List: {Player}, Value: number?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
-			if not CheckUnreliableSize("OptionalPrimitive") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
-			if not CheckUnreliableSize("OptionalPrimitive") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	ManyReliableSync = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	ManyReliableAsync = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	ManyUnreliableSync = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
-			if not CheckUnreliableSize("ManyUnreliableSync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
-			if not CheckUnreliableSize("ManyUnreliableSync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
-			if not CheckUnreliableSize("ManyUnreliableSync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
-			if not CheckUnreliableSize("ManyUnreliableSync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	ManyUnreliableAsync = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
-			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
-			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
-			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
-			if not CheckUnreliableSize("ManyUnreliableAsync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	ReliableServer = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_ReliableServer(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReliableServer(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReliableServer(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReliableServer(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	ReliableServerAsync = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	ReliableClient = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Reliable[32] ~= nil then
-				warn("[BlinkBlox]: \"ReliableClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[32] = Listener
-			local Pending = Queue.Reliable[32]
-			Queue.Reliable[32] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "ReliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[32] == Listener then
-					Events.Reliable[32] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: number): ()
-			local BOUND_LISTENER = Events.Reliable[32]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "ReliableClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "ReliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[32] < 256 then
-					table.insert(Queue.Reliable[32], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	UnreliableServer = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
-			if not CheckUnreliableSize("UnreliableServer") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
-			if not CheckUnreliableSize("UnreliableServer") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
-			if not CheckUnreliableSize("UnreliableServer") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_UnreliableServer(Value)
-			if not CheckUnreliableSize("UnreliableServer") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	UnreliableServerAsync = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
-			if not CheckUnreliableSize("UnreliableServerAsync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
-			if not CheckUnreliableSize("UnreliableServerAsync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
-			if not CheckUnreliableSize("UnreliableServerAsync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
-			if not CheckUnreliableSize("UnreliableServerAsync") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	UnreliableClient = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Unreliable[16] ~= nil then
-				warn("[BlinkBlox]: \"UnreliableClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[16] = Listener
-			return function (): ()
-				if Events.Unreliable[16] == Listener then
-					Events.Unreliable[16] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: number): ()
-			local BOUND_LISTENER = Events.Unreliable[16]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "UnreliableClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "UnreliableClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		end
-	},
-	InstanceAny = {
-		Fire = function(Player: Player, Value: Instance): ()
-			LoadPlayer(Player)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceAny, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: Instance): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceAny(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: Instance): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceAny(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: Instance): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceAny(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	InstanceOfType = {
-		Fire = function(Player: Player, Value: Sound): ()
-			LoadPlayer(Player)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOfType, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: Sound): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceOfType(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: Sound): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceOfType(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: Sound): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceOfType(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	InstanceOptional = {
-		Fire = function(Player: Player, Value: Instance?): ()
-			LoadPlayer(Player)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOptional, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: Instance?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceOptional(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: Instance?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceOptional(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: Instance?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceOptional(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	InstanceOfClassWithDigit = {
-		Fire = function(Player: Player, Value: Motor6D): ()
-			LoadPlayer(Player)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit, Value)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: Motor6D): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: Motor6D): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: Motor6D): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	Reference = {
-		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_Reference(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Reference(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Reference(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Reference(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	ReferenceArray = {
-		Fire = function(Player: Player, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_ReferenceArray(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReferenceArray(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReferenceArray(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReferenceArray(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	ReferenceOptional = {
-		Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	RemoteFunction = {
-		On = function(Listener: (Player, number) -> (number)): ()
-			if Events.Reliable[40] ~= nil then
-				warn("[BlinkBlox]: \"RemoteFunction\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[40] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
-				local ReturnValue: number;
-				local Success, Error = pcall(function ()
-					ReturnValue = Listener(Player, Value)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_RemoteFunction, ReturnValue, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 40)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "RemoteFunction", Error) then warn(`"RemoteFunction" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[40] or {}
-				Queue.Reliable[40] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[40](table.unpack(Arguments, 1, Arguments.n))
-				end
-			end)
-		end
-	},
-	Tuple = {
-		Fire = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-			LoadPlayer(Player)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Tuple, Value1, Value2, Value3, Value4, Value5, Value6)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				error(Failure, 0)
-			end
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	TupleUnreliable = {
-		Fire = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
-			if not CheckUnreliableSize("TupleUnreliable") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
-			if not CheckUnreliableSize("TupleUnreliable") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		FireList = function(List: {Player}, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
-			if not CheckUnreliableSize("TupleUnreliable") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
-			if not CheckUnreliableSize("TupleUnreliable") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	TupleFunction = {
-		On = function(Listener: (Player, number, ("A" | "B" | "C" | "D"), number?, Instance, Instance?) -> (Instance?, Instance, number?, ("A" | "B" | "C" | "D"), number)): ()
-			if Events.Reliable[42] ~= nil then
-				warn("[BlinkBlox]: \"TupleFunction\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[42] = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, InvocationIdentifier: number): ()
-				local ReturnValue1: Instance?, ReturnValue2: Instance, ReturnValue3: number?, ReturnValue4: ("A" | "B" | "C" | "D"), ReturnValue5: number;
-				local Success, Error = pcall(function ()
-					ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5 = Listener(Player, Value1, Value2, Value3, Value4, Value5)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_TupleFunction, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 42)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "TupleFunction", Error) then warn(`"TupleFunction" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[42] or {}
-				Queue.Reliable[42] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[42](table.unpack(Arguments, 1, Arguments.n))
-				end
-			end)
-		end
-	},
-	AnotherScope = {
-		InScopeEvent = {
-			Fire = function(Player: Player, Value: number): ()
-				LoadPlayer(Player)
-				SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
-				SavePlayerBuffer(Player)
-			end,
-			FireAll = function(Value: number): ()
-				LoadScratch()
-				SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
-				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-				KeepScratch()
-				AppendShared(Buffer, Size, Instances)
-			end,
-			FireList = function(List: {Player}, Value: number): ()
-				LoadScratch()
-				SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
-				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-				KeepScratch()
-				for _, Player in List do
-					AppendPlayer(Player, Buffer, Size, Instances)
-				end
-			end,
-			FireExcept = function(Except: Player, Value: number): ()
-				LoadScratch()
-				SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
-				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-				KeepScratch()
-				for _, Player in Players:GetPlayers() do
-					if Player == Except then
-						continue
-					end
-					AppendPlayer(Player, Buffer, Size, Instances)
-				end
-			end,
-		},
-		ScopeWithinAnotherScope = {
-			InAnotherScopeEvent = {
-				Fire = function(Player: Player, Value: number): ()
-					LoadPlayer(Player)
-					SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
-					SavePlayerBuffer(Player)
-				end,
-				FireAll = function(Value: number): ()
-					LoadScratch()
-					SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
-					local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-					KeepScratch()
-					AppendShared(Buffer, Size, Instances)
-				end,
-				FireList = function(List: {Player}, Value: number): ()
-					LoadScratch()
-					SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
-					local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-					KeepScratch()
-					for _, Player in List do
-						AppendPlayer(Player, Buffer, Size, Instances)
-					end
-				end,
-				FireExcept = function(Except: Player, Value: number): ()
-					LoadScratch()
-					SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
-					local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-					KeepScratch()
-					for _, Player in Players:GetPlayers() do
-						if Player == Except then
-							continue
-						end
-						AppendPlayer(Player, Buffer, Size, Instances)
-					end
-				end,
-			},
-		},
-	},
-	ExampleScope = {
-		InScopeEvent = {
-			Fire = function(Player: Player, Value: number): ()
-				LoadPlayer(Player)
-				SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
-				SavePlayerBuffer(Player)
-			end,
-			FireAll = function(Value: number): ()
-				LoadScratch()
-				SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
-				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-				KeepScratch()
-				AppendShared(Buffer, Size, Instances)
-			end,
-			FireList = function(List: {Player}, Value: number): ()
-				LoadScratch()
-				SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
-				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-				KeepScratch()
-				for _, Player in List do
-					AppendPlayer(Player, Buffer, Size, Instances)
-				end
-			end,
-			FireExcept = function(Except: Player, Value: number): ()
-				LoadScratch()
-				SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
-				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-				KeepScratch()
-				for _, Player in Players:GetPlayers() do
-					if Player == Except then
-						continue
-					end
-					AppendPlayer(Player, Buffer, Size, Instances)
-				end
-			end,
-		},
-	},
-	Issue33 = {
-		Event = {
-			Fire = function(Player: Player, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
-				LoadPlayer(Player)
-				SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
-				SavePlayerBuffer(Player)
-			end,
-			FireAll = function(Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
-				LoadScratch()
-				SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
-				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-				KeepScratch()
-				AppendShared(Buffer, Size, Instances)
-			end,
-			FireList = function(List: {Player}, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
-				LoadScratch()
-				SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
-				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-				KeepScratch()
-				for _, Player in List do
-					AppendPlayer(Player, Buffer, Size, Instances)
-				end
-			end,
-			FireExcept = function(Except: Player, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
-				LoadScratch()
-				SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
-				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-				KeepScratch()
-				for _, Player in Players:GetPlayers() do
-					if Player == Except then
-						continue
-					end
-					AppendPlayer(Player, Buffer, Size, Instances)
-				end
-			end,
-		},
-	},
-	UnknownInbound = {
-		On = function(Listener: (Player: Player, Value: any) -> ()): () -> ()
-			if Events.Reliable[47] ~= nil then
-				warn("[BlinkBlox]: \"UnknownInbound\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[47] = Listener
-			local Pending = Queue.Reliable[47]
-			Queue.Reliable[47] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "UnknownInbound", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[47] == Listener then
-					Events.Reliable[47] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: any): ()
-			local BOUND_LISTENER = Events.Reliable[47]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "UnknownInbound"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "UnknownInbound", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[47] < 256 then
-					table.insert(Queue.Reliable[47], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	NamedTuple = {
-		Fire = function(Player: Player, chefId: number, dish: string, portions: number?): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(chefId: number, dish: string, portions: number?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, chefId: number, dish: string, portions: number?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, chefId: number, dish: string, portions: number?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	NamedTupleFunction = {
-		On = function(Listener: (Player, number, string) -> (number, string)): ()
-			if Events.Reliable[49] ~= nil then
-				warn("[BlinkBlox]: \"NamedTupleFunction\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[49] = function(Player: Player, Value1: number, Value2: string, InvocationIdentifier: number): ()
-				local ReturnValue1: number, ReturnValue2: string;
-				local Success, Error = pcall(function ()
-					ReturnValue1, ReturnValue2 = Listener(Player, Value1, Value2)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_NamedTupleFunction, ReturnValue1, ReturnValue2, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 49)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "NamedTupleFunction", Error) then warn(`"NamedTupleFunction" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[49] or {}
-				Queue.Reliable[49] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[49](table.unpack(Arguments, 1, Arguments.n))
-				end
-			end)
-		end
-	},
-	PartiallyNamedTuple = {
-		Fire = function(Player: Player, Value1: number, named: string, Value3: number): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value1: number, named: string, Value3: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value1: number, named: string, Value3: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value1: number, named: string, Value3: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	NeverAnswered = {
-		On = function(Listener: (Player, number) -> (number)): ()
-			if Events.Reliable[51] ~= nil then
-				warn("[BlinkBlox]: \"NeverAnswered\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[51] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
-				local ReturnValue: number;
-				local Success, Error = pcall(function ()
-					ReturnValue = Listener(Player, Value)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_NeverAnswered, ReturnValue, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 51)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "NeverAnswered", Error) then warn(`"NeverAnswered" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[51] or {}
-				Queue.Reliable[51] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[51](table.unpack(Arguments, 1, Arguments.n))
-				end
-			end)
-		end
-	},
-	AskClient = {
-		Invoke = function(Player: Player, Value: number): (number)
-			local InvocationIdentifier = InvokePlayer(Player, 52)
-			LoadPlayer(Player)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_AskClient, Value, InvocationIdentifier)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				ReleaseInvocation(PlayerInvocations[Player], InvocationIdentifier)
-				error(Failure, 0)
-			end
-			SavePlayerBuffer(Player)
-			ParkInvocation(PlayerInvocations[Player], InvocationIdentifier, coroutine.running())
-			TimeoutPlayerInvocation(Player, InvocationIdentifier, 3, "AskClient")
-			local Success, ReturnValue: number = coroutine.yield()
-			if Success ~= true then
-				error("There was an exception while processing \"AskClient\".")
-			end
-			return ReturnValue
-		end
-	},
-	RangedFromClient = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Reliable[53] ~= nil then
-				warn("[BlinkBlox]: \"RangedFromClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[53] = Listener
-			local Pending = Queue.Reliable[53]
-			Queue.Reliable[53] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "RangedFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[53] == Listener then
-					Events.Reliable[53] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: number): ()
-			local BOUND_LISTENER = Events.Reliable[53]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "RangedFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "RangedFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[53] < 256 then
-					table.insert(Queue.Reliable[53], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	RangedUnreliableFromClient = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Unreliable[18] ~= nil then
-				warn("[BlinkBlox]: \"RangedUnreliableFromClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[18] = Listener
-			return function (): ()
-				if Events.Unreliable[18] == Listener then
-					Events.Unreliable[18] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: number): ()
-			local BOUND_LISTENER = Events.Unreliable[18]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "RangedUnreliableFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "RangedUnreliableFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		end
-	},
-	RangedVectorFromClient = {
-		On = function(Listener: (Player: Player, Value: Vector3) -> ()): () -> ()
-			if Events.Reliable[54] ~= nil then
-				warn("[BlinkBlox]: \"RangedVectorFromClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[54] = Listener
-			local Pending = Queue.Reliable[54]
-			Queue.Reliable[54] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "RangedVectorFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[54] == Listener then
-					Events.Reliable[54] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: Vector3): ()
-			local BOUND_LISTENER = Events.Reliable[54]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "RangedVectorFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "RangedVectorFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[54] < 256 then
-					table.insert(Queue.Reliable[54], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	BadlyAnswered = {
-		On = function(Listener: (Player, number) -> (number)): ()
-			if Events.Reliable[55] ~= nil then
-				warn("[BlinkBlox]: \"BadlyAnswered\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[55] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
-				local ReturnValue: number;
-				local Success, Error = pcall(function ()
-					ReturnValue = Listener(Player, Value)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_BadlyAnswered, ReturnValue, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 55)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "BadlyAnswered", Error) then warn(`"BadlyAnswered" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[55] or {}
-				Queue.Reliable[55] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[55](table.unpack(Arguments, 1, Arguments.n))
-				end
-			end)
-		end
-	},
-	PlainFromClient = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Reliable[56] ~= nil then
-				warn("[BlinkBlox]: \"PlainFromClient\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[56] = Listener
-			local Pending = Queue.Reliable[56]
-			Queue.Reliable[56] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "PlainFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[56] == Listener then
-					Events.Reliable[56] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: number): ()
-			local BOUND_LISTENER = Events.Reliable[56]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "PlainFromClient"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "PlainFromClient", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[56] < 256 then
-					table.insert(Queue.Reliable[56], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	Unlistened = {
-		On = function(Listener: (Player: Player, Value: nil) -> ()): () -> ()
-			if Events.Reliable[57] ~= nil then
-				warn("[BlinkBlox]: \"Unlistened\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[57] = Listener
-			local Pending = Queue.Reliable[57]
-			Queue.Reliable[57] = {}
-			for _, Arguments in Pending do
-				Spawn(RunListener, "Unlistened", Listener, table.unpack(Arguments, 1, Arguments.n))
-			end
-			return function (): ()
-				if Events.Reliable[57] == Listener then
-					Events.Reliable[57] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: nil): ()
-			local BOUND_LISTENER = Events.Reliable[57]
-			if BOUND_LISTENER ~= nil then
-				Spawn(RunListener, "Unlistened", BOUND_LISTENER, Player, Value)
-			else
-				if #Queue.Reliable[57] < 256 then
-					table.insert(Queue.Reliable[57], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	Unanswered = {
-		On = function(Listener: (Player, nil) -> (nil)): ()
-			if Events.Reliable[58] ~= nil then
-				warn("[BlinkBlox]: \"Unanswered\" already has a listener. A function keeps only the newest one.")
-			end
-			Events.Reliable[58] = function(Player: Player, Value: nil, InvocationIdentifier: number): ()
-				local ReturnValue: nil;
-				local Success, Error = pcall(function ()
-					ReturnValue = Listener(Player, Value)
-				end)
-				LoadPlayer(Player)
-				if Success == true then
-					local Cursor, Instances = Mark()
-					Success, Error = pcall(SerdesFunctions.WriteFUNCTION_RETURN_Unanswered, ReturnValue, InvocationIdentifier)
-					if Success ~= true then
-						Rollback(Cursor, Instances)
-					end
-				end
-				if Success ~= true then
-					local Position = Allocate(3)
-					buffer.writeu8(SendBuffer, Position, 58)
-					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-					buffer.writeu8(SendBuffer, Position + 2, 0)
-					if not ListenerFailed(Player, "Unanswered", Error) then warn(`"Unanswered" encountered an error, {Error}`) end
-				end
-				SavePlayerBuffer(Player)
-			end
-			Spawn(function (): ()
-				local EventQueue = Queue.Reliable[58] or {}
-				Queue.Reliable[58] = nil
-				for Index, Arguments in EventQueue do
-					Events.Reliable[58](table.unpack(Arguments, 1, Arguments.n))
-				end
-			end)
-		end
-	},
-	QueuedHoles = {
-		Fire = function(Player: Player, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	OrderedToClient = {
-		Fire = function(Player: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
-			if not CheckUnreliableSize("OrderedToClient") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			buffer.writeu16(Buffer, 1, NextOrder(Player, 19))
-			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
-			if not CheckUnreliableSize("OrderedToClient") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 19))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireList = function(List: {Player}, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
-			if not CheckUnreliableSize("OrderedToClient") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 19))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-		FireExcept = function(Except: Player, Value: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_OrderedToClient(Value)
-			if not CheckUnreliableSize("OrderedToClient") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				buffer.writeu16(Buffer, 1, NextOrder(Player, 19))
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-	OptionalHoles = {
-		Read = function(Buffer: buffer): (OptionalHoles)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (OptionalHoles)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: OptionalHoles
-				-- START ARRAY
-				local Length = 3
-				local Value = table.create(Length)
-					-- Read BLOCK: 1 bytes
-				local ARRAY_START_1 = Read(1 * Length)
-				local BITFIELD_2_0
-				for Slot_1 = 1, Length do
-					-- Item_1: OptionalHoles
-					local Item_1
-					-- Read 1
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					BITFIELD_2_0 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-					if bit32.btest(BITFIELD_2_0, 0x01) then
-						-- Read BLOCK: 1 bytes
-						local BLOCK_START = Read(1)
-						-- Item_1: OptionalHoles
-						Item_1 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					end
-					Value[Slot_1] = Item_1
-				end
-				-- END ARRAY
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: OptionalHoles
-		end,
-		Write = function(Value: OptionalHoles): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Value: OptionalHoles
-				-- START ARRAY
-				for Key in Value do if type(Key) == "number" and Key > 3 then error(`Expected "Value" to hold at most 3 elements, got one at index {Key} instead.`) end end
-					-- Allocate BLOCK: 1 bytes
-				local ARRAY_START_1 = Allocate(1 * 3)
-				local BITFIELD_2_0_OFFSET
-				local BITFIELD_2_0
-				for Index = 1, 3 do
-					local Item_1 = Value[Index]
-					-- Item_1: OptionalHoles
-					-- Allocate 1
-					local OPERATION_OFFSET_0 = ARRAY_START_1
-					ARRAY_START_1 += 1
-					BITFIELD_2_0 = 0
-					BITFIELD_2_0_OFFSET = OPERATION_OFFSET_0
-					if Item_1 ~= nil then BITFIELD_2_0 += 0x01 end
-					if Item_1 ~= nil then
-						-- Allocate BLOCK: 1 bytes
-						local BLOCK_START = Allocate(1)
-						-- Item_1: OptionalHoles
-						if typeof(Item_1) ~= "number" then
-							error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-						end
-						buffer.writeu8(SendBuffer, BLOCK_START + 0, Item_1)
-					end
-					buffer.writeu8(SendBuffer, BITFIELD_2_0_OFFSET, BITFIELD_2_0)
-				end
-				-- END ARRAY
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	HalfFloat = {
-		Read = function(Buffer: buffer): (HalfFloat)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (HalfFloat)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: HalfFloat
-				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				local Value
-				local MantissaExponent = Encoded % 0x8000
-				if MantissaExponent == 0b0_11111_0000000000  then
-					if Encoded // 0x8000 == 1 then
-						Value = -math.huge
-					else
-						Value = math.huge
-					end
-				elseif MantissaExponent > 0b0_11111_0000000000 then
-					Value = 0 / 0
-				elseif MantissaExponent == 0b0_00000_0000000000   then
-					Value = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x400
-					local Exponent = MantissaExponent // 0x400
-					local Fraction;
-					if Exponent == 0 then
-						Fraction = Mantissa / 0x400
-					else
-						Fraction = Mantissa / 0x800 + 0.5
-					end
-					local Result = math.ldexp(Fraction, Exponent - 14)
-					Value = if Encoded // 0x8000 == 1 then -Result else Result
-				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: HalfFloat
-		end,
-		Write = function(Value: HalfFloat): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: HalfFloat
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value > 65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
-				elseif Value < -65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
-				elseif Value ~= Value then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
-				elseif Value == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value < 0 then 0x8000 else 0)
-				else
-					local float = Value
-					local Abosulte = math.abs(float)
-					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
-					local RoundedValue = (Abosulte // Interval) * Interval
-					local Fraction, Exponent = math.frexp(RoundedValue)
-					Exponent += 14
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800)
-					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
-						+ if float < 0 then 0x8000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
-				end
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	Float24 = {
-		Read = function(Buffer: buffer): (Float24)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (Float24)
-				-- Read BLOCK: 3 bytes
-				local BLOCK_START = Read(3)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: Float24
-				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
-				local Value
-				local MantissaExponent = Encoded % 0x800000
-				if MantissaExponent == 0x7E0000 then
-					Value = if Encoded >= 0x800000 then -math.huge else math.huge
-				elseif MantissaExponent > 0x7E0000 then
-					Value = 0 / 0
-				elseif MantissaExponent == 0 then
-					Value = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x20000
-					local Exponent = MantissaExponent // 0x20000
-					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
-					local Result = math.ldexp(Fraction, Exponent - 30)
-					Value = if Encoded >= 0x800000 then -Result else Result
-				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: Float24
-		end,
-		Write = function(Value: Float24): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 3 bytes
-				local BLOCK_START = Allocate(3)
-				-- Value: Float24
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value ~= Value then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
-					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
-				elseif Value == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
-					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Value < 0 then 0x80 else 0)
-				else
-					local float = Value
-					local Fraction, Exponent = math.frexp(math.abs(float))
-					Exponent += 30
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
-						else Fraction * 0x40000)
-					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
-						+ if float < 0 then 0x800000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
-					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
-				end
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	Unsigned24 = {
-		Read = function(Buffer: buffer): (Unsigned24)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (Unsigned24)
-				-- Read BLOCK: 3 bytes
-				local BLOCK_START = Read(3)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: Unsigned24
-				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: Unsigned24
-		end,
-		Write = function(Value: Unsigned24): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 3 bytes
-				local BLOCK_START = Allocate(3)
-				-- Value: Unsigned24
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Value)
-				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Value, 16))
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	Signed24 = {
-		Read = function(Buffer: buffer): (Signed24)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (Signed24)
-				-- Read BLOCK: 3 bytes
-				local BLOCK_START = Read(3)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: Signed24
-				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: Signed24
-		end,
-		Write = function(Value: Signed24): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 3 bytes
-				local BLOCK_START = Allocate(3)
-				-- Value: Signed24
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Value)
-				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Value, 16))
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	Vector24 = {
-		Read = function(Buffer: buffer): (Vector24)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (Vector24)
-				-- Read BLOCK: 9 bytes
-				local BLOCK_START = Read(9)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: Vector24
-				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
-				local X
-				local MantissaExponent = Encoded % 0x800000
-				if MantissaExponent == 0x7E0000 then
-					X = if Encoded >= 0x800000 then -math.huge else math.huge
-				elseif MantissaExponent > 0x7E0000 then
-					X = 0 / 0
-				elseif MantissaExponent == 0 then
-					X = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x20000
-					local Exponent = MantissaExponent // 0x20000
-					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
-					local Result = math.ldexp(Fraction, Exponent - 30)
-					X = if Encoded >= 0x800000 then -Result else Result
-				end
-				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
-				local Y
-				MantissaExponent = Encoded % 0x800000
-				if MantissaExponent == 0x7E0000 then
-					Y = if Encoded >= 0x800000 then -math.huge else math.huge
-				elseif MantissaExponent > 0x7E0000 then
-					Y = 0 / 0
-				elseif MantissaExponent == 0 then
-					Y = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x20000
-					local Exponent = MantissaExponent // 0x20000
-					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
-					local Result = math.ldexp(Fraction, Exponent - 30)
-					Y = if Encoded >= 0x800000 then -Result else Result
-				end
-				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
-				local Z
-				MantissaExponent = Encoded % 0x800000
-				if MantissaExponent == 0x7E0000 then
-					Z = if Encoded >= 0x800000 then -math.huge else math.huge
-				elseif MantissaExponent > 0x7E0000 then
-					Z = 0 / 0
-				elseif MantissaExponent == 0 then
-					Z = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x20000
-					local Exponent = MantissaExponent // 0x20000
-					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
-					local Result = math.ldexp(Fraction, Exponent - 30)
-					Z = if Encoded >= 0x800000 then -Result else Result
-				end
-				local Value = Vector3.new(X, Y, Z)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: Vector24
-		end,
-		Write = function(Value: Vector24): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 9 bytes
-				local BLOCK_START = Allocate(9)
-				-- Value: Vector24
-				if typeof(Value) ~= "Vector3" then
-					error(`Expected Value to be of type Vector3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				local Vector = Value
-				if Vector.X ~= Vector.X then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
-					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
-				elseif Vector.X == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
-					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Vector.X < 0 then 0x80 else 0)
-				else
-					local float = Vector.X
-					local Fraction, Exponent = math.frexp(math.abs(float))
-					Exponent += 30
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
-						else Fraction * 0x40000)
-					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
-						+ if float < 0 then 0x800000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
-					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
-				end
-				if Vector.Y ~= Vector.Y then
-					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0x0001)
-					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, 0xFE)
-				elseif Vector.Y == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0)
-					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, if 1 / Vector.Y < 0 then 0x80 else 0)
-				else
-					local float = Vector.Y
-					local Fraction, Exponent = math.frexp(math.abs(float))
-					Exponent += 30
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
-						else Fraction * 0x40000)
-					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
-						+ if float < 0 then 0x800000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 3, Result)
-					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, bit32.rshift(Result, 16))
-				end
-				if Vector.Z ~= Vector.Z then
-					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0x0001)
-					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, 0xFE)
-				elseif Vector.Z == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0)
-					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, if 1 / Vector.Z < 0 then 0x80 else 0)
-				else
-					local float = Vector.Z
-					local Fraction, Exponent = math.frexp(math.abs(float))
-					Exponent += 30
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
-						else Fraction * 0x40000)
-					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
-						+ if float < 0 then 0x800000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 6, Result)
-					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, bit32.rshift(Result, 16))
-				end
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	QuatCFrame24 = {
-		Read = function(Buffer: buffer): (QuatCFrame24)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (QuatCFrame24)
-				-- Read BLOCK: 16 bytes
-				local BLOCK_START = Read(16)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: QuatCFrame24
-				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readu8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
-				local X
-				local MantissaExponent = Encoded % 0x800000
-				if MantissaExponent == 0x7E0000 then
-					X = if Encoded >= 0x800000 then -math.huge else math.huge
-				elseif MantissaExponent > 0x7E0000 then
-					X = 0 / 0
-				elseif MantissaExponent == 0 then
-					X = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x20000
-					local Exponent = MantissaExponent // 0x20000
-					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
-					local Result = math.ldexp(Fraction, Exponent - 30)
-					X = if Encoded >= 0x800000 then -Result else Result
-				end
-				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 3) + buffer.readu8(RecieveBuffer, BLOCK_START + 3 + 2) * 0x10000
-				local Y
-				MantissaExponent = Encoded % 0x800000
-				if MantissaExponent == 0x7E0000 then
-					Y = if Encoded >= 0x800000 then -math.huge else math.huge
-				elseif MantissaExponent > 0x7E0000 then
-					Y = 0 / 0
-				elseif MantissaExponent == 0 then
-					Y = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x20000
-					local Exponent = MantissaExponent // 0x20000
-					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
-					local Result = math.ldexp(Fraction, Exponent - 30)
-					Y = if Encoded >= 0x800000 then -Result else Result
-				end
-				Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 6) + buffer.readu8(RecieveBuffer, BLOCK_START + 6 + 2) * 0x10000
-				local Z
-				MantissaExponent = Encoded % 0x800000
-				if MantissaExponent == 0x7E0000 then
-					Z = if Encoded >= 0x800000 then -math.huge else math.huge
-				elseif MantissaExponent > 0x7E0000 then
-					Z = 0 / 0
-				elseif MantissaExponent == 0 then
-					Z = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x20000
-					local Exponent = MantissaExponent // 0x20000
-					local Fraction = if Exponent == 0 then Mantissa / 0x20000 else Mantissa / 0x40000 + 0.5
-					local Result = math.ldexp(Fraction, Exponent - 30)
-					Z = if Encoded >= 0x800000 then -Result else Result
-				end
-				local QIndex = buffer.readu8(RecieveBuffer, BLOCK_START + 9)
-				local QA = buffer.readi16(RecieveBuffer, BLOCK_START + 10)
-				local QB = buffer.readi16(RecieveBuffer, BLOCK_START + 12)
-				local QC = buffer.readi16(RecieveBuffer, BLOCK_START + 14)
-				local Value = UnpackRotation(X, Y, Z, QIndex, QA, QB, QC)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: QuatCFrame24
-		end,
-		Write = function(Value: QuatCFrame24): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 16 bytes
-				local BLOCK_START = Allocate(16)
-				-- Value: QuatCFrame24
-				if typeof(Value) ~= "CFrame" then
-					error(`Expected Value to be of type CFrame, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				local Position = Value.Position
-				local QIndex, QA, QB, QC = PackRotation(Value)
-				if Position.X ~= Position.X then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0x0001)
-					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, 0xFE)
-				elseif Position.X == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0)
-					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, if 1 / Position.X < 0 then 0x80 else 0)
-				else
-					local float = Position.X
-					local Fraction, Exponent = math.frexp(math.abs(float))
-					Exponent += 30
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
-						else Fraction * 0x40000)
-					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
-						+ if float < 0 then 0x800000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
-					buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Result, 16))
-				end
-				if Position.Y ~= Position.Y then
-					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0x0001)
-					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, 0xFE)
-				elseif Position.Y == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 3, 0)
-					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, if 1 / Position.Y < 0 then 0x80 else 0)
-				else
-					local float = Position.Y
-					local Fraction, Exponent = math.frexp(math.abs(float))
-					Exponent += 30
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
-						else Fraction * 0x40000)
-					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
-						+ if float < 0 then 0x800000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 3, Result)
-					buffer.writeu8(SendBuffer, BLOCK_START + 3 + 2, bit32.rshift(Result, 16))
-				end
-				if Position.Z ~= Position.Z then
-					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0x0001)
-					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, 0xFE)
-				elseif Position.Z == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 6, 0)
-					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, if 1 / Position.Z < 0 then 0x80 else 0)
-				else
-					local float = Position.Z
-					local Fraction, Exponent = math.frexp(math.abs(float))
-					Exponent += 30
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x20000 / math.ldexp(1, -Exponent)
-						else Fraction * 0x40000)
-					local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
-						+ if float < 0 then 0x800000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 6, Result)
-					buffer.writeu8(SendBuffer, BLOCK_START + 6 + 2, bit32.rshift(Result, 16))
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 9, QIndex)
-				buffer.writei16(SendBuffer, BLOCK_START + 10, QA)
-				buffer.writei16(SendBuffer, BLOCK_START + 12, QB)
-				buffer.writei16(SendBuffer, BLOCK_START + 14, QC)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	RangedFloat32 = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Reliable[60] ~= nil then
-				warn("[BlinkBlox]: \"RangedFloat32\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[60] = Listener
-			local Pending = Queue.Reliable[60]
-			Queue.Reliable[60] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "RangedFloat32", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[60] == Listener then
-					Events.Reliable[60] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: number): ()
-			local BOUND_LISTENER = Events.Reliable[60]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "RangedFloat32"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "RangedFloat32", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[60] < 256 then
-					table.insert(Queue.Reliable[60], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	RangedFloat16 = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Reliable[61] ~= nil then
-				warn("[BlinkBlox]: \"RangedFloat16\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[61] = Listener
-			local Pending = Queue.Reliable[61]
-			Queue.Reliable[61] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "RangedFloat16", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[61] == Listener then
-					Events.Reliable[61] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: number): ()
-			local BOUND_LISTENER = Events.Reliable[61]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "RangedFloat16"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "RangedFloat16", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[61] < 256 then
-					table.insert(Queue.Reliable[61], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	NamedLength = {
-		Fire = function(Player: Player, s: string, Length: number): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(s: string, Length: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, s: string, Length: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, s: string, Length: number): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_NamedLength(s, Length)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	LengthFirst = {
-		Fire = function(Player: Player, Length: number, s: string): ()
-			LoadPlayer(Player)
-			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
-			SavePlayerBuffer(Player)
-		end,
-		FireAll = function(Length: number, s: string): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
-		end,
-		FireList = function(List: {Player}, Length: number, s: string): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in List do
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-		FireExcept = function(Except: Player, Length: number, s: string): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				AppendPlayer(Player, Buffer, Size, Instances)
-			end
-		end,
-	},
-	FlagCarrier = {
-		Read = function(Buffer: buffer): (FlagCarrier)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (FlagCarrier)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: FlagCarrier
-				local Value = {Flags = false, Text = false, Kind = false} :: any
-				do
-					-- Value.Flags: Flags
-					Value.Flags = {}
-					local SET_BITS = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					Value.Flags.Length = bit32.btest(SET_BITS, 0x1);
-					Value.Flags.Index = bit32.btest(SET_BITS, 0x2);
-				end
-				do
-					-- Value.Text: Text
-					local Length = ReadVarLength()
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Text" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Text = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				end
-				do
-					-- Value.Kind: Kind
-					Value.Kind = true :: any
-					BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-					local Index = bit32.extract(BITFIELD_1_0, 0, 1)
-					if Index == 0 then
-						Value.Kind = "A"
-					elseif Index == 1 then
-						Value.Kind = "B"
-					else
-						error(`Unexpected enum: {Index}`)
-					end
-				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: FlagCarrier
-		end,
-		Write = function(Value: FlagCarrier): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				local BITFIELD_1_0
-				-- Value: FlagCarrier
-				do
-					-- Value.Flags: Flags
-					local SET_BITS = 0
-					if Value.Flags.Length == true then SET_BITS += 0x1 end
-					if Value.Flags.Index == true then SET_BITS += 0x2 end
-					buffer.writeu8(SendBuffer, BLOCK_START + 0, SET_BITS)
-				end
-				do
-					-- Value.Text: Text
-					if typeof(Value.Text) ~= "string" then
-						error(`Expected Value.Text to be of type string, got {type(Value.Text)} instead.{if type(Value.Text) == "table" or type(Value.Text) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					local Length = #Value.Text
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					WriteVarLength(Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Text, Length)
-				end
-				-- Value.Kind: Kind
-				BITFIELD_1_0 = 0
-				if Value.Kind == "A" then
-				elseif Value.Kind == "B" then
-					BITFIELD_1_0 += 1
-				else
-					error(`Unexpected enum: {Value.Kind}, expected one of "A" or "B".`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	RangedFloat24 = {
-		On = function(Listener: (Player: Player, Value: number) -> ()): () -> ()
-			if Events.Reliable[64] ~= nil then
-				warn("[BlinkBlox]: \"RangedFloat24\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[64] = Listener
-			local Pending = Queue.Reliable[64]
-			Queue.Reliable[64] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "RangedFloat24", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[64] == Listener then
-					Events.Reliable[64] = nil
-				end
-			end
-		end,
-		Predict = function(Player: Player, Value: number): ()
-			local BOUND_LISTENER = Events.Reliable[64]
-			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "RangedFloat24"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(BOUND_LISTENER, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "RangedFloat24", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			else
-				if #Queue.Reliable[64] < 256 then
-					table.insert(Queue.Reliable[64], table.pack(Player, Value))
-				end
-			end
-		end
-	},
-	FixedTenths = {
-		Read = function(Buffer: buffer): (FixedTenths)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (FixedTenths)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: FixedTenths
-				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				Value = Value / 10
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: FixedTenths
-		end,
-		Write = function(Value: FixedTenths): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: FixedTenths
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value * 10)
-				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.1, got {Value} instead.`) end
-				if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 6553.5 in steps of 0.1, got {Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	FixedRanged = {
-		Read = function(Buffer: buffer): (FixedRanged)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (FixedRanged)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: FixedRanged
-				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				Value = Value / 10
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: FixedRanged
-		end,
-		Write = function(Value: FixedRanged): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: FixedRanged
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value * 10)
-				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.1, got {Value} instead.`) end
-				if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 6553.5 in steps of 0.1, got {Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	FixedSigned = {
-		Read = function(Buffer: buffer): (FixedSigned)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (FixedSigned)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: FixedSigned
-				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= -400) then error(`Expected "Value" to be larger than or equal to -400, got {Value} instead.`) end
-				if not (Value <= 400) then error(`Expected "Value" to be smaller than or equal to 400, got {Value} instead.`) end
-				Value = Value / 4
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: FixedSigned
-		end,
-		Write = function(Value: FixedSigned): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: FixedSigned
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value * 4)
-				if not (Fixed >= -400) then error(`Expected "Value" to be larger than or equal to -100 in steps of 0.25, got {Value} instead.`) end
-				if not (Fixed <= 400) then error(`Expected "Value" to be smaller than or equal to 100 in steps of 0.25, got {Value} instead.`) end
-				buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	FixedCoarse = {
-		Read = function(Buffer: buffer): (FixedCoarse)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (FixedCoarse)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: FixedCoarse
-				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				Value = Value * 2.5
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: FixedCoarse
-		end,
-		Write = function(Value: FixedCoarse): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: FixedCoarse
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value / 2.5)
-				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 2.5, got {Value} instead.`) end
-				if not (Fixed <= 255) then error(`Expected "Value" to be smaller than or equal to 637.5 in steps of 2.5, got {Value} instead.`) end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	FixedTriple = {
-		Read = function(Buffer: buffer): (FixedTriple)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (FixedTriple)
-				-- Read BLOCK: 3 bytes
-				local BLOCK_START = Read(3)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: FixedTriple
-				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0) + buffer.readi8(RecieveBuffer, BLOCK_START + 0 + 2) * 0x10000
-				Value = Value / 1000
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: FixedTriple
-		end,
-		Write = function(Value: FixedTriple): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 3 bytes
-				local BLOCK_START = Allocate(3)
-				-- Value: FixedTriple
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value * 1000)
-				if not (Fixed >= -8388608) then error(`Expected "Value" to be larger than or equal to -8388.608 in steps of 0.001, got {Value} instead.`) end
-				if not (Fixed <= 8388607) then error(`Expected "Value" to be smaller than or equal to 8388.607 in steps of 0.001, got {Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
-				buffer.writeu8(SendBuffer, BLOCK_START + 0 + 2, bit32.rshift(Fixed, 16))
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	FixedWide = {
-		Read = function(Buffer: buffer): (FixedWide)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (FixedWide)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: FixedWide
-				local Value = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
-				if not (Value <= 100000) then error(`Expected "Value" to be smaller than or equal to 100000, got {Value} instead.`) end
-				Value = Value / 100
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: FixedWide
-		end,
-		Write = function(Value: FixedWide): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				-- Value: FixedWide
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value * 100)
-				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 0.01, got {Value} instead.`) end
-				if not (Fixed <= 100000) then error(`Expected "Value" to be smaller than or equal to 1000 in steps of 0.01, got {Value} instead.`) end
-				buffer.writeu32(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	FixedWhole = {
-		Read = function(Buffer: buffer): (FixedWhole)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (FixedWhole)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: FixedWhole
-				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: FixedWhole
-		end,
-		Write = function(Value: FixedWhole): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: FixedWhole
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value)
-				if not (Fixed >= 0) then error(`Expected "Value" to be larger than or equal to 0 in steps of 1, got {Value} instead.`) end
-				if not (Fixed <= 65535) then error(`Expected "Value" to be smaller than or equal to 65535 in steps of 1, got {Value} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SaturatedCount = {
-		Read = function(Buffer: buffer): (SaturatedCount)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SaturatedCount)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SaturatedCount
-				local Value = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= 1) then error(`Expected "Value" to be larger than or equal to 1, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SaturatedCount
-		end,
-		Write = function(Value: SaturatedCount): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: SaturatedCount
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value)
-				if not (Fixed >= 1) then Fixed = 1 elseif Fixed > 255 then Fixed = 255 end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SaturatedSigned = {
-		Read = function(Buffer: buffer): (SaturatedSigned)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SaturatedSigned)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SaturatedSigned
-				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
-				if not (Value <= 5) then error(`Expected "Value" to be smaller than or equal to 5, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SaturatedSigned
-		end,
-		Write = function(Value: SaturatedSigned): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: SaturatedSigned
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value)
-				if Fixed ~= Fixed then Fixed = 0 elseif Fixed < -5 then Fixed = -5 elseif Fixed > 5 then Fixed = 5 end
-				buffer.writei8(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SaturatedNegative = {
-		Read = function(Buffer: buffer): (SaturatedNegative)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SaturatedNegative)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SaturatedNegative
-				local Value = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= -10) then error(`Expected "Value" to be larger than or equal to -10, got {Value} instead.`) end
-				if not (Value <= -5) then error(`Expected "Value" to be smaller than or equal to -5, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SaturatedNegative
-		end,
-		Write = function(Value: SaturatedNegative): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: SaturatedNegative
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value)
-				if Fixed ~= Fixed then Fixed = -5 elseif Fixed < -10 then Fixed = -10 elseif Fixed > -5 then Fixed = -5 end
-				buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SaturatedTenths = {
-		Read = function(Buffer: buffer): (SaturatedTenths)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SaturatedTenths)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SaturatedTenths
-				local Value = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				if not (Value <= 1000) then error(`Expected "Value" to be smaller than or equal to 1000, got {Value} instead.`) end
-				Value = Value / 10
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SaturatedTenths
-		end,
-		Write = function(Value: SaturatedTenths): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: SaturatedTenths
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = math.round(Value * 10)
-				if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 1000 then Fixed = 1000 end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SaturatedHalf = {
-		Read = function(Buffer: buffer): (SaturatedHalf)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SaturatedHalf)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SaturatedHalf
-				local Encoded = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				local Value
-				local MantissaExponent = Encoded % 0x8000
-				if MantissaExponent == 0b0_11111_0000000000  then
-					if Encoded // 0x8000 == 1 then
-						Value = -math.huge
-					else
-						Value = math.huge
-					end
-				elseif MantissaExponent > 0b0_11111_0000000000 then
-					Value = 0 / 0
-				elseif MantissaExponent == 0b0_00000_0000000000   then
-					Value = if Encoded == 0 then 0 else -0
-				else
-					local Mantissa = MantissaExponent % 0x400
-					local Exponent = MantissaExponent // 0x400
-					local Fraction;
-					if Exponent == 0 then
-						Fraction = Mantissa / 0x400
-					else
-						Fraction = Mantissa / 0x800 + 0.5
-					end
-					local Result = math.ldexp(Fraction, Exponent - 14)
-					Value = if Encoded // 0x8000 == 1 then -Result else Result
-				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SaturatedHalf
-		end,
-		Write = function(Value: SaturatedHalf): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: SaturatedHalf
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = Value
-				if Fixed ~= Fixed then Fixed = 0 elseif Fixed < -65504 then Fixed = -65504 elseif Fixed > 65504 then Fixed = 65504 end
-				if Fixed > 65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
-				elseif Fixed < -65504 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
-				elseif Fixed ~= Fixed then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
-				elseif Fixed == 0 then
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Fixed < 0 then 0x8000 else 0)
-				else
-					local float = Fixed
-					local Abosulte = math.abs(float)
-					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
-					local RoundedValue = (Abosulte // Interval) * Interval
-					local Fraction, Exponent = math.frexp(RoundedValue)
-					Exponent += 14
-					local Scaled = math.round(if Exponent <= 0
-						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
-						else Fraction * 0x800)
-					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
-						+ if float < 0 then 0x8000 else 0
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
-				end
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	SaturatedUnit = {
-		Read = function(Buffer: buffer): (SaturatedUnit)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (SaturatedUnit)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: SaturatedUnit
-				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
-				if not (Value <= 1) then error(`Expected "Value" to be smaller than or equal to 1, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: SaturatedUnit
-		end,
-		Write = function(Value: SaturatedUnit): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				-- Value: SaturatedUnit
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
-				end
-				local Fixed = Value
-				if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 1 then Fixed = 1 end
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Fixed)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-	FixedStruct = {
-		Read = function(Buffer: buffer): (FixedStruct)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (FixedStruct)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: FixedStruct
-				local Value = {A = false, C = false} :: any
-				-- Value.A: A
-				Value.A = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				Value.A = Value.A / 10
-				-- Value.B: B
-				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				if bit32.btest(BITFIELD_1_0, 0x01) then
-					-- Read BLOCK: 2 bytes
-					local BLOCK_START = Read(2)
-					-- Value.B: B
-					Value.B = buffer.readi16(RecieveBuffer, BLOCK_START + 0)
-					if not (Value.B >= -20) then error(`Expected "Value.B" to be larger than or equal to -20, got {Value.B} instead.`) end
-					if not (Value.B <= 20) then error(`Expected "Value.B" to be smaller than or equal to 20, got {Value.B} instead.`) end
-					Value.B = Value.B / 2
-				end
-				do
-					-- Value.C: C
-					-- START ARRAY
-					local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-					if not (Length <= 4) then error(`Expected "Length" to be smaller than or equal to 4, got {Length} instead.`) end
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.C" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.C = table.create(Length)
-						-- Read BLOCK: 1 bytes
-					local ARRAY_START_1 = Read(1 * Length)
-					for Slot_1 = 1, Length do
-						-- Item_1: C
-						-- Read 1
-						local OPERATION_OFFSET_0 = ARRAY_START_1
-						ARRAY_START_1 += 1
-						local Item_1 = buffer.readu8(RecieveBuffer, OPERATION_OFFSET_0)
-						Value.C[Slot_1] = Item_1
-					end
-					-- END ARRAY
-				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: FixedStruct
-		end,
-		Write = function(Value: FixedStruct): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				local BITFIELD_1_0
-				-- Value: FixedStruct
-				do
-					-- Value.A: A
-					if typeof(Value.A) ~= "number" then
-						error(`Expected Value.A to be of type number, got {type(Value.A)} instead.`)
-					end
-					local Fixed = math.round(Value.A * 10)
-					if not (Fixed >= 0) then Fixed = 0 elseif Fixed > 65535 then Fixed = 65535 end
-					buffer.writeu16(SendBuffer, BLOCK_START + 0, Fixed)
-				end
-				-- Value.B: B
-				BITFIELD_1_0 = 0
-				if Value.B ~= nil then BITFIELD_1_0 += 0x01 end
-				if Value.B ~= nil then
-					-- Allocate BLOCK: 2 bytes
-					local BLOCK_START = Allocate(2)
-					-- Value.B: B
-					if typeof(Value.B) ~= "number" then
-						error(`Expected Value.B to be of type number, got {type(Value.B)} instead.`)
-					end
-					local Fixed = math.round(Value.B * 2)
-					if not (Fixed >= -20) then error(`Expected "Value.B" to be larger than or equal to -10 in steps of 0.5, got {Value.B} instead.`) end
-					if not (Fixed <= 20) then error(`Expected "Value.B" to be smaller than or equal to 10 in steps of 0.5, got {Value.B} instead.`) end
-					buffer.writei16(SendBuffer, BLOCK_START + 0, Fixed)
-				end
-				do
-					-- Value.C: C
-					-- START ARRAY
-					if not (#Value.C <= 4) then error(`Expected "#Value.C" to be smaller than or equal to 4, got {#Value.C} instead.`) end
-					buffer.writeu8(SendBuffer, BLOCK_START + 3, #Value.C)
-						-- Allocate BLOCK: 1 bytes
-					local ARRAY_START_1 = Allocate(1 * #Value.C)
-					for Index = 1, #Value.C do
-						local Item_1 = Value.C[Index]
-						-- Item_1: C
-						if typeof(Item_1) ~= "number" then
-							error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
-						end
-						local Fixed = math.round(Item_1)
-						if not (Fixed >= 0) then error(`Expected "Item_1" to be larger than or equal to 0 in steps of 1, got {Item_1} instead.`) end
-						if not (Fixed <= 255) then error(`Expected "Item_1" to be smaller than or equal to 255 in steps of 1, got {Item_1} instead.`) end
-						-- Allocate 1
-						local OPERATION_OFFSET_0 = ARRAY_START_1
-						ARRAY_START_1 += 1
-						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Fixed)
-					end
-					-- END ARRAY
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
-		end
-	},
-})
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

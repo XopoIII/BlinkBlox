@@ -160,7 +160,7 @@ function Serde.Map(Declaration: Parser.Map, Read: Blocks.Block, Write: Blocks.Bl
 	local ElementsVariable = `Elements_{Write.Indent}`
 	local ElementsAllocation = Write:Allocate(2)
 
-	Read:Line(`{Read:Declare(Variable)} = \{\}`)
+	Read:Line(`{Read:Declare(Variable)} = \{\} :: \{ [any]: any \}`)
 	Write:Line(`local {ElementsVariable} = 0`)
 	Types.u16.Read(ElementsVariable, Read)
 	--> The count is two bytes, and each entry is read by a trip round the loop below: without this, a
@@ -336,7 +336,9 @@ function Serde.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Block
 	if IsVariableSize then
 		Prefabs.EmitCapacityGuard(Read, "Length", Variable, Of, InstanceCapacity())
 	end
-	Read:Line(`{Read:Declare(Variable)} = table.create(Length)`)
+	--> Cast because the new type solver takes `table.create` for a list of unknown, which the reader
+	--> cannot return as the list of the declared type it is. Erased before bytecode.
+	Read:Line(`{Read:Declare(Variable)} = table.create(Length) :: \{any\}`)
 
 	if Size.PacksBooleans(Of :: any) then
 		PackedBooleans.Emit(Read, Write, Variable, if IsVariableSize then nil else Upper)

@@ -559,9 +559,9 @@ local function UnpackRotation(X: number, Y: number, Z: number, Index: number, A:
 	return CFrame.new(X, Y, Z, A, B, C, D)
 end
 
-local PACKED_ROWS = table.create(256)
+local PACKED_ROWS = table.create(256) :: { { boolean } }
 for Byte = 0, 255 do
-	local Row = table.create(8)
+	local Row = table.create(8) :: { boolean }
 	for Bit = 0, 7 do
 		Row[Bit + 1] = bit32.btest(Byte, bit32.lshift(1, Bit))
 	end
@@ -866,7 +866,7 @@ return {
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if Length * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 3 bytes
 				local ARRAY_START_1 = Read(3 * Length)
 				for Slot_1 = 1, Length do
@@ -1546,7 +1546,7 @@ return {
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if not (Length <= 8) then error(`Expected "Length" to be smaller than or equal to 8, got {Length} instead.`) end
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
 				for Slot_1 = 1, Length do
@@ -2495,7 +2495,7 @@ return {
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if Length * 19 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 19 bytes
 				local ARRAY_START_1 = Read(19 * Length)
 				for Slot_1 = 1, Length do
@@ -2614,19 +2614,19 @@ return {
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				for Slot_1 = 1, Length do
 					-- Item_1: MultiDimensionalArray
 					-- START ARRAY
 					local Length = ReadVarLength()
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Item_1 = table.create(Length)
+					local Item_1 = table.create(Length) :: {any}
 					for Slot_2 = 1, Length do
 						-- Item_2: MultiDimensionalArray
 						-- START ARRAY
 						local Length = ReadVarLength()
 						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-						local Item_2 = table.create(Length)
+						local Item_2 = table.create(Length) :: {any}
 							-- Read BLOCK: 1 bytes
 						local ARRAY_START_3 = Read(1 * Length)
 						for Slot_3 = 1, Length do
@@ -2861,7 +2861,7 @@ return {
 				-- Value: SizeFixedArray
 				-- START ARRAY
 				local Length = 4
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
 				for Slot_1 = 1, Length do
@@ -2931,7 +2931,7 @@ return {
 				local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				if not (Length <= 10) then error(`Expected "Length" to be smaller than or equal to 10, got {Length} instead.`) end
 				if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 2 bytes
 				local ARRAY_START_1 = Read(2 * Length)
 				for Slot_1 = 1, Length do
@@ -3294,7 +3294,7 @@ return {
 				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: SizeMap
-				local Value = {}
+				local Value = {} :: { [any]: any }
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
@@ -3369,7 +3369,7 @@ return {
 				local Length = LengthOffset + 300
 				if not (Length <= 400) then error(`Expected "Length" to be smaller than or equal to 400, got {Length} instead.`) end
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
 				for Slot_1 = 1, Length do
@@ -4191,7 +4191,7 @@ return {
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
 					if PACKED_BY_ROWS then
@@ -4300,7 +4300,7 @@ return {
 				-- Value: PackedFixed
 				-- START ARRAY
 				local Length = 10
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				do
 					local PACKED_OFFSET = BLOCK_START + 0
 					if PACKED_BY_ROWS then
@@ -4413,7 +4413,7 @@ return {
 				local Length = LengthOffset + 3
 				if not (Length <= 20) then error(`Expected "Length" to be smaller than or equal to 20, got {Length} instead.`) end
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
 					if PACKED_BY_ROWS then
@@ -4525,13 +4525,13 @@ return {
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				for Slot_1 = 1, Length do
 					-- Item_1: PackedNested
 					-- START ARRAY
 					local Length = ReadVarLength()
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Item_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Item_1 = table.create(Length)
+					local Item_1 = table.create(Length) :: {any}
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
 						if PACKED_BY_ROWS then
@@ -4650,7 +4650,7 @@ return {
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 				do
 					local PACKED_OFFSET = Read((Length + 7) // 8)
 					if PACKED_BY_ROWS then
@@ -4767,7 +4767,7 @@ return {
 					-- START ARRAY
 					local Length = ReadVarLength()
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.List" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.List = table.create(Length)
+					Value.List = table.create(Length) :: {any}
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
 						if PACKED_BY_ROWS then
@@ -4803,7 +4803,7 @@ return {
 					-- Value.Fixed: Fixed
 					-- START ARRAY
 					local Length = 3
-					Value.Fixed = table.create(Length)
+					Value.Fixed = table.create(Length) :: {any}
 					do
 						local PACKED_OFFSET = BLOCK_START + 1
 						if PACKED_BY_ROWS then
@@ -4974,7 +4974,7 @@ return {
 				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: PackedMap
-				local Value = {}
+				local Value = {} :: { [any]: any }
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Elements_1 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
@@ -4986,7 +4986,7 @@ return {
 					-- START ARRAY
 					local Length = ReadVarLength()
 					if (Length + 7) // 8 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Element_1 = table.create(Length)
+					local Element_1 = table.create(Length) :: {any}
 					do
 						local PACKED_OFFSET = Read((Length + 7) // 8)
 						if PACKED_BY_ROWS then
@@ -5114,7 +5114,7 @@ return {
 				-- START ARRAY
 				local Length = ReadVarLength()
 				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
 				local BITFIELD_2_0
@@ -5205,7 +5205,7 @@ return {
 				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: MapNested
-				local Value = {}
+				local Value = {} :: { [any]: any }
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
@@ -5214,7 +5214,7 @@ return {
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_1: MapNested
-					local Element_1 = {}
+					local Element_1 = {} :: { [any]: any }
 					local OFFSET_0 = Read(2)
 					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
 					if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
@@ -5519,7 +5519,7 @@ return {
 				-- Value: OptionalHoles
 				-- START ARRAY
 				local Length = 3
-				local Value = table.create(Length)
+				local Value = table.create(Length) :: {any}
 					-- Read BLOCK: 1 bytes
 				local ARRAY_START_1 = Read(1 * Length)
 				local BITFIELD_2_0
@@ -6966,7 +6966,7 @@ return {
 					local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
 					if not (Length <= 4) then error(`Expected "Length" to be smaller than or equal to 4, got {Length} instead.`) end
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.C" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.C = table.create(Length)
+					Value.C = table.create(Length) :: {any}
 						-- Read BLOCK: 1 bytes
 					local ARRAY_START_1 = Read(1 * Length)
 					for Slot_1 = 1, Length do

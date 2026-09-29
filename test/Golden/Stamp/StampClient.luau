@@ -681,7 +681,7 @@ if not RunService:IsRunning() then
 		On = NOOP_RETURNING
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsClient() then
@@ -928,14 +928,14 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable()
+local function DecodeReliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
-local function DecodeUnreliable()
+local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -944,7 +944,7 @@ local function DecodeUnreliable()
 		local Value1: { Gap: number, Bucket: number }?, Value2: number = SerdesFunctions.ReadEVENT_Trust()
 		Value2 = UnwrapStamp(Value2)
 		if StreamAccept(1, Value2) == true then
-			local BOUND_LISTENER = Events.Unreliable[1]
+			local BOUND_LISTENER = Events.Unreliable[1] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Trust"
 				Decoding = -2 - Index
@@ -1006,55 +1006,48 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	Swing = {
-		Fire = function(): ()
-			Begin()
-			SerdesFunctions.WriteEVENT_Swing(StampNow())
-			Commit()
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.Swing = {
+	Fire = function(): ()
+		Begin()
+		SerdesFunctions.WriteEVENT_Swing(StampNow())
+		Commit()
+	end
+}
+Returns.Aim = {
+	Fire = function(Target: number, At: Vector3): ()
+		Hold()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Aim, Target, At, StampNow())
+		if Sent and CheckUnreliableSize("Aim") then
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			Unreliable:FireServer(Buffer, SendInstances)
 		end
-	},
-	Aim = {
-		Fire = function(Target: number, At: Vector3): ()
-			Hold()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Aim, Target, At, StampNow())
-			if Sent and CheckUnreliableSize("Aim") then
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				Unreliable:FireServer(Buffer, SendInstances)
-			end
-			Release()
-			if Sent ~= true then
-				error(Failure, 0)
-			end
+		Release()
+		if Sent ~= true then
+			error(Failure, 0)
 		end
-	},
-	Trust = {
-		On = function(Listener: (Value: { Gap: number, Bucket: number }?, ServerTime: number) -> ()): () -> ()
-			if Events.Unreliable[1] ~= nil then
-				warn("[BlinkBlox]: \"Trust\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[1] = Listener
-			return function (): ()
-				if Events.Unreliable[1] == Listener then
-					Events.Unreliable[1] = nil
-				end
+	end
+}
+Returns.Trust = {
+	On = function(Listener: (Value: { Gap: number, Bucket: number }?, ServerTime: number) -> ()): () -> ()
+		if Events.Unreliable[1] ~= nil then
+			warn("[BlinkBlox]: \"Trust\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[1] = Listener
+		return function (): ()
+			if Events.Unreliable[1] == Listener then
+				Events.Unreliable[1] = nil
 			end
 		end
-	},
-})
+	end
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

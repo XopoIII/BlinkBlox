@@ -515,9 +515,9 @@ local EventNames: any = {
 }
 
 
-local PACKED_ROWS = table.create(256)
+local PACKED_ROWS = table.create(256) :: { { boolean } }
 for Byte = 0, 255 do
-	local Row = table.create(8)
+	local Row = table.create(8) :: { boolean }
 	for Bit = 0, 7 do
 		Row[Bit + 1] = bit32.btest(Byte, bit32.lshift(1, Bit))
 	end
@@ -1033,7 +1033,7 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 		-- Value.Nested.Array: Array
 		-- START ARRAY
 		local Length = 10
-		Value.Nested.Array = table.create(Length)
+		Value.Nested.Array = table.create(Length) :: {any}
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_1 = Read(1 * Length)
 		for Slot_1 = 1, Length do
@@ -1051,7 +1051,7 @@ function SerdesFunctions.ReadEVENT_ServerPollEvent(): ({ Field: number?, Float16
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
 		local Length = 2
-		Value.Nested.OptionalArray = table.create(Length)
+		Value.Nested.OptionalArray = table.create(Length) :: {any}
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_2 = Read(1 * Length)
 		for Slot_2 = 1, Length do
@@ -1136,7 +1136,7 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 		-- Value.Nested.Array: Array
 		-- START ARRAY
 		local Length = 10
-		Value.Nested.Array = table.create(Length)
+		Value.Nested.Array = table.create(Length) :: {any}
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_1 = Read(1 * Length)
 		for Slot_1 = 1, Length do
@@ -1154,7 +1154,7 @@ function SerdesFunctions.ReadEVENT_ServerUnreliablePollEvent(): ({ Field: number
 		-- Value.Nested.OptionalArray: OptionalArray
 		-- START ARRAY
 		local Length = 2
-		Value.Nested.OptionalArray = table.create(Length)
+		Value.Nested.OptionalArray = table.create(Length) :: {any}
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_2 = Read(1 * Length)
 		for Slot_2 = 1, Length do
@@ -1352,7 +1352,7 @@ function SerdesFunctions.ReadEVENT_DynamicMap(): ({[number]: { Static: number, D
 	local BLOCK_START = Read(2)
 	local RecieveBuffer = RecieveBuffer
 	-- Value: DynamicMap
-	local Value = {}
+	local Value = {} :: { [any]: any }
 	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 	for _ = 1, Elements_1 do
@@ -1383,7 +1383,7 @@ function SerdesFunctions.ReadEVENT_DynamicArray(): ({ { Static: number, Dynamic:
 	-- Value: DynamicArray
 	-- START ARRAY
 	local Length = 12
-	local Value = table.create(Length)
+	local Value = table.create(Length) :: {any}
 		-- Read BLOCK: 1 bytes
 	local ARRAY_START_1 = Read(1 * Length)
 	for Slot_1 = 1, Length do
@@ -1522,7 +1522,7 @@ function SerdesFunctions.ReadEVENT_MapEvent(): ({[string]: number})
 	local BLOCK_START = Read(2)
 	local RecieveBuffer = RecieveBuffer
 	-- Value: MapEvent
-	local Value = {}
+	local Value = {} :: { [any]: any }
 	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	if Elements_1 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 	for _ = 1, Elements_1 do
@@ -1546,7 +1546,7 @@ function SerdesFunctions.ReadEVENT_MapStructEvent(): ({ Map: {[string]: number} 
 	local Value = {Map = false} :: any
 	do
 		-- Value.Map: Map
-		Value.Map = {}
+		Value.Map = {} :: { [any]: any }
 		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 		if Elements_1 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Map" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 		for _ = 1, Elements_1 do
@@ -1568,7 +1568,7 @@ function SerdesFunctions.ReadEVENT_MapComplexEvent(): ({[string]: { number }})
 	local BLOCK_START = Read(2)
 	local RecieveBuffer = RecieveBuffer
 	-- Value: MapComplexEvent
-	local Value = {}
+	local Value = {} :: { [any]: any }
 	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 	if Elements_1 * 9 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 	for _ = 1, Elements_1 do
@@ -1581,7 +1581,7 @@ function SerdesFunctions.ReadEVENT_MapComplexEvent(): ({[string]: { number }})
 		-- Element_1: MapComplex
 		-- START ARRAY
 		local Length = 8
-		local Element_1 = table.create(Length)
+		local Element_1 = table.create(Length) :: {any}
 			-- Read BLOCK: 1 bytes
 		local ARRAY_START_2 = Read(1 * Length)
 		for Slot_2 = 1, Length do
@@ -1611,7 +1611,7 @@ function SerdesFunctions.ReadEVENT_MapReferenceEvent(): ({[("A" | "B" | "C" | "D
 		-- Read BLOCK: 2 bytes
 		local BLOCK_START = Read(2)
 		-- Value: MapReference
-		Value = {}
+		Value = {} :: { [any]: any }
 		local Elements_2 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 		if Elements_2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
 		local BITFIELD_3_0
@@ -1657,7 +1657,7 @@ function SerdesFunctions.ReadEVENT_ArrayPrimitive(): ({ number })
 	-- Value: ArrayPrimitive
 	-- START ARRAY
 	local Length = 8
-	local Value = table.create(Length)
+	local Value = table.create(Length) :: {any}
 		-- Read BLOCK: 1 bytes
 	local ARRAY_START_1 = Read(1 * Length)
 	for Slot_1 = 1, Length do
@@ -1902,7 +1902,7 @@ function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field:
 			-- Value.Nested.Array: Array
 			-- START ARRAY
 			local Length = 10
-			Value.Nested.Array = table.create(Length)
+			Value.Nested.Array = table.create(Length) :: {any}
 				-- Read BLOCK: 1 bytes
 			local ARRAY_START_2 = Read(1 * Length)
 			for Slot_2 = 1, Length do
@@ -1920,7 +1920,7 @@ function SerdesFunctions.ReadEVENT_Reference(): ({ Field: number?, Float16Field:
 			-- Value.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
 			local Length = 2
-			Value.Nested.OptionalArray = table.create(Length)
+			Value.Nested.OptionalArray = table.create(Length) :: {any}
 				-- Read BLOCK: 1 bytes
 			local ARRAY_START_3 = Read(1 * Length)
 			for Slot_3 = 1, Length do
@@ -1942,7 +1942,7 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 	-- Value: ReferenceArray
 	-- START ARRAY
 	local Length = 8
-	local Value = table.create(Length)
+	local Value = table.create(Length) :: {any}
 		-- Read BLOCK: 2 bytes
 	local ARRAY_START_1 = Read(2 * Length)
 	local BITFIELD_2_0
@@ -2021,7 +2021,7 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 			-- Item_1.Nested.Array: Array
 			-- START ARRAY
 			local Length = 10
-			Item_1.Nested.Array = table.create(Length)
+			Item_1.Nested.Array = table.create(Length) :: {any}
 				-- Read BLOCK: 1 bytes
 			local ARRAY_START_2 = Read(1 * Length)
 			for Slot_2 = 1, Length do
@@ -2039,7 +2039,7 @@ function SerdesFunctions.ReadEVENT_ReferenceArray(): ({ { Field: number?, Float1
 			-- Item_1.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
 			local Length = 2
-			Item_1.Nested.OptionalArray = table.create(Length)
+			Item_1.Nested.OptionalArray = table.create(Length) :: {any}
 				-- Read BLOCK: 1 bytes
 			local ARRAY_START_3 = Read(1 * Length)
 			for Slot_3 = 1, Length do
@@ -2134,7 +2134,7 @@ function SerdesFunctions.ReadEVENT_ReferenceOptional(): ({ Field: number?, Float
 			-- Value.Nested.Array: Array
 			-- START ARRAY
 			local Length = 10
-			Value.Nested.Array = table.create(Length)
+			Value.Nested.Array = table.create(Length) :: {any}
 				-- Read BLOCK: 1 bytes
 			local ARRAY_START_2 = Read(1 * Length)
 			for Slot_2 = 1, Length do
@@ -2152,7 +2152,7 @@ function SerdesFunctions.ReadEVENT_ReferenceOptional(): ({ Field: number?, Float
 			-- Value.Nested.OptionalArray: OptionalArray
 			-- START ARRAY
 			local Length = 2
-			Value.Nested.OptionalArray = table.create(Length)
+			Value.Nested.OptionalArray = table.create(Length) :: {any}
 				-- Read BLOCK: 1 bytes
 			local ARRAY_START_3 = Read(1 * Length)
 			for Slot_3 = 1, Length do
@@ -2242,7 +2242,7 @@ function SerdesFunctions.ReadEVENT_Tuple(): (number, ("A" | "B" | "C" | "D"), nu
 	-- Value6: Tuple
 	-- START ARRAY
 	local Length = 8
-	local Value6 = table.create(Length)
+	local Value6 = table.create(Length) :: {any}
 		-- Read BLOCK: 1 bytes
 	local ARRAY_START_1 = Read(1 * Length)
 	for Slot_1 = 1, Length do
@@ -2761,7 +2761,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Read(2)
 				local RecieveBuffer = RecieveBuffer
 				-- Value: MapNested
-				local Value = {}
+				local Value = {} :: { [any]: any }
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
 				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
@@ -2770,7 +2770,7 @@ if not RunService:IsRunning() then
 					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
 					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					-- Element_1: MapNested
-					local Element_1 = {}
+					local Element_1 = {} :: { [any]: any }
 					local OFFSET_0 = Read(2)
 					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
 					if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
@@ -3219,7 +3219,7 @@ if not RunService:IsRunning() then
 		},
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsClient() then
@@ -3441,7 +3441,7 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable()
+local function DecodeReliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -3454,7 +3454,7 @@ local function DecodeReliable()
 				Push(Queue.Reliable[3], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyPollEvent()))
 			elseif Index == 5 then
 				local Value: nil = SerdesFunctions.ReadEVENT_EmptyEvent()
-				local BOUND_LISTENER = Events.Reliable[5]
+				local BOUND_LISTENER = Events.Reliable[5] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "EmptyEvent"
 					Decoding = -2 - Index
@@ -3487,7 +3487,7 @@ local function DecodeReliable()
 				if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 			elseif Index == 7 then
 				local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,} = SerdesFunctions.ReadEVENT_Flags8()
-				local BOUND_LISTENER = Events.Reliable[7]
+				local BOUND_LISTENER = Events.Reliable[7] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Flags8"
 					Decoding = -2 - Index
@@ -3502,7 +3502,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 8 then
 				local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,} = SerdesFunctions.ReadEVENT_Flags16()
-				local BOUND_LISTENER = Events.Reliable[8]
+				local BOUND_LISTENER = Events.Reliable[8] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Flags16"
 					Decoding = -2 - Index
@@ -3517,7 +3517,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 9 then
 				local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,} = SerdesFunctions.ReadEVENT_Flags32()
-				local BOUND_LISTENER = Events.Reliable[9]
+				local BOUND_LISTENER = Events.Reliable[9] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Flags32"
 					Decoding = -2 - Index
@@ -3532,7 +3532,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 10 then
 				local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,} = SerdesFunctions.ReadEVENT_Flags33()
-				local BOUND_LISTENER = Events.Reliable[10]
+				local BOUND_LISTENER = Events.Reliable[10] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Flags33"
 					Decoding = -2 - Index
@@ -3551,7 +3551,7 @@ local function DecodeReliable()
 		else
 			if Index == 11 then
 				local Value: {[number]: { Static: number, Dynamic: buffer }} = SerdesFunctions.ReadEVENT_DynamicMap()
-				local BOUND_LISTENER = Events.Reliable[11]
+				local BOUND_LISTENER = Events.Reliable[11] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "DynamicMap"
 					Decoding = -2 - Index
@@ -3566,7 +3566,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 12 then
 				local Value: { { Static: number, Dynamic: buffer } } = SerdesFunctions.ReadEVENT_DynamicArray()
-				local BOUND_LISTENER = Events.Reliable[12]
+				local BOUND_LISTENER = Events.Reliable[12] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "DynamicArray"
 					Decoding = -2 - Index
@@ -3581,7 +3581,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 13 then
 				local Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number } = SerdesFunctions.ReadEVENT_PlayerEvent()
-				local BOUND_LISTENER = Events.Reliable[13]
+				local BOUND_LISTENER = Events.Reliable[13] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "PlayerEvent"
 					Decoding = -2 - Index
@@ -3596,7 +3596,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 15 then
 				local Value: any = SerdesFunctions.ReadEVENT_Unknown()
-				local BOUND_LISTENER = Events.Reliable[15]
+				local BOUND_LISTENER = Events.Reliable[15] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Unknown"
 					Decoding = -2 - Index
@@ -3611,7 +3611,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 16 then
 				local Value: {[string]: number} = SerdesFunctions.ReadEVENT_MapEvent()
-				local BOUND_LISTENER = Events.Reliable[16]
+				local BOUND_LISTENER = Events.Reliable[16] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "MapEvent"
 					Decoding = -2 - Index
@@ -3626,7 +3626,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 17 then
 				local Value: { Map: {[string]: number} } = SerdesFunctions.ReadEVENT_MapStructEvent()
-				local BOUND_LISTENER = Events.Reliable[17]
+				local BOUND_LISTENER = Events.Reliable[17] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "MapStructEvent"
 					Decoding = -2 - Index
@@ -3641,7 +3641,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 18 then
 				local Value: {[string]: { number }} = SerdesFunctions.ReadEVENT_MapComplexEvent()
-				local BOUND_LISTENER = Events.Reliable[18]
+				local BOUND_LISTENER = Events.Reliable[18] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "MapComplexEvent"
 					Decoding = -2 - Index
@@ -3656,7 +3656,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 19 then
 				local Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}? = SerdesFunctions.ReadEVENT_MapReferenceEvent()
-				local BOUND_LISTENER = Events.Reliable[19]
+				local BOUND_LISTENER = Events.Reliable[19] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "MapReferenceEvent"
 					Decoding = -2 - Index
@@ -3711,7 +3711,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 22 then
 				local Value: number = SerdesFunctions.ReadEVENT_ReliableServer()
-				local BOUND_LISTENER = Events.Reliable[22]
+				local BOUND_LISTENER = Events.Reliable[22] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "ReliableServer"
 					Decoding = -2 - Index
@@ -3726,7 +3726,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 23 then
 				local Value: number = SerdesFunctions.ReadEVENT_ReliableServerAsync()
-				local BOUND_LISTENER = Events.Reliable[23]
+				local BOUND_LISTENER = Events.Reliable[23] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					Spawn(BOUND_LISTENER, Value)
 				else
@@ -3739,7 +3739,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 25 then
 				local Value: Instance = SerdesFunctions.ReadEVENT_InstanceAny()
-				local BOUND_LISTENER = Events.Reliable[25]
+				local BOUND_LISTENER = Events.Reliable[25] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InstanceAny"
 					Decoding = -2 - Index
@@ -3754,7 +3754,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 26 then
 				local Value: Sound = SerdesFunctions.ReadEVENT_InstanceOfType()
-				local BOUND_LISTENER = Events.Reliable[26]
+				local BOUND_LISTENER = Events.Reliable[26] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InstanceOfType"
 					Decoding = -2 - Index
@@ -3769,7 +3769,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 27 then
 				local Value: Instance? = SerdesFunctions.ReadEVENT_InstanceOptional()
-				local BOUND_LISTENER = Events.Reliable[27]
+				local BOUND_LISTENER = Events.Reliable[27] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InstanceOptional"
 					Decoding = -2 - Index
@@ -3784,7 +3784,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 28 then
 				local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_Reference()
-				local BOUND_LISTENER = Events.Reliable[28]
+				local BOUND_LISTENER = Events.Reliable[28] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Reference"
 					Decoding = -2 - Index
@@ -3803,7 +3803,7 @@ local function DecodeReliable()
 		else
 			if Index == 29 then
 				local Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } } = SerdesFunctions.ReadEVENT_ReferenceArray()
-				local BOUND_LISTENER = Events.Reliable[29]
+				local BOUND_LISTENER = Events.Reliable[29] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "ReferenceArray"
 					Decoding = -2 - Index
@@ -3818,7 +3818,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 30 then
 				local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_ReferenceOptional()
-				local BOUND_LISTENER = Events.Reliable[30]
+				local BOUND_LISTENER = Events.Reliable[30] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "ReferenceOptional"
 					Decoding = -2 - Index
@@ -3851,7 +3851,7 @@ local function DecodeReliable()
 				if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
 			elseif Index == 32 then
 				local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number } = SerdesFunctions.ReadEVENT_Tuple()
-				local BOUND_LISTENER = Events.Reliable[32]
+				local BOUND_LISTENER = Events.Reliable[32] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "Tuple"
 					Decoding = -2 - Index
@@ -3889,7 +3889,7 @@ local function DecodeReliable()
 				if Answered == 1 and Success ~= true and not string.find(tostring(ReturnValue1), MISSING_INSTANCE, 1, true) then error(ReturnValue1, 0) end
 			elseif Index == 34 then
 				local Value: number = SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent()
-				local BOUND_LISTENER = Events.Reliable[34]
+				local BOUND_LISTENER = Events.Reliable[34] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InScopeEvent"
 					Decoding = -2 - Index
@@ -3904,7 +3904,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 35 then
 				local Value: number = SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_ReadEVENT_InAnotherScopeEvent()
-				local BOUND_LISTENER = Events.Reliable[35]
+				local BOUND_LISTENER = Events.Reliable[35] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InAnotherScopeEvent"
 					Decoding = -2 - Index
@@ -3919,7 +3919,7 @@ local function DecodeReliable()
 				end
 			elseif Index == 36 then
 				local Value: number = SerdesFunctions.ExampleScope_ReadEVENT_InScopeEvent()
-				local BOUND_LISTENER = Events.Reliable[36]
+				local BOUND_LISTENER = Events.Reliable[36] :: ((...any) -> ())?
 				if BOUND_LISTENER ~= nil then
 					SerdesEvent = "InScopeEvent"
 					Decoding = -2 - Index
@@ -3938,7 +3938,7 @@ local function DecodeReliable()
 		end
 	end
 end
-local function DecodeUnreliable()
+local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -3950,7 +3950,7 @@ local function DecodeUnreliable()
 			Push(Queue.Unreliable[3], table.pack(SerdesFunctions.ReadEVENT_ServerEmptyUnreliablePollEvent()))
 		elseif Index == 5 then
 			local Value: nil = SerdesFunctions.ReadEVENT_EmptyUnreliableEvent()
-			local BOUND_LISTENER = Events.Unreliable[5]
+			local BOUND_LISTENER = Events.Unreliable[5] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "EmptyUnreliableEvent"
 				Decoding = -2 - Index
@@ -3958,7 +3958,7 @@ local function DecodeUnreliable()
 			end
 		elseif Index == 6 then
 			local Value: { number } = SerdesFunctions.ReadEVENT_ArrayPrimitive()
-			local BOUND_LISTENER = Events.Unreliable[6]
+			local BOUND_LISTENER = Events.Unreliable[6] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "ArrayPrimitive"
 				Decoding = -2 - Index
@@ -3966,7 +3966,7 @@ local function DecodeUnreliable()
 			end
 		elseif Index == 7 then
 			local Value: number? = SerdesFunctions.ReadEVENT_OptionalPrimitive()
-			local BOUND_LISTENER = Events.Unreliable[7]
+			local BOUND_LISTENER = Events.Unreliable[7] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "OptionalPrimitive"
 				Decoding = -2 - Index
@@ -3994,7 +3994,7 @@ local function DecodeUnreliable()
 			end
 		elseif Index == 10 then
 			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServer()
-			local BOUND_LISTENER = Events.Unreliable[10]
+			local BOUND_LISTENER = Events.Unreliable[10] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "UnreliableServer"
 				Decoding = -2 - Index
@@ -4002,13 +4002,13 @@ local function DecodeUnreliable()
 			end
 		elseif Index == 11 then
 			local Value: number = SerdesFunctions.ReadEVENT_UnreliableServerAsync()
-			local BOUND_LISTENER = Events.Unreliable[11]
+			local BOUND_LISTENER = Events.Unreliable[11] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				Spawn(BOUND_LISTENER, Value)
 			end
 		elseif Index == 13 then
 			local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadEVENT_TupleUnreliable()
-			local BOUND_LISTENER = Events.Unreliable[13]
+			local BOUND_LISTENER = Events.Unreliable[13] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "TupleUnreliable"
 				Decoding = -2 - Index
@@ -4080,1517 +4080,1510 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	Source = {
-		Source2 = {
-		},
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.Source = {
+	Source2 = {
 	},
-	ImportA = {
-		Source2 = {
-		},
+}
+Returns.ImportA = {
+	Source2 = {
 	},
-	Color = {
-		Read = function(Buffer: buffer): (Color)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (Color)
-				-- Read BLOCK: 3 bytes
-				local BLOCK_START = Read(3)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: Color
-				local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: Color
-		end,
-		Write = function(Value: Color): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 3 bytes
-				local BLOCK_START = Allocate(3)
-				-- Value: Color
-				if typeof(Value) ~= "Color3" then
-					error(`Expected Value to be of type Color3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				local Color = Value
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
-				buffer.writeu8(SendBuffer, BLOCK_START + 1, math.clamp(math.round(Color.G * 255), 0, 255))
-				buffer.writeu8(SendBuffer, BLOCK_START + 2, math.clamp(math.round(Color.B * 255), 0, 255))
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result
+}
+Returns.Color = {
+	Read = function(Buffer: buffer): (Color)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Color)
+			-- Read BLOCK: 3 bytes
+			local BLOCK_START = Read(3)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Color
+			local Value = Color3.fromRGB(buffer.readu8(RecieveBuffer, BLOCK_START + 0), buffer.readu8(RecieveBuffer, BLOCK_START + 1), buffer.readu8(RecieveBuffer, BLOCK_START + 2))
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	ExactRange = {
-		Read = function(Buffer: buffer): (ExactRange)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (ExactRange)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: ExactRange
-				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+		return Result :: Color
+	end,
+	Write = function(Value: Color): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- Value: Color
+			if typeof(Value) ~= "Color3" then
+				error(`Expected Value to be of type Color3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
-			return Result :: ExactRange
-		end,
-		Write = function(Value: ExactRange): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				-- Value: ExactRange
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
+			local Color = Value
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, math.clamp(math.round(Color.G * 255), 0, 255))
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, math.clamp(math.round(Color.B * 255), 0, 255))
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	DecimalRange = {
-		Read = function(Buffer: buffer): (DecimalRange)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (DecimalRange)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: DecimalRange
-				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
-				if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+		return Result
+	end
+}
+Returns.ExactRange = {
+	Read = function(Buffer: buffer): (ExactRange)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (ExactRange)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: ExactRange
+			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: ExactRange
+	end,
+	Write = function(Value: ExactRange): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Value: ExactRange
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
-			return Result :: DecimalRange
-		end,
-		Write = function(Value: DecimalRange): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				-- Value: DecimalRange
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
-				if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
+			if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	NegativeRange = {
-		Read = function(Buffer: buffer): (NegativeRange)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (NegativeRange)
-				-- Read BLOCK: 1 bytes
-				local BLOCK_START = Read(1)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: NegativeRange
-				local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
-				if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+		return Result
+	end
+}
+Returns.DecimalRange = {
+	Read = function(Buffer: buffer): (DecimalRange)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (DecimalRange)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: DecimalRange
+			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: DecimalRange
+	end,
+	Write = function(Value: DecimalRange): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Value: DecimalRange
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
-			return Result :: NegativeRange
-		end,
-		Write = function(Value: NegativeRange): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 1 bytes
-				local BLOCK_START = Allocate(1)
-				-- Value: NegativeRange
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
-				if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
-				buffer.writei8(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
+			if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
+			if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	UnboundUpper = {
-		Read = function(Buffer: buffer): (UnboundUpper)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (UnboundUpper)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: UnboundUpper
-				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+		return Result
+	end
+}
+Returns.NegativeRange = {
+	Read = function(Buffer: buffer): (NegativeRange)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (NegativeRange)
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: NegativeRange
+			local Value = buffer.readi8(RecieveBuffer, BLOCK_START + 0)
+			if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: NegativeRange
+	end,
+	Write = function(Value: NegativeRange): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- Value: NegativeRange
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
-			return Result :: UnboundUpper
-		end,
-		Write = function(Value: UnboundUpper): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				-- Value: UnboundUpper
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
+			if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
+			if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
+			buffer.writei8(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	UnboundLower = {
-		Read = function(Buffer: buffer): (UnboundLower)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (UnboundLower)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: UnboundLower
-				local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
-				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+		return Result
+	end
+}
+Returns.UnboundUpper = {
+	Read = function(Buffer: buffer): (UnboundUpper)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (UnboundUpper)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: UnboundUpper
+			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: UnboundUpper
+	end,
+	Write = function(Value: UnboundUpper): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Value: UnboundUpper
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
-			return Result :: UnboundLower
-		end,
-		Write = function(Value: UnboundLower): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				-- Value: UnboundLower
-				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
-				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
-			end
+			if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	MapNested = {
-		Read = function(Buffer: buffer): (MapNested)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (MapNested)
-				-- Read BLOCK: 2 bytes
-				local BLOCK_START = Read(2)
-				local RecieveBuffer = RecieveBuffer
-				-- Value: MapNested
-				local Value = {}
-				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
-				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
-				for _ = 1, Elements_1 do
-					-- Key_1: MapNested
+		return Result
+	end
+}
+Returns.UnboundLower = {
+	Read = function(Buffer: buffer): (UnboundLower)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (UnboundLower)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: UnboundLower
+			local Value = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: UnboundLower
+	end,
+	Write = function(Value: UnboundLower): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- Value: UnboundLower
+			if typeof(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
+			buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.MapNested = {
+	Read = function(Buffer: buffer): (MapNested)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (MapNested)
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local RecieveBuffer = RecieveBuffer
+			-- Value: MapNested
+			local Value = {} :: { [any]: any }
+			local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+			if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
+			for _ = 1, Elements_1 do
+				-- Key_1: MapNested
+				local Length = ReadVarLength()
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+				-- Element_1: MapNested
+				local Element_1 = {} :: { [any]: any }
+				local OFFSET_0 = Read(2)
+				local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
+				if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
+				for _ = 1, Elements_2 do
+					-- Key_2: MapSimple
 					local Length = ReadVarLength()
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					local Key_1 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-					-- Element_1: MapNested
-					local Element_1 = {}
-					local OFFSET_0 = Read(2)
-					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
-					if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
-					for _ = 1, Elements_2 do
-						-- Key_2: MapSimple
-						local Length = ReadVarLength()
-						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-						local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
-						-- Element_2: MapSimple
-						local OFFSET_0 = Read(1)
-						local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_0)
-						Element_1[Key_2] = Element_2
-					end
-					Value[Key_1] = Element_1
+					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Key_2" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+					local Key_2 = buffer.readstring(RecieveBuffer, Read(Length), Length)
+					-- Element_2: MapSimple
+					local OFFSET_0 = Read(1)
+					local Element_2 = buffer.readu8(RecieveBuffer, OFFSET_0)
+					Element_1[Key_2] = Element_2
 				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
+				Value[Key_1] = Element_1
 			end
-			return Result :: MapNested
-		end,
-		Write = function(Value: MapNested): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 2 bytes
-				local BLOCK_START = Allocate(2)
-				-- Value: MapNested
-				local Elements_1 = 0
-				for Key_1, Element_1 in Value do
-					Elements_1 += 1
-					-- Key_1: MapNested
-					if typeof(Key_1) ~= "string" then
-						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: MapNested
+	end,
+	Write = function(Value: MapNested): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- Value: MapNested
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: MapNested
+				if typeof(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Length = #Key_1
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				WriteVarLength(Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+				-- Element_1: MapNested
+				local OFFSET_0 = Allocate(2)
+				local Elements_2 = 0
+				for Key_2, Element_2 in Element_1 do
+					Elements_2 += 1
+					-- Key_2: MapSimple
+					if typeof(Key_2) ~= "string" then
+						error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.{if type(Key_2) == "table" or type(Key_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
-					local Length = #Key_1
+					local Length = #Key_2
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
 					WriteVarLength(Length)
 					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
-					-- Element_1: MapNested
-					local OFFSET_0 = Allocate(2)
-					local Elements_2 = 0
-					for Key_2, Element_2 in Element_1 do
-						Elements_2 += 1
-						-- Key_2: MapSimple
-						if typeof(Key_2) ~= "string" then
-							error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.{if type(Key_2) == "table" or type(Key_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-						end
-						local Length = #Key_2
-						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						WriteVarLength(Length)
-						Allocate(Length)
-						buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
-						-- Element_2: MapSimple
-						if typeof(Element_2) ~= "number" then
-							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.{if type(Element_2) == "table" or type(Element_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-						end
-						local OFFSET_0 = Allocate(1)
-						buffer.writeu8(SendBuffer, OFFSET_0, Element_2)
+					buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
+					-- Element_2: MapSimple
+					if typeof(Element_2) ~= "number" then
+						error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.{if type(Element_2) == "table" or type(Element_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
-					if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
-					buffer.writeu16(SendBuffer, OFFSET_0, Elements_2)
+					local OFFSET_0 = Allocate(1)
+					buffer.writeu8(SendBuffer, OFFSET_0, Element_2)
 				end
-				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
-				buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
+				if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
+				buffer.writeu16(SendBuffer, OFFSET_0, Elements_2)
 			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_1)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	Standalone = {
-		Read = function(Buffer: buffer): (Standalone)
-			local PreviousCursor = RecieveCursor
-			local PreviousBuffer = RecieveBuffer
-			local PreviousInstanceCursor = RecieveInstanceCursor
-			RecieveCursor = 0
-			RecieveBuffer = Buffer
-			local Success, Result = pcall(function (): (Standalone)
-				-- Read BLOCK: 4 bytes
-				local BLOCK_START = Read(4)
-				local BITFIELD_1_0
-				local RecieveBuffer = RecieveBuffer
-				-- Value: Standalone
-				local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
-				-- Value.One: One
-				Value.One = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-				-- Value.Two: Two
-				Value.Two = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				-- Value.Three: Three
-				Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
-				do
-					-- Value.Event: Event
-					BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
-					local Tag = bit32.extract(BITFIELD_1_0, 0, 2)
-					Value.Event = true :: any
-					if Tag == 0 then
-						-- Read BLOCK: 8 bytes
-						local BLOCK_START = Read(8)
-						-- Value.Event: Join
-						Value.Event = {Name = false, UserId = false} :: any
-						do
-							-- Value.Event.Name: Name
-							local Length = ReadVarLength()
-							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-							Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
-						end
-						-- Value.Event.UserId: UserId
-						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-						Value.Event.Type = "Join"
-					elseif Tag == 1 then
-						-- Read BLOCK: 8 bytes
-						local BLOCK_START = Read(8)
-						-- Value.Event: Chat
-						Value.Event = {UserId = false, Message = false} :: any
-						-- Value.Event.UserId: UserId
-						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-						do
-							-- Value.Event.Message: Message
-							local Length = ReadVarLength()
-							if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-							Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
-						end
-						Value.Event.Type = "Chat"
-					elseif Tag == 2 then
-						-- Read BLOCK: 8 bytes
-						local BLOCK_START = Read(8)
-						-- Value.Event: Leave
-						Value.Event = {UserId = false} :: any
-						-- Value.Event.UserId: UserId
-						Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
-						Value.Event.Type = "Leave"
-					else
-						error(`Unexpected variant: {Tag}`)
-					end
-				end
-				-- Value.Nested: Nested
-				Value.Nested = {Four = false, Five = false} :: any
-				do
-					-- Value.Nested.Four: Four
-					local Length = ReadVarLength()
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				end
-				do
-					-- Value.Nested.Five: Five
-					local Length = ReadVarLength()
-					if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-					Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
-				end
-				return Value
-			end)
-			RecieveCursor = PreviousCursor
-			RecieveBuffer = PreviousBuffer
-			RecieveInstanceCursor = PreviousInstanceCursor
-			if Success ~= true then
-				error(Result, 0)
-			end
-			return Result :: Standalone
-		end,
-		Write = function(Value: Standalone): (buffer)
-			local Previous = Save()
-			Load()
-			local Success, Result = pcall(function (): (buffer)
-				-- Allocate BLOCK: 4 bytes
-				local BLOCK_START = Allocate(4)
-				local BITFIELD_1_0
-				-- Value: Standalone
-				-- Value.One: One
-				if typeof(Value.One) ~= "number" then
-					error(`Expected Value.One to be of type number, got {type(Value.One)} instead.{if type(Value.One) == "table" or type(Value.One) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.One)
-				-- Value.Two: Two
-				if typeof(Value.Two) ~= "number" then
-					error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.{if type(Value.Two) == "table" or type(Value.Two) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Two)
-				-- Value.Three: Three
-				if typeof(Value.Three) ~= "number" then
-					error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.{if type(Value.Three) == "table" or type(Value.Three) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
+		return Result
+	end
+}
+Returns.Standalone = {
+	Read = function(Buffer: buffer): (Standalone)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Standalone)
+			-- Read BLOCK: 4 bytes
+			local BLOCK_START = Read(4)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Standalone
+			local Value = {One = false, Two = false, Three = false, Event = false, Nested = false} :: any
+			-- Value.One: One
+			Value.One = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			-- Value.Two: Two
+			Value.Two = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+			-- Value.Three: Three
+			Value.Three = buffer.readu8(RecieveBuffer, BLOCK_START + 2)
+			do
 				-- Value.Event: Event
-				BITFIELD_1_0 = 0
-				if Value.Event.Type == "Join" then
-					-- Allocate BLOCK: 8 bytes
-					local BLOCK_START = Allocate(8)
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 3)
+				local Tag = bit32.extract(BITFIELD_1_0, 0, 2)
+				Value.Event = true :: any
+				if Tag == 0 then
+					-- Read BLOCK: 8 bytes
+					local BLOCK_START = Read(8)
 					-- Value.Event: Join
+					Value.Event = {Name = false, UserId = false} :: any
 					do
 						-- Value.Event.Name: Name
-						if typeof(Value.Event.Name) ~= "string" then
-							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.{if type(Value.Event.Name) == "table" or type(Value.Event.Name) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-						end
-						local Length = #Value.Event.Name
-						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						WriteVarLength(Length)
-						Allocate(Length)
-						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
+						local Length = ReadVarLength()
+						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Name" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+						Value.Event.Name = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					end
 					-- Value.Event.UserId: UserId
-					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
-				elseif Value.Event.Type == "Chat" then
-					-- Allocate BLOCK: 8 bytes
-					local BLOCK_START = Allocate(8)
-					BITFIELD_1_0 += 1
+					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+					Value.Event.Type = "Join"
+				elseif Tag == 1 then
+					-- Read BLOCK: 8 bytes
+					local BLOCK_START = Read(8)
 					-- Value.Event: Chat
+					Value.Event = {UserId = false, Message = false} :: any
 					-- Value.Event.UserId: UserId
-					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
+					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 					do
 						-- Value.Event.Message: Message
-						if typeof(Value.Event.Message) ~= "string" then
-							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.{if type(Value.Event.Message) == "table" or type(Value.Event.Message) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-						end
-						local Length = #Value.Event.Message
-						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-						WriteVarLength(Length)
-						Allocate(Length)
-						buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
+						local Length = ReadVarLength()
+						if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Event.Message" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+						Value.Event.Message = buffer.readstring(RecieveBuffer, Read(Length), Length)
 					end
-				elseif Value.Event.Type == "Leave" then
-					-- Allocate BLOCK: 8 bytes
-					local BLOCK_START = Allocate(8)
-					BITFIELD_1_0 += 2
+					Value.Event.Type = "Chat"
+				elseif Tag == 2 then
+					-- Read BLOCK: 8 bytes
+					local BLOCK_START = Read(8)
 					-- Value.Event: Leave
+					Value.Event = {UserId = false} :: any
 					-- Value.Event.UserId: UserId
-					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
+					Value.Event.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
+					Value.Event.Type = "Leave"
 				else
-					error(`Unexpected variant: {Value.Event.Type}`)
+					error(`Unexpected variant: {Tag}`)
 				end
-				-- Value.Nested: Nested
-				do
-					-- Value.Nested.Four: Four
-					if typeof(Value.Nested.Four) ~= "string" then
-						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.{if type(Value.Nested.Four) == "table" or type(Value.Nested.Four) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					local Length = #Value.Nested.Four
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					WriteVarLength(Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
-				end
-				do
-					-- Value.Nested.Five: Five
-					if typeof(Value.Nested.Five) ~= "string" then
-						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.{if type(Value.Nested.Five) == "table" or type(Value.Nested.Five) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
-					end
-					local Length = #Value.Nested.Five
-					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
-					WriteVarLength(Length)
-					Allocate(Length)
-					buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
-				end
-				buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
-				local Result = buffer.create(SendCursor)
-				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-				return Result
-			end)
-			Load(Previous)
-			if Success ~= true then
-				error(Result, 0)
 			end
+			-- Value.Nested: Nested
+			Value.Nested = {Four = false, Five = false} :: any
+			do
+				-- Value.Nested.Four: Four
+				local Length = ReadVarLength()
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Four" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Value.Nested.Four = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			end
+			do
+				-- Value.Nested.Five: Five
+				local Length = ReadVarLength()
+				if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Nested.Five" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+				Value.Nested.Five = buffer.readstring(RecieveBuffer, Read(Length), Length)
+			end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: Standalone
+	end,
+	Write = function(Value: Standalone): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			local BITFIELD_1_0
+			-- Value: Standalone
+			-- Value.One: One
+			if typeof(Value.One) ~= "number" then
+				error(`Expected Value.One to be of type number, got {type(Value.One)} instead.{if type(Value.One) == "table" or type(Value.One) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.One)
+			-- Value.Two: Two
+			if typeof(Value.Two) ~= "number" then
+				error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.{if type(Value.Two) == "table" or type(Value.Two) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Two)
+			-- Value.Three: Three
+			if typeof(Value.Three) ~= "number" then
+				error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.{if type(Value.Three) == "table" or type(Value.Three) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
+			-- Value.Event: Event
+			BITFIELD_1_0 = 0
+			if Value.Event.Type == "Join" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				-- Value.Event: Join
+				do
+					-- Value.Event.Name: Name
+					if typeof(Value.Event.Name) ~= "string" then
+						error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.{if type(Value.Event.Name) == "table" or type(Value.Event.Name) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Value.Event.Name
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
+				end
+				-- Value.Event.UserId: UserId
+				if typeof(Value.Event.UserId) ~= "number" then
+					error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
+			elseif Value.Event.Type == "Chat" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				BITFIELD_1_0 += 1
+				-- Value.Event: Chat
+				-- Value.Event.UserId: UserId
+				if typeof(Value.Event.UserId) ~= "number" then
+					error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
+				do
+					-- Value.Event.Message: Message
+					if typeof(Value.Event.Message) ~= "string" then
+						error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.{if type(Value.Event.Message) == "table" or type(Value.Event.Message) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Value.Event.Message
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Event.Message, Length)
+				end
+			elseif Value.Event.Type == "Leave" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				BITFIELD_1_0 += 2
+				-- Value.Event: Leave
+				-- Value.Event.UserId: UserId
+				if typeof(Value.Event.UserId) ~= "number" then
+					error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
+			else
+				error(`Unexpected variant: {Value.Event.Type}`)
+			end
+			-- Value.Nested: Nested
+			do
+				-- Value.Nested.Four: Four
+				if typeof(Value.Nested.Four) ~= "string" then
+					error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.{if type(Value.Nested.Four) == "table" or type(Value.Nested.Four) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Length = #Value.Nested.Four
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				WriteVarLength(Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Four, Length)
+			end
+			do
+				-- Value.Nested.Five: Five
+				if typeof(Value.Nested.Five) ~= "string" then
+					error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.{if type(Value.Nested.Five) == "table" or type(Value.Nested.Five) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Length = #Value.Nested.Five
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				WriteVarLength(Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Value.Nested.Five, Length)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
 		end
-	},
-	ClientPollEvent = {
-		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
-			Begin()
-			SerdesFunctions.WriteEVENT_ClientPollEvent(Value)
-			Commit()
+		return Result
+	end
+}
+Returns.ClientPollEvent = {
+	Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
+		Begin()
+		SerdesFunctions.WriteEVENT_ClientPollEvent(Value)
+		Commit()
+	end
+}
+Returns.ClientUnreliablePollEvent = {
+	Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
+		Hold()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent, Value)
+		if Sent and CheckUnreliableSize("ClientUnreliablePollEvent") then
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			Unreliable:FireServer(Buffer, SendInstances)
 		end
-	},
-	ClientUnreliablePollEvent = {
-		Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
-			Hold()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent, Value)
-			if Sent and CheckUnreliableSize("ClientUnreliablePollEvent") then
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				Unreliable:FireServer(Buffer, SendInstances)
-			end
-			Release()
-			if Sent ~= true then
-				error(Failure, 0)
-			end
+		Release()
+		if Sent ~= true then
+			error(Failure, 0)
 		end
-	},
-	ClientEmptyPollEvent = {
-		Fire = function(Value: nil): ()
-			Begin()
-			SerdesFunctions.WriteEVENT_ClientEmptyPollEvent(Value)
-			Commit()
+	end
+}
+Returns.ClientEmptyPollEvent = {
+	Fire = function(Value: nil): ()
+		Begin()
+		SerdesFunctions.WriteEVENT_ClientEmptyPollEvent(Value)
+		Commit()
+	end
+}
+Returns.ClientEmptyUnreliablePollEvent = {
+	Fire = function(Value: nil): ()
+		Hold()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent, Value)
+		if Sent and CheckUnreliableSize("ClientEmptyUnreliablePollEvent") then
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			Unreliable:FireServer(Buffer, SendInstances)
 		end
-	},
-	ClientEmptyUnreliablePollEvent = {
-		Fire = function(Value: nil): ()
-			Hold()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent, Value)
-			if Sent and CheckUnreliableSize("ClientEmptyUnreliablePollEvent") then
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				Unreliable:FireServer(Buffer, SendInstances)
-			end
-			Release()
-			if Sent ~= true then
-				error(Failure, 0)
-			end
+		Release()
+		if Sent ~= true then
+			error(Failure, 0)
 		end
-	},
-	ServerPollEvent = {
-		Iter = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
-			local index = 0
-			local queue = Queue.Reliable[2]
-			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
+	end
+}
+Returns.ServerPollEvent = {
+	Iter = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
+		local index = 0
+		local queue = Queue.Reliable[2]
+		return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
 			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		Next = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
-			local index = 0
-			local queue = Queue.Reliable[2]
-			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
-			end
+			return nil :: any, nil :: any
 		end
-	},
-	ServerUnreliablePollEvent = {
-		Iter = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
-			local index = 0
-			local queue = Queue.Unreliable[2]
-			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	Next = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
+		local index = 0
+		local queue = Queue.Reliable[2]
+		return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
 			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		Next = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
-			local index = 0
-			local queue = Queue.Unreliable[2]
-			return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
-			end
+			return nil :: any, nil :: any
 		end
-	},
-	ServerEmptyPollEvent = {
-		Iter = function(): () -> (number, nil)
-			local index = 0
-			local queue = Queue.Reliable[3]
-			return function (): (number, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
+	end
+}
+Returns.ServerUnreliablePollEvent = {
+	Iter = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
+		local index = 0
+		local queue = Queue.Unreliable[2]
+		return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
 			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		Next = function(): () -> (number, nil)
-			local index = 0
-			local queue = Queue.Reliable[3]
-			return function (): (number, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
-			end
+			return nil :: any, nil :: any
 		end
-	},
-	ServerEmptyUnreliablePollEvent = {
-		Iter = function(): () -> (number, nil)
-			local index = 0
-			local queue = Queue.Unreliable[3]
-			return function (): (number, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	Next = function(): () -> (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
+		local index = 0
+		local queue = Queue.Unreliable[2]
+		return function (): (number, { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } })
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
 			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		Next = function(): () -> (number, nil)
-			local index = 0
-			local queue = Queue.Unreliable[3]
-			return function (): (number, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
-			end
+			return nil :: any, nil :: any
 		end
-	},
-	ClientEmptyEvent = {
-		Fire = function(Value: nil): ()
-			Begin()
-			SerdesFunctions.WriteEVENT_ClientEmptyEvent(Value)
-			Commit()
+	end
+}
+Returns.ServerEmptyPollEvent = {
+	Iter = function(): () -> (number, nil)
+		local index = 0
+		local queue = Queue.Reliable[3]
+		return function (): (number, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any
 		end
-	},
-	ClientEmptyUnreliableEvent = {
-		Fire = function(Value: nil): ()
-			Hold()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent, Value)
-			if Sent and CheckUnreliableSize("ClientEmptyUnreliableEvent") then
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				Unreliable:FireServer(Buffer, SendInstances)
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	Next = function(): () -> (number, nil)
+		local index = 0
+		local queue = Queue.Reliable[3]
+		return function (): (number, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
 			end
-			Release()
-			if Sent ~= true then
-				error(Failure, 0)
-			end
+			return nil :: any, nil :: any
 		end
-	},
-	EmptyEvent = {
-		On = function(Listener: (Value: nil) -> ()): () -> ()
-			if Events.Reliable[5] ~= nil then
-				warn("[BlinkBlox]: \"EmptyEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+	end
+}
+Returns.ServerEmptyUnreliablePollEvent = {
+	Iter = function(): () -> (number, nil)
+		local index = 0
+		local queue = Queue.Unreliable[3]
+		return function (): (number, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
 			end
-			Events.Reliable[5] = Listener
-			local Pending = Queue.Reliable[5]
-			Queue.Reliable[5] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[5] == Listener then
-					Events.Reliable[5] = nil
-				end
-			end
+			return nil :: any, nil :: any
 		end
-	},
-	EmptyUnreliableEvent = {
-		On = function(Listener: (Value: nil) -> ()): () -> ()
-			if Events.Unreliable[5] ~= nil then
-				warn("[BlinkBlox]: \"EmptyUnreliableEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	Next = function(): () -> (number, nil)
+		local index = 0
+		local queue = Queue.Unreliable[3]
+		return function (): (number, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
 			end
-			Events.Unreliable[5] = Listener
-			return function (): ()
-				if Events.Unreliable[5] == Listener then
-					Events.Unreliable[5] = nil
-				end
+			return nil :: any, nil :: any
+		end
+	end
+}
+Returns.ClientEmptyEvent = {
+	Fire = function(Value: nil): ()
+		Begin()
+		SerdesFunctions.WriteEVENT_ClientEmptyEvent(Value)
+		Commit()
+	end
+}
+Returns.ClientEmptyUnreliableEvent = {
+	Fire = function(Value: nil): ()
+		Hold()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent, Value)
+		if Sent and CheckUnreliableSize("ClientEmptyUnreliableEvent") then
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			Unreliable:FireServer(Buffer, SendInstances)
+		end
+		Release()
+		if Sent ~= true then
+			error(Failure, 0)
+		end
+	end
+}
+Returns.EmptyEvent = {
+	On = function(Listener: (Value: nil) -> ()): () -> ()
+		if Events.Reliable[5] ~= nil then
+			warn("[BlinkBlox]: \"EmptyEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[5] = Listener
+		local Pending = Queue.Reliable[5]
+		Queue.Reliable[5] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[5] == Listener then
+				Events.Reliable[5] = nil
 			end
 		end
-	},
-	EmptyFunction = {
-		Invoke = function(Value: nil): (nil)
-			local InvocationIdentifier = ClaimInvocation(Invocations, 6)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_EmptyFunction, Value, InvocationIdentifier)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				ReleaseInvocation(Invocations, InvocationIdentifier)
-				error(Failure, 0)
-			end
-			Close(Cursor, Instances)
-			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
-			TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"EmptyFunction" was never answered')
-			local Success, ReturnValue: nil = coroutine.yield()
-			if Success ~= true then
-				error("There was an exception while processing \"EmptyFunction\".")
-			end
-			return ReturnValue
+	end
+}
+Returns.EmptyUnreliableEvent = {
+	On = function(Listener: (Value: nil) -> ()): () -> ()
+		if Events.Unreliable[5] ~= nil then
+			warn("[BlinkBlox]: \"EmptyUnreliableEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 		end
-	},
-	Flags8 = {
-		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}) -> ()): () -> ()
-			if Events.Reliable[7] ~= nil then
-				warn("[BlinkBlox]: \"Flags8\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[7] = Listener
-			local Pending = Queue.Reliable[7]
-			Queue.Reliable[7] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[7] == Listener then
-					Events.Reliable[7] = nil
-				end
+		Events.Unreliable[5] = Listener
+		return function (): ()
+			if Events.Unreliable[5] == Listener then
+				Events.Unreliable[5] = nil
 			end
 		end
-	},
-	Flags16 = {
-		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}) -> ()): () -> ()
-			if Events.Reliable[8] ~= nil then
-				warn("[BlinkBlox]: \"Flags16\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[8] = Listener
-			local Pending = Queue.Reliable[8]
-			Queue.Reliable[8] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[8] == Listener then
-					Events.Reliable[8] = nil
-				end
+	end
+}
+Returns.EmptyFunction = {
+	Invoke = function(Value: nil): (nil)
+		local InvocationIdentifier = ClaimInvocation(Invocations, 6)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_EmptyFunction, Value, InvocationIdentifier)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			ReleaseInvocation(Invocations, InvocationIdentifier)
+			error(Failure, 0)
+		end
+		Close(Cursor, Instances)
+		ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
+		TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"EmptyFunction" was never answered')
+		local Success, ReturnValue: nil = coroutine.yield()
+		if Success ~= true then
+			error("There was an exception while processing \"EmptyFunction\".")
+		end
+		return ReturnValue
+	end
+}
+Returns.Flags8 = {
+	On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}) -> ()): () -> ()
+		if Events.Reliable[7] ~= nil then
+			warn("[BlinkBlox]: \"Flags8\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[7] = Listener
+		local Pending = Queue.Reliable[7]
+		Queue.Reliable[7] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[7] == Listener then
+				Events.Reliable[7] = nil
 			end
 		end
-	},
-	Flags32 = {
-		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}) -> ()): () -> ()
-			if Events.Reliable[9] ~= nil then
-				warn("[BlinkBlox]: \"Flags32\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[9] = Listener
-			local Pending = Queue.Reliable[9]
-			Queue.Reliable[9] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[9] == Listener then
-					Events.Reliable[9] = nil
-				end
+	end
+}
+Returns.Flags16 = {
+	On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}) -> ()): () -> ()
+		if Events.Reliable[8] ~= nil then
+			warn("[BlinkBlox]: \"Flags16\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[8] = Listener
+		local Pending = Queue.Reliable[8]
+		Queue.Reliable[8] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[8] == Listener then
+				Events.Reliable[8] = nil
 			end
 		end
-	},
-	Flags33 = {
-		On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}) -> ()): () -> ()
-			if Events.Reliable[10] ~= nil then
-				warn("[BlinkBlox]: \"Flags33\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[10] = Listener
-			local Pending = Queue.Reliable[10]
-			Queue.Reliable[10] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[10] == Listener then
-					Events.Reliable[10] = nil
-				end
+	end
+}
+Returns.Flags32 = {
+	On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}) -> ()): () -> ()
+		if Events.Reliable[9] ~= nil then
+			warn("[BlinkBlox]: \"Flags32\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[9] = Listener
+		local Pending = Queue.Reliable[9]
+		Queue.Reliable[9] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[9] == Listener then
+				Events.Reliable[9] = nil
 			end
 		end
-	},
-	DynamicMap = {
-		On = function(Listener: (Value: {[number]: { Static: number, Dynamic: buffer }}) -> ()): () -> ()
-			if Events.Reliable[11] ~= nil then
-				warn("[BlinkBlox]: \"DynamicMap\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[11] = Listener
-			local Pending = Queue.Reliable[11]
-			Queue.Reliable[11] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[11] == Listener then
-					Events.Reliable[11] = nil
-				end
+	end
+}
+Returns.Flags33 = {
+	On = function(Listener: (Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}) -> ()): () -> ()
+		if Events.Reliable[10] ~= nil then
+			warn("[BlinkBlox]: \"Flags33\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[10] = Listener
+		local Pending = Queue.Reliable[10]
+		Queue.Reliable[10] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[10] == Listener then
+				Events.Reliable[10] = nil
 			end
 		end
-	},
-	DynamicArray = {
-		On = function(Listener: (Value: { { Static: number, Dynamic: buffer } }) -> ()): () -> ()
-			if Events.Reliable[12] ~= nil then
-				warn("[BlinkBlox]: \"DynamicArray\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[12] = Listener
-			local Pending = Queue.Reliable[12]
-			Queue.Reliable[12] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[12] == Listener then
-					Events.Reliable[12] = nil
-				end
+	end
+}
+Returns.DynamicMap = {
+	On = function(Listener: (Value: {[number]: { Static: number, Dynamic: buffer }}) -> ()): () -> ()
+		if Events.Reliable[11] ~= nil then
+			warn("[BlinkBlox]: \"DynamicMap\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[11] = Listener
+		local Pending = Queue.Reliable[11]
+		Queue.Reliable[11] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[11] == Listener then
+				Events.Reliable[11] = nil
 			end
 		end
-	},
-	PlayerEvent = {
-		On = function(Listener: (Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }) -> ()): () -> ()
-			if Events.Reliable[13] ~= nil then
-				warn("[BlinkBlox]: \"PlayerEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[13] = Listener
-			local Pending = Queue.Reliable[13]
-			Queue.Reliable[13] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[13] == Listener then
-					Events.Reliable[13] = nil
-				end
+	end
+}
+Returns.DynamicArray = {
+	On = function(Listener: (Value: { { Static: number, Dynamic: buffer } }) -> ()): () -> ()
+		if Events.Reliable[12] ~= nil then
+			warn("[BlinkBlox]: \"DynamicArray\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[12] = Listener
+		local Pending = Queue.Reliable[12]
+		Queue.Reliable[12] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[12] == Listener then
+				Events.Reliable[12] = nil
 			end
 		end
-	},
-	Booleans = {
-		Fire = function(Value: { boolean }): ()
-			Begin()
-			SerdesFunctions.WriteEVENT_Booleans(Value)
-			Commit()
+	end
+}
+Returns.PlayerEvent = {
+	On = function(Listener: (Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }) -> ()): () -> ()
+		if Events.Reliable[13] ~= nil then
+			warn("[BlinkBlox]: \"PlayerEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 		end
-	},
-	Unknown = {
-		On = function(Listener: (Value: any) -> ()): () -> ()
-			if Events.Reliable[15] ~= nil then
-				warn("[BlinkBlox]: \"Unknown\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[15] = Listener
-			local Pending = Queue.Reliable[15]
-			Queue.Reliable[15] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[15] == Listener then
-					Events.Reliable[15] = nil
-				end
+		Events.Reliable[13] = Listener
+		local Pending = Queue.Reliable[13]
+		Queue.Reliable[13] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[13] == Listener then
+				Events.Reliable[13] = nil
 			end
 		end
-	},
-	MapEvent = {
-		On = function(Listener: (Value: {[string]: number}) -> ()): () -> ()
-			if Events.Reliable[16] ~= nil then
-				warn("[BlinkBlox]: \"MapEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[16] = Listener
-			local Pending = Queue.Reliable[16]
-			Queue.Reliable[16] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[16] == Listener then
-					Events.Reliable[16] = nil
-				end
+	end
+}
+Returns.Booleans = {
+	Fire = function(Value: { boolean }): ()
+		Begin()
+		SerdesFunctions.WriteEVENT_Booleans(Value)
+		Commit()
+	end
+}
+Returns.Unknown = {
+	On = function(Listener: (Value: any) -> ()): () -> ()
+		if Events.Reliable[15] ~= nil then
+			warn("[BlinkBlox]: \"Unknown\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[15] = Listener
+		local Pending = Queue.Reliable[15]
+		Queue.Reliable[15] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[15] == Listener then
+				Events.Reliable[15] = nil
 			end
 		end
-	},
-	MapStructEvent = {
-		On = function(Listener: (Value: { Map: {[string]: number} }) -> ()): () -> ()
-			if Events.Reliable[17] ~= nil then
-				warn("[BlinkBlox]: \"MapStructEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[17] = Listener
-			local Pending = Queue.Reliable[17]
-			Queue.Reliable[17] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[17] == Listener then
-					Events.Reliable[17] = nil
-				end
+	end
+}
+Returns.MapEvent = {
+	On = function(Listener: (Value: {[string]: number}) -> ()): () -> ()
+		if Events.Reliable[16] ~= nil then
+			warn("[BlinkBlox]: \"MapEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[16] = Listener
+		local Pending = Queue.Reliable[16]
+		Queue.Reliable[16] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[16] == Listener then
+				Events.Reliable[16] = nil
 			end
 		end
-	},
-	MapComplexEvent = {
-		On = function(Listener: (Value: {[string]: { number }}) -> ()): () -> ()
-			if Events.Reliable[18] ~= nil then
-				warn("[BlinkBlox]: \"MapComplexEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[18] = Listener
-			local Pending = Queue.Reliable[18]
-			Queue.Reliable[18] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[18] == Listener then
-					Events.Reliable[18] = nil
-				end
+	end
+}
+Returns.MapStructEvent = {
+	On = function(Listener: (Value: { Map: {[string]: number} }) -> ()): () -> ()
+		if Events.Reliable[17] ~= nil then
+			warn("[BlinkBlox]: \"MapStructEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[17] = Listener
+		local Pending = Queue.Reliable[17]
+		Queue.Reliable[17] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[17] == Listener then
+				Events.Reliable[17] = nil
 			end
 		end
-	},
-	MapReferenceEvent = {
-		On = function(Listener: (Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?) -> ()): () -> ()
-			if Events.Reliable[19] ~= nil then
-				warn("[BlinkBlox]: \"MapReferenceEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[19] = Listener
-			local Pending = Queue.Reliable[19]
-			Queue.Reliable[19] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[19] == Listener then
-					Events.Reliable[19] = nil
-				end
+	end
+}
+Returns.MapComplexEvent = {
+	On = function(Listener: (Value: {[string]: { number }}) -> ()): () -> ()
+		if Events.Reliable[18] ~= nil then
+			warn("[BlinkBlox]: \"MapComplexEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[18] = Listener
+		local Pending = Queue.Reliable[18]
+		Queue.Reliable[18] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[18] == Listener then
+				Events.Reliable[18] = nil
 			end
 		end
-	},
-	ArrayPrimitive = {
-		On = function(Listener: (Value: { number }) -> ()): () -> ()
-			if Events.Unreliable[6] ~= nil then
-				warn("[BlinkBlox]: \"ArrayPrimitive\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[6] = Listener
-			return function (): ()
-				if Events.Unreliable[6] == Listener then
-					Events.Unreliable[6] = nil
-				end
+	end
+}
+Returns.MapReferenceEvent = {
+	On = function(Listener: (Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?) -> ()): () -> ()
+		if Events.Reliable[19] ~= nil then
+			warn("[BlinkBlox]: \"MapReferenceEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[19] = Listener
+		local Pending = Queue.Reliable[19]
+		Queue.Reliable[19] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[19] == Listener then
+				Events.Reliable[19] = nil
 			end
 		end
-	},
-	OptionalPrimitive = {
-		On = function(Listener: (Value: number?) -> ()): () -> ()
-			if Events.Unreliable[7] ~= nil then
-				warn("[BlinkBlox]: \"OptionalPrimitive\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[7] = Listener
-			return function (): ()
-				if Events.Unreliable[7] == Listener then
-					Events.Unreliable[7] = nil
-				end
+	end
+}
+Returns.ArrayPrimitive = {
+	On = function(Listener: (Value: { number }) -> ()): () -> ()
+		if Events.Unreliable[6] ~= nil then
+			warn("[BlinkBlox]: \"ArrayPrimitive\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[6] = Listener
+		return function (): ()
+			if Events.Unreliable[6] == Listener then
+				Events.Unreliable[6] = nil
 			end
 		end
-	},
-	ManyReliableSync = {
+	end
+}
+Returns.OptionalPrimitive = {
+	On = function(Listener: (Value: number?) -> ()): () -> ()
+		if Events.Unreliable[7] ~= nil then
+			warn("[BlinkBlox]: \"OptionalPrimitive\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[7] = Listener
+		return function (): ()
+			if Events.Unreliable[7] == Listener then
+				Events.Unreliable[7] = nil
+			end
+		end
+	end
+}
+Returns.ManyReliableSync = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Reliable[20])
+		table.insert(Listeners, Listener)
+		Events.Reliable[20] = Listeners
+		local Pending = Queue.Reliable[20]
+		Queue.Reliable[20] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			local Index = table.find(Events.Reliable[20], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Reliable[20])
+				table.remove(Listeners, Index)
+				Events.Reliable[20] = Listeners
+				ListenerEpoch += 1
+			end
+		end
+	end
+}
+Returns.ManyReliableAsync = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Reliable[21])
+		table.insert(Listeners, Listener)
+		Events.Reliable[21] = Listeners
+		local Pending = Queue.Reliable[21]
+		Queue.Reliable[21] = {}
+		for _, Arguments in Pending do
+			Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
+		end
+		return function (): ()
+			local Index = table.find(Events.Reliable[21], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Reliable[21])
+				table.remove(Listeners, Index)
+				Events.Reliable[21] = Listeners
+				ListenerEpoch += 1
+			end
+		end
+	end
+}
+Returns.ManyUnreliableSync = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[8])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[8] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[8], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[8])
+				table.remove(Listeners, Index)
+				Events.Unreliable[8] = Listeners
+				ListenerEpoch += 1
+			end
+		end
+	end
+}
+Returns.ManyUnreliableAsync = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[9])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[9] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[9], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[9])
+				table.remove(Listeners, Index)
+				Events.Unreliable[9] = Listeners
+				ListenerEpoch += 1
+			end
+		end
+	end
+}
+Returns.ReliableServer = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		if Events.Reliable[22] ~= nil then
+			warn("[BlinkBlox]: \"ReliableServer\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[22] = Listener
+		local Pending = Queue.Reliable[22]
+		Queue.Reliable[22] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[22] == Listener then
+				Events.Reliable[22] = nil
+			end
+		end
+	end
+}
+Returns.ReliableServerAsync = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		if Events.Reliable[23] ~= nil then
+			warn("[BlinkBlox]: \"ReliableServerAsync\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[23] = Listener
+		local Pending = Queue.Reliable[23]
+		Queue.Reliable[23] = {}
+		for _, Arguments in Pending do
+			Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
+		end
+		return function (): ()
+			if Events.Reliable[23] == Listener then
+				Events.Reliable[23] = nil
+			end
+		end
+	end
+}
+Returns.ReliableClient = {
+	Fire = function(Value: number): ()
+		Begin()
+		SerdesFunctions.WriteEVENT_ReliableClient(Value)
+		Commit()
+	end
+}
+Returns.UnreliableServer = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		if Events.Unreliable[10] ~= nil then
+			warn("[BlinkBlox]: \"UnreliableServer\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[10] = Listener
+		return function (): ()
+			if Events.Unreliable[10] == Listener then
+				Events.Unreliable[10] = nil
+			end
+		end
+	end
+}
+Returns.UnreliableServerAsync = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		if Events.Unreliable[11] ~= nil then
+			warn("[BlinkBlox]: \"UnreliableServerAsync\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[11] = Listener
+		return function (): ()
+			if Events.Unreliable[11] == Listener then
+				Events.Unreliable[11] = nil
+			end
+		end
+	end
+}
+Returns.UnreliableClient = {
+	Fire = function(Value: number): ()
+		Hold()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_UnreliableClient, Value)
+		if Sent and CheckUnreliableSize("UnreliableClient") then
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			Unreliable:FireServer(Buffer, SendInstances)
+		end
+		Release()
+		if Sent ~= true then
+			error(Failure, 0)
+		end
+	end
+}
+Returns.InstanceAny = {
+	On = function(Listener: (Value: Instance) -> ()): () -> ()
+		if Events.Reliable[25] ~= nil then
+			warn("[BlinkBlox]: \"InstanceAny\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[25] = Listener
+		local Pending = Queue.Reliable[25]
+		Queue.Reliable[25] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[25] == Listener then
+				Events.Reliable[25] = nil
+			end
+		end
+	end
+}
+Returns.InstanceOfType = {
+	On = function(Listener: (Value: Sound) -> ()): () -> ()
+		if Events.Reliable[26] ~= nil then
+			warn("[BlinkBlox]: \"InstanceOfType\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[26] = Listener
+		local Pending = Queue.Reliable[26]
+		Queue.Reliable[26] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[26] == Listener then
+				Events.Reliable[26] = nil
+			end
+		end
+	end
+}
+Returns.InstanceOptional = {
+	On = function(Listener: (Value: Instance?) -> ()): () -> ()
+		if Events.Reliable[27] ~= nil then
+			warn("[BlinkBlox]: \"InstanceOptional\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[27] = Listener
+		local Pending = Queue.Reliable[27]
+		Queue.Reliable[27] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[27] == Listener then
+				Events.Reliable[27] = nil
+			end
+		end
+	end
+}
+Returns.Reference = {
+	On = function(Listener: (Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?) -> ()): () -> ()
+		if Events.Reliable[28] ~= nil then
+			warn("[BlinkBlox]: \"Reference\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[28] = Listener
+		local Pending = Queue.Reliable[28]
+		Queue.Reliable[28] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[28] == Listener then
+				Events.Reliable[28] = nil
+			end
+		end
+	end
+}
+Returns.ReferenceArray = {
+	On = function(Listener: (Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }) -> ()): () -> ()
+		if Events.Reliable[29] ~= nil then
+			warn("[BlinkBlox]: \"ReferenceArray\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[29] = Listener
+		local Pending = Queue.Reliable[29]
+		Queue.Reliable[29] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[29] == Listener then
+				Events.Reliable[29] = nil
+			end
+		end
+	end
+}
+Returns.ReferenceOptional = {
+	On = function(Listener: (Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?) -> ()): () -> ()
+		if Events.Reliable[30] ~= nil then
+			warn("[BlinkBlox]: \"ReferenceOptional\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[30] = Listener
+		local Pending = Queue.Reliable[30]
+		Queue.Reliable[30] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[30] == Listener then
+				Events.Reliable[30] = nil
+			end
+		end
+	end
+}
+Returns.RemoteFunction = {
+	Invoke = function(Value: number): (number)
+		local InvocationIdentifier = ClaimInvocation(Invocations, 31)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_RemoteFunction, Value, InvocationIdentifier)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			ReleaseInvocation(Invocations, InvocationIdentifier)
+			error(Failure, 0)
+		end
+		Close(Cursor, Instances)
+		ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
+		TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"RemoteFunction" was never answered')
+		local Success, ReturnValue: number = coroutine.yield()
+		if Success ~= true then
+			error("There was an exception while processing \"RemoteFunction\".")
+		end
+		return ReturnValue
+	end
+}
+Returns.Tuple = {
+	On = function(Listener: (Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }) -> ()): () -> ()
+		if Events.Reliable[32] ~= nil then
+			warn("[BlinkBlox]: \"Tuple\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[32] = Listener
+		local Pending = Queue.Reliable[32]
+		Queue.Reliable[32] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[32] == Listener then
+				Events.Reliable[32] = nil
+			end
+		end
+	end
+}
+Returns.TupleUnreliable = {
+	On = function(Listener: (Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?) -> ()): () -> ()
+		if Events.Unreliable[13] ~= nil then
+			warn("[BlinkBlox]: \"TupleUnreliable\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[13] = Listener
+		return function (): ()
+			if Events.Unreliable[13] == Listener then
+				Events.Unreliable[13] = nil
+			end
+		end
+	end
+}
+Returns.TupleFunction = {
+	Invoke = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): (Instance?, Instance, number?, ("A" | "B" | "C" | "D"), number)
+		local InvocationIdentifier = ClaimInvocation(Invocations, 33)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_TupleFunction, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			ReleaseInvocation(Invocations, InvocationIdentifier)
+			error(Failure, 0)
+		end
+		Close(Cursor, Instances)
+		ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
+		TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"TupleFunction" was never answered')
+		local Success, ReturnValue1: Instance?, ReturnValue2: Instance, ReturnValue3: number?, ReturnValue4: ("A" | "B" | "C" | "D"), ReturnValue5: number = coroutine.yield()
+		if Success ~= true then
+			error("There was an exception while processing \"TupleFunction\".")
+		end
+		return ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5
+	end
+}
+Returns.AnotherScope = {
+	InScopeEvent = {
 		On = function(Listener: (Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Reliable[20])
-			table.insert(Listeners, Listener)
-			Events.Reliable[20] = Listeners
-			local Pending = Queue.Reliable[20]
-			Queue.Reliable[20] = {}
+			if Events.Reliable[34] ~= nil then
+				warn("[BlinkBlox]: \"InScopeEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Reliable[34] = Listener
+			local Pending = Queue.Reliable[34]
+			Queue.Reliable[34] = {}
 			for _, Arguments in Pending do
 				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 			return function (): ()
-				local Index = table.find(Events.Reliable[20], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Reliable[20])
-					table.remove(Listeners, Index)
-					Events.Reliable[20] = Listeners
-					ListenerEpoch += 1
+				if Events.Reliable[34] == Listener then
+					Events.Reliable[34] = nil
 				end
 			end
 		end
 	},
-	ManyReliableAsync = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Reliable[21])
-			table.insert(Listeners, Listener)
-			Events.Reliable[21] = Listeners
-			local Pending = Queue.Reliable[21]
-			Queue.Reliable[21] = {}
-			for _, Arguments in Pending do
-				Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
-			end
-			return function (): ()
-				local Index = table.find(Events.Reliable[21], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Reliable[21])
-					table.remove(Listeners, Index)
-					Events.Reliable[21] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	ManyUnreliableSync = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[8])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[8] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[8], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[8])
-					table.remove(Listeners, Index)
-					Events.Unreliable[8] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	ManyUnreliableAsync = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[9])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[9] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[9], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[9])
-					table.remove(Listeners, Index)
-					Events.Unreliable[9] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	ReliableServer = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Reliable[22] ~= nil then
-				warn("[BlinkBlox]: \"ReliableServer\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[22] = Listener
-			local Pending = Queue.Reliable[22]
-			Queue.Reliable[22] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[22] == Listener then
-					Events.Reliable[22] = nil
-				end
-			end
-		end
-	},
-	ReliableServerAsync = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Reliable[23] ~= nil then
-				warn("[BlinkBlox]: \"ReliableServerAsync\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[23] = Listener
-			local Pending = Queue.Reliable[23]
-			Queue.Reliable[23] = {}
-			for _, Arguments in Pending do
-				Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
-			end
-			return function (): ()
-				if Events.Reliable[23] == Listener then
-					Events.Reliable[23] = nil
-				end
-			end
-		end
-	},
-	ReliableClient = {
-		Fire = function(Value: number): ()
-			Begin()
-			SerdesFunctions.WriteEVENT_ReliableClient(Value)
-			Commit()
-		end
-	},
-	UnreliableServer = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Unreliable[10] ~= nil then
-				warn("[BlinkBlox]: \"UnreliableServer\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[10] = Listener
-			return function (): ()
-				if Events.Unreliable[10] == Listener then
-					Events.Unreliable[10] = nil
-				end
-			end
-		end
-	},
-	UnreliableServerAsync = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Unreliable[11] ~= nil then
-				warn("[BlinkBlox]: \"UnreliableServerAsync\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[11] = Listener
-			return function (): ()
-				if Events.Unreliable[11] == Listener then
-					Events.Unreliable[11] = nil
-				end
-			end
-		end
-	},
-	UnreliableClient = {
-		Fire = function(Value: number): ()
-			Hold()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_UnreliableClient, Value)
-			if Sent and CheckUnreliableSize("UnreliableClient") then
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				Unreliable:FireServer(Buffer, SendInstances)
-			end
-			Release()
-			if Sent ~= true then
-				error(Failure, 0)
-			end
-		end
-	},
-	InstanceAny = {
-		On = function(Listener: (Value: Instance) -> ()): () -> ()
-			if Events.Reliable[25] ~= nil then
-				warn("[BlinkBlox]: \"InstanceAny\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[25] = Listener
-			local Pending = Queue.Reliable[25]
-			Queue.Reliable[25] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[25] == Listener then
-					Events.Reliable[25] = nil
-				end
-			end
-		end
-	},
-	InstanceOfType = {
-		On = function(Listener: (Value: Sound) -> ()): () -> ()
-			if Events.Reliable[26] ~= nil then
-				warn("[BlinkBlox]: \"InstanceOfType\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[26] = Listener
-			local Pending = Queue.Reliable[26]
-			Queue.Reliable[26] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[26] == Listener then
-					Events.Reliable[26] = nil
-				end
-			end
-		end
-	},
-	InstanceOptional = {
-		On = function(Listener: (Value: Instance?) -> ()): () -> ()
-			if Events.Reliable[27] ~= nil then
-				warn("[BlinkBlox]: \"InstanceOptional\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[27] = Listener
-			local Pending = Queue.Reliable[27]
-			Queue.Reliable[27] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[27] == Listener then
-					Events.Reliable[27] = nil
-				end
-			end
-		end
-	},
-	Reference = {
-		On = function(Listener: (Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?) -> ()): () -> ()
-			if Events.Reliable[28] ~= nil then
-				warn("[BlinkBlox]: \"Reference\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[28] = Listener
-			local Pending = Queue.Reliable[28]
-			Queue.Reliable[28] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[28] == Listener then
-					Events.Reliable[28] = nil
-				end
-			end
-		end
-	},
-	ReferenceArray = {
-		On = function(Listener: (Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }) -> ()): () -> ()
-			if Events.Reliable[29] ~= nil then
-				warn("[BlinkBlox]: \"ReferenceArray\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[29] = Listener
-			local Pending = Queue.Reliable[29]
-			Queue.Reliable[29] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[29] == Listener then
-					Events.Reliable[29] = nil
-				end
-			end
-		end
-	},
-	ReferenceOptional = {
-		On = function(Listener: (Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?) -> ()): () -> ()
-			if Events.Reliable[30] ~= nil then
-				warn("[BlinkBlox]: \"ReferenceOptional\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[30] = Listener
-			local Pending = Queue.Reliable[30]
-			Queue.Reliable[30] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[30] == Listener then
-					Events.Reliable[30] = nil
-				end
-			end
-		end
-	},
-	RemoteFunction = {
-		Invoke = function(Value: number): (number)
-			local InvocationIdentifier = ClaimInvocation(Invocations, 31)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_RemoteFunction, Value, InvocationIdentifier)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				ReleaseInvocation(Invocations, InvocationIdentifier)
-				error(Failure, 0)
-			end
-			Close(Cursor, Instances)
-			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
-			TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"RemoteFunction" was never answered')
-			local Success, ReturnValue: number = coroutine.yield()
-			if Success ~= true then
-				error("There was an exception while processing \"RemoteFunction\".")
-			end
-			return ReturnValue
-		end
-	},
-	Tuple = {
-		On = function(Listener: (Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }) -> ()): () -> ()
-			if Events.Reliable[32] ~= nil then
-				warn("[BlinkBlox]: \"Tuple\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[32] = Listener
-			local Pending = Queue.Reliable[32]
-			Queue.Reliable[32] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[32] == Listener then
-					Events.Reliable[32] = nil
-				end
-			end
-		end
-	},
-	TupleUnreliable = {
-		On = function(Listener: (Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?) -> ()): () -> ()
-			if Events.Unreliable[13] ~= nil then
-				warn("[BlinkBlox]: \"TupleUnreliable\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[13] = Listener
-			return function (): ()
-				if Events.Unreliable[13] == Listener then
-					Events.Unreliable[13] = nil
-				end
-			end
-		end
-	},
-	TupleFunction = {
-		Invoke = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): (Instance?, Instance, number?, ("A" | "B" | "C" | "D"), number)
-			local InvocationIdentifier = ClaimInvocation(Invocations, 33)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_TupleFunction, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				ReleaseInvocation(Invocations, InvocationIdentifier)
-				error(Failure, 0)
-			end
-			Close(Cursor, Instances)
-			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
-			TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"TupleFunction" was never answered')
-			local Success, ReturnValue1: Instance?, ReturnValue2: Instance, ReturnValue3: number?, ReturnValue4: ("A" | "B" | "C" | "D"), ReturnValue5: number = coroutine.yield()
-			if Success ~= true then
-				error("There was an exception while processing \"TupleFunction\".")
-			end
-			return ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5
-		end
-	},
-	AnotherScope = {
-		InScopeEvent = {
+	ScopeWithinAnotherScope = {
+		InAnotherScopeEvent = {
 			On = function(Listener: (Value: number) -> ()): () -> ()
-				if Events.Reliable[34] ~= nil then
-					warn("[BlinkBlox]: \"InScopeEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+				if Events.Reliable[35] ~= nil then
+					warn("[BlinkBlox]: \"InAnotherScopeEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
 				end
-				Events.Reliable[34] = Listener
-				local Pending = Queue.Reliable[34]
-				Queue.Reliable[34] = {}
+				Events.Reliable[35] = Listener
+				local Pending = Queue.Reliable[35]
+				Queue.Reliable[35] = {}
 				for _, Arguments in Pending do
 					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
 					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 				end
 				return function (): ()
-					if Events.Reliable[34] == Listener then
-						Events.Reliable[34] = nil
-					end
-				end
-			end
-		},
-		ScopeWithinAnotherScope = {
-			InAnotherScopeEvent = {
-				On = function(Listener: (Value: number) -> ()): () -> ()
-					if Events.Reliable[35] ~= nil then
-						warn("[BlinkBlox]: \"InAnotherScopeEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-					end
-					Events.Reliable[35] = Listener
-					local Pending = Queue.Reliable[35]
-					Queue.Reliable[35] = {}
-					for _, Arguments in Pending do
-						local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-					end
-					return function (): ()
-						if Events.Reliable[35] == Listener then
-							Events.Reliable[35] = nil
-						end
-					end
-				end
-			},
-		},
-	},
-	ExampleScope = {
-		InScopeEvent = {
-			On = function(Listener: (Value: number) -> ()): () -> ()
-				if Events.Reliable[36] ~= nil then
-					warn("[BlinkBlox]: \"InScopeEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-				end
-				Events.Reliable[36] = Listener
-				local Pending = Queue.Reliable[36]
-				Queue.Reliable[36] = {}
-				for _, Arguments in Pending do
-					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-				end
-				return function (): ()
-					if Events.Reliable[36] == Listener then
-						Events.Reliable[36] = nil
+					if Events.Reliable[35] == Listener then
+						Events.Reliable[35] = nil
 					end
 				end
 			end
 		},
 	},
-})
+}
+Returns.ExampleScope = {
+	InScopeEvent = {
+		On = function(Listener: (Value: number) -> ()): () -> ()
+			if Events.Reliable[36] ~= nil then
+				warn("[BlinkBlox]: \"InScopeEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Reliable[36] = Listener
+			local Pending = Queue.Reliable[36]
+			Queue.Reliable[36] = {}
+			for _, Arguments in Pending do
+				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+			end
+			return function (): ()
+				if Events.Reliable[36] == Listener then
+					Events.Reliable[36] = nil
+				end
+			end
+		end
+	},
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL
