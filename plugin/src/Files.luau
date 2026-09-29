@@ -5,6 +5,8 @@
 --- Split out of init.server.luau; the list the side panel draws from these stays there.
 local ServerStorage = game:GetService("ServerStorage")
 
+local History = require("./History")
+
 local FILES_FOLDER = "BLINK_CONFIGURATION_FILES"
 local TEMPLATE_FILE = {
 	Name = "Template",
@@ -34,19 +36,29 @@ function Files.Folder(): Folder
 	return SaveFolder
 end
 
---- Writes `Source` under `Name`, replacing a file of that name.
+--- Writes `Source` under `Name`, replacing a file of that name. One undo step.
 function Files.Save(Name: string, Source: string)
-	local SaveFolder = Files.Folder()
-	local SaveInstance: StringValue? = SaveFolder:FindFirstChild(Name) :: StringValue
-	if not SaveInstance then
-		local NewSaveInstance = Instance.new("StringValue")
-		NewSaveInstance.Name = Name
-		NewSaveInstance.Value = Source
-		NewSaveInstance.Parent = SaveFolder
-		return
-	end
+	History.Record(`Save {Name}`, function()
+		local SaveFolder = Files.Folder()
+		local SaveInstance: StringValue? = SaveFolder:FindFirstChild(Name) :: StringValue
+		if not SaveInstance then
+			local NewSaveInstance = Instance.new("StringValue")
+			NewSaveInstance.Name = Name
+			NewSaveInstance.Value = Source
+			NewSaveInstance.Parent = SaveFolder
+			return
+		end
 
-	SaveInstance.Value = Source
+		SaveInstance.Value = Source
+	end)
+end
+
+--- Takes `File` out of the folder, as one undo step. Unparented rather than destroyed, so the step
+--- can be undone.
+function Files.Delete(File: StringValue)
+	History.Record(`Delete {File.Name}`, function()
+		File.Parent = nil
+	end)
 end
 
 --- In a place that has never had the folder, saves the template and returns it to be opened. In one

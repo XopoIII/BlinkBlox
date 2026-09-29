@@ -41,6 +41,11 @@ unreliable event that cannot fit in
 | `Color3` | 3 |
 | `BrickColor` | 2 |
 | `DateTime`, `DateTimeMillis` | 8 |
+| `Vector2`, `UDim`, `NumberRange` | 8 |
+| `UDim2` | 16 |
+| `ColorSequence` | 1 + 7 per keypoint: 15 to 141 |
+| `TweenInfo` | 15 |
+| `Enum(Name)` | 2 |
 | `Instance`, `unknown` | 0, and one slot in the instance list |
 
 Each event adds one byte for its id, and an `OrderedUnreliable` event other than a stream two more for
@@ -751,12 +756,14 @@ travels in the remote's instance list, and counts towards `MaxInstancesPerPacket
 type AnInstance = Instance
 ```
 
-<Aside type="danger">
-If a non-optional instance is `nil` on the receiving side, the packet fails to decode and the rest of
-it is dropped. An instance can turn `nil` for many reasons: instance streaming, an instance that only
-exists on the sender's side, one destroyed while the packet was in flight.
+<Aside type="caution">
+If a non-optional instance is `nil` on the receiving side, that event is refused and reported to the
+decode-error handler; the rest of the packet is still read. An instance can turn `nil` for many
+reasons: instance streaming, an instance that only exists on the sender's side, one destroyed while
+the packet was in flight. Before 1.0.0 the whole rest of the packet was dropped with it.
 
-If you send instances that might not exist on the other side, mark them [optional](#optionals).
+If you send instances that might not exist on the other side, mark them [optional](#optionals), and
+the listener gets `nil` instead.
 </Aside>
 
 ### Specifying Class
@@ -834,6 +841,13 @@ in one CFrame (`E3023`).
 | `BrickColor` | 2 | The colour's `Number`, as a `u16`. |
 | `DateTime` | 8 | `UnixTimestamp` as an `f64`: whole seconds. |
 | `DateTimeMillis` | 8 | `UnixTimestampMillis` as an `f64`: milliseconds. Decodes to a `DateTime`. |
+| `Vector2` | 8 | `X` and `Y` as `f32`. |
+| `UDim` | 8 | `Scale` as an `f32`, `Offset` as an `i32`. |
+| `UDim2` | 16 | Two `UDim`s, X then Y. |
+| `NumberRange` | 8 | `Min` and `Max` as `f32`. A received range with `Max` below `Min`, or NaN, is refused. |
+| `ColorSequence` | 15 to 141 | A byte for the count of keypoints, 2 to 20, then each keypoint's `Time` as an `f32` and its colour as a `Color3`. A received sequence that does not run from 0 to 1 in order is refused. |
+| `TweenInfo` | 15 | `Time`, `RepeatCount` (`i32`) and `DelayTime`; `EasingStyle` and `EasingDirection` by their `Value`, a byte each; `Reverses` as a byte. |
+| `Enum(Name)` | 2 | An item of the Roblox enum `Name`, as its `Value` in a `u16`. See [Roblox enums](#roblox-enums). |
 
 ```blink
 struct Appearance {
@@ -843,6 +857,39 @@ struct Appearance {
     LastSeen: DateTimeMillis
 }
 ```
+
+```blink
+struct Panel {
+    Size: UDim2,
+    Anchor: Vector2,
+    Fade: ColorSequence,
+    Open: TweenInfo
+}
+```
+
+### Roblox enums
+
+`Enum(Name)` is an item of one Roblox enum, `Enum.Name` in Luau and in TypeScript:
+
+```blink
+struct Surface {
+    Material: Enum(Material),
+    Font: Enum(Font)?
+}
+```
+
+An item travels as its `Value` and is looked up by it on arrival. Not by its position in
+`GetEnumItems()`: that list can differ between a client and a server while Roblox rolls out an engine
+change, and a position would then decode as a neighbouring item without any error. A `Value` the
+enum has no item for is refused. The value is checked on send too, whatever
+[`WriteValidations`](/BlinkBlox/language/options/#writevalidations) says: an item whose `Value` does
+not fit in a `u16` would arrive as a different one. With `WriteValidations`, an item of another enum is
+refused on send.
+
+The name must follow `Enum` directly: `Enum(Material)`, not `Enum (Material)`. Written alone,
+`Enum` is still an ordinary name -- a declaration called `Enum` in an older schema keeps working. The
+compiler cannot tell whether `Name` is a real Roblox enum; a misspelt one fails in Luau, at the first
+send or read that uses it.
 
 <Aside type="caution">
 `Color3` carries the 0 to 1 range and nothing outside it. An HDR channel above 1 -- `Highlight` and

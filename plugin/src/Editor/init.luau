@@ -45,6 +45,11 @@ local SCROLL_LINES = 2
 local CURSOR_BLINK_RATE = 0.5
 local PRE_ALLOCATED_LINES = 2_000
 
+--> Seconds of no typing before the schema is parsed again. A parse is linear in the document --
+--> 15 ms for 1,200 lines on LuneBlox -- and while a schema is typed it is almost always incomplete,
+--> so parsing per keystroke mostly produced an error that the next keystroke replaced.
+local ANALYSIS_DELAY = 0.3
+
 type CompletionItem = Completion.Item
 
 ---- Constants ----
@@ -94,6 +99,11 @@ local PreviousCursorPosition: number?
 local NavigationPending: { Direction: number, Position: number }?
 local CompletionPending: boolean?
 local IgnoreCursorChange: boolean?
+
+--> Work a text change leaves for OnPreRender: highlighting once a frame however many changes it
+--> saw (a held key, a paste through the styling hooks), and a parse once typing has paused.
+local ColorsPending: boolean?
+local AnalysisDue: number?
 
 local AnalysisError: State.Class<Error.Class?> = State.new(nil :: any)
 local SourceAnalysis = Analysis.new(function(Diagnostic)
@@ -146,6 +156,22 @@ end
 ---- Event Functions -----
 
 local function OnPreRender(DeltaTime: number)
+	if ColorsPending then
+		ColorsPending = nil
+
+		Profiler.profileBegin("Highlighting")
+		UpdateColors()
+		Profiler.profileEnd()
+	end
+
+	if AnalysisDue and os.clock() >= AnalysisDue then
+		AnalysisDue = nil
+
+		Profiler.profileBegin("Analysis")
+		UpdateAnalysis()
+		Profiler.profileEnd()
+	end
+
 	if NavigationPending then
 		local Navigation = NavigationPending
 		NavigationPending = nil
@@ -222,42 +248,17 @@ local function OnAnalysisErrorChanged()
 	end
 
 	RenderedDiagnostic = Key
-
-	--> Clear previous error
-	ErrorContainer.Visible = false
-	Instances.ClearChildrenWhichAre(ErrorSelection, "Frame")
-
-	--> No errors
-	if not Diagnostic then
-		return
-	end
-
-	local Labels = Diagnostic.Labels
-	if #Labels == 0 then
-		return
-	end
-
-	local IsWarning = (Diagnostic.Severity == "Warning")
-	local Message = Diagnostics.Message(Diagnostic, Input.Text, THEME)
-	ErrorText.Text = Message
-
-	--> Underline where the primary label begins.
-	local Primary = Labels[#Labels]
-	local Span = Primary.Span
-
-	Spans.Draw({
+	Diagnostics.Draw({
+		Popup = ErrorContainer,
+		Message = ErrorText,
+		Underlines = ErrorSelection,
 		Template = ErrorTemplate :: any,
-		Parent = ErrorSelection,
-		Text = string.sub(Input.ContentText, 1, Span.End),
-		Start = Span.Start,
-		Finish = Span.End,
+		Widget = EditorWidget,
 		LineHeight = TextHeight,
 		TextSize = TextSize,
 		Font = Display.FontFace,
-		FillOffset = 10,
-		FirstLineOnly = true,
-		Decorate = Diagnostics.Underline(ErrorContainer, EditorWidget, if IsWarning then THEME.Warning else nil),
-	})
+		Theme = THEME,
+	}, Diagnostic, Input.Text, Input.ContentText)
 end
 
 --> RBXScriptSignal functions
@@ -400,17 +401,13 @@ local function OnSourceChanged()
 
 	Profiler.profileEnd()
 
-	--> Perform lexer pass
-	Profiler.profileBegin("Analysis")
-	UpdateAnalysis()
-	Profiler.profileEnd()
+	--> Completion reads the line under the cursor and the symbols of the last good parse, so it keeps
+	--> up per keystroke; the parse and the highlighting, both linear in the document, are deferred.
+	AnalysisDue = os.clock() + ANALYSIS_DELAY
+	ColorsPending = true
 
 	Profiler.profileBegin("Completion")
 	UpdateCompletion()
-	Profiler.profileEnd()
-
-	Profiler.profileBegin("Highlighting")
-	UpdateColors()
 	Profiler.profileEnd()
 
 	--> Update cursor after text change

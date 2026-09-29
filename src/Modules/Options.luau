@@ -184,6 +184,17 @@ function Utility.Parse(Reader: Reader): Options
 					:Emit()
 			end
 
+			if Name == "RemotesFolder" and Value.Value == "" then
+				Error.new(
+					Error.ParserUnknownOption,
+					Reader.Source,
+					`Invalid value for option "RemotesFolder"`,
+					Reader.File
+				)
+					:Primary(Value, "Expected the name of a folder")
+					:Emit()
+			end
+
 			if not Excluded then
 				Options[Name] = Value.Value
 			end

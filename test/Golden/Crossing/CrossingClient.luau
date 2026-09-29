@@ -598,7 +598,7 @@ function SerdesFunctions.ReadEVENT_Crawls(): ({ { Id: number, Speed: number, Hea
 		local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		if not (Length <= 16) then error(`Expected "Length" to be smaller than or equal to 16, got {Length} instead.`) end
 		if Length * 4 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value1 = table.create(Length)
+		Value1 = table.create(Length) :: {any}
 			-- Read BLOCK: 4 bytes
 		local ARRAY_START_2 = Read(4 * Length)
 		for Slot_2 = 1, Length do
@@ -764,7 +764,7 @@ if not RunService:IsRunning() or not ConnectRemotes() then
 		fire = NOOP
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsClient() then
@@ -779,6 +779,14 @@ local Unreliable: UnreliableRemoteEvent = ConnectedUnreliable :: UnreliableRemot
 --> outgoing packet is then handed to an object of the attacker's choosing.
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+
+--> One module per remote on this side too: a copy required from a LocalScript under an Actor is a VM
+--> the `_G` guard cannot see, and it would decode every packet and call every listener a second time.
+--> An attribute set here stays on this client -- the server never writes this one.
+if Reliable:GetAttribute("BlinkBloxClient") then
+    error(`[BlinkBlox]: A client module using the remote "{BASE_EVENT_NAME}_RELIABLE_REMOTE" is already running in another Luau VM, such as an Actor's. Require it from one VM only, and hand work to Actors with messages or SharedTables.`)
+end
+Reliable:SetAttribute("BlinkBloxClient", true)
 
 --> Refuse to run against a server built from a different schema.
 -->
@@ -1000,14 +1008,14 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable()
+local function DecodeReliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
-local function DecodeUnreliable()
+local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1019,7 +1027,7 @@ local function DecodeUnreliable()
 		TrafficCounters[12] += 1
 		Value2 = UnwrapStamp(Value2)
 		if StreamAccept(0, Value2) == true then
-			local BOUND_LISTENER = Events.Unreliable[0]
+			local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Crawls"
 				Decoding = -2 - Index
@@ -1100,66 +1108,55 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 end)
 
-
-local Returns = table.freeze({
-	step_replication = StepReplication,
-
-	set_rate_limit_handler = SetRateLimitHandler,
-
-	set_decode_error_handler = SetDecodeErrorHandler,
-
-	set_packet_drop_handler = SetPacketDropHandler,
-
-	set_listener_error_handler = SetListenerErrorHandler,
-
-	remotes = REMOTE_NAMES,
-
-	connected = true,
-
-	get_traffic_stats = GetTrafficStats,
-
-	reset_traffic_stats = ResetTrafficStats,
-
-	limits = BLINK_LIMITS,
-
-	Crawls = {
-		on = function(Listener: (Value: { { Id: number, Speed: number, Heat: number } }?, ServerTime: number) -> ()): () -> ()
-			if Events.Unreliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Crawls\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[0] = Listener
-			return function (): ()
-				if Events.Unreliable[0] == Listener then
-					Events.Unreliable[0] = nil
-				end
+local Returns = {}
+Returns.step_replication = StepReplication
+Returns.set_rate_limit_handler = SetRateLimitHandler
+Returns.set_decode_error_handler = SetDecodeErrorHandler
+Returns.set_packet_drop_handler = SetPacketDropHandler
+Returns.set_listener_error_handler = SetListenerErrorHandler
+Returns.remotes = REMOTE_NAMES
+Returns.connected = true
+Returns.get_traffic_stats = GetTrafficStats
+Returns.reset_traffic_stats = ResetTrafficStats
+Returns.limits = BLINK_LIMITS
+Returns.Crawls = {
+	on = function(Listener: (Value: { { Id: number, Speed: number, Heat: number } }?, ServerTime: number) -> ()): () -> ()
+		if Events.Unreliable[0] ~= nil then
+			warn("[BlinkBlox]: \"Crawls\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[0] = Listener
+		return function (): ()
+			if Events.Unreliable[0] == Listener then
+				Events.Unreliable[0] = nil
 			end
 		end
-	},
-	Tick = {
-		on = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[1])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[1] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[1], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[1])
-					table.remove(Listeners, Index)
-					Events.Unreliable[1] = Listeners
-					ListenerEpoch += 1
-				end
+	end
+}
+Returns.Tick = {
+	on = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[1])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[1] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[1], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[1])
+				table.remove(Listeners, Index)
+				Events.Unreliable[1] = Listeners
+				ListenerEpoch += 1
 			end
 		end
-	},
-	Ready = {
-		fire = function(Value: number): ()
-			Begin()
-			local Cursor = SendCursor
-			SerdesFunctions.WriteEVENT_Ready(Value)
-			Commit()
-			TrafficCounters[18] += 1
-		end
-	},
-})
+	end
+}
+Returns.Ready = {
+	fire = function(Value: number): ()
+		Begin()
+		local Cursor = SendCursor
+		SerdesFunctions.WriteEVENT_Ready(Value)
+		Commit()
+		TrafficCounters[18] += 1
+	end
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

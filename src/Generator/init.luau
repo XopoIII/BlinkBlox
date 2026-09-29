@@ -6,6 +6,7 @@ local Parser = require("./Parser")
 local Settings = require("./Settings")
 
 local Builder = require("./Modules/Builder")
+local Datatypes = require("./Templates/Datatypes")
 local Table = require("./Modules/Table")
 
 local Batches = require("@self/Batches")
@@ -18,6 +19,7 @@ local Lifecycle = require("@self/Lifecycle")
 local Limits = require("@self/Limits")
 local Outbound = require("@self/Outbound")
 local Prefabs = require("@self/Prefabs")
+local Returns = require("@self/Returns")
 local Serde = require("@self/Serde")
 --> `option TrafficStats`; every call below emits nothing when it is off.
 local Traffic = require("@self/Traffic")
@@ -190,7 +192,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> read in place rather than through `Read`, a call an event.
 	local DecoderArguments = if State.Context == "Server" then "Player: Player" else ""
 	local function OpenDecode(Name: string): Blocks.Block
-		local Decoder = Blocks.Function(`Decode{Name}`, DecoderArguments, nil, false, true)
+		local Decoder = Blocks.Function(`Decode{Name}`, DecoderArguments, "()", false, true)
 		Decoder:Line("Decoding = -1")
 		Decoder:Line("local Index = buffer.readu8(RecieveBuffer, RecieveCursor)")
 		Decoder:Line("RecieveCursor += 1")
@@ -299,11 +301,28 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 			Connection:Line(`DecodeRemaining = {MaxEvents}`)
 		end
 		Connection:Line("Decoding = -1")
+		--> A packet that failed after a read raised the flag, and before its event's check cleared it,
+		--> must not refuse the first event of the next one.
+		if Prefabs.Missing.Count > 0 then
+			Connection:Line("MissingInstance = false")
+		end
 		Connection:Line("while true do")
 		Connection:Line(`\tlocal Parsed: boolean, Failure: any = pcall(DecodeLoop, {LoopArguments})`)
 		Connection:Line("\tif Parsed then")
 		Connection:Line("\t\tbreak")
 		Connection:Line("\tend")
+		--> An event refused for an Instance that did not arrive: its reader raised the signal once its
+		--> payload was read, so the cursor is at the next event and the packet goes on from there.
+		if Prefabs.Missing.Count > 0 then
+			Connection:Line("\tif Failure == MISSING_SIGNAL then")
+			if OnServer then
+				Connection:Line(`\t\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], MISSING_INSTANCE)`)
+			else
+				Connection:Line(`\t\tReportMissingInstance(EventNames.{Name}[Decoding])`)
+			end
+			Connection:Line("\t\tcontinue")
+			Connection:Line("\tend")
+		end
 		Connection:Line("\tif Decoding > -2 then")
 		Connection:Line(`\t\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], Failure)`)
 		Connection:Line("\t\tbreak")
@@ -328,11 +347,10 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	UnreliableConnection = CloseDecode(UnreliableDecoder, UnreliableConnection, "Unreliable")
 
 	State.Noop.Push(`\})`, 0, 1)
-	State.Noop.Push(`return Returns :: {EVENTS_TYPE}`, 0, 1)
+	--> Through `any`: the stub table is as large as the module's API, and a direct cast has the new type
+	--> solver compare it with the module's type field by field, which it gives up on as too complex.
+	State.Noop.Push(`return (Returns :: any) :: {EVENTS_TYPE}`, 0, 1)
 	State.Noop.Push(`end`, 0, 0)
-
-	State.Return.PushFront(`\nlocal Returns = table.freeze(\{`)
-	State.Return.Push(`})`)
 
 	local ScopeValidationBody = {}
 	if State.Context ~= "Shared" then
@@ -360,6 +378,9 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
 		(if Prefabs.Required.PackedRows then Fragments.PACKED_ROWS else {}),
 		(if Prefabs.Required.PackedCalibration then Fragments.PACKED_CALIBRATION else {}),
+		(if Prefabs.Required.EnumItems then { Datatypes.EnumItems } else {}),
+		(if Prefabs.Required.ColorSequences then { Datatypes.ColorSequences } else {}),
+		(if Prefabs.Missing.Count > 0 then Fragments.MISSING_INSTANCE else {}),
 		Bodies.RateTemplate(),
 		Bodies.Ordering(),
 		Bodies.UnreliableGuard(),
@@ -385,6 +406,11 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 			State.Context,
 			State.Options,
 			Table.Merge(
+				(
+					if Prefabs.Missing.Count > 0 and State.Context == "Client"
+						then Fragments.MISSING_INSTANCE_CLIENT
+						else {}
+				),
 				DecodeLoop,
 				Replication.DumpLines(),
 				ReliableDecoder.Content,
@@ -393,7 +419,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 				UnreliableConnection.Content
 			)
 		),
-		State.Return.DumpLines(),
+		Returns.Assemble(State.Return.DumpLines()),
 		{ `type {EVENTS_TYPE} = typeof(Returns)\n`, `return Returns :: {EVENTS_TYPE}` }
 	)
 
@@ -423,6 +449,9 @@ function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
 		(if Prefabs.Required.PackedRows then Fragments.PACKED_ROWS else {}),
 		(if Prefabs.Required.PackedCalibration then Fragments.PACKED_CALIBRATION else {}),
+		(if Prefabs.Required.EnumItems then { Datatypes.EnumItems } else {}),
+		(if Prefabs.Required.ColorSequences then { Datatypes.ColorSequences } else {}),
+		(if Prefabs.Missing.Count > 0 then Fragments.MISSING_INSTANCE else {}),
 		State.LuauTypes.DumpLines(),
 		{ "\n" },
 		State.UserTypes.DumpLines(),

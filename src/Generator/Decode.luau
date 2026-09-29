@@ -58,6 +58,32 @@ function Decode.StreamGuardExpression(Index: number, Stamp: string): string
 	return `StreamAccept({Index}, {Stamp})`
 end
 
+--- Refuses the declaration just read when one of its Instances did not arrive, and clears the flag the
+--- read raised (see the Instance read in Prefabs/Common). Emitted only after a reader that can raise
+--- it, so a schema carrying no Instances decodes exactly as it did.
+---
+--- The refusal is reported as a decode failure naming the event, which on the server goes to the
+--- game's decode-error handler on the once-a-second schedule, and on the client to its handler or to
+--- one warning an event. `Answer`, for an invocation, writes the failure reply its caller is owed and
+--- returns; an event just returns, and the decode loop goes on with the packet's next event.
+function Decode.MissingGuard(Block: Blocks.Block, Unreliable: boolean, Name: string, Answer: ((Blocks.Block) -> ())?)
+	Block:Line("if MissingInstance then")
+	Block:Line("\tMissingInstance = false")
+	if State.Context == "Server" then
+		local Channel = if Unreliable then "Unreliable" else "Reliable"
+		Block:Line(`\tReportDecodeFailure(Player, "{Channel}", "{Name}", MISSING_INSTANCE)`)
+	else
+		Block:Line(`\tReportMissingInstance("{Name}")`)
+	end
+
+	if Answer then
+		Answer(Block)
+	else
+		Block:Line("\treturn")
+	end
+	Block:Line("end")
+end
+
 --- Opens the branch of a channel's decode loop that receives declaration `Index`. The branch is a
 --- block of its own, kept until `Close` arranges the channel's branches into the dispatch.
 function Decode.Open(Unreliable: boolean, Index: number): Blocks.Block

@@ -36,6 +36,7 @@ A few rules hold for all of them:
 | `Typescript` | boolean | `false` | [Output](#typescript) |
 | `Casing` | `Pascal`, `Camel`, `Snake` | `Pascal` | [Output](#casing) |
 | `RemoteScope` | string | `""` | [Output](#remotescope) |
+| `RemotesFolder` | string | none | [Output](#remotesfolder) |
 | `ExportLimits` | boolean | `false` | [Output](#exportlimits) |
 | `FutureLibrary`, `PromiseLibrary` | Luau path | none | [Output](#futurelibrary-and-promiselibrary) |
 | `ManualReplication` | boolean | `false` | [Runtime behaviour](#manualreplication) |
@@ -142,6 +143,22 @@ already part of the remote names, so it is not part of the
 
 Both modules export the two names as `Remotes.Reliable` and `Remotes.Unreliable`, so code that has to
 find the remotes itself never spells them out.
+
+### `RemotesFolder`
+Default: none -- the remotes sit directly in ReplicatedStorage
+
+Puts the two remotes in a folder of this name in ReplicatedStorage, rather than beside everything
+else there.
+
+```blink
+option RemotesFolder = "Network"
+```
+
+The server module makes the folder when it is missing and uses one that is already there, such as a
+folder Rojo syncs in. The client waits for the folder, then for the remotes in it; under
+[`ClientConnectTimeout`](#clientconnecttimeout) all of that waiting counts against the one timeout.
+Both modules must be built with the same folder, or the client never finds the remotes. An empty
+name is refused.
 
 ### `ExportLimits`
 Default: `false`
@@ -372,6 +389,9 @@ place. [Places without a server](/BlinkBlox/guides/places-without-a-server/) wal
 
 ### `ClientConnectTimeout`
 Default: none -- the client waits for the remotes for as long as it takes
+
+Without it, a client still waiting after 5 seconds warns once, saying the server module creates the
+remotes and naming this option, then keeps waiting.
 
 How many seconds the client module waits for the two remotes. Any number above zero is taken.
 

@@ -1,0 +1,6 @@
+-- expect E3037
+-- An EnumItem travels as its Value, which means nothing without the enum it belongs to.
+option ClientOutput = "../../Network/EnumWithoutNameClient.luau"
+option ServerOutput = "../../Network/EnumWithoutNameServer.luau"
+
+type Surface = Enum(1..2)

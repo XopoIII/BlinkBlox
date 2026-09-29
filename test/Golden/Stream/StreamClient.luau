@@ -579,7 +579,7 @@ function SerdesFunctions.ReadEVENT_Heads(): ({ { Id: number, Head: Vector3, Back
 		local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 		if not (Length <= 16) then error(`Expected "Length" to be smaller than or equal to 16, got {Length} instead.`) end
 		if Length * 11 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-		Value1 = table.create(Length)
+		Value1 = table.create(Length) :: {any}
 			-- Read BLOCK: 11 bytes
 		local ARRAY_START_2 = Read(11 * Length)
 		local BITFIELD_3_0
@@ -726,14 +726,30 @@ if not RunService:IsRunning() then
 		},
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsClient() then
     error("Client network module can only be required from the client.")
 end
 
-local Reliable: RemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
+--> The server module creates the remotes, so a client in a place where it is never required waits
+--> for good. Roblox's own "Infinite yield possible" names the remote and not the reason; this says
+--> once what is missing, then keeps waiting, since a late server is still a server.
+local function Await(Parent: Instance, Name: string): Instance
+    local Found: Instance? = Parent:WaitForChild(Name, 5)
+    if Found == nil then
+        warn(`[BlinkBlox]: Still waiting for "{Name}" after 5 seconds. The server module creates it: require it from a server Script. To stop waiting after a while, set option ClientConnectTimeout.`)
+    end
+
+    while Found == nil do
+        Found = Parent:WaitForChild(Name, 60)
+    end
+
+    return Found :: Instance
+end
+
+local Reliable: RemoteEvent = Await(ReplicatedStorage, BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
 local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
 
 --> WaitForChild returns whatever carries that name. A client can create an instance of any class in
@@ -741,6 +757,14 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EV
 --> outgoing packet is then handed to an object of the attacker's choosing.
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+
+--> One module per remote on this side too: a copy required from a LocalScript under an Actor is a VM
+--> the `_G` guard cannot see, and it would decode every packet and call every listener a second time.
+--> An attribute set here stays on this client -- the server never writes this one.
+if Reliable:GetAttribute("BlinkBloxClient") then
+    error(`[BlinkBlox]: A client module using the remote "{BASE_EVENT_NAME}_RELIABLE_REMOTE" is already running in another Luau VM, such as an Actor's. Require it from one VM only, and hand work to Actors with messages or SharedTables.`)
+end
+Reliable:SetAttribute("BlinkBloxClient", true)
 
 --> Refuse to run against a server built from a different schema.
 -->
@@ -960,14 +984,14 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable()
+local function DecodeReliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
-local function DecodeUnreliable()
+local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -976,7 +1000,7 @@ local function DecodeUnreliable()
 		local Value1: { { Id: number, Head: Vector3, Back: boolean } }?, Value2: number = SerdesFunctions.ReadEVENT_Heads()
 		Value2 = UnwrapStamp(Value2)
 		if StreamAccept(0, Value2) == true then
-			local BOUND_LISTENER = Events.Unreliable[0]
+			local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Heads"
 				Decoding = -2 - Index
@@ -1056,78 +1080,71 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 end)
 
-
-local Returns = table.freeze({
-	stepReplication = StepReplication,
-
-	setRateLimitHandler = SetRateLimitHandler,
-
-	setDecodeErrorHandler = SetDecodeErrorHandler,
-
-	setPacketDropHandler = SetPacketDropHandler,
-
-	setListenerErrorHandler = SetListenerErrorHandler,
-
-	remotes = REMOTE_NAMES,
-
-	Heads = {
-		on = function(Listener: (Value: { { Id: number, Head: Vector3, Back: boolean } }?, ServerTime: number) -> ()): () -> ()
-			if Events.Unreliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Heads\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+local Returns = {}
+Returns.stepReplication = StepReplication
+Returns.setRateLimitHandler = SetRateLimitHandler
+Returns.setDecodeErrorHandler = SetDecodeErrorHandler
+Returns.setPacketDropHandler = SetPacketDropHandler
+Returns.setListenerErrorHandler = SetListenerErrorHandler
+Returns.remotes = REMOTE_NAMES
+Returns.Heads = {
+	on = function(Listener: (Value: { { Id: number, Head: Vector3, Back: boolean } }?, ServerTime: number) -> ()): () -> ()
+		if Events.Unreliable[0] ~= nil then
+			warn("[BlinkBlox]: \"Heads\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[0] = Listener
+		return function (): ()
+			if Events.Unreliable[0] == Listener then
+				Events.Unreliable[0] = nil
 			end
-			Events.Unreliable[0] = Listener
+		end
+	end
+}
+Returns.Aim = {
+	iter = function(): () -> (number, Vector3)
+		local index = 0
+		local queue = Queue.Unreliable[1]
+		return function (): (number, Vector3)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any
+		end
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	next = function(): () -> (number, Vector3)
+		local index = 0
+		local queue = Queue.Unreliable[1]
+		return function (): (number, Vector3)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any
+		end
+	end
+}
+Returns.World = {
+	Clock = {
+		on = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
+			local Listeners = table.clone(Events.Unreliable[2])
+			table.insert(Listeners, Listener)
+			Events.Unreliable[2] = Listeners
 			return function (): ()
-				if Events.Unreliable[0] == Listener then
-					Events.Unreliable[0] = nil
+				local Index = table.find(Events.Unreliable[2], Listener)
+				if Index ~= nil then
+					local Listeners = table.clone(Events.Unreliable[2])
+					table.remove(Listeners, Index)
+					Events.Unreliable[2] = Listeners
+					ListenerEpoch += 1
 				end
 			end
 		end
 	},
-	Aim = {
-		iter = function(): () -> (number, Vector3)
-			local index = 0
-			local queue = Queue.Unreliable[1]
-			return function (): (number, Vector3)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
-			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		next = function(): () -> (number, Vector3)
-			local index = 0
-			local queue = Queue.Unreliable[1]
-			return function (): (number, Vector3)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any
-			end
-		end
-	},
-	World = {
-		Clock = {
-			on = function(Listener: (Value: number?, ServerTime: number) -> ()): () -> ()
-				local Listeners = table.clone(Events.Unreliable[2])
-				table.insert(Listeners, Listener)
-				Events.Unreliable[2] = Listeners
-				return function (): ()
-					local Index = table.find(Events.Unreliable[2], Listener)
-					if Index ~= nil then
-						local Listeners = table.clone(Events.Unreliable[2])
-						table.remove(Listeners, Index)
-						Events.Unreliable[2] = Listeners
-						ListenerEpoch += 1
-					end
-				end
-			end
-		},
-	},
-})
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

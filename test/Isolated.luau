@@ -126,11 +126,21 @@ local function Parse(Source: string, Directory: string?, File: string?): any
 	return Tree
 end
 
+local function WithGlobals(Environment: { [string]: any }, Globals: { [string]: any }?): { [string]: any }
+	for Name, Value in Globals or {} do
+		Environment[Name] = Value
+	end
+	return Environment
+end
+
 --- Builds the pair. `Scope` names its remotes, and must be unique among the pairs a run builds.
---- `Client` is false for a spec that only feeds the server.
-local function Build(Tree: any, Scope: string, WithClient: boolean?): Pair
+--- `Client` is false for a spec that only feeds the server. `Globals` replace the mocked ones both
+--- modules get, as Lune's own Color3 does for a ColorSequence, whose keypoints refuse the mock.
+local function Build(Tree: any, Scope: string, WithClient: boolean?, Globals: { [string]: any }?): Pair
 	local Options = table.clone(Tree.Value.Options)
 	Options.RemoteScope = Scope
+	--> The pair's remotes are the stubs below, planted where the modules look by default.
+	Options.RemotesFolder = nil
 	Options.ManualReplication = true
 
 	local Built = table.clone(Tree)
@@ -150,24 +160,30 @@ local function Build(Tree: any, Scope: string, WithClient: boolean?): Pair
 
 	local Path = `../Network/Isolated{Scope}`
 	fs.writeFile(`{Path}Server.luau`, Generator.Generate("Server", Built))
-	local Server = Modules.MockRequire(`{Path}Server.luau`, {
-		game = ServerEnvironment.game,
-		Color3 = ServerEnvironment.Color3,
-		DateTime = ServerEnvironment.DateTime,
-		BrickColor = ServerEnvironment.BrickColor,
-		warn = Quiet,
-	})
+	local Server = Modules.MockRequire(
+		`{Path}Server.luau`,
+		WithGlobals({
+			game = ServerEnvironment.game,
+			Color3 = ServerEnvironment.Color3,
+			DateTime = ServerEnvironment.DateTime,
+			BrickColor = ServerEnvironment.BrickColor,
+			warn = Quiet,
+		}, Globals)
+	)
 
 	local Client = nil
 	if WithClient ~= false then
 		fs.writeFile(`{Path}Client.luau`, Generator.Generate("Client", Built))
-		Client = Modules.MockRequire(`{Path}Client.luau`, {
-			game = ClientEnvironment.game,
-			Color3 = ClientEnvironment.Color3,
-			DateTime = ClientEnvironment.DateTime,
-			BrickColor = ClientEnvironment.BrickColor,
-			warn = Quiet,
-		})
+		Client = Modules.MockRequire(
+			`{Path}Client.luau`,
+			WithGlobals({
+				game = ClientEnvironment.game,
+				Color3 = ClientEnvironment.Color3,
+				DateTime = ClientEnvironment.DateTime,
+				BrickColor = ClientEnvironment.BrickColor,
+				warn = Quiet,
+			}, Globals)
+		)
 	end
 
 	return {

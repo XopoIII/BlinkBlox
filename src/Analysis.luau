@@ -401,6 +401,14 @@ local ROBLOX_TYPES = {
 	BrickColor = true,
 }
 
+--- Luau types a datatype's generated code names only when a schema uses that datatype, so a schema
+--- that declared a type of one of these names before the datatypes existed still compiles.
+local ROBLOX_TYPES_OF: { [string]: { string } } = {
+	Enum = { "Enum", "EnumItem" },
+	TweenInfo = { "Enum", "EnumItem" },
+	ColorSequence = { "ColorSequenceKeypoint" },
+}
+
 --- Refuses a top-level type named after a Roblox type the generated module uses.
 ---
 --- A declared type is exported under its own name, and a Luau type alias shadows the global one for
@@ -423,8 +431,18 @@ local function RobloxNames(Source: string, File: string?, Declarations: { Declar
 
 			for _, Root in Walk.Roots(Declaration) do
 				Walk.Type(Root, function(Node: Declaration)
-					if Node.Type == "Primitive" and Node.Value.Class then
+					if Node.Type ~= "Primitive" then
+						return
+					end
+
+					local Primitive = Node.Tokens.Primitive.Value
+					--> An Enum's class is emitted as `Enum.Material`, under the global it cannot shadow.
+					if Node.Value.Class and Primitive == "Instance" then
 						Used[Node.Value.Class] = true
+					end
+					local Named: { string } = ROBLOX_TYPES_OF[Primitive] or {}
+					for _, Name in Named do
+						Used[Name] = true
 					end
 				end)
 			end

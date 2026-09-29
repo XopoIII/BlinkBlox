@@ -191,8 +191,8 @@ A function has one listener. `On` returns nothing, and calling it again replaces
 
 Calls that arrive before a listener connects are queued, up to 256 on the server, and run when it does.
 Past that the server answers each further call with a failure, so the caller's `Invoke` raises
-promptly instead of hanging. A client's queue is filled by the server, and warns once it passes 256
-instead.
+promptly instead of hanging. A client's queue is filled by the server; it stops at 256 as well,
+warns once when it fills, and answers each further call with a failure the same way.
 
 ## When a call fails
 

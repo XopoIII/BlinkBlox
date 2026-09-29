@@ -9,7 +9,10 @@ local ScriptEditorService = game:GetService("ScriptEditorService")
 
 local Attributes = require("@compiler/Modules/Attributes")
 local Generator = require("@compiler/Generator")
+local OutputSize = require("@compiler/Modules/OutputSize")
 local Parser = require("@compiler/Parser")
+
+local History = require("./History")
 
 local Output = {}
 
@@ -93,25 +96,39 @@ function Output.Generate(File: StringValue, Directory: Instance, Probe: Instance
 	local ServerSource = Generator.Generate("Server", AbstractSyntaxTree)
 	local ClientSource = Generator.Generate("Client", AbstractSyntaxTree)
 	local TypesSource = Generator.GenerateShared(AbstractSyntaxTree)
-
-	--> Named `Blink` from before the rename to BlinkBlox, and kept: games require the modules through
-	--> it, and a new name would leave a second folder beside the one their code points at.
-	local BlinkFolder: Folder = Directory:FindFirstChild("Blink") :: Folder
-	if not BlinkFolder then
-		local Folder = Instance.new("Folder")
-		Folder.Name = "Blink"
-		Folder.Parent = Directory
-		BlinkFolder = Folder
+	for _, Generated in { { "server", ServerSource }, { "client", ClientSource } } do
+		local Warning = OutputSize.Warning(Generated[1], Generated[2])
+		if Warning then
+			warn(`[BlinkBlox]: {Warning}`)
+		end
 	end
 
-	--> The three generated modules are overwritten in place. Nothing else in the folder is touched.
-	-->
-	--> This used to be `BlinkFolder:ClearAllChildren()`, which deleted whatever else the user had put
-	--> there -- a wrapper module, a configuration script, anything -- with no warning and no undo
-	--> beyond Ctrl+Z. BlinkBlox owns these three names; it does not own the folder.
-	WriteModuleScript("Types", TypesSource, BlinkFolder)
-	WriteModuleScript("Server", ServerSource, BlinkFolder)
-	WriteModuleScript("Client", ClientSource, BlinkFolder)
+	--> One undo step, and all or nothing: a write that fails rolls back the ones before it, rather
+	--> than leaving a new Server beside an old Client.
+	local Written: boolean, Failure: unknown = pcall(History.Record, `Generate {File.Name}`, function()
+		--> Named `Blink` from before the rename to BlinkBlox, and kept: games require the modules
+		--> through it, and a new name would leave a second folder beside the one their code points at.
+		local BlinkFolder: Folder = Directory:FindFirstChild("Blink") :: Folder
+		if not BlinkFolder then
+			local Folder = Instance.new("Folder")
+			Folder.Name = "Blink"
+			Folder.Parent = Directory
+			BlinkFolder = Folder
+		end
+
+		--> The three generated modules are overwritten in place. Nothing else in the folder is touched.
+		-->
+		--> This used to be `BlinkFolder:ClearAllChildren()`, which deleted whatever else the user had
+		--> put there -- a wrapper module, a configuration script, anything. BlinkBlox owns these three
+		--> names; it does not own the folder.
+		WriteModuleScript("Types", TypesSource, BlinkFolder)
+		WriteModuleScript("Server", ServerSource, BlinkFolder)
+		WriteModuleScript("Client", ClientSource, BlinkFolder)
+	end)
+
+	if not Written then
+		Report(`Writing the modules failed: {Failure}`)
+	end
 end
 
 --- Where the last generation went, so it does not have to be picked out of the Explorer every time.

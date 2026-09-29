@@ -515,7 +515,7 @@ local EventNames: any = {
     Unreliable = {}
 }
 
-local RATE_TEMPLATE = table.freeze({})
+local RATE_TEMPLATE = table.freeze({} :: {number})
 local SerdesEvent = "?"
 local SerdesThread: thread?
 Queue.Reliable[0] = CreateQueue()
@@ -556,7 +556,7 @@ if not RunService:IsRunning() then
 		next = NOOP_RETURNING
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -567,6 +567,9 @@ local Reliable: RemoteEvent = ReplicatedStorage:FindFirstChild(BASE_EVENT_NAME .
 if not Reliable then
     local RemoteEvent = Instance.new("RemoteEvent")
     RemoteEvent.Name = BASE_EVENT_NAME .. "_RELIABLE_REMOTE"
+    --> A place saved while running -- SavePlaceAsync, a plugin, Studio's own save during a test --
+    --> would otherwise keep the remote, and the next server would find one it did not make.
+    RemoteEvent.Archivable = false
     --> Set BEFORE parenting, and that ordering is the whole trick. An attribute written on an
     --> unparented instance replicates atomically with the instance itself; one written afterwards is
     --> a separate replication event with no ordering guarantee against the client's WaitForChild
@@ -584,6 +587,7 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:FindFirstChild(BASE_
 if not Unreliable then
     local UnreliableRemoteEvent = Instance.new("UnreliableRemoteEvent")
     UnreliableRemoteEvent.Name = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE"
+    UnreliableRemoteEvent.Archivable = false
     UnreliableRemoteEvent.Parent = ReplicatedStorage
     Unreliable = UnreliableRemoteEvent
 end
@@ -593,6 +597,17 @@ end
 --> require time beats failing per packet, forever, at runtime.
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+
+--> ONE MODULE PER REMOTE. The `_G` guard above is per Luau VM, and every Actor is a VM of its own: a
+--> second copy required from an Actor passed it, found these remotes already made, and connected to
+--> them too. Every packet was then decoded twice and every listener called twice, each copy kept its
+--> own inbound budget -- so a client had twice the allowance -- and a player's sends were split across
+--> two batches with no order between them. The DataModel is what the VMs share, so the claim is kept
+--> there. It is never cleared: a server does not unload its network module.
+if Reliable:GetAttribute("BlinkBloxServer") then
+    error(`[BlinkBlox]: A server module using the remote "{BASE_EVENT_NAME}_RELIABLE_REMOTE" is already running in another Luau VM, such as an Actor's. Require it from one VM only, and hand work to Actors with messages or SharedTables.`)
+end
+Reliable:SetAttribute("BlinkBloxServer", true)
 
 local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
 
@@ -1089,6 +1104,12 @@ local function SavePlayerBuffer(Player: Player)
     --> every reliable send to a player, and the entry also carries its shrink count.
     local Entry = PlayersMap[Player]
     if Entry == nil then
+        --> Checked here, where a player's first send lands, rather than on every send: a call made with
+        --> `:` -- `Net.Event:Fire(...)` -- passes the event's table as the player, and failed in the
+        --> line below as "attempt to call a nil value".
+        if type(Player) == "table" then
+            error("[BlinkBlox]: Expected a Player to send to, got a table instead. Call a send with '.', as Net.Event.Fire(Player, ...), not with ':'.", 3)
+        end
         if Player:IsDescendantOf(Players) then
             PlayersMap[Player] = Save()
             if SharedCursor > 0 then
@@ -1268,7 +1289,7 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player)
+local function DecodeReliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1287,7 +1308,7 @@ local function DecodeReliable(Player: Player)
 		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable(Player: Player)
+local function DecodeUnreliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1387,74 +1408,67 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 end)
 
-
-local Returns = table.freeze({
-	step_replication = StepReplication,
-
-	set_rate_limit_handler = SetRateLimitHandler,
-
-	set_decode_error_handler = SetDecodeErrorHandler,
-
-	set_packet_drop_handler = SetPacketDropHandler,
-
-	set_listener_error_handler = SetListenerErrorHandler,
-
-	remotes = REMOTE_NAMES,
-
-	PollingEvent = {
-		iter = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[0]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
+local Returns = {}
+Returns.step_replication = StepReplication
+Returns.set_rate_limit_handler = SetRateLimitHandler
+Returns.set_decode_error_handler = SetDecodeErrorHandler
+Returns.set_packet_drop_handler = SetPacketDropHandler
+Returns.set_listener_error_handler = SetListenerErrorHandler
+Returns.remotes = REMOTE_NAMES
+Returns.PollingEvent = {
+	iter = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Reliable[0]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
 			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		next = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[0]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
+			return nil :: any, nil :: any, nil :: any
 		end
-	},
-	ImplicitPollingEvent = {
-		iter = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[1]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	next = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Reliable[0]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
 			end
-		end,
-		--- @deprecated v0.14.1 -- Use `Iter` instead.
-		next = function(): () -> (number, Player, nil)
-			local index = 0
-			local queue = Queue.Reliable[1]
-			return function (): (number, Player, nil)
-				index += 1
-				local arguments = Pop(queue)
-				if arguments ~= nil then
-					return index, unpack(arguments, 1, arguments.n)
-				end
-				return nil :: any, nil :: any, nil :: any
-			end
+			return nil :: any, nil :: any, nil :: any
 		end
-	},
-})
+	end
+}
+Returns.ImplicitPollingEvent = {
+	iter = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Reliable[1]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end,
+	--- @deprecated v0.14.1 -- Use `Iter` instead.
+	next = function(): () -> (number, Player, nil)
+		local index = 0
+		local queue = Queue.Reliable[1]
+		return function (): (number, Player, nil)
+			index += 1
+			local arguments = Pop(queue)
+			if arguments ~= nil then
+				return index, unpack(arguments :: any, 1, arguments.n)
+			end
+			return nil :: any, nil :: any, nil :: any
+		end
+	end
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

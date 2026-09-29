@@ -58,4 +58,35 @@ luau-lsp analyze --sourcemap build/sourcemap.json --defs globalTypes.d.luau plug
 echo "type-check: generated modules (test/Golden)"
 luau-lsp analyze --defs globalTypes.d.luau test/Golden
 
+# The same modules under the new type solver, which Studio offers a game and a game's editor may use.
+# Test.blink's pair is left out: at 20,000 lines they are past the size the solver finishes inferring
+# at all, and what is left of them there is its own "Code is too complex" and what follows from it.
+# What a game needs from a module that size is that its types still reach the code requiring it,
+# and the consumers below check that on exactly those two.
+echo "type-check: generated modules under the new solver (test/Golden)"
+luau-lsp analyze --defs globalTypes.d.luau --flag:LuauSolverV2=true \
+	--ignore "test/Golden/Test/Server.luau" --ignore "test/Golden/Test/Client.luau" test/Golden
+
+# A game's code using the modules, under both solvers. test/Consumers/Uses.luau must be clean, and
+# test/Consumers/Misuses.luau must be reported on exactly the lines it marks `-- type error`: a module
+# whose type collapsed into `any` -- what users of other libraries met under the new solver -- lets
+# every one of them through, and would pass a check that only looked for errors.
+Marked="$(grep -n -- ') -- type error$' test/Consumers/Misuses.luau | cut -d: -f1 | tr '\n' ' ')"
+for Solver in false true; do
+	echo "type-check: a game's code using the modules, LuauSolverV2=$Solver (test/Consumers)"
+	Reported="$(luau-lsp analyze --defs globalTypes.d.luau --flag:LuauSolverV2=$Solver \
+		test/Consumers/Uses.luau test/Consumers/Misuses.luau 2>&1 | grep 'test/Consumers/' || true)"
+	if printf '%s\n' "$Reported" | grep -q 'Uses.luau'; then
+		printf '%s\n' "$Reported"
+		echo "type-check: correct use of the generated modules reports errors" >&2
+		exit 1
+	fi
+	Lines="$(printf '%s\n' "$Reported" | sed -n 's/.*Misuses\.luau(\([0-9]*\),.*/\1/p' | sort -n | uniq | tr '\n' ' ')"
+	if [ "$Lines" != "$Marked" ]; then
+		printf '%s\n' "$Reported"
+		echo "type-check: misuses reported on lines '$Lines', expected '$Marked'" >&2
+		exit 1
+	fi
+done
+
 echo "type-check: clean"

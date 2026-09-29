@@ -1,9 +1,37 @@
 ---
-title: What's new in 0.42
-description: What 0.42.0 changed -- a decode that allocates nothing a packet, a client that reuses its packet buffer, a boolean array read the faster way where the module runs -- and what 0.41 brought before it, with how to upgrade.
+title: What's new in 1.0
+description: What 1.0.0 changed -- a missing Instance costs one event rather than the packet, Actors and other silent mistakes named, Vector2, UDim2, ColorSequence, TweenInfo and Roblox enums, types that survive the new solver -- and what 0.42 brought before it, with how to upgrade.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+
+## 1.0.0
+
+A release built from other libraries' bug reports: about two hundred, from the DevForum threads and
+issue trackers of upstream Blink, zap, ByteNet, Packet, Warp and QuickNet, each checked against this
+fork. The wire does not change, so a module built by 1.0.0 talks to one built by 0.40.0 or later.
+
+- **A missing Instance costs one event, not the packet.** Under StreamingEnabled an Instance the
+  sender had is often not there on arrival. That event alone is refused and reported, and the rest of
+  the packet is still read, at no cost to decoding when everything arrives.
+- **Mistakes that were silent are named.** A second copy of a module in an
+  [Actor](/BlinkBlox/guides/common-pitfalls/#requiring-a-module-from-an-actor) errors at require; a
+  send made with `:` says so; a function's second `.On` warns; a client left waiting for a server
+  explains why after five seconds; a file of events imported twice warns (`W3036`). The client's
+  queues stop at 256, as the server's do.
+- **New types**: `Vector2`, `UDim`, `UDim2`, `NumberRange`, `ColorSequence`, `TweenInfo`, and
+  [`Enum(Name)`](/BlinkBlox/language/types/#roblox-enums) for a Roblox enum's items, sent by `Value`.
+- [`RemotesFolder`](/BlinkBlox/language/options/#remotesfolder) keeps the remotes in a folder.
+- **Types survive the new type solver** however many events a schema has.
+- **The Studio plugin** keeps up with typing on long schemas, and saving, deleting and generating are
+  undo steps.
+
+<Aside type="caution" title="What reaches your handlers changes">
+A missing Instance used to fail its whole packet; now each event that lost one reaches the
+decode-error handler on its own, with a failure that begins "An Instance it carried did not arrive".
+It is the other side's view of the world, not a malformed packet -- a game that punishes decode errors
+should not count it. See [Common pitfalls](/BlinkBlox/guides/common-pitfalls/#streamingenabled-and-missing-instances).
+</Aside>
 
 ## 0.42.0
 

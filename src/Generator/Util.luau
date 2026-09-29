@@ -83,6 +83,10 @@ local function Constants(RemoteScope: string?, Tree: any): { string }
 		`local SCHEMA_SIGNATURE = "{Signature.Of(Tree)}"\n`,
 		--> Exported as the module's Remotes, so that nothing outside it spells the names out again.
 		`local REMOTE_NAMES = table.freeze(\{ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" \})\n`,
+		--> Only under `option RemotesFolder`; see Generator/Folder.
+		if Tree.Value.Options.RemotesFolder
+			then `local REMOTES_FOLDER = {string.format("%q", Tree.Value.Options.RemotesFolder)}\n`
+			else "",
 	}
 end
 

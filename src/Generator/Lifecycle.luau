@@ -13,6 +13,7 @@
 --- Without either option the templates come out exactly as they always did. The markers this file
 --- splits on (`-- REMOTES --`, `-- STARTED --`) are removed whole, newline included.
 local Connect = require("../Templates/Connect")
+local Folder = require("./Folder")
 local Start = require("../Templates/Start")
 
 local Parser = require("../Parser")
@@ -53,7 +54,7 @@ end
 function Lifecycle.Sources(Context: string, Options: Parser.Options): { string }
 	if Context == "Client" then
 		local Parts = string.split(CLIENT[2], REMOTES)
-		local Lookup = Parts[2]
+		local Lookup = Folder.Client(Parts[2], Options)
 		if Lifecycle.Bounded(Context, Options) then
 			--> ConnectRemotes has already found both, or the module returned before getting here.
 			Lookup = "local Reliable: RemoteEvent = ConnectedReliable :: RemoteEvent\n"
@@ -65,7 +66,7 @@ function Lifecycle.Sources(Context: string, Options: Parser.Options): { string }
 
 	local Deferred = Lifecycle.Deferred(Context, Options)
 	local Remotes = string.split(SERVER[2], REMOTES)
-	local Lookup = Remotes[2]
+	local Lookup = Folder.Server(Remotes[2], Options)
 	if Deferred then
 		Lookup = Start.Before .. Indent(Lookup, "    ") .. Start.After
 	end
@@ -97,7 +98,7 @@ function Lifecycle.Stubs(Context: string, Options: Parser.Options): ({ string },
 
 	return {
 		`local CONNECT_TIMEOUT = {Options.ClientConnectTimeout}\n`,
-		Connect,
+		Folder.Connect(Connect, Options),
 	},
 		"if not RunService:IsRunning() or not ConnectRemotes() then"
 end

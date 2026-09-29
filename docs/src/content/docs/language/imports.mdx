@@ -79,8 +79,9 @@ generated modules contain `ItemAdded` twice, as two separate events with their o
 listeners.
 
 For types this costs little: two identical type aliases. For events it is almost never what you
-want. Keep events in files that are imported exactly once, and put what several files share in a
-file that holds only types.
+want, so a second import of a file that holds events or functions -- by any route -- warns with
+`W3036`, pointing at the import that repeats it. Keep events in files that are imported exactly
+once, and put what several files share in a file that holds only types.
 
 ## Cyclic imports
 

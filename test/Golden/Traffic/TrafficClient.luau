@@ -674,7 +674,7 @@ function SerdesFunctions.ReadEVENT_Trail(): ({ number })
 	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if not (Length <= 4) then error(`Expected "Length" to be smaller than or equal to 4, got {Length} instead.`) end
 	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
-	local Value = table.create(Length)
+	local Value = table.create(Length) :: {any}
 		-- Read BLOCK: 1 bytes
 	local ARRAY_START_1 = Read(1 * Length)
 	for Slot_1 = 1, Length do
@@ -759,14 +759,30 @@ if not RunService:IsRunning() then
 		},
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsClient() then
     error("Client network module can only be required from the client.")
 end
 
-local Reliable: RemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
+--> The server module creates the remotes, so a client in a place where it is never required waits
+--> for good. Roblox's own "Infinite yield possible" names the remote and not the reason; this says
+--> once what is missing, then keeps waiting, since a late server is still a server.
+local function Await(Parent: Instance, Name: string): Instance
+    local Found: Instance? = Parent:WaitForChild(Name, 5)
+    if Found == nil then
+        warn(`[BlinkBlox]: Still waiting for "{Name}" after 5 seconds. The server module creates it: require it from a server Script. To stop waiting after a while, set option ClientConnectTimeout.`)
+    end
+
+    while Found == nil do
+        Found = Parent:WaitForChild(Name, 60)
+    end
+
+    return Found :: Instance
+end
+
+local Reliable: RemoteEvent = Await(ReplicatedStorage, BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
 local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
 
 --> WaitForChild returns whatever carries that name. A client can create an instance of any class in
@@ -774,6 +790,14 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EV
 --> outgoing packet is then handed to an object of the attacker's choosing.
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+
+--> One module per remote on this side too: a copy required from a LocalScript under an Actor is a VM
+--> the `_G` guard cannot see, and it would decode every packet and call every listener a second time.
+--> An attribute set here stays on this client -- the server never writes this one.
+if Reliable:GetAttribute("BlinkBloxClient") then
+    error(`[BlinkBlox]: A client module using the remote "{BASE_EVENT_NAME}_RELIABLE_REMOTE" is already running in another Luau VM, such as an Actor's. Require it from one VM only, and hand work to Actors with messages or SharedTables.`)
+end
+Reliable:SetAttribute("BlinkBloxClient", true)
 
 --> Refuse to run against a server built from a different schema.
 -->
@@ -964,7 +988,7 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable()
+local function DecodeReliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -972,14 +996,16 @@ local function DecodeReliable()
 	if Index == 1 then
 		local Value: number = SerdesFunctions.ReadEVENT_Push()
 		TrafficCounters[16] += 1
-		local BOUND_LISTENER = Events.Reliable[1]
+		local BOUND_LISTENER = Events.Reliable[1] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			Spawn(BOUND_LISTENER, Value)
 		else
-			if #Queue.Reliable[1] > 256 then
-				warn("[BlinkBlox]: Event queue of \"Push\" exceeded 256, did you forget to implement a listener?")
+			if #Queue.Reliable[1] < 256 then
+				table.insert(Queue.Reliable[1], table.pack(Value))
+				if #Queue.Reliable[1] == 256 then
+					warn("[BlinkBlox]: \"Push\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+				end
 			end
-			table.insert(Queue.Reliable[1], table.pack(Value))
 		end
 	elseif Index == 3 then
 		-- Read BLOCK: 2 bytes
@@ -1003,7 +1029,7 @@ local function DecodeReliable()
 		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable()
+local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1109,158 +1135,149 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	GetTrafficStats = GetTrafficStats,
-
-	ResetTrafficStats = ResetTrafficStats,
-
-	Byte = {
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.GetTrafficStats = GetTrafficStats
+Returns.ResetTrafficStats = ResetTrafficStats
+Returns.Byte = {
+	Fire = function(Value: number): ()
+		Begin()
+		local Cursor = SendCursor
+		SerdesFunctions.WriteEVENT_Byte(Value)
+		Commit()
+		TrafficCounters[10] += 1
+	end
+}
+Returns.Push = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		if Events.Reliable[1] ~= nil then
+			warn("[BlinkBlox]: \"Push\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[1] = Listener
+		local Pending = Queue.Reliable[1]
+		Queue.Reliable[1] = {}
+		for _, Arguments in Pending do
+			Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
+		end
+		return function (): ()
+			if Events.Reliable[1] == Listener then
+				Events.Reliable[1] = nil
+			end
+		end
+	end
+}
+Returns.Blip = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[0])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[0] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[0], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[0])
+				table.remove(Listeners, Index)
+				Events.Unreliable[0] = Listeners
+				ListenerEpoch += 1
+			end
+		end
+	end
+}
+Returns.Ping = {
+	Fire = function(Value: number): ()
+		Hold()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Ping, Value)
+		if Sent and CheckUnreliableSize("Ping") then
+			local Buffer = buffer.create(SendCursor)
+			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+			Unreliable:FireServer(Buffer, SendInstances)
+			TrafficCounters[22] += 1
+			TrafficCounters[5] += SendCursor
+			TrafficCounters[6] += 1
+		end
+		Release()
+		if Sent ~= true then
+			error(Failure, 0)
+		end
+	end
+}
+Returns.Seq = {
+	On = function(Listener: (Value: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[2])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[2] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[2], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[2])
+				table.remove(Listeners, Index)
+				Events.Unreliable[2] = Listeners
+				ListenerEpoch += 1
+			end
+		end
+	end
+}
+Returns.Note = {
+	Fire = function(Value: string): ()
+		Begin()
+		local Cursor = SendCursor
+		SerdesFunctions.WriteEVENT_Note(Value)
+		Commit()
+		TrafficCounters[29] += SendCursor - Cursor
+		TrafficCounters[30] += 1
+	end
+}
+Returns.Trail = {
+	On = function(Listener: (Value: { number }) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[3])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[3] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[3], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[3])
+				table.remove(Listeners, Index)
+				Events.Unreliable[3] = Listeners
+				ListenerEpoch += 1
+			end
+		end
+	end
+}
+Returns.Ask = {
+	Invoke = function(Value: number): (number)
+		local InvocationIdentifier = ClaimInvocation(Invocations, 3)
+		local Cursor, Instances = Mark()
+		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_Ask, Value, InvocationIdentifier)
+		if Sent ~= true then
+			Rollback(Cursor, Instances)
+			ReleaseInvocation(Invocations, InvocationIdentifier)
+			error(Failure, 0)
+		end
+		Close(Cursor, Instances)
+		ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
+		TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"Ask" was never answered')
+		local Success, ReturnValue: number = coroutine.yield()
+		if Success ~= true then
+			error("There was an exception while processing \"Ask\".")
+		end
+		return ReturnValue
+	end
+}
+Returns.Inner = {
+	Poll = {
 		Fire = function(Value: number): ()
 			Begin()
 			local Cursor = SendCursor
-			SerdesFunctions.WriteEVENT_Byte(Value)
+			SerdesFunctions.Inner_WriteEVENT_Poll(Value)
 			Commit()
-			TrafficCounters[10] += 1
+			TrafficCounters[38] += 1
 		end
 	},
-	Push = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			if Events.Reliable[1] ~= nil then
-				warn("[BlinkBlox]: \"Push\" already has a listener. SingleAsync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[1] = Listener
-			local Pending = Queue.Reliable[1]
-			Queue.Reliable[1] = {}
-			for _, Arguments in Pending do
-				Spawn(Listener, table.unpack(Arguments, 1, Arguments.n))
-			end
-			return function (): ()
-				if Events.Reliable[1] == Listener then
-					Events.Reliable[1] = nil
-				end
-			end
-		end
-	},
-	Blip = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[0])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[0] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[0], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[0])
-					table.remove(Listeners, Index)
-					Events.Unreliable[0] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	Ping = {
-		Fire = function(Value: number): ()
-			Hold()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Ping, Value)
-			if Sent and CheckUnreliableSize("Ping") then
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				Unreliable:FireServer(Buffer, SendInstances)
-				TrafficCounters[22] += 1
-				TrafficCounters[5] += SendCursor
-				TrafficCounters[6] += 1
-			end
-			Release()
-			if Sent ~= true then
-				error(Failure, 0)
-			end
-		end
-	},
-	Seq = {
-		On = function(Listener: (Value: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[2])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[2] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[2], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[2])
-					table.remove(Listeners, Index)
-					Events.Unreliable[2] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	Note = {
-		Fire = function(Value: string): ()
-			Begin()
-			local Cursor = SendCursor
-			SerdesFunctions.WriteEVENT_Note(Value)
-			Commit()
-			TrafficCounters[29] += SendCursor - Cursor
-			TrafficCounters[30] += 1
-		end
-	},
-	Trail = {
-		On = function(Listener: (Value: { number }) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[3])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[3] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[3], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[3])
-					table.remove(Listeners, Index)
-					Events.Unreliable[3] = Listeners
-					ListenerEpoch += 1
-				end
-			end
-		end
-	},
-	Ask = {
-		Invoke = function(Value: number): (number)
-			local InvocationIdentifier = ClaimInvocation(Invocations, 3)
-			local Cursor, Instances = Mark()
-			local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteFUNCTION_DATA_Ask, Value, InvocationIdentifier)
-			if Sent ~= true then
-				Rollback(Cursor, Instances)
-				ReleaseInvocation(Invocations, InvocationIdentifier)
-				error(Failure, 0)
-			end
-			Close(Cursor, Instances)
-			ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
-			TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"Ask" was never answered')
-			local Success, ReturnValue: number = coroutine.yield()
-			if Success ~= true then
-				error("There was an exception while processing \"Ask\".")
-			end
-			return ReturnValue
-		end
-	},
-	Inner = {
-		Poll = {
-			Fire = function(Value: number): ()
-				Begin()
-				local Cursor = SendCursor
-				SerdesFunctions.Inner_WriteEVENT_Poll(Value)
-				Commit()
-				TrafficCounters[38] += 1
-			end
-		},
-	},
-})
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

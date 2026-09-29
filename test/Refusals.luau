@@ -187,8 +187,12 @@ RunClosure("A packet on a channel with no events is reported once and read no fu
 	-->
 	--> Its own copy, loaded here, because it has a decode handler of its own. It shares the mock
 	--> remotes with Test's server, which is why the bytes are 255 -- an index Test's server knows
-	--> nothing about either -- and why the signature it writes is put back afterwards.
+	--> nothing about either -- and why the signature it writes is put back afterwards. Test's server
+	--> has claimed the remote, which refuses a second module on it, so the claim is lifted first.
 	local Signatures = table.clone(Shared.Attributes.BLINK_RELIABLE_REMOTE or {})
+	if Shared.Attributes.BLINK_RELIABLE_REMOTE then
+		Shared.Attributes.BLINK_RELIABLE_REMOTE.BlinkBloxServer = nil
+	end
 	local Empty = MockRequire("../Network/DriftServer.luau", {
 		game = ServerEnvironment.game,
 		Color3 = ServerEnvironment.Color3,

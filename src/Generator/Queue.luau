@@ -8,9 +8,15 @@
 --- On the SERVER that queue is filled by clients. Uncapped, a client firing an event the game never
 --- listens to grew server memory for as long as it cared to keep sending, each row pinning its
 --- Player, and past 256 rows it printed a warning per event -- the output flood the decode loop
---- already refuses to cause. So the server stops at the cap and says nothing. The CLIENT's queue is
---- filled by the server, which it trusts, and there the warning is the useful signal of a listener
---- somebody forgot. Upstream reported the same unbounded queue against `rewrite` as #93.
+--- already refuses to cause. So the server stops at the cap and says nothing. Upstream reported the
+--- same unbounded queue against `rewrite` as #93.
+---
+--- The CLIENT's queue is filled by the server, which it trusts, and a warning there is the useful
+--- signal of a listener somebody forgot. It used to be all that happened: the queue grew for as long
+--- as the server sent and printed a line for every event past 256, so a client that never listened to
+--- an event sent each frame filled its output and its memory together -- the "death loop" zap's #190
+--- describes. It stops at the cap too now, and says so once, when the queue fills. A call the server
+--- makes into a full queue is answered with a failure, as the server answers one.
 local Blocks = require("./Blocks")
 
 type Block = Blocks.Block
@@ -41,6 +47,27 @@ local function Refuse(Target: Block, Index: number, Indent: number): Block
 	return Target
 end
 
+--- The client's form of `Refuse`: the same failure reply, written into the client's one batch once
+--- whatever a Fire that threw left there is settled. `return` for the same reason.
+local function RefuseClient(Target: Block, Index: number, Indent: number): Block
+	for _, Line in
+		{
+			"Settle()",
+			"local ReplyStart, ReplyInstances = SendCursor, #SendInstances",
+			"local Position = Allocate(3)",
+			`buffer.writeu8(SendBuffer, Position, {Index})`,
+			"buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)",
+			"buffer.writeu8(SendBuffer, Position + 2, 0)",
+			"Close(ReplyStart, ReplyInstances)",
+			"return",
+		}
+	do
+		Target:Line(Line, Indent)
+	end
+
+	return Target
+end
+
 --- Emits the enqueue into `Target`, the branch taken when no listener is bound, and returns it.
 --- `Invocation` is the event index of a function, whose caller is answered rather than dropped when
 --- the server's queue is full. `Release` is emitted on that refusal first: a call a `Concurrency`
@@ -60,12 +87,21 @@ local function Enqueue(
 	local Insert = `table.insert({Queue}, table.pack({Row}))`
 
 	if Context ~= "Server" then
-		return Target:Compare(`#{Queue}`, CAPACITY, "Greater")
-			:Line(
-				`warn("[BlinkBlox]: Event queue of \\"{Name}\\" exceeded {CAPACITY}, did you forget to implement a listener?")`
-			)
-			:End()
-			:Line(Insert)
+		local Warning =
+			`warn("[BlinkBlox]: \\"{Name}\\" has {CAPACITY} events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")`
+
+		if Invocation then
+			local Full = Target:Compare(`#{Queue}`, CAPACITY, "GreaterOrEquals")
+			RefuseClient(Full, Invocation, Full.Indent):End()
+		else
+			Target = Target:Compare(`#{Queue}`, CAPACITY, "Less")
+		end
+
+		Target:Line(Insert):Compare(`#{Queue}`, CAPACITY, "Equals"):Line(Warning):End()
+		if Invocation then
+			return Target
+		end
+		return Target:End()
 	end
 
 	if Invocation then
@@ -83,5 +119,6 @@ end
 return {
 	CAPACITY = CAPACITY,
 	Refuse = Refuse,
+	RefuseClient = RefuseClient,
 	Enqueue = Enqueue,
 }

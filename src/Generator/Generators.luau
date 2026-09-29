@@ -10,6 +10,7 @@ local Fragments = require("./Fragments")
 local Parser = require("../Parser")
 local Prefabs = require("./Prefabs")
 local Serde = require("./Serde")
+local Size = require("../Modules/Size")
 local State = require("./State")
 local Util = require("./Util")
 
@@ -177,12 +178,23 @@ function Generators.Export(Declaration: Type)
 	Reader:Line(READ_LOCAL)
 	local Writer = Blocks.Function("", "", "(buffer)")
 
+	local MissingBefore = Prefabs.Missing.Count
 	Generators.UserType(Declaration, Reader, Writer)
 
 	--> The payload is complete, so any half-filled bitfield has to reach the buffer BEFORE the trim
 	--> and the return below. Left to `End`, it would be emitted after the return.
 	Reader:FlushBits()
 	Writer:FlushBits()
+
+	--> A read that found no Instance raises the flag rather than throwing (see Decode.MissingGuard).
+	--> There is no event here to refuse, so the call fails -- and the flag is cleared, where it would
+	--> otherwise refuse the first such event of the next packet.
+	if Prefabs.Missing.Count > MissingBefore then
+		Reader:Compare("MissingInstance", "true", "Equals")
+			:Line("MissingInstance = false")
+			:Line(`error(\`Could not read "{Name}". \{MISSING_INSTANCE}\`, 0)`)
+			:End()
+	end
 
 	Writer:Line("local Result = buffer.create(SendCursor)")
 	Writer:Line("buffer.copy(Result, 0, SendBuffer, 0, SendCursor)")
@@ -229,6 +241,81 @@ function Generators.Export(Declaration: Type)
 
 	State.Noop.PushLines(table.clone(BodyLines), 0, 0)
 	State.Return.PushLines(BodyLines, 0, 0)
+end
+
+--- Whether every read in a payload of this type is one from the block its reader reserves up front,
+--- and every Instance in it takes one slot in order: primitives of a fixed size other than strings and
+--- buffers, and structs, packs and enums of them. Nothing optional, repeated or tagged.
+local function IsFlat(Node: Type): boolean
+	local Kind = Node.Type
+	if Kind == "Primitive" then
+		local Name = (Node :: Parser.Primitive).Tokens.Primitive.Value
+		return Name ~= "string" and Name ~= "buffer"
+	elseif Kind == "Enum" then
+		return true
+	elseif Kind == "Struct" or Kind == "Tuple" then
+		for _, Field in (Node :: any).Value.Values do
+			if not IsFlat(Field) then
+				return false
+			end
+		end
+		return true
+	end
+
+	return false
+end
+
+--> The reads a reader may make, found in its text: the reserving of a block, and the lines that step
+--> the Instance cursor. See RaiseWhereMissing.
+local BLOCK_READ = "local BLOCK_START = Read%("
+local INSTANCE_STEP = "RecieveInstanceCursor %+= 1"
+
+--- For an event whose payload is flat (IsFlat) and whose reader reserves its bytes in one block before
+--- it reads any Instance, a missing Instance can refuse the event where it is found, and the reader
+--- needs no check at its end -- which is what that check costs every event that does arrive whole.
+--- Its bytes are already behind the cursor, so the Instance cursor is moved past the event's remaining
+--- slots and the signal raised at once. Both conditions are confirmed on the text the reader was
+--- emitted as, so that a change to how a type is read can only fall back to the flag, never leave the
+--- cursor inside an event. Returns whether it rewrote the reader.
+local function RaiseWhereMissing(Data: Type, Content: { string }): boolean
+	if not IsFlat(Data) or Size.Sealed(Data :: any).Min ~= Size.Sealed(Data :: any).Max then
+		return false
+	end
+
+	local Reserved, Steps = 0, 0
+	for _, Line in Content do
+		if string.find(Line, BLOCK_READ) then
+			if Steps > 0 then
+				return false
+			end
+			Reserved += 1
+		elseif string.find(Line, "%f[%w_]Read%(") or string.find(Line, "RecieveCursor") then
+			return false
+		elseif string.find(Line, "RecieveInstanceCursor %-= ") or string.find(Line, "^%s*for ") then
+			return false
+		elseif string.find(Line, INSTANCE_STEP) then
+			Steps += 1
+		end
+	end
+
+	if Reserved > 1 then
+		return false
+	end
+
+	local Seen = 0
+	for Index, Line in Content do
+		if string.find(Line, INSTANCE_STEP) then
+			Seen += 1
+		elseif string.find(Line, "MissingInstance = true", 1, true) then
+			local Remaining = Steps - Seen
+			local Raise = if Remaining > 0
+				then `RecieveInstanceCursor += {Remaining}; error(MISSING_SIGNAL, 0)`
+				else "error(MISSING_SIGNAL, 0)"
+			Content[Index] = string.gsub(Line, "MissingInstance = true", Raise)
+		end
+	end
+
+	return true
 end
 
 function Generators.Event(
@@ -290,12 +377,28 @@ function Generators.Event(
 		end
 	end
 
+	local MissingBefore = Prefabs.Missing.Count
 	if Data then
 		Generators.UserType(Data, Read, Write)
 	end
 
 	Read:FlushBits()
 	Write:FlushBits()
+
+	--> An event's reader refuses the event itself, by raising MISSING_SIGNAL once the event is read
+	--> to its end: the decode loop's pcall catches it with the cursor at the next event, reports the
+	--> event and goes on (see CloseDecode in Generator/init.luau). A function's readers leave the flag
+	--> to their branch, which has a caller to answer.
+	if Function == nil and Prefabs.Missing.Count > MissingBefore then
+		if not RaiseWhereMissing(Data :: Type, Read.Content) then
+			--> The check sits here, in a function that already holds the flag as an upvalue: in the
+			--> decode branch it cost a hundred events carrying a part 4% more to decode.
+			Read:Compare("MissingInstance", "true", "Equals")
+				:Line("MissingInstance = false")
+				:Line("error(MISSING_SIGNAL, 0)")
+				:End()
+		end
+	end
 
 	return Read:Return(Returns):End().Content, Write:End().Content
 end

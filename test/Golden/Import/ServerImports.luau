@@ -515,7 +515,7 @@ local EventNames: any = {
     Unreliable = {}
 }
 
-local RATE_TEMPLATE = table.freeze({})
+local RATE_TEMPLATE = table.freeze({} :: {number})
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
@@ -838,7 +838,7 @@ if not RunService:IsRunning() then
 	Source2 = {
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -849,6 +849,9 @@ local Reliable: RemoteEvent = ReplicatedStorage:FindFirstChild(BASE_EVENT_NAME .
 if not Reliable then
     local RemoteEvent = Instance.new("RemoteEvent")
     RemoteEvent.Name = BASE_EVENT_NAME .. "_RELIABLE_REMOTE"
+    --> A place saved while running -- SavePlaceAsync, a plugin, Studio's own save during a test --
+    --> would otherwise keep the remote, and the next server would find one it did not make.
+    RemoteEvent.Archivable = false
     --> Set BEFORE parenting, and that ordering is the whole trick. An attribute written on an
     --> unparented instance replicates atomically with the instance itself; one written afterwards is
     --> a separate replication event with no ordering guarantee against the client's WaitForChild
@@ -866,6 +869,7 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:FindFirstChild(BASE_
 if not Unreliable then
     local UnreliableRemoteEvent = Instance.new("UnreliableRemoteEvent")
     UnreliableRemoteEvent.Name = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE"
+    UnreliableRemoteEvent.Archivable = false
     UnreliableRemoteEvent.Parent = ReplicatedStorage
     Unreliable = UnreliableRemoteEvent
 end
@@ -875,6 +879,17 @@ end
 --> require time beats failing per packet, forever, at runtime.
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+
+--> ONE MODULE PER REMOTE. The `_G` guard above is per Luau VM, and every Actor is a VM of its own: a
+--> second copy required from an Actor passed it, found these remotes already made, and connected to
+--> them too. Every packet was then decoded twice and every listener called twice, each copy kept its
+--> own inbound budget -- so a client had twice the allowance -- and a player's sends were split across
+--> two batches with no order between them. The DataModel is what the VMs share, so the claim is kept
+--> there. It is never cleared: a server does not unload its network module.
+if Reliable:GetAttribute("BlinkBloxServer") then
+    error(`[BlinkBlox]: A server module using the remote "{BASE_EVENT_NAME}_RELIABLE_REMOTE" is already running in another Luau VM, such as an Actor's. Require it from one VM only, and hand work to Actors with messages or SharedTables.`)
+end
+Reliable:SetAttribute("BlinkBloxServer", true)
 
 local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
 
@@ -1371,6 +1386,12 @@ local function SavePlayerBuffer(Player: Player)
     --> every reliable send to a player, and the entry also carries its shrink count.
     local Entry = PlayersMap[Player]
     if Entry == nil then
+        --> Checked here, where a player's first send lands, rather than on every send: a call made with
+        --> `:` -- `Net.Event:Fire(...)` -- passes the event's table as the player, and failed in the
+        --> line below as "attempt to call a nil value".
+        if type(Player) == "table" then
+            error("[BlinkBlox]: Expected a Player to send to, got a table instead. Call a send with '.', as Net.Event.Fire(Player, ...), not with ':'.", 3)
+        end
         if Player:IsDescendantOf(Players) then
             PlayersMap[Player] = Save()
             if SharedCursor > 0 then
@@ -1550,21 +1571,21 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player)
+local function DecodeReliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
-local function DecodeUnreliable(Player: Player)
+local function DecodeUnreliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	if Index == 0 then
 		local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Generics_ReadEVENT_Snapshot()
-		local BOUND_LISTENER = Events.Unreliable[0]
+		local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "Snapshot"
 			Decoding = -2 - Index
@@ -1572,7 +1593,7 @@ local function DecodeUnreliable(Player: Player)
 		end
 	elseif Index == 1 then
 		local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Example_ReadEVENT_Snapshot()
-		local BOUND_LISTENER = Events.Unreliable[1]
+		local BOUND_LISTENER = Events.Unreliable[1] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "Snapshot"
 			Decoding = -2 - Index
@@ -1675,182 +1696,175 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	Generics = {
-		Entity = {
-			Read = function(Buffer: buffer): (Generics_Entity)
-				local PreviousCursor = RecieveCursor
-				local PreviousBuffer = RecieveBuffer
-				local PreviousInstanceCursor = RecieveInstanceCursor
-				RecieveCursor = 0
-				RecieveBuffer = Buffer
-				local Success, Result = pcall(function (): (Generics_Entity)
-					-- Read BLOCK: 15 bytes
-					local BLOCK_START = Read(15)
-					local RecieveBuffer = RecieveBuffer
-					-- Value: Entity
-					local Value = {id = false, pos = false, angle = false} :: any
-					-- Value.id: id
-					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					do
-						-- Value.pos: pos
-						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-						Value.pos = Vector3.new(X, Y, Z)
-					end
-					-- Value.angle: angle
-					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
-					return Value
-				end)
-				RecieveCursor = PreviousCursor
-				RecieveBuffer = PreviousBuffer
-				RecieveInstanceCursor = PreviousInstanceCursor
-				if Success ~= true then
-					error(Result, 0)
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.Generics = {
+	Entity = {
+		Read = function(Buffer: buffer): (Generics_Entity)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Generics_Entity)
+				-- Read BLOCK: 15 bytes
+				local BLOCK_START = Read(15)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: Entity
+				local Value = {id = false, pos = false, angle = false} :: any
+				-- Value.id: id
+				Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				do
+					-- Value.pos: pos
+					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+					Value.pos = Vector3.new(X, Y, Z)
 				end
-				return Result :: Generics_Entity
-			end,
-			Write = function(Value: Generics_Entity): (buffer)
-				local Previous = Save()
-				Load()
-				local Success, Result = pcall(function (): (buffer)
-					-- Allocate BLOCK: 15 bytes
-					local BLOCK_START = Allocate(15)
-					-- Value: Entity
-					-- Value.id: id
-					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					do
-						-- Value.pos: pos
-						local Vector = Value.pos
-						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
-					end
-					-- Value.angle: angle
-					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
-					local Result = buffer.create(SendCursor)
-					buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-					return Result
-				end)
-				Load(Previous)
-				if Success ~= true then
-					error(Result, 0)
+				-- Value.angle: angle
+				Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Generics_Entity
+		end,
+		Write = function(Value: Generics_Entity): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 15 bytes
+				local BLOCK_START = Allocate(15)
+				-- Value: Entity
+				-- Value.id: id
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
+				do
+					-- Value.pos: pos
+					local Vector = Value.pos
+					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
 				end
+				-- Value.angle: angle
+				buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
 			end
-		},
-		Snapshot = {
-			On = function(Listener: (Player: Player, Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }) -> ()): () -> ()
-				if Events.Unreliable[0] ~= nil then
-					warn("[BlinkBlox]: \"Snapshot\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-				end
-				Events.Unreliable[0] = Listener
-				return function (): ()
-					if Events.Unreliable[0] == Listener then
-						Events.Unreliable[0] = nil
-					end
-				end
-			end
-		},
+			return Result
+		end
 	},
-	Example = {
-		Entity = {
-			Read = function(Buffer: buffer): (Example_Entity)
-				local PreviousCursor = RecieveCursor
-				local PreviousBuffer = RecieveBuffer
-				local PreviousInstanceCursor = RecieveInstanceCursor
-				RecieveCursor = 0
-				RecieveBuffer = Buffer
-				local Success, Result = pcall(function (): (Example_Entity)
-					-- Read BLOCK: 15 bytes
-					local BLOCK_START = Read(15)
-					local RecieveBuffer = RecieveBuffer
-					-- Value: Entity
-					local Value = {id = false, pos = false, angle = false} :: any
-					-- Value.id: id
-					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					do
-						-- Value.pos: pos
-						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-						Value.pos = Vector3.new(X, Y, Z)
-					end
-					-- Value.angle: angle
-					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
-					return Value
-				end)
-				RecieveCursor = PreviousCursor
-				RecieveBuffer = PreviousBuffer
-				RecieveInstanceCursor = PreviousInstanceCursor
-				if Success ~= true then
-					error(Result, 0)
+	Snapshot = {
+		On = function(Listener: (Player: Player, Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }) -> ()): () -> ()
+			if Events.Unreliable[0] ~= nil then
+				warn("[BlinkBlox]: \"Snapshot\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Unreliable[0] = Listener
+			return function (): ()
+				if Events.Unreliable[0] == Listener then
+					Events.Unreliable[0] = nil
 				end
-				return Result :: Example_Entity
-			end,
-			Write = function(Value: Example_Entity): (buffer)
-				local Previous = Save()
-				Load()
-				local Success, Result = pcall(function (): (buffer)
-					-- Allocate BLOCK: 15 bytes
-					local BLOCK_START = Allocate(15)
-					-- Value: Entity
-					-- Value.id: id
-					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					do
-						-- Value.pos: pos
-						local Vector = Value.pos
-						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
-					end
-					-- Value.angle: angle
-					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
-					local Result = buffer.create(SendCursor)
-					buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-					return Result
-				end)
-				Load(Previous)
-				if Success ~= true then
-					error(Result, 0)
+			end
+		end
+	},
+}
+Returns.Example = {
+	Entity = {
+		Read = function(Buffer: buffer): (Example_Entity)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Example_Entity)
+				-- Read BLOCK: 15 bytes
+				local BLOCK_START = Read(15)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: Entity
+				local Value = {id = false, pos = false, angle = false} :: any
+				-- Value.id: id
+				Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				do
+					-- Value.pos: pos
+					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+					Value.pos = Vector3.new(X, Y, Z)
 				end
+				-- Value.angle: angle
+				Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Example_Entity
+		end,
+		Write = function(Value: Example_Entity): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 15 bytes
+				local BLOCK_START = Allocate(15)
+				-- Value: Entity
+				-- Value.id: id
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
+				do
+					-- Value.pos: pos
+					local Vector = Value.pos
+					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+				end
+				-- Value.angle: angle
+				buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
 			end
-		},
-		Snapshot = {
-			On = function(Listener: (Player: Player, Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }) -> ()): () -> ()
-				if Events.Unreliable[1] ~= nil then
-					warn("[BlinkBlox]: \"Snapshot\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-				end
-				Events.Unreliable[1] = Listener
-				return function (): ()
-					if Events.Unreliable[1] == Listener then
-						Events.Unreliable[1] = nil
-					end
+			return Result
+		end
+	},
+	Snapshot = {
+		On = function(Listener: (Player: Player, Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }) -> ()): () -> ()
+			if Events.Unreliable[1] ~= nil then
+				warn("[BlinkBlox]: \"Snapshot\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+			end
+			Events.Unreliable[1] = Listener
+			return function (): ()
+				if Events.Unreliable[1] == Listener then
+					Events.Unreliable[1] = nil
 				end
 			end
-		},
+		end
 	},
-	Source = {
-		Source2 = {
-		},
-	},
+}
+Returns.Source = {
 	Source2 = {
 	},
-})
+}
+Returns.Source2 = {
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

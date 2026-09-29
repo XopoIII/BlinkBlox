@@ -249,11 +249,14 @@ function Parser.Declaration(self: Parser, Name: Token): TypeNode
 			)
 		end
 
-		error(
-			self:Diagnostic(Error.AnalyzeUnknownReference, `Unknown reference`)
-				:Primary(Token, "Unknown reference")
-				:Emit()
-		)
+		local Diagnostic = self:Diagnostic(Error.AnalyzeUnknownReference, `Unknown reference`)
+			:Primary(Token, "Unknown reference")
+		--> `Enum` is a type only with its enum's name right after it (Lexer), so a bare one lands here.
+		if Token.Value == "Enum" then
+			Diagnostic:Note("A Roblox enum's items are written with the enum's name: Enum(Material).")
+		end
+
+		error(Diagnostic:Emit())
 	end
 
 	local To = Reference.To

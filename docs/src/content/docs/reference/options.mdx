@@ -22,6 +22,7 @@ page explains each one in full.
 | [`ManualReplication`](/BlinkBlox/language/options/#manualreplication) | boolean | `false` | Do not flush reliable traffic on `Heartbeat`; call `StepReplication` yourself. |
 | [`ClientFlushRate`](/BlinkBlox/language/options/#clientflushrate) | whole number | `60` | The most times a second a client's Heartbeat sends what it has gathered. |
 | [`RemoteScope`](/BlinkBlox/language/options/#remotescope) | string | `""` | Prefix for the remotes' names: `"PKG"` gives `PKG_BLINK_RELIABLE_REMOTE`. |
+| [`RemotesFolder`](/BlinkBlox/language/options/#remotesfolder) | string | none | A folder in ReplicatedStorage to hold the remotes. |
 | [`ExportLimits`](/BlinkBlox/language/options/#exportlimits) | boolean | `false` | Add a frozen `Limits` table of the schema's ranges and length caps to every module. |
 | [`MaxPacketSize`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | whole number | `8192` | Largest inbound packet the server reads, in bytes. |
 | [`MaxEventsPerPacket`](/BlinkBlox/language/options/#maxpacketsize-maxeventsperpacket-maxinstancesperpacket) | whole number | `64` | Events the server decodes from one packet before dropping the rest. |

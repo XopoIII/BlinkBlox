@@ -817,14 +817,30 @@ if not RunService:IsRunning() then
 	Source2 = {
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsClient() then
     error("Client network module can only be required from the client.")
 end
 
-local Reliable: RemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
+--> The server module creates the remotes, so a client in a place where it is never required waits
+--> for good. Roblox's own "Infinite yield possible" names the remote and not the reason; this says
+--> once what is missing, then keeps waiting, since a late server is still a server.
+local function Await(Parent: Instance, Name: string): Instance
+    local Found: Instance? = Parent:WaitForChild(Name, 5)
+    if Found == nil then
+        warn(`[BlinkBlox]: Still waiting for "{Name}" after 5 seconds. The server module creates it: require it from a server Script. To stop waiting after a while, set option ClientConnectTimeout.`)
+    end
+
+    while Found == nil do
+        Found = Parent:WaitForChild(Name, 60)
+    end
+
+    return Found :: Instance
+end
+
+local Reliable: RemoteEvent = Await(ReplicatedStorage, BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
 local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
 
 --> WaitForChild returns whatever carries that name. A client can create an instance of any class in
@@ -832,6 +848,14 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EV
 --> outgoing packet is then handed to an object of the attacker's choosing.
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+
+--> One module per remote on this side too: a copy required from a LocalScript under an Actor is a VM
+--> the `_G` guard cannot see, and it would decode every packet and call every listener a second time.
+--> An attribute set here stays on this client -- the server never writes this one.
+if Reliable:GetAttribute("BlinkBloxClient") then
+    error(`[BlinkBlox]: A client module using the remote "{BASE_EVENT_NAME}_RELIABLE_REMOTE" is already running in another Luau VM, such as an Actor's. Require it from one VM only, and hand work to Actors with messages or SharedTables.`)
+end
+Reliable:SetAttribute("BlinkBloxClient", true)
 
 --> Refuse to run against a server built from a different schema.
 -->
@@ -1020,14 +1044,14 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable()
+local function DecodeReliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
-local function DecodeUnreliable()
+local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1085,186 +1109,179 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	Generics = {
-		Entity = {
-			Read = function(Buffer: buffer): (Generics_Entity)
-				local PreviousCursor = RecieveCursor
-				local PreviousBuffer = RecieveBuffer
-				local PreviousInstanceCursor = RecieveInstanceCursor
-				RecieveCursor = 0
-				RecieveBuffer = Buffer
-				local Success, Result = pcall(function (): (Generics_Entity)
-					-- Read BLOCK: 15 bytes
-					local BLOCK_START = Read(15)
-					local RecieveBuffer = RecieveBuffer
-					-- Value: Entity
-					local Value = {id = false, pos = false, angle = false} :: any
-					-- Value.id: id
-					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					do
-						-- Value.pos: pos
-						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-						Value.pos = Vector3.new(X, Y, Z)
-					end
-					-- Value.angle: angle
-					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
-					return Value
-				end)
-				RecieveCursor = PreviousCursor
-				RecieveBuffer = PreviousBuffer
-				RecieveInstanceCursor = PreviousInstanceCursor
-				if Success ~= true then
-					error(Result, 0)
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.Generics = {
+	Entity = {
+		Read = function(Buffer: buffer): (Generics_Entity)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Generics_Entity)
+				-- Read BLOCK: 15 bytes
+				local BLOCK_START = Read(15)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: Entity
+				local Value = {id = false, pos = false, angle = false} :: any
+				-- Value.id: id
+				Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				do
+					-- Value.pos: pos
+					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+					Value.pos = Vector3.new(X, Y, Z)
 				end
-				return Result :: Generics_Entity
-			end,
-			Write = function(Value: Generics_Entity): (buffer)
-				local Previous = Save()
-				Load()
-				local Success, Result = pcall(function (): (buffer)
-					-- Allocate BLOCK: 15 bytes
-					local BLOCK_START = Allocate(15)
-					-- Value: Entity
-					-- Value.id: id
-					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					do
-						-- Value.pos: pos
-						local Vector = Value.pos
-						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
-					end
-					-- Value.angle: angle
-					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
-					local Result = buffer.create(SendCursor)
-					buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-					return Result
-				end)
-				Load(Previous)
-				if Success ~= true then
-					error(Result, 0)
+				-- Value.angle: angle
+				Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Generics_Entity
+		end,
+		Write = function(Value: Generics_Entity): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 15 bytes
+				local BLOCK_START = Allocate(15)
+				-- Value: Entity
+				-- Value.id: id
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
+				do
+					-- Value.pos: pos
+					local Vector = Value.pos
+					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
 				end
+				-- Value.angle: angle
+				buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
 			end
-		},
-		Snapshot = {
-			Fire = function(Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }): ()
-				Hold()
-				local Sent: boolean, Failure: any = pcall(SerdesFunctions.Generics_WriteEVENT_Snapshot, Value)
-				if Sent and CheckUnreliableSize("Snapshot") then
-					local Buffer = buffer.create(SendCursor)
-					buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-					Unreliable:FireServer(Buffer, SendInstances)
-				end
-				Release()
-				if Sent ~= true then
-					error(Failure, 0)
-				end
-			end
-		},
+			return Result
+		end
 	},
-	Example = {
-		Entity = {
-			Read = function(Buffer: buffer): (Example_Entity)
-				local PreviousCursor = RecieveCursor
-				local PreviousBuffer = RecieveBuffer
-				local PreviousInstanceCursor = RecieveInstanceCursor
-				RecieveCursor = 0
-				RecieveBuffer = Buffer
-				local Success, Result = pcall(function (): (Example_Entity)
-					-- Read BLOCK: 15 bytes
-					local BLOCK_START = Read(15)
-					local RecieveBuffer = RecieveBuffer
-					-- Value: Entity
-					local Value = {id = false, pos = false, angle = false} :: any
-					-- Value.id: id
-					Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-					do
-						-- Value.pos: pos
-						local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
-						local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
-						local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
-						Value.pos = Vector3.new(X, Y, Z)
-					end
-					-- Value.angle: angle
-					Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
-					return Value
-				end)
-				RecieveCursor = PreviousCursor
-				RecieveBuffer = PreviousBuffer
-				RecieveInstanceCursor = PreviousInstanceCursor
-				if Success ~= true then
-					error(Result, 0)
+	Snapshot = {
+		Fire = function(Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }): ()
+			Hold()
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.Generics_WriteEVENT_Snapshot, Value)
+			if Sent and CheckUnreliableSize("Snapshot") then
+				local Buffer = buffer.create(SendCursor)
+				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+				Unreliable:FireServer(Buffer, SendInstances)
+			end
+			Release()
+			if Sent ~= true then
+				error(Failure, 0)
+			end
+		end
+	},
+}
+Returns.Example = {
+	Entity = {
+		Read = function(Buffer: buffer): (Example_Entity)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Example_Entity)
+				-- Read BLOCK: 15 bytes
+				local BLOCK_START = Read(15)
+				local RecieveBuffer = RecieveBuffer
+				-- Value: Entity
+				local Value = {id = false, pos = false, angle = false} :: any
+				-- Value.id: id
+				Value.id = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				do
+					-- Value.pos: pos
+					local X = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					local Y = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+					local Z = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+					Value.pos = Vector3.new(X, Y, Z)
 				end
-				return Result :: Example_Entity
-			end,
-			Write = function(Value: Example_Entity): (buffer)
-				local Previous = Save()
-				Load()
-				local Success, Result = pcall(function (): (buffer)
-					-- Allocate BLOCK: 15 bytes
-					local BLOCK_START = Allocate(15)
-					-- Value: Entity
-					-- Value.id: id
-					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
-					do
-						-- Value.pos: pos
-						local Vector = Value.pos
-						buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
-						buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
-						buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
-					end
-					-- Value.angle: angle
-					buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
-					local Result = buffer.create(SendCursor)
-					buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
-					return Result
-				end)
-				Load(Previous)
-				if Success ~= true then
-					error(Result, 0)
+				-- Value.angle: angle
+				Value.angle = buffer.readu16(RecieveBuffer, BLOCK_START + 13)
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Example_Entity
+		end,
+		Write = function(Value: Example_Entity): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 15 bytes
+				local BLOCK_START = Allocate(15)
+				-- Value: Entity
+				-- Value.id: id
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.id)
+				do
+					-- Value.pos: pos
+					local Vector = Value.pos
+					buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
 				end
+				-- Value.angle: angle
+				buffer.writeu16(SendBuffer, BLOCK_START + 13, Value.angle)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
 				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
 			end
-		},
-		Snapshot = {
-			Fire = function(Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }): ()
-				Hold()
-				local Sent: boolean, Failure: any = pcall(SerdesFunctions.Example_WriteEVENT_Snapshot, Value)
-				if Sent and CheckUnreliableSize("Snapshot") then
-					local Buffer = buffer.create(SendCursor)
-					buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-					Unreliable:FireServer(Buffer, SendInstances)
-				end
-				Release()
-				if Sent ~= true then
-					error(Failure, 0)
-				end
+			return Result
+		end
+	},
+	Snapshot = {
+		Fire = function(Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } }): ()
+			Hold()
+			local Sent: boolean, Failure: any = pcall(SerdesFunctions.Example_WriteEVENT_Snapshot, Value)
+			if Sent and CheckUnreliableSize("Snapshot") then
+				local Buffer = buffer.create(SendCursor)
+				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+				Unreliable:FireServer(Buffer, SendInstances)
 			end
-		},
+			Release()
+			if Sent ~= true then
+				error(Failure, 0)
+			end
+		end
 	},
-	Source = {
-		Source2 = {
-		},
-	},
+}
+Returns.Source = {
 	Source2 = {
 	},
-})
+}
+Returns.Source2 = {
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

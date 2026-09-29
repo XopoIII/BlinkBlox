@@ -2,6 +2,8 @@
 --- The diagnostic shown in the editor: the text of its message, and the key that says whether a new
 --- one would draw anything different from the one already drawn.
 local Error = require("@compiler/Modules/Error")
+local Instances = require("../Instances")
+local Spans = require("./Spans")
 local Utility = require("./Utility")
 
 local Diagnostics = {}
@@ -73,6 +75,50 @@ function Diagnostics.Underline(
 
 		Fill.MaxVisibleGraphemes = #Covered
 	end
+end
+
+export type View = {
+	--- The message box, shown while the mouse is over the underline.
+	Popup: GuiObject,
+	Message: TextLabel,
+	--- Holds the underline frames; each is cloned from `Template`.
+	Underlines: Instance,
+	Template: Frame & { Fill: GuiObject },
+	Widget: DockWidgetPluginGui,
+	LineHeight: number,
+	TextSize: number,
+	Font: Font,
+	Theme: { Error: Color3, Warning: Color3 },
+}
+
+--- Clears what was drawn and draws `Diagnostic`, if any: the message, and an underline where its
+--- primary label begins. `Source` is the editor's text, `Content` the same without rich text.
+function Diagnostics.Draw(View: View, Diagnostic: Error.Class?, Source: string, Content: string)
+	View.Popup.Visible = false
+	Instances.ClearChildrenWhichAre(View.Underlines, "Frame")
+
+	local Labels = if Diagnostic then Diagnostic.Labels else {}
+	if not Diagnostic or #Labels == 0 then
+		return
+	end
+
+	local IsWarning = (Diagnostic.Severity == "Warning")
+	View.Message.Text = Diagnostics.Message(Diagnostic, Source, View.Theme)
+
+	local Span = Labels[#Labels].Span
+	Spans.Draw({
+		Template = View.Template,
+		Parent = View.Underlines,
+		Text = string.sub(Content, 1, Span.End),
+		Start = Span.Start,
+		Finish = Span.End,
+		LineHeight = View.LineHeight,
+		TextSize = View.TextSize,
+		Font = View.Font,
+		FillOffset = 10,
+		FirstLineOnly = true,
+		Decorate = Diagnostics.Underline(View.Popup, View.Widget, if IsWarning then View.Theme.Warning else nil),
+	})
 end
 
 return Diagnostics

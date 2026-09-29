@@ -100,7 +100,9 @@ the menu button again closes it.
 </Tabs>
 
 - **Edit** opens the file in the editor and closes the menu.
-- **Delete** removes the file at once. There is no confirmation.
+- **Delete** removes the file at once, without asking. <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings it back: saving,
+  deleting and generating are each one step in Studio's undo history. A deleted file used to be
+  destroyed, which no undo could restore.
 - **Generate** opens the generate prompt -- see [Generating](#generating).
 
 ### Searching
@@ -233,6 +235,13 @@ the folder is touched**: a wrapper module or configuration script you keep besid
 stays. Before 0.23.0 the plugin emptied the folder on every generation. The one exception is an
 instance of another class sitting on one of the three names -- a `Folder` named `Server`, say -- which
 is replaced, with a warning in the Output window saying so.
+
+Generating is one undo step, and all or nothing: if writing one module fails, the ones written before
+it are rolled back, and the Error window says what failed.
+
+The plugin writes into the folder you select. `option ServerOutput`, `ClientOutput` and `TypesOutput`
+are paths on disk for the [command line](/BlinkBlox/getting-started/cli/), and the plugin leaves them
+alone, so one schema serves both.
 
 The modules are written through `ScriptEditorService`, so a large schema whose output passes the
 200,000 characters a script's `Source` property accepts still generates.
@@ -376,8 +385,10 @@ on every keystroke instead. Warnings now appear here and are not printed.
 
 ### Large files
 
-The editor does a fixed amount of work per keystroke however long the schema is. It draws the
-document once per change, and a diagnostic costs the same wherever it is -- until 0.23.0, a
+The editor does little per keystroke however long the schema is. It re-colours the document at most
+once a frame, and parses it -- which is what finds diagnostics and the names autocomplete offers --
+once typing has paused for 0.3 seconds: on a 1,200-line schema each costs about 15ms, and both used
+to run on every key. It draws the document once per change, and a diagnostic costs the same wherever it is -- until 0.23.0, a
 diagnostic on line 800 rebuilt 800 instances on every keystroke, about 39ms. Line numbers past the
 first 2,000 are created as they are needed; a longer document used to crash the editor. The mouse
 wheel scrolls two lines at a time.

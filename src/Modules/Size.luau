@@ -242,7 +242,7 @@ local function MeasurePrimitive(Node: Node): Measurement
 
 	local Result = Empty()
 	Result.Min = if Primitive then Primitive.Bytes else 0
-	Result.Max = Result.Min
+	Result.Max = if Primitive and Primitive.MaxBytes then Primitive.MaxBytes else Result.Min
 	return Result
 end
 
@@ -306,15 +306,19 @@ local function MeasureArray(Node: Node): Measurement
 	return Result
 end
 
-local function MeasureMap(Node: Node): Measurement
+--- One entry of a map: its key and value, sealed. Key and value are emitted into the SAME loop body,
+--- so they share one bitfield -- sealing them together rather than separately is what keeps this in
+--- step with the emitter.
+local function MapEntry(Node: Node): Measurement
 	local Values = Node.Value.Values
-
-	--> Key and value are emitted into the SAME loop body, so they share one bitfield -- sealing them
-	--> together rather than separately is what keeps this in step with the emitter.
 	local Pair = Empty()
 	Add(Pair, Measure(Values[1]))
 	Add(Pair, Measure(Values[2]))
-	Pair = Seal(Pair)
+	return Seal(Pair)
+end
+
+local function MeasureMap(Node: Node): Measurement
+	local Pair = MapEntry(Node)
 
 	--> The element count is an unconditional u16 and nothing in the language can bound it, so every
 	--> map is unbounded by construction.
@@ -481,6 +485,7 @@ local ORDERING_BYTES = 2
 return {
 	Measure = Measure,
 	Sealed = Sealed,
+	MapEntry = MapEntry,
 	PacksBooleans = PacksBooleans,
 	RangeWritten = RangeWritten,
 	TokenOf = TokenOf,

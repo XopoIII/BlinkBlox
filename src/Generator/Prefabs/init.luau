@@ -14,15 +14,19 @@ local Common = require("@self/Common")
 local Lengths = require("@self/Lengths")
 local _ = require("@self/Numbers")
 local _ = require("@self/Roblox")
+local _ = require("@self/Datatypes")
 
 return {
 	Types = Common.Types,
 	Asserts = AssertsModule.Asserts,
 	EmitCapacityGuard = AssertsModule.EmitCapacityGuard,
+	EmitCountGuard = AssertsModule.EmitCountGuard,
 	EmitLengthGuard = AssertsModule.EmitLengthGuard,
 	EmitReceivedLength = AssertsModule.EmitReceivedLength,
 	Primitives = Common.Primitives,
 	Required = Common.Required,
+	Missing = Common.Missing,
+	Present = Common.Present,
 	GetTypeToUse = Common.GetTypeToUse,
 	GetTypeToUseByBits = Common.GetTypeToUseByBits,
 	ReadPrefix = Lengths.ReadPrefix,

@@ -601,14 +601,30 @@ if not RunService:IsRunning() then
 		On = NOOP_RETURNING
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsClient() then
     error("Client network module can only be required from the client.")
 end
 
-local Reliable: RemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
+--> The server module creates the remotes, so a client in a place where it is never required waits
+--> for good. Roblox's own "Infinite yield possible" names the remote and not the reason; this says
+--> once what is missing, then keeps waiting, since a late server is still a server.
+local function Await(Parent: Instance, Name: string): Instance
+    local Found: Instance? = Parent:WaitForChild(Name, 5)
+    if Found == nil then
+        warn(`[BlinkBlox]: Still waiting for "{Name}" after 5 seconds. The server module creates it: require it from a server Script. To stop waiting after a while, set option ClientConnectTimeout.`)
+    end
+
+    while Found == nil do
+        Found = Parent:WaitForChild(Name, 60)
+    end
+
+    return Found :: Instance
+end
+
+local Reliable: RemoteEvent = Await(ReplicatedStorage, BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
 local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
 
 --> WaitForChild returns whatever carries that name. A client can create an instance of any class in
@@ -616,6 +632,14 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EV
 --> outgoing packet is then handed to an object of the attacker's choosing.
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+
+--> One module per remote on this side too: a copy required from a LocalScript under an Actor is a VM
+--> the `_G` guard cannot see, and it would decode every packet and call every listener a second time.
+--> An attribute set here stays on this client -- the server never writes this one.
+if Reliable:GetAttribute("BlinkBloxClient") then
+    error(`[BlinkBlox]: A client module using the remote "{BASE_EVENT_NAME}_RELIABLE_REMOTE" is already running in another Luau VM, such as an Actor's. Require it from one VM only, and hand work to Actors with messages or SharedTables.`)
+end
+Reliable:SetAttribute("BlinkBloxClient", true)
 
 --> Refuse to run against a server built from a different schema.
 -->
@@ -804,21 +828,21 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable()
+local function DecodeReliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
-local function DecodeUnreliable()
+local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	if Index == 0 then
 		local Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number } = SerdesFunctions.ReadEVENT_TestEvent()
-		local BOUND_LISTENER = Events.Unreliable[0]
+		local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
 		if BOUND_LISTENER ~= nil then
 			SerdesEvent = "TestEvent"
 			Decoding = -2 - Index
@@ -879,33 +903,26 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	TestEvent = {
-		On = function(Listener: (Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }) -> ()): () -> ()
-			if Events.Unreliable[0] ~= nil then
-				warn("[BlinkBlox]: \"TestEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Unreliable[0] = Listener
-			return function (): ()
-				if Events.Unreliable[0] == Listener then
-					Events.Unreliable[0] = nil
-				end
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.TestEvent = {
+	On = function(Listener: (Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }) -> ()): () -> ()
+		if Events.Unreliable[0] ~= nil then
+			warn("[BlinkBlox]: \"TestEvent\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[0] = Listener
+		return function (): ()
+			if Events.Unreliable[0] == Listener then
+				Events.Unreliable[0] = nil
 			end
 		end
-	},
-})
+	end
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

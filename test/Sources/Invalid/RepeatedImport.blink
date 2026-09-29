@@ -1,0 +1,7 @@
+-- expect W3036
+-- A file of events imported twice compiles its events twice, as separate events; legal, so it warns.
+option ClientOutput = "../../Network/RepeatedImportClient.luau"
+option ServerOutput = "../../Network/RepeatedImportServer.luau"
+
+import "./Imported/Pinged.blink"
+import "./Imported/Pinged.blink" as Again

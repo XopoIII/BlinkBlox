@@ -94,6 +94,57 @@ ExpectCompiles(
 	end
 )
 
+--> The largest module a schema can make, loaded as native code on both sides. Every decoder here has
+--> its full 256-way dispatch, in both directions, over payloads of every shape. Compiling to bytecode
+--> is not enough: LuneBlox 0.10.11 and earlier died without a word natively loading a client module
+--> of 64 server events, a Luau 0.740 fault on ARM64 that bytecode never reaches.
+do
+	local SHAPES = {
+		"u8",
+		"struct { id: u16, x: f32, alive: boolean }",
+		"(string(..32), u16?, boolean)",
+		"f32[..16]",
+		"map { [string(..16)]: u8 }",
+		"Instance",
+		"struct { a: u8?, b: vector, c: CFrame }",
+	}
+	local Lines: { string } = {}
+	for Index = 1, 256 do
+		local From = if Index % 2 == 0 then "Server" else "Client"
+		local Shape = SHAPES[(Index % #SHAPES) + 1]
+		table.insert(Lines, `event R{Index} \{ From: {From}, Type: Reliable, Call: SingleSync, Data: {Shape} }`)
+		table.insert(Lines, `event U{Index} \{ From: {From}, Type: Unreliable, Call: SingleSync, Data: u8 }`)
+	end
+	local Source = table.concat(Lines, "\n")
+
+	PrettyPrint("cyan", "Testing: Full channels load as native code on both sides...", true)
+	local Success, Result = pcall(function()
+		local Tree = Parse(Source)
+		for _, Side in { "Server", "Client" } do
+			local Bytecode = luau.compile(Generator.Generate(Side, Tree), { optimizationLevel = 2 })
+			luau.load(Bytecode, { debugName = Side, codegenEnabled = true })
+		end
+	end)
+	if not Success then
+		ErrorPrint(`Failed "Full channels load as native code on both sides": {Result}`)
+	end
+	OkPrint(`Test "Full channels load as native code on both sides" passed!`)
+end
+
+--> A module past OutputSize.LIMIT lines is warned about; one short of it is not.
+do
+	local OutputSize = require("@compiler/Modules/OutputSize")
+	PrettyPrint("cyan", "Testing: A module past the size limit is warned about...", true)
+	local Under = string.rep("\n", OutputSize.LIMIT)
+	local Over = Under .. "\n"
+	if OutputSize.Warning("server", Under) ~= nil then
+		ErrorPrint(`Failed "size limit": a module of {OutputSize.LIMIT} lines was warned about`)
+	elseif not string.find(OutputSize.Warning("server", Over) or "", "RemoteScope", 1, true) then
+		ErrorPrint(`Failed "size limit": a module past the limit was not warned about`)
+	end
+	OkPrint(`Test "A module past the size limit is warned about" passed!`)
+end
+
 ExpectRefusal(
 	"A 257th reliable event is refused",
 	Declarations("R", 257, "Reliable"),

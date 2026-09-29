@@ -59,8 +59,25 @@ local Types: { [string]: TypePrefab } = {}
 
 --- Runtime helpers the emitted code has called during the current generate, so the generator splices
 --- in only those. Cleared by `Generator.Reset`; `Rotation` is `Fragments.ROTATION_HELPERS`,
---- `PackedRows` is `Fragments.PACKED_ROWS` and `PackedCalibration` is `Fragments.PACKED_CALIBRATION`.
-local Required: { Rotation: boolean?, PackedRows: boolean?, PackedCalibration: boolean? } = {}
+--- `PackedRows` is `Fragments.PACKED_ROWS` and `PackedCalibration` is `Fragments.PACKED_CALIBRATION`;
+--- `EnumItems` and `ColorSequences` are in Templates/Datatypes.
+local Required: {
+	Rotation: boolean?,
+	PackedRows: boolean?,
+	PackedCalibration: boolean?,
+	EnumItems: boolean?,
+	ColorSequences: boolean?,
+} =
+	{}
+
+--- How many reads have been emitted that set `MissingInstance` rather than throw. A caller compares it
+--- before and after emitting a reader to learn whether that reader can leave the flag set, and so
+--- whether its decode branch needs the check that clears it. Cleared by `Generator.Reset`.
+local Missing = { Count = 0 }
+
+--- Set while an `Instance?` emits its value, which it reads only once the slot has been seen to hold
+--- an Instance: the read there cannot find a nil, and keeps the plain class check.
+local Present = { Value = false }
 
 local Primitives: { [string]: {
 	Type: string | (Declaration: Parser.Primitive) -> string,
@@ -128,9 +145,12 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 			end
 
 			if Block == Write and Type ~= "any" then
+				--> A table where a value belongs is most often the event itself, handed over by a call made
+				--> with `:`, and a Player -- userdata -- is what a server send's value becomes when its
+				--> arguments are shifted that way. The hint costs nothing until the check has failed.
 				Block:Compare(`typeof({TargetVariable})`, `"{Type}"`, "Not")
 					:Line(
-						`error(\`Expected {TargetVariable} to be of type {Type}, got \{type({TargetVariable})} instead.\`)`
+						`error(\`Expected {TargetVariable} to be of type {Type}, got \{type({TargetVariable})} instead.\{if type({TargetVariable}) == "table" or type({TargetVariable}) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}\`)`
 					)
 					:End()
 			end
@@ -177,8 +197,34 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 						Block:Compare(`({TargetVariable} :: any)`, "nil", "Not")
 							:Multiline(Exact, Block.Indent + 1)
 							:End()
-					else
+					elseif Present.Value then
 						Block:Multiline(Exact, Block.Indent)
+					else
+						--> A nil on receipt is an Instance the sender had and this side does not: not
+						--> streamed in, not replicated here, or destroyed before the packet arrived. An
+						--> honest player meets that every day, and throwing here threw away every event
+						--> after this one in the packet. The cursor is sound -- the slot was read, it is
+						--> just empty -- so only this event is refused: the flag is raised, the read goes
+						--> on, and the event's branch checks it once the whole payload is decoded
+						--> (Decode.MissingGuard). Anything else in the slot is a value no sender writes,
+						--> and still stops the packet.
+						-->
+						--> The type is tested first and nil only once it has failed, so an Instance that
+						--> did arrive pays the one comparison it always did: testing for nil first cost a
+						--> decode of a hundred events carrying a part 6% more, interpreted.
+						Missing.Count += 1
+						Block:Line(`if typeof({TargetVariable}) ~= "Instance" then`)
+						Block:Line(
+							`\tif {TargetVariable} ~= nil then error(\`Expected an Instance, got \{typeof({TargetVariable})} instead.\`) end`
+						)
+						Block:Line("\tMissingInstance = true")
+						if Class ~= "Instance" then
+							Block:Line(`elseif not {TargetVariable}:IsA("{Class}") then`)
+							Block:Line(
+								`\terror(\`Expected an Instance of type "{Class}", got "\{{TargetVariable}.ClassName}" instead.\`)`
+							)
+						end
+						Block:Line("end")
 					end
 				end
 			end
@@ -224,6 +270,8 @@ end
 return {
 	Types = Types,
 	Required = Required,
+	Missing = Missing,
+	Present = Present,
 	Primitives = Primitives,
 	GetTypeToUse = GetTypeToUse,
 	GetTypeToUseByBits = GetTypeToUseByBits,

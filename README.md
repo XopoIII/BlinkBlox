@@ -50,8 +50,18 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 - **Hostile input costs the attacker, not the server.** Every length is checked before the read and
   the allocation it pays for. A malformed event ends its packet without throwing: the events
   before it are delivered, and the failure goes to a handler you provide.
+- **A missing Instance costs one event, not the packet.** Under StreamingEnabled an Instance the
+  sender had often is not there on arrival. That event alone is refused and reported; the rest of the
+  packet is still read, at no cost to decoding when everything arrives.
+- **Mistakes other libraries leave silent are named.** A second copy of the module in an Actor errors
+  at require, a send made with `:` instead of `.` says so, a function's listener replaced by a second
+  `.On` warns, a client left waiting for a server that never started says why, and a file of events
+  imported twice warns at compile time. The client's queues are capped as the server's are.
 - **Mismatched builds refuse each other.** A client and a server built from different schemas stop
   at startup instead of decoding one event as another.
+- **The Roblox types games send.** `Vector2`, `UDim`, `UDim2`, `NumberRange`, `ColorSequence`,
+  `TweenInfo`, and a Roblox enum's items as `Enum(Material)` -- sent by `Value`, never by list
+  position, which can differ between client and server during an engine rollout.
 - **Small on the wire.** Booleans, optional flags, enum values and tags share a bitfield, and
   `boolean[]` packs eight to a byte. A length is sent relative to its range, a short one in a single
   varint byte, `CFrame<quat>` fits a rotation in 7 bytes, and
@@ -67,7 +77,8 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 - **Tooling.** The CLI has watch mode and `@profile` builds that keep debug remotes out of release,
   `--check --json` reports every diagnostic as JSON for editors and AI assistants, and `--verify`
   fails a pre-commit hook or CI step when the committed modules no longer match the schema. The generated
-  modules pass their own `--!strict`. You also get TypeScript definitions and a Studio plugin with
+  modules pass their own `--!strict`, and keep their types under the new type solver however many
+  events the schema has. You also get TypeScript definitions and a Studio plugin with
   live diagnostics.
 
 ## Performance

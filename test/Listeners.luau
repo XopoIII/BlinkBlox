@@ -4,6 +4,7 @@
 ---
 --- They live apart from Test.luau but run as part of the same suite, in the place they held there.
 local Assertions = require("./Assertions")
+local Isolated = require("./Isolated")
 local Modules = require("./Modules")
 local Shared = require("./Shared")
 local task = require("@lune/task")
@@ -244,4 +245,25 @@ RunClosure("A listener disconnected by another during dispatch does not run", fu
 
 	local Order = table.concat(Seen, ", ")
 	assert(Order == "first, third", `one fire reached {Order}, expected first, third`)
+end)
+
+--> The same for a function, which answers with one listener and replaced it without a word.
+RunClosure("A second listener on a function is reported", function()
+	local Pair =
+		Isolated.Build(Isolated.Parse("function Price { Yield: Coroutine, Data: u8, Return: u8 }"), "SECONDFUNCTION")
+	table.clear(Shared.Warnings)
+	Pair.Server.Price.On(function(_Player, Value)
+		return Value
+	end)
+	Pair.Server.Price.On(function(_Player, Value)
+		return Value + 1
+	end)
+
+	local Warned = 0
+	for _, Warning in Shared.Warnings do
+		if string.find(Warning, '"Price" already has a listener', 1, true) then
+			Warned += 1
+		end
+	end
+	assert(Warned == 1, `{Warned} warnings for one replaced function listener`)
 end)

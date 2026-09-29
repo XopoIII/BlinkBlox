@@ -212,7 +212,10 @@ function Declarations.Event(Declaration: Parser.Event)
 			local Call =
 				Listeners.Call(Event, "BOUND_LISTENER", ListenerArguments, "Player", true, Received and IsSingle)
 			if IsSingle then
-				Target:Line(`local BOUND_LISTENER = {Connection}`)
+				--> Typed as what it holds: read out of the untyped Events table, the new type solver
+				--> refines it against nil into an error type it refuses to call. A cast is erased before
+				--> bytecode, so it costs nothing.
+				Target:Line(`local BOUND_LISTENER = {Connection} :: ((...any) -> ())?`)
 			end
 
 			if not IsReliable then
@@ -335,7 +338,7 @@ function Declarations.Event(Declaration: Parser.Event)
 			:Line("index += 1")
 			:Line("local arguments = Pop(queue)")
 			:Compare("arguments", "nil", "Not")
-			:Return("index, unpack(arguments, 1, arguments.n)")
+			:Return("index, unpack(arguments :: any, 1, arguments.n)")
 			:End()
 			:Return(Util.ExhaustedValues(Value.Data :: any, State.Context))
 			:End()

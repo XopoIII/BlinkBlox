@@ -515,7 +515,7 @@ local EventNames: any = {
     Unreliable = {}
 }
 
-local RATE_TEMPLATE = table.freeze({2, 0, 0, 0, 30, 0, 0, 0})
+local RATE_TEMPLATE = table.freeze({2, 0, 0, 0, 30, 0, 0, 0} :: {number})
 
 --> Sequence numbers for ordered unreliable events, per player and per event, both ways.
 local OrderOut: { [Player]: { number } } = {}
@@ -709,7 +709,7 @@ if not RunService:IsRunning() then
 		SetFast = NOOP
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -720,6 +720,9 @@ local Reliable: RemoteEvent = ReplicatedStorage:FindFirstChild(BASE_EVENT_NAME .
 if not Reliable then
     local RemoteEvent = Instance.new("RemoteEvent")
     RemoteEvent.Name = BASE_EVENT_NAME .. "_RELIABLE_REMOTE"
+    --> A place saved while running -- SavePlaceAsync, a plugin, Studio's own save during a test --
+    --> would otherwise keep the remote, and the next server would find one it did not make.
+    RemoteEvent.Archivable = false
     --> Set BEFORE parenting, and that ordering is the whole trick. An attribute written on an
     --> unparented instance replicates atomically with the instance itself; one written afterwards is
     --> a separate replication event with no ordering guarantee against the client's WaitForChild
@@ -737,6 +740,7 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:FindFirstChild(BASE_
 if not Unreliable then
     local UnreliableRemoteEvent = Instance.new("UnreliableRemoteEvent")
     UnreliableRemoteEvent.Name = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE"
+    UnreliableRemoteEvent.Archivable = false
     UnreliableRemoteEvent.Parent = ReplicatedStorage
     Unreliable = UnreliableRemoteEvent
 end
@@ -746,6 +750,17 @@ end
 --> require time beats failing per packet, forever, at runtime.
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+
+--> ONE MODULE PER REMOTE. The `_G` guard above is per Luau VM, and every Actor is a VM of its own: a
+--> second copy required from an Actor passed it, found these remotes already made, and connected to
+--> them too. Every packet was then decoded twice and every listener called twice, each copy kept its
+--> own inbound budget -- so a client had twice the allowance -- and a player's sends were split across
+--> two batches with no order between them. The DataModel is what the VMs share, so the claim is kept
+--> there. It is never cleared: a server does not unload its network module.
+if Reliable:GetAttribute("BlinkBloxServer") then
+    error(`[BlinkBlox]: A server module using the remote "{BASE_EVENT_NAME}_RELIABLE_REMOTE" is already running in another Luau VM, such as an Actor's. Require it from one VM only, and hand work to Actors with messages or SharedTables.`)
+end
+Reliable:SetAttribute("BlinkBloxServer", true)
 
 local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
 
@@ -1242,6 +1257,12 @@ local function SavePlayerBuffer(Player: Player)
     --> every reliable send to a player, and the entry also carries its shrink count.
     local Entry = PlayersMap[Player]
     if Entry == nil then
+        --> Checked here, where a player's first send lands, rather than on every send: a call made with
+        --> `:` -- `Net.Event:Fire(...)` -- passes the event's table as the player, and failed in the
+        --> line below as "attempt to call a nil value".
+        if type(Player) == "table" then
+            error("[BlinkBlox]: Expected a Player to send to, got a table instead. Call a send with '.', as Net.Event.Fire(Player, ...), not with ':'.", 3)
+        end
         if Player:IsDescendantOf(Players) then
             PlayersMap[Player] = Save()
             if SharedCursor > 0 then
@@ -1763,7 +1784,7 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player)
+local function DecodeReliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1772,7 +1793,7 @@ local function DecodeReliable(Player: Player)
 		local Value1: number = SerdesFunctions.ReadEVENT_Swing()
 		Value1 = ClampStamp(Value1, 0.25)
 		if RateAccept(Player, 1, 2, 2, "Swing") == true then
-			local BOUND_LISTENER = Events.Reliable[0]
+			local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
 				SerdesEvent = "Swing"
 				Decoding = -2 - Index
@@ -1787,7 +1808,7 @@ local function DecodeReliable(Player: Player)
 		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable(Player: Player)
+local function DecodeUnreliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1904,61 +1925,54 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	Swing = {
-		On = function(Listener: (Player: Player, SentAt: number) -> ()): () -> ()
-			if Events.Reliable[0] ~= nil then
-				warn("[BlinkBlox]: \"Swing\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
-			end
-			Events.Reliable[0] = Listener
-			local Pending = Queue.Reliable[0]
-			Queue.Reliable[0] = {}
-			for _, Arguments in Pending do
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
-				if not ListenerRan and not ListenerFailed(Arguments[1], "Swing", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-			return function (): ()
-				if Events.Reliable[0] == Listener then
-					Events.Reliable[0] = nil
-				end
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.Swing = {
+	On = function(Listener: (Player: Player, SentAt: number) -> ()): () -> ()
+		if Events.Reliable[0] ~= nil then
+			warn("[BlinkBlox]: \"Swing\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[0] = Listener
+		local Pending = Queue.Reliable[0]
+		Queue.Reliable[0] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan and not ListenerFailed(Arguments[1], "Swing", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[0] == Listener then
+				Events.Reliable[0] = nil
 			end
 		end
-	},
-	Aim = {
-		On = function(Listener: (Player: Player, Target: number, At: Vector3, SentAt: number) -> ()): () -> ()
-			local Listeners = table.clone(Events.Unreliable[0])
-			table.insert(Listeners, Listener)
-			Events.Unreliable[0] = Listeners
-			return function (): ()
-				local Index = table.find(Events.Unreliable[0], Listener)
-				if Index ~= nil then
-					local Listeners = table.clone(Events.Unreliable[0])
-					table.remove(Listeners, Index)
-					Events.Unreliable[0] = Listeners
-					ListenerEpoch += 1
-				end
+	end
+}
+Returns.Aim = {
+	On = function(Listener: (Player: Player, Target: number, At: Vector3, SentAt: number) -> ()): () -> ()
+		local Listeners = table.clone(Events.Unreliable[0])
+		table.insert(Listeners, Listener)
+		Events.Unreliable[0] = Listeners
+		return function (): ()
+			local Index = table.find(Events.Unreliable[0], Listener)
+			if Index ~= nil then
+				local Listeners = table.clone(Events.Unreliable[0])
+				table.remove(Listeners, Index)
+				Events.Unreliable[0] = Listeners
+				ListenerEpoch += 1
 			end
 		end
-	},
-	Trust = {
-		Set = function(Player: Player, Value: { Gap: number, Bucket: number }): () PlayerStreamSet(STREAM_1, Player, Value) end,
-		Clear = function(Player: Player): () PlayerStreamClear(STREAM_1, Player) end,
-		Urgent = function(Player: Player): () PlayerStreamUrgent(STREAM_1, Player) end,
-		SetFast = function(Player: Player, Fast: boolean): () PlayerStreamSetFast(STREAM_1, Player, Fast) end,
-	},
-})
+	end
+}
+Returns.Trust = {
+	Set = function(Player: Player, Value: { Gap: number, Bucket: number }): () PlayerStreamSet(STREAM_1, Player, Value) end,
+	Clear = function(Player: Player): () PlayerStreamClear(STREAM_1, Player) end,
+	Urgent = function(Player: Player): () PlayerStreamUrgent(STREAM_1, Player) end,
+	SetFast = function(Player: Player, Fast: boolean): () PlayerStreamSetFast(STREAM_1, Player, Fast) end,
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

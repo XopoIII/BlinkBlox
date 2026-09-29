@@ -188,10 +188,85 @@ RunClosure("A client without ClientConnectTimeout has no Connected and waits unb
 
 	Same(Client.Connected, nil, "Connected")
 	Same(#Place.Waits, 2, "WaitForChild calls")
-	Same(Place.Waits[1].Timeout, nil, "the reliable wait's timeout")
+	Same(Place.Waits[1].Timeout, 5, "the reliable wait's first timeout, after which it warns")
 	Same(Place.Waits[2].Timeout, nil, "the unreliable wait's timeout")
+	Same(#Place.Warnings, 0, "warnings")
 	Same(Server.Remotes.Reliable, "CCTOFF_BLINK_RELIABLE_REMOTE", "Remotes.Reliable")
 	Same(Server.Start, nil, "Start")
+end)
+
+RunClosure(
+	"A client without ClientConnectTimeout says once why it waits, and connects when the server comes",
+	function()
+		local Place = World.new()
+		local ServerPath = Build("CCTSLOW", "option ManualReplication = true", "Server")
+		local ClientPath = Build("CCTSLOW", "option ManualReplication = true", "Client")
+
+		task.delay(5.3, function()
+			World.Load(Place, ServerPath, "Server")
+		end)
+
+		local Client = World.Load(Place, ClientPath, "Client")
+		Same(Client.Connected, nil, "Connected")
+		Same(#Place.Warnings, 1, "warnings")
+		Expect(string.find(Place.Warnings[1], "ClientConnectTimeout", 1, true) ~= nil, `warned "{Place.Warnings[1]}"`)
+	end
+)
+
+---- RemotesFolder ----
+
+--- The folder the server made, and that nothing else was put in ReplicatedStorage.
+local function FolderOf(Place: any, Name: string): any
+	local Made = Place.Children[Name]
+	Expect(Made ~= nil and Made.ClassName == "Folder", `no Folder called {Name} in ReplicatedStorage`)
+	Same(Count(Place.Children), 1, "children of ReplicatedStorage")
+	return Made
+end
+
+RunClosure("RemotesFolder puts both remotes in a folder, and the client finds them there", function()
+	local Place = World.new()
+	local Options = 'option RemotesFolder = "Net"\noption ManualReplication = true'
+	local Server = World.Load(Place, Build("RFOPEN", Options, "Server"), "Server")
+	local Client = World.Load(Place, Build("RFOPEN", Options, "Client"), "Client")
+
+	local Made = FolderOf(Place, "Net")
+	for _, Channel in { "Reliable", "Unreliable" } do
+		Expect(Made.Children[Server.Remotes[Channel]] ~= nil, `the {Channel} remote is not in the folder`)
+	end
+	Same(#Place.Warnings, 0, "warnings")
+
+	local Got: number? = nil
+	Server.Ready.On(function(_Player, Value)
+		Got = Value
+	end)
+	Client.Ready.Fire(7)
+	Client.StepReplication()
+	Same(Got, 7, "the value the server heard")
+end)
+
+RunClosure("RemotesFolder with ClientConnectTimeout waits for the folder within the timeout", function()
+	local Place = World.new()
+	local Options = 'option RemotesFolder = "Net"\noption ClientConnectTimeout = 3\noption ManualReplication = true'
+	local ServerPath = Build("RFLATE", Options, "Server")
+	local ClientPath = Build("RFLATE", Options, "Client")
+
+	task.delay(0.1, function()
+		World.Load(Place, ServerPath, "Server")
+	end)
+	local Client = World.Load(Place, ClientPath, "Client")
+	Same(Client.Connected, true, "Connected")
+	FolderOf(Place, "Net")
+
+	local Alone = World.new()
+	local Began = os.clock()
+	local Stubbed = World.Load(
+		Alone,
+		Build("RFNONE", 'option RemotesFolder = "Net"\noption ClientConnectTimeout = 0.3', "Client"),
+		"Client"
+	)
+	local Took = os.clock() - Began
+	Same(Stubbed.Connected, false, "Connected with no server")
+	Expect(Took >= 0.3 and Took < 0.8, `the require took {Took} seconds for a timeout of 0.3`)
 end)
 
 ---- AutoStart ----
@@ -262,6 +337,39 @@ RunClosure("The client module ignores AutoStart", function()
 	local Client = World.Load(Place, Build("ASCLIENT", Options, "Client"), "Client")
 	Same(Client.Start, nil, "the client's Start")
 	Same(Client.Connected, false, "Connected with no server")
+end)
+
+---- One module per remote ----
+
+RunClosure("A second VM requiring either module is refused, and made remotes are not archivable", function()
+	--> Every World.Load is a VM of its own, with its own _G, as an Actor is: the scope guard cannot see
+	--> the first copy, and only the claim on the remote stops the second from connecting to it too.
+	local Place = World.new()
+	local ServerPath = Build("ACTOR", "", "Server")
+	local ClientPath = Build("ACTOR", "", "Client")
+	World.Load(Place, ServerPath, "Server")
+
+	local Reliable = Place.Children.ACTOR_BLINK_RELIABLE_REMOTE
+	local Unreliable = Place.Children.ACTOR_BLINK_UNRELIABLE_REMOTE
+	Same(Reliable.Archivable, false, "the reliable remote's Archivable")
+	Same(Unreliable.Archivable, false, "the unreliable remote's Archivable")
+
+	local Loaded, Failure = pcall(World.Load, Place, ServerPath, "Server")
+	Same(Loaded, false, "a second server module loading")
+	Expect(
+		string.find(tostring(Failure), "another Luau VM", 1, true) ~= nil,
+		`the second server failed with "{Failure}"`
+	)
+	Same(Count(Reliable.OnServerEvent.Connections), 1, "reliable server connections")
+
+	World.Load(Place, ClientPath, "Client")
+	Loaded, Failure = pcall(World.Load, Place, ClientPath, "Client")
+	Same(Loaded, false, "a second client module loading")
+	Expect(
+		string.find(tostring(Failure), "another Luau VM", 1, true) ~= nil,
+		`the second client failed with "{Failure}"`
+	)
+	Same(Count(Reliable.OnClientEvent.Connections), 1, "reliable client connections")
 end)
 
 require("./LifecycleOptions")

@@ -24,7 +24,9 @@ local function OutboundJoin(Player: Player): {number}
     return Budget
 end
 
-Players.PlayerAdded:Connect(OutboundJoin)
+Players.PlayerAdded:Connect(function(Player: Player)
+    OutboundJoin(Player)
+end)
 Players.PlayerRemoving:Connect(function(Player)
     OutboundBudgets[Player] = nil
 end)

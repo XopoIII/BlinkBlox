@@ -515,7 +515,7 @@ local EventNames: any = {
     Unreliable = {}
 }
 
-local RATE_TEMPLATE = table.freeze({})
+local RATE_TEMPLATE = table.freeze({} :: {number})
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
@@ -594,7 +594,7 @@ if not RunService:IsRunning() then
 		FireExcept = NOOP
 	},
 	})
-	return Returns :: BLINK_EVENTS_SYMBOL
+	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
 end
 
 if not RunService:IsServer() then
@@ -605,6 +605,9 @@ local Reliable: RemoteEvent = ReplicatedStorage:FindFirstChild(BASE_EVENT_NAME .
 if not Reliable then
     local RemoteEvent = Instance.new("RemoteEvent")
     RemoteEvent.Name = BASE_EVENT_NAME .. "_RELIABLE_REMOTE"
+    --> A place saved while running -- SavePlaceAsync, a plugin, Studio's own save during a test --
+    --> would otherwise keep the remote, and the next server would find one it did not make.
+    RemoteEvent.Archivable = false
     --> Set BEFORE parenting, and that ordering is the whole trick. An attribute written on an
     --> unparented instance replicates atomically with the instance itself; one written afterwards is
     --> a separate replication event with no ordering guarantee against the client's WaitForChild
@@ -622,6 +625,7 @@ local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:FindFirstChild(BASE_
 if not Unreliable then
     local UnreliableRemoteEvent = Instance.new("UnreliableRemoteEvent")
     UnreliableRemoteEvent.Name = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE"
+    UnreliableRemoteEvent.Archivable = false
     UnreliableRemoteEvent.Parent = ReplicatedStorage
     Unreliable = UnreliableRemoteEvent
 end
@@ -631,6 +635,17 @@ end
 --> require time beats failing per packet, forever, at runtime.
 assert(Reliable:IsA("RemoteEvent"), "[BlinkBlox]: The reliable remote is not a RemoteEvent.")
 assert(Unreliable:IsA("UnreliableRemoteEvent"), "[BlinkBlox]: The unreliable remote is not an UnreliableRemoteEvent.")
+
+--> ONE MODULE PER REMOTE. The `_G` guard above is per Luau VM, and every Actor is a VM of its own: a
+--> second copy required from an Actor passed it, found these remotes already made, and connected to
+--> them too. Every packet was then decoded twice and every listener called twice, each copy kept its
+--> own inbound budget -- so a client had twice the allowance -- and a player's sends were split across
+--> two batches with no order between them. The DataModel is what the VMs share, so the claim is kept
+--> there. It is never cleared: a server does not unload its network module.
+if Reliable:GetAttribute("BlinkBloxServer") then
+    error(`[BlinkBlox]: A server module using the remote "{BASE_EVENT_NAME}_RELIABLE_REMOTE" is already running in another Luau VM, such as an Actor's. Require it from one VM only, and hand work to Actors with messages or SharedTables.`)
+end
+Reliable:SetAttribute("BlinkBloxServer", true)
 
 local PlayersMap: {[Player]: BLINK_BUFFER_SAVE} = {}
 
@@ -1127,6 +1142,12 @@ local function SavePlayerBuffer(Player: Player)
     --> every reliable send to a player, and the entry also carries its shrink count.
     local Entry = PlayersMap[Player]
     if Entry == nil then
+        --> Checked here, where a player's first send lands, rather than on every send: a call made with
+        --> `:` -- `Net.Event:Fire(...)` -- passes the event's table as the player, and failed in the
+        --> line below as "attempt to call a nil value".
+        if type(Player) == "table" then
+            error("[BlinkBlox]: Expected a Player to send to, got a table instead. Call a send with '.', as Net.Event.Fire(Player, ...), not with ':'.", 3)
+        end
         if Player:IsDescendantOf(Players) then
             PlayersMap[Player] = Save()
             if SharedCursor > 0 then
@@ -1306,14 +1327,14 @@ local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, S
 	end
 end
 RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player)
+local function DecodeReliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
 	error("[BlinkBlox]: This channel receives no events.")
 end
-local function DecodeUnreliable(Player: Player)
+local function DecodeUnreliable(Player: Player): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
@@ -1413,65 +1434,58 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	end
 end)
 
-
-local Returns = table.freeze({
-	StepReplication = StepReplication,
-
-	SetRateLimitHandler = SetRateLimitHandler,
-
-	SetDecodeErrorHandler = SetDecodeErrorHandler,
-
-	SetPacketDropHandler = SetPacketDropHandler,
-
-	SetListenerErrorHandler = SetListenerErrorHandler,
-
-	Remotes = REMOTE_NAMES,
-
-	TestEvent = {
-		Fire = function(Player: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-			if not CheckUnreliableSize("TestEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
+local Returns = {}
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.TestEvent = {
+	Fire = function(Player: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+		if not CheckUnreliableSize("TestEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireClient(Player, Buffer, SendInstances)
+	end,
+	FireAll = function(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+		if not CheckUnreliableSize("TestEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		Unreliable:FireAllClients(Buffer, SendInstances)
+	end,
+	FireList = function(List: {Player}, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+		if not CheckUnreliableSize("TestEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in List do
 			Unreliable:FireClient(Player, Buffer, SendInstances)
-		end,
-		FireAll = function(Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-			if not CheckUnreliableSize("TestEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			Unreliable:FireAllClients(Buffer, SendInstances)
-		end,
-		FireList = function(List: {Player}, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-			if not CheckUnreliableSize("TestEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in List do
-				Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+	FireExcept = function(Except: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
+		LoadScratch()
+		SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
+		if not CheckUnreliableSize("TestEvent") then return end
+		local Buffer = buffer.create(SendCursor)
+		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
+		KeepScratch()
+		for _, Player in Players:GetPlayers() do
+			if Player == Except then
+				continue
 			end
-		end,
-		FireExcept = function(Except: Player, Value1: { ["z z"]: number, ["1 1"]: number, ["2 2"]: number, ["3 3"]: number }, Value2: {["a a"]: boolean,}, Value3: ("b b"), Value4: { Type: "c c", Test: number }): ()
-			LoadScratch()
-			SerdesFunctions.WriteEVENT_TestEvent(Value1, Value2, Value3, Value4)
-			if not CheckUnreliableSize("TestEvent") then return end
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			KeepScratch()
-			for _, Player in Players:GetPlayers() do
-				if Player == Except then
-					continue
-				end
-				Unreliable:FireClient(Player, Buffer, SendInstances)
-			end
-		end,
-	},
-})
+			Unreliable:FireClient(Player, Buffer, SendInstances)
+		end
+	end,
+}
+table.freeze(Returns)
 type BLINK_EVENTS_SYMBOL = typeof(Returns)
 return Returns :: BLINK_EVENTS_SYMBOL

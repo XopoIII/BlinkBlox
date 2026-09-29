@@ -113,6 +113,8 @@ function State.Reset()
 
 	table.clear(State.RateSlots)
 	table.clear(Prefabs.Required)
+	Prefabs.Missing.Count = 0
+	Prefabs.Present.Value = false
 	State.UsesOrdering = false
 	State.UsesStreams = false
 	State.UsesBatches = false
