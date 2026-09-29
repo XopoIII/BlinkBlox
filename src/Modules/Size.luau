@@ -242,7 +242,7 @@ local function MeasurePrimitive(Node: Node): Measurement
 
 	local Result = Empty()
 	Result.Min = if Primitive then Primitive.Bytes else 0
-	Result.Max = Result.Min
+	Result.Max = if Primitive and Primitive.MaxBytes then Primitive.MaxBytes else Result.Min
 	return Result
 end
 

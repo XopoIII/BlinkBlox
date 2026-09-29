@@ -148,6 +148,9 @@ local TOKENS: { TokenRule } = {
 
 	--> Complex patterns
 	{ "^[%w_]+%.[%w_%.]+", "Identifier" },
+	--> `Enum` is a type only right before its enum's name, `Enum(Material)`. Anywhere else it is still
+	--> an identifier: schemas named declarations `Enum` long before the type existed.
+	{ "^Enum%f[(]", "Primitive" },
 	{
 		"^[%a_][%w_]*",
 		function(Token: string)
@@ -157,7 +160,7 @@ local TOKENS: { TokenRule } = {
 				return "As", Token
 			elseif Keywords[Token] then
 				return "Keyword", Token
-			elseif Primitives[Token] then
+			elseif Token ~= "Enum" and Primitives[Token] then
 				return "Primitive", Token
 			elseif Booleans[Token] then
 				return "Boolean", (Token == "true")

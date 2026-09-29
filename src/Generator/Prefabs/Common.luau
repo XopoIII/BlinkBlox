@@ -59,8 +59,16 @@ local Types: { [string]: TypePrefab } = {}
 
 --- Runtime helpers the emitted code has called during the current generate, so the generator splices
 --- in only those. Cleared by `Generator.Reset`; `Rotation` is `Fragments.ROTATION_HELPERS`,
---- `PackedRows` is `Fragments.PACKED_ROWS` and `PackedCalibration` is `Fragments.PACKED_CALIBRATION`.
-local Required: { Rotation: boolean?, PackedRows: boolean?, PackedCalibration: boolean? } = {}
+--- `PackedRows` is `Fragments.PACKED_ROWS` and `PackedCalibration` is `Fragments.PACKED_CALIBRATION`;
+--- `EnumItems` and `ColorSequences` are in Templates/Datatypes.
+local Required: {
+	Rotation: boolean?,
+	PackedRows: boolean?,
+	PackedCalibration: boolean?,
+	EnumItems: boolean?,
+	ColorSequences: boolean?,
+} =
+	{}
 
 --- How many reads have been emitted that set `MissingInstance` rather than throw. A caller compares it
 --- before and after emitting a reader to learn whether that reader can leave the flag set, and so

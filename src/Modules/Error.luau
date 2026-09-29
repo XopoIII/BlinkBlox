@@ -119,6 +119,7 @@ local Error = {
 	AnalyzeInvalidStamp = 3034,
 	AnalyzeInvalidPriority = 3035,
 	AnalyzeRepeatedImport = 3036,
+	AnalyzeInvalidEnumType = 3037,
 }
 
 Error.__index = Error

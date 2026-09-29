@@ -228,6 +228,18 @@ function Parser.Primitive(self: Parser, Name: Token): Primitive
 	if Value == "Instance" then
 		local ClassToken = self:TryConsume("Class")
 		Class = if ClassToken then string.sub(ClassToken.Value, 2, #ClassToken.Value - 1) else "Instance"
+	elseif Value == "Enum" then
+		--> Which enum decides how a Value reads back, so there is no default to fall back on.
+		local ClassToken = self:TryConsume("Class")
+		if not ClassToken then
+			error(
+				self:Diagnostic(Error.AnalyzeInvalidEnumType, `Enum needs the name of a Roblox enum`)
+					:Primary(Token, `Write the enum's name after it, as in Enum(Material)`)
+					:Emit()
+			)
+		end
+
+		Class = string.sub(ClassToken.Value, 2, #ClassToken.Value - 1)
 	end
 
 	return {

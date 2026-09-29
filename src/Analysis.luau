@@ -399,6 +399,15 @@ local ROBLOX_TYPES = {
 	Color3 = true,
 	DateTime = true,
 	BrickColor = true,
+	Vector2 = true,
+	UDim = true,
+	UDim2 = true,
+	NumberRange = true,
+	ColorSequence = true,
+	ColorSequenceKeypoint = true,
+	TweenInfo = true,
+	Enum = true,
+	EnumItem = true,
 }
 
 --- Refuses a top-level type named after a Roblox type the generated module uses.
@@ -423,7 +432,8 @@ local function RobloxNames(Source: string, File: string?, Declarations: { Declar
 
 			for _, Root in Walk.Roots(Declaration) do
 				Walk.Type(Root, function(Node: Declaration)
-					if Node.Type == "Primitive" and Node.Value.Class then
+					--> An Enum's class is emitted as `Enum.Material`, under the global it cannot shadow.
+					if Node.Type == "Primitive" and Node.Value.Class and Node.Tokens.Primitive.Value == "Instance" then
 						Used[Node.Value.Class] = true
 					end
 				end)

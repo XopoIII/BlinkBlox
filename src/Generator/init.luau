@@ -6,6 +6,7 @@ local Parser = require("./Parser")
 local Settings = require("./Settings")
 
 local Builder = require("./Modules/Builder")
+local Datatypes = require("./Templates/Datatypes")
 local Table = require("./Modules/Table")
 
 local Batches = require("@self/Batches")
@@ -377,6 +378,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
 		(if Prefabs.Required.PackedRows then Fragments.PACKED_ROWS else {}),
 		(if Prefabs.Required.PackedCalibration then Fragments.PACKED_CALIBRATION else {}),
+		(if Prefabs.Required.EnumItems then { Datatypes.EnumItems } else {}),
+		(if Prefabs.Required.ColorSequences then { Datatypes.ColorSequences } else {}),
 		(if Prefabs.Missing.Count > 0 then Fragments.MISSING_INSTANCE else {}),
 		Bodies.RateTemplate(),
 		Bodies.Ordering(),
@@ -446,6 +449,8 @@ function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
 		(if Prefabs.Required.PackedRows then Fragments.PACKED_ROWS else {}),
 		(if Prefabs.Required.PackedCalibration then Fragments.PACKED_CALIBRATION else {}),
+		(if Prefabs.Required.EnumItems then { Datatypes.EnumItems } else {}),
+		(if Prefabs.Required.ColorSequences then { Datatypes.ColorSequences } else {}),
 		(if Prefabs.Missing.Count > 0 then Fragments.MISSING_INSTANCE else {}),
 		State.LuauTypes.DumpLines(),
 		{ "\n" },

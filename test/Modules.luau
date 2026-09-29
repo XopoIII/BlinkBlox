@@ -19,6 +19,21 @@ local function MockTypeof(a: any)
 	return TypeofA
 end
 
+--- Lune has no TweenInfo. The fields and constructor order are Roblox's.
+local TweenInfo = {
+	new = function(Time: number, Style: any, Direction: any, RepeatCount: number, Reverses: boolean, DelayTime: number)
+		return table.freeze({
+			Time = Time,
+			EasingStyle = Style,
+			EasingDirection = Direction,
+			RepeatCount = RepeatCount,
+			Reverses = Reverses,
+			DelayTime = DelayTime,
+			__typeof = "TweenInfo",
+		})
+	end,
+}
+
 local function MockRequire(Path: string, Environment)
 	local Source = fs.readFile(Path)
 	local Bytecode = luau.compile(Source, {
@@ -35,6 +50,15 @@ local function MockRequire(Path: string, Environment)
 	Environment.Vector3 = roblox.Vector3
 	--> Likewise `CFrame`: every CFrame serialiser was emitted and none had ever run.
 	Environment.CFrame = roblox.CFrame
+	--> The datatypes of Prefabs/Datatypes, which Lune has -- all but TweenInfo, mocked below.
+	Environment.Vector2 = roblox.Vector2
+	Environment.UDim = roblox.UDim
+	Environment.UDim2 = roblox.UDim2
+	Environment.NumberRange = roblox.NumberRange
+	Environment.ColorSequence = roblox.ColorSequence
+	Environment.ColorSequenceKeypoint = roblox.ColorSequenceKeypoint
+	Environment.Enum = roblox.Enum
+	Environment.TweenInfo = Environment.TweenInfo or TweenInfo
 
 	--> Records what the module warns about before passing it on, so a spec can assert on it. The
 	--> generated code reports several things through `warn` and nothing else, and none of that was

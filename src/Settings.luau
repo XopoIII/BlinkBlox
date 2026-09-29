@@ -58,6 +58,9 @@ export type Primitive = {
 	--- cannot reach `src/Generator/Prefabs/` -- it never loads `Blocks` -- and the size analysis
 	--- has to run in the editor for the oversize-unreliable diagnostic to appear there.
 	Bytes: number,
+	--- The most bytes, for a primitive whose size varies within a bound the primitive fixes itself: a
+	--- ColorSequence holds 2 to 20 keypoints. Absent means `Bytes`.
+	MaxBytes: number?,
 }
 
 local Indexes = {
@@ -301,6 +304,62 @@ local Primitives: { [string]: Primitive } = {
 		AllowsOptional = true,
 		AllowedComponents = 0,
 		Bytes = 8,
+	},
+	--> Two f32.
+	Vector2 = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 8,
+	},
+	--> Scale as f32, Offset as i32; UDim2 is two of them.
+	UDim = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 8,
+	},
+	UDim2 = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 16,
+	},
+	--> Min and Max as f32.
+	NumberRange = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 8,
+	},
+	--> A u8 count of 2 to 20 keypoints, each a f32 time and three u8 channels.
+	ColorSequence = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 15,
+		MaxBytes = 141,
+	},
+	--> Time, RepeatCount and DelayTime; EasingStyle and EasingDirection by Value, Reverses as a byte.
+	TweenInfo = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 15,
+	},
+	--> `Enum(Material)`: the item's Value as u16, the enum named by the class after it.
+	Enum = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 2,
 	},
 }
 
