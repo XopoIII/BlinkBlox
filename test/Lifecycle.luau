@@ -188,11 +188,30 @@ RunClosure("A client without ClientConnectTimeout has no Connected and waits unb
 
 	Same(Client.Connected, nil, "Connected")
 	Same(#Place.Waits, 2, "WaitForChild calls")
-	Same(Place.Waits[1].Timeout, nil, "the reliable wait's timeout")
+	Same(Place.Waits[1].Timeout, 5, "the reliable wait's first timeout, after which it warns")
 	Same(Place.Waits[2].Timeout, nil, "the unreliable wait's timeout")
+	Same(#Place.Warnings, 0, "warnings")
 	Same(Server.Remotes.Reliable, "CCTOFF_BLINK_RELIABLE_REMOTE", "Remotes.Reliable")
 	Same(Server.Start, nil, "Start")
 end)
+
+RunClosure(
+	"A client without ClientConnectTimeout says once why it waits, and connects when the server comes",
+	function()
+		local Place = World.new()
+		local ServerPath = Build("CCTSLOW", "option ManualReplication = true", "Server")
+		local ClientPath = Build("CCTSLOW", "option ManualReplication = true", "Client")
+
+		task.delay(5.3, function()
+			World.Load(Place, ServerPath, "Server")
+		end)
+
+		local Client = World.Load(Place, ClientPath, "Client")
+		Same(Client.Connected, nil, "Connected")
+		Same(#Place.Warnings, 1, "warnings")
+		Expect(string.find(Place.Warnings[1], "ClientConnectTimeout", 1, true) ~= nil, `warned "{Place.Warnings[1]}"`)
+	end
+)
 
 ---- AutoStart ----
 

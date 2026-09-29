@@ -373,6 +373,9 @@ place. [Places without a server](/BlinkBlox/guides/places-without-a-server/) wal
 ### `ClientConnectTimeout`
 Default: none -- the client waits for the remotes for as long as it takes
 
+Without it, a client still waiting after 5 seconds warns once, saying the server module creates the
+remotes and naming this option, then keeps waiting.
+
 How many seconds the client module waits for the two remotes. Any number above zero is taken.
 
 ```blink
