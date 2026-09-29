@@ -592,7 +592,7 @@ return {
 				local BLOCK_START = Allocate(3)
 				-- Value: Color
 				if typeof(Value) ~= "Color3" then
-					error(`Expected Value to be of type Color3, got {type(Value)} instead.`)
+					error(`Expected Value to be of type Color3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				local Color = Value
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
@@ -641,7 +641,7 @@ return {
 				local BLOCK_START = Allocate(4)
 				-- Value: ExactRange
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
 				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
@@ -689,7 +689,7 @@ return {
 				local BLOCK_START = Allocate(4)
 				-- Value: DecimalRange
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
 				if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
@@ -738,7 +738,7 @@ return {
 				local BLOCK_START = Allocate(1)
 				-- Value: NegativeRange
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
 				if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
@@ -786,7 +786,7 @@ return {
 				local BLOCK_START = Allocate(4)
 				-- Value: UnboundUpper
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
 				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
@@ -833,7 +833,7 @@ return {
 				local BLOCK_START = Allocate(4)
 				-- Value: UnboundLower
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
 				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
@@ -907,7 +907,7 @@ return {
 					Elements_1 += 1
 					-- Key_1: MapNested
 					if typeof(Key_1) ~= "string" then
-						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Key_1
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -921,7 +921,7 @@ return {
 						Elements_2 += 1
 						-- Key_2: MapSimple
 						if typeof(Key_2) ~= "string" then
-							error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.`)
+							error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.{if type(Key_2) == "table" or type(Key_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Key_2
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -930,7 +930,7 @@ return {
 						buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
 						-- Element_2: MapSimple
 						if typeof(Element_2) ~= "number" then
-							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
+							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.{if type(Element_2) == "table" or type(Element_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local OFFSET_0 = Allocate(1)
 						buffer.writeu8(SendBuffer, OFFSET_0, Element_2)
@@ -1050,17 +1050,17 @@ return {
 				-- Value: Standalone
 				-- Value.One: One
 				if typeof(Value.One) ~= "number" then
-					error(`Expected Value.One to be of type number, got {type(Value.One)} instead.`)
+					error(`Expected Value.One to be of type number, got {type(Value.One)} instead.{if type(Value.One) == "table" or type(Value.One) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.One)
 				-- Value.Two: Two
 				if typeof(Value.Two) ~= "number" then
-					error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.`)
+					error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.{if type(Value.Two) == "table" or type(Value.Two) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Two)
 				-- Value.Three: Three
 				if typeof(Value.Three) ~= "number" then
-					error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.`)
+					error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.{if type(Value.Three) == "table" or type(Value.Three) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
 				-- Value.Event: Event
@@ -1072,7 +1072,7 @@ return {
 					do
 						-- Value.Event.Name: Name
 						if typeof(Value.Event.Name) ~= "string" then
-							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.{if type(Value.Event.Name) == "table" or type(Value.Event.Name) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Value.Event.Name
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -1082,7 +1082,7 @@ return {
 					end
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				elseif Value.Event.Type == "Chat" then
@@ -1092,13 +1092,13 @@ return {
 					-- Value.Event: Chat
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 					do
 						-- Value.Event.Message: Message
 						if typeof(Value.Event.Message) ~= "string" then
-							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.{if type(Value.Event.Message) == "table" or type(Value.Event.Message) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Value.Event.Message
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -1113,7 +1113,7 @@ return {
 					-- Value.Event: Leave
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				else
@@ -1123,7 +1123,7 @@ return {
 				do
 					-- Value.Nested.Four: Four
 					if typeof(Value.Nested.Four) ~= "string" then
-						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.{if type(Value.Nested.Four) == "table" or type(Value.Nested.Four) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Value.Nested.Four
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -1134,7 +1134,7 @@ return {
 				do
 					-- Value.Nested.Five: Five
 					if typeof(Value.Nested.Five) ~= "string" then
-						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.{if type(Value.Nested.Five) == "table" or type(Value.Nested.Five) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Value.Nested.Five
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end

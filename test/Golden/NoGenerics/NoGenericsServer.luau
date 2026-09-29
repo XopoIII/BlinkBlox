@@ -894,7 +894,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 		local BLOCK_START = Allocate(1)
 		-- Value.Field: Field
 		if typeof(Value.Field) ~= "number" then
-			error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.`)
+			error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.{if type(Value.Field) == "table" or type(Value.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
 	end
@@ -905,7 +905,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 		local BLOCK_START = Allocate(2)
 		-- Value.Float16Field: Float16Field
 		if typeof(Value.Float16Field) ~= "number" then
-			error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.`)
+			error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.{if type(Value.Float16Field) == "table" or type(Value.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		if Value.Float16Field > 65504 then
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
@@ -944,7 +944,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 	-- Value.Nested: Nested
 	-- Value.Nested.Guh: Guh
 	if typeof(Value.Nested.Guh) ~= "number" then
-		error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
+		error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.{if type(Value.Nested.Guh) == "table" or type(Value.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Nested.Guh)
 	do
@@ -957,7 +957,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 			local Item_1 = Value.Nested.Array[Index]
 			-- Item_1: Array
 			if typeof(Item_1) ~= "number" then
-				error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+				error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			-- Allocate 1
 			local OPERATION_OFFSET_0 = ARRAY_START_1
@@ -978,7 +978,7 @@ function SerdesFunctions.WriteEVENT_ServerPollEvent(Value: { Field: number?, Flo
 			local Item_2 = Value.Nested.OptionalArray[Index]
 			-- Item_2: OptionalArray
 			if typeof(Item_2) ~= "number" then
-				error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.`)
+				error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			-- Allocate 1
 			local OPERATION_OFFSET_0 = ARRAY_START_2
@@ -1005,7 +1005,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 		local BLOCK_START = Allocate(1)
 		-- Value.Field: Field
 		if typeof(Value.Field) ~= "number" then
-			error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.`)
+			error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.{if type(Value.Field) == "table" or type(Value.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
 	end
@@ -1016,7 +1016,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 		local BLOCK_START = Allocate(2)
 		-- Value.Float16Field: Float16Field
 		if typeof(Value.Float16Field) ~= "number" then
-			error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.`)
+			error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.{if type(Value.Float16Field) == "table" or type(Value.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		if Value.Float16Field > 65504 then
 			buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
@@ -1055,7 +1055,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 	-- Value.Nested: Nested
 	-- Value.Nested.Guh: Guh
 	if typeof(Value.Nested.Guh) ~= "number" then
-		error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
+		error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.{if type(Value.Nested.Guh) == "table" or type(Value.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Nested.Guh)
 	do
@@ -1068,7 +1068,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 			local Item_1 = Value.Nested.Array[Index]
 			-- Item_1: Array
 			if typeof(Item_1) ~= "number" then
-				error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+				error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			-- Allocate 1
 			local OPERATION_OFFSET_0 = ARRAY_START_1
@@ -1089,7 +1089,7 @@ function SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value: { Field: nu
 			local Item_2 = Value.Nested.OptionalArray[Index]
 			-- Item_2: OptionalArray
 			if typeof(Item_2) ~= "number" then
-				error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.`)
+				error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			-- Allocate 1
 			local OPERATION_OFFSET_0 = ARRAY_START_2
@@ -1295,7 +1295,7 @@ function SerdesFunctions.WriteEVENT_DynamicMap(Value: {[number]: { Static: numbe
 		Elements_1 += 1
 		-- Key_1: DynamicMap
 		if typeof(Key_1) ~= "number" then
-			error(`Expected Key_1 to be of type number, got {type(Key_1)} instead.`)
+			error(`Expected Key_1 to be of type number, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		local OFFSET_0 = Allocate(1)
 		buffer.writeu8(SendBuffer, OFFSET_0, Key_1)
@@ -1303,7 +1303,7 @@ function SerdesFunctions.WriteEVENT_DynamicMap(Value: {[number]: { Static: numbe
 		do
 			-- Element_1.Static: Static
 			if typeof(Element_1.Static) ~= "number" then
-				error(`Expected Element_1.Static to be of type number, got {type(Element_1.Static)} instead.`)
+				error(`Expected Element_1.Static to be of type number, got {type(Element_1.Static)} instead.{if type(Element_1.Static) == "table" or type(Element_1.Static) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			local OFFSET_1 = Allocate(1)
 			buffer.writeu8(SendBuffer, OFFSET_1, Element_1.Static)
@@ -1311,7 +1311,7 @@ function SerdesFunctions.WriteEVENT_DynamicMap(Value: {[number]: { Static: numbe
 		do
 			-- Element_1.Dynamic: Dynamic
 			if typeof(Element_1.Dynamic) ~= "buffer" then
-				error(`Expected Element_1.Dynamic to be of type buffer, got {type(Element_1.Dynamic)} instead.`)
+				error(`Expected Element_1.Dynamic to be of type buffer, got {type(Element_1.Dynamic)} instead.{if type(Element_1.Dynamic) == "table" or type(Element_1.Dynamic) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			local Length = buffer.len(Element_1.Dynamic)
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -1340,7 +1340,7 @@ function SerdesFunctions.WriteEVENT_DynamicArray(Value: { { Static: number, Dyna
 		do
 			-- Item_1.Static: Static
 			if typeof(Item_1.Static) ~= "number" then
-				error(`Expected Item_1.Static to be of type number, got {type(Item_1.Static)} instead.`)
+				error(`Expected Item_1.Static to be of type number, got {type(Item_1.Static)} instead.{if type(Item_1.Static) == "table" or type(Item_1.Static) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			-- Allocate 1
 			local OPERATION_OFFSET_0 = ARRAY_START_1
@@ -1350,7 +1350,7 @@ function SerdesFunctions.WriteEVENT_DynamicArray(Value: { { Static: number, Dyna
 		do
 			-- Item_1.Dynamic: Dynamic
 			if typeof(Item_1.Dynamic) ~= "buffer" then
-				error(`Expected Item_1.Dynamic to be of type buffer, got {type(Item_1.Dynamic)} instead.`)
+				error(`Expected Item_1.Dynamic to be of type buffer, got {type(Item_1.Dynamic)} instead.{if type(Item_1.Dynamic) == "table" or type(Item_1.Dynamic) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			local Length = buffer.len(Item_1.Dynamic)
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -1377,7 +1377,7 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 		do
 			-- Value.Name: Name
 			if typeof(Value.Name) ~= "string" then
-				error(`Expected Value.Name to be of type string, got {type(Value.Name)} instead.`)
+				error(`Expected Value.Name to be of type string, got {type(Value.Name)} instead.{if type(Value.Name) == "table" or type(Value.Name) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			local Length = #Value.Name
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -1387,7 +1387,7 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 		end
 		-- Value.UserId: UserId
 		if typeof(Value.UserId) ~= "number" then
-			error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.`)
+			error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.{if type(Value.UserId) == "table" or type(Value.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		buffer.writef64(SendBuffer, BLOCK_START + 0, Value.UserId)
 	elseif Value.Type == "Chat" then
@@ -1397,13 +1397,13 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 		-- Value: Chat
 		-- Value.UserId: UserId
 		if typeof(Value.UserId) ~= "number" then
-			error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.`)
+			error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.{if type(Value.UserId) == "table" or type(Value.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		buffer.writef64(SendBuffer, BLOCK_START + 0, Value.UserId)
 		do
 			-- Value.Message: Message
 			if typeof(Value.Message) ~= "string" then
-				error(`Expected Value.Message to be of type string, got {type(Value.Message)} instead.`)
+				error(`Expected Value.Message to be of type string, got {type(Value.Message)} instead.{if type(Value.Message) == "table" or type(Value.Message) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			local Length = #Value.Message
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -1418,7 +1418,7 @@ function SerdesFunctions.WriteEVENT_PlayerEvent(Value: { Type: "Join", Name: str
 		-- Value: Leave
 		-- Value.UserId: UserId
 		if typeof(Value.UserId) ~= "number" then
-			error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.`)
+			error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.{if type(Value.UserId) == "table" or type(Value.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		buffer.writef64(SendBuffer, BLOCK_START + 0, Value.UserId)
 	else
@@ -1485,7 +1485,7 @@ function SerdesFunctions.WriteEVENT_MapEvent(Value: {[string]: number}): ()
 		Elements_1 += 1
 		-- Key_1: MapSimple
 		if typeof(Key_1) ~= "string" then
-			error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+			error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		local Length = #Key_1
 		if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -1494,7 +1494,7 @@ function SerdesFunctions.WriteEVENT_MapEvent(Value: {[string]: number}): ()
 		buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 		-- Element_1: MapSimple
 		if typeof(Element_1) ~= "number" then
-			error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
+			error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.{if type(Element_1) == "table" or type(Element_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		local OFFSET_0 = Allocate(1)
 		buffer.writeu8(SendBuffer, OFFSET_0, Element_1)
@@ -1516,7 +1516,7 @@ function SerdesFunctions.WriteEVENT_MapStructEvent(Value: { Map: {[string]: numb
 			Elements_1 += 1
 			-- Key_1: Map
 			if typeof(Key_1) ~= "string" then
-				error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+				error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			local Length = #Key_1
 			if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -1525,7 +1525,7 @@ function SerdesFunctions.WriteEVENT_MapStructEvent(Value: { Map: {[string]: numb
 			buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
 			-- Element_1: Map
 			if typeof(Element_1) ~= "number" then
-				error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.`)
+				error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.{if type(Element_1) == "table" or type(Element_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			local OFFSET_0 = Allocate(1)
 			buffer.writeu8(SendBuffer, OFFSET_0, Element_1)
@@ -1546,7 +1546,7 @@ function SerdesFunctions.WriteEVENT_MapComplexEvent(Value: {[string]: { number }
 		Elements_1 += 1
 		-- Key_1: MapComplex
 		if typeof(Key_1) ~= "string" then
-			error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+			error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		if #Key_1 < 0 then error(`Expected length of "Key_1" to be larger than or equal to 0, got {#Key_1} instead.`) end
 		if #Key_1 > 20 then error(`Expected length of "Key_1" to be smaller than or equal to 20, got {#Key_1} instead.`) end
@@ -1565,7 +1565,7 @@ function SerdesFunctions.WriteEVENT_MapComplexEvent(Value: {[string]: { number }
 			local Item_2 = Element_1[Index]
 			-- Item_2: MapComplex
 			if typeof(Item_2) ~= "number" then
-				error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.`)
+				error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			if not (Item_2 >= 0) then error(`Expected "Item_2" to be larger than or equal to 0, got {Item_2} instead.`) end
 			if not (Item_2 <= 100) then error(`Expected "Item_2" to be smaller than or equal to 100, got {Item_2} instead.`) end
@@ -1645,7 +1645,7 @@ function SerdesFunctions.WriteEVENT_ArrayPrimitive(Value: { number }): ()
 		local Item_1 = Value[Index]
 		-- Item_1: ArrayPrimitive
 		if typeof(Item_1) ~= "number" then
-			error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+			error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		-- Allocate 1
 		local OPERATION_OFFSET_0 = ARRAY_START_1
@@ -1669,7 +1669,7 @@ function SerdesFunctions.WriteEVENT_OptionalPrimitive(Value: number?): ()
 		local BLOCK_START = Allocate(1)
 		-- Value: OptionalPrimitive
 		if typeof(Value) ~= "number" then
-			error(`Expected Value to be of type number, got {type(Value)} instead.`)
+			error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		buffer.writeu8(SendBuffer, BLOCK_START + 0, Value)
 	end
@@ -1683,7 +1683,7 @@ function SerdesFunctions.WriteEVENT_ManyReliableSync(Value: number): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 20)
 	-- Value: ManyReliableSync
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
@@ -1695,7 +1695,7 @@ function SerdesFunctions.WriteEVENT_ManyReliableAsync(Value: number): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 21)
 	-- Value: ManyReliableAsync
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
@@ -1707,7 +1707,7 @@ function SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value: number): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 8)
 	-- Value: ManyUnreliableSync
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
@@ -1719,7 +1719,7 @@ function SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value: number): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 9)
 	-- Value: ManyUnreliableAsync
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
@@ -1731,7 +1731,7 @@ function SerdesFunctions.WriteEVENT_ReliableServer(Value: number): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 22)
 	-- Value: ReliableServer
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
@@ -1743,7 +1743,7 @@ function SerdesFunctions.WriteEVENT_ReliableServerAsync(Value: number): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 23)
 	-- Value: ReliableServerAsync
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
@@ -1764,7 +1764,7 @@ function SerdesFunctions.WriteEVENT_UnreliableServer(Value: number): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 10)
 	-- Value: UnreliableServer
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
@@ -1776,7 +1776,7 @@ function SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value: number): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 11)
 	-- Value: UnreliableServerAsync
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
@@ -1850,7 +1850,7 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 			local BLOCK_START = Allocate(1)
 			-- Value.Field: Field
 			if typeof(Value.Field) ~= "number" then
-				error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.`)
+				error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.{if type(Value.Field) == "table" or type(Value.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
 		end
@@ -1861,7 +1861,7 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 			local BLOCK_START = Allocate(2)
 			-- Value.Float16Field: Float16Field
 			if typeof(Value.Float16Field) ~= "number" then
-				error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.`)
+				error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.{if type(Value.Float16Field) == "table" or type(Value.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			if Value.Float16Field > 65504 then
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
@@ -1900,7 +1900,7 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 		-- Value.Nested: Nested
 		-- Value.Nested.Guh: Guh
 		if typeof(Value.Nested.Guh) ~= "number" then
-			error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
+			error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.{if type(Value.Nested.Guh) == "table" or type(Value.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Nested.Guh)
 		do
@@ -1913,7 +1913,7 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 				local Item_2 = Value.Nested.Array[Index]
 				-- Item_2: Array
 				if typeof(Item_2) ~= "number" then
-					error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.`)
+					error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				-- Allocate 1
 				local OPERATION_OFFSET_0 = ARRAY_START_2
@@ -1934,7 +1934,7 @@ function SerdesFunctions.WriteEVENT_Reference(Value: { Field: number?, Float16Fi
 				local Item_3 = Value.Nested.OptionalArray[Index]
 				-- Item_3: OptionalArray
 				if typeof(Item_3) ~= "number" then
-					error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.`)
+					error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.{if type(Item_3) == "table" or type(Item_3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				-- Allocate 1
 				local OPERATION_OFFSET_0 = ARRAY_START_3
@@ -1976,7 +1976,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 				local BLOCK_START = Allocate(1)
 				-- Item_1.Field: Field
 				if typeof(Item_1.Field) ~= "number" then
-					error(`Expected Item_1.Field to be of type number, got {type(Item_1.Field)} instead.`)
+					error(`Expected Item_1.Field to be of type number, got {type(Item_1.Field)} instead.{if type(Item_1.Field) == "table" or type(Item_1.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, Item_1.Field)
 			end
@@ -1988,7 +1988,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 			local BLOCK_START = Allocate(2)
 			-- Item_1.Float16Field: Float16Field
 			if typeof(Item_1.Float16Field) ~= "number" then
-				error(`Expected Item_1.Float16Field to be of type number, got {type(Item_1.Float16Field)} instead.`)
+				error(`Expected Item_1.Float16Field to be of type number, got {type(Item_1.Float16Field)} instead.{if type(Item_1.Float16Field) == "table" or type(Item_1.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			if Item_1.Float16Field > 65504 then
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
@@ -2028,7 +2028,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 		do
 			-- Item_1.Nested.Guh: Guh
 			if typeof(Item_1.Nested.Guh) ~= "number" then
-				error(`Expected Item_1.Nested.Guh to be of type number, got {type(Item_1.Nested.Guh)} instead.`)
+				error(`Expected Item_1.Nested.Guh to be of type number, got {type(Item_1.Nested.Guh)} instead.{if type(Item_1.Nested.Guh) == "table" or type(Item_1.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			-- Allocate 1
 			local OPERATION_OFFSET_1 = ARRAY_START_1
@@ -2045,7 +2045,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 				local Item_2 = Item_1.Nested.Array[Index]
 				-- Item_2: Array
 				if typeof(Item_2) ~= "number" then
-					error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.`)
+					error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				-- Allocate 1
 				local OPERATION_OFFSET_0 = ARRAY_START_2
@@ -2066,7 +2066,7 @@ function SerdesFunctions.WriteEVENT_ReferenceArray(Value: { { Field: number?, Fl
 				local Item_3 = Item_1.Nested.OptionalArray[Index]
 				-- Item_3: OptionalArray
 				if typeof(Item_3) ~= "number" then
-					error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.`)
+					error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.{if type(Item_3) == "table" or type(Item_3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				-- Allocate 1
 				local OPERATION_OFFSET_0 = ARRAY_START_3
@@ -2102,7 +2102,7 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 			local BLOCK_START = Allocate(1)
 			-- Value.Field: Field
 			if typeof(Value.Field) ~= "number" then
-				error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.`)
+				error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.{if type(Value.Field) == "table" or type(Value.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
 		end
@@ -2113,7 +2113,7 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 			local BLOCK_START = Allocate(2)
 			-- Value.Float16Field: Float16Field
 			if typeof(Value.Float16Field) ~= "number" then
-				error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.`)
+				error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.{if type(Value.Float16Field) == "table" or type(Value.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 			end
 			if Value.Float16Field > 65504 then
 				buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
@@ -2152,7 +2152,7 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 		-- Value.Nested: Nested
 		-- Value.Nested.Guh: Guh
 		if typeof(Value.Nested.Guh) ~= "number" then
-			error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.`)
+			error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.{if type(Value.Nested.Guh) == "table" or type(Value.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Nested.Guh)
 		do
@@ -2165,7 +2165,7 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 				local Item_2 = Value.Nested.Array[Index]
 				-- Item_2: Array
 				if typeof(Item_2) ~= "number" then
-					error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.`)
+					error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				-- Allocate 1
 				local OPERATION_OFFSET_0 = ARRAY_START_2
@@ -2186,7 +2186,7 @@ function SerdesFunctions.WriteEVENT_ReferenceOptional(Value: { Field: number?, F
 				local Item_3 = Value.Nested.OptionalArray[Index]
 				-- Item_3: OptionalArray
 				if typeof(Item_3) ~= "number" then
-					error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.`)
+					error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.{if type(Item_3) == "table" or type(Item_3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				-- Allocate 1
 				local OPERATION_OFFSET_0 = ARRAY_START_3
@@ -2218,7 +2218,7 @@ function SerdesFunctions.WriteFUNCTION_RETURN_RemoteFunction(Value: number, Invo
 	buffer.writeu8(SendBuffer, BLOCK_START + 2, 1)
 	-- Value: RemoteFunction
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, Value)
 end
@@ -2232,7 +2232,7 @@ function SerdesFunctions.WriteEVENT_Tuple(Value1: number, Value2: ("A" | "B" | "
 	-- Value: Tuple
 	-- Value1: Tuple
 	if typeof(Value1) ~= "number" then
-		error(`Expected Value1 to be of type number, got {type(Value1)} instead.`)
+		error(`Expected Value1 to be of type number, got {type(Value1)} instead.{if type(Value1) == "table" or type(Value1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value1)
 	-- Value2: Tuple
@@ -2254,7 +2254,7 @@ function SerdesFunctions.WriteEVENT_Tuple(Value1: number, Value2: ("A" | "B" | "
 		local BLOCK_START = Allocate(2)
 		-- Value3: Tuple
 		if typeof(Value3) ~= "number" then
-			error(`Expected Value3 to be of type number, got {type(Value3)} instead.`)
+			error(`Expected Value3 to be of type number, got {type(Value3)} instead.{if type(Value3) == "table" or type(Value3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		buffer.writeu16(SendBuffer, BLOCK_START + 0, Value3)
 	end
@@ -2278,7 +2278,7 @@ function SerdesFunctions.WriteEVENT_Tuple(Value1: number, Value2: ("A" | "B" | "
 		local Item_1 = Value6[Index]
 		-- Item_1: Tuple
 		if typeof(Item_1) ~= "number" then
-			error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.`)
+			error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		-- Allocate 1
 		local OPERATION_OFFSET_0 = ARRAY_START_1
@@ -2298,7 +2298,7 @@ function SerdesFunctions.WriteEVENT_TupleUnreliable(Value1: number, Value2: ("A"
 	-- Value: TupleUnreliable
 	-- Value1: TupleUnreliable
 	if typeof(Value1) ~= "number" then
-		error(`Expected Value1 to be of type number, got {type(Value1)} instead.`)
+		error(`Expected Value1 to be of type number, got {type(Value1)} instead.{if type(Value1) == "table" or type(Value1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value1)
 	-- Value2: TupleUnreliable
@@ -2320,7 +2320,7 @@ function SerdesFunctions.WriteEVENT_TupleUnreliable(Value1: number, Value2: ("A"
 		local BLOCK_START = Allocate(2)
 		-- Value3: TupleUnreliable
 		if typeof(Value3) ~= "number" then
-			error(`Expected Value3 to be of type number, got {type(Value3)} instead.`)
+			error(`Expected Value3 to be of type number, got {type(Value3)} instead.{if type(Value3) == "table" or type(Value3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		buffer.writeu16(SendBuffer, BLOCK_START + 0, Value3)
 	end
@@ -2417,7 +2417,7 @@ function SerdesFunctions.WriteFUNCTION_RETURN_TupleFunction(Value1: Instance?, V
 		local BLOCK_START = Allocate(2)
 		-- Value3: TupleFunction
 		if typeof(Value3) ~= "number" then
-			error(`Expected Value3 to be of type number, got {type(Value3)} instead.`)
+			error(`Expected Value3 to be of type number, got {type(Value3)} instead.{if type(Value3) == "table" or type(Value3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 		end
 		buffer.writeu16(SendBuffer, BLOCK_START + 0, Value3)
 	end
@@ -2434,7 +2434,7 @@ function SerdesFunctions.WriteFUNCTION_RETURN_TupleFunction(Value1: Instance?, V
 	end
 	-- Value5: TupleFunction
 	if typeof(Value5) ~= "number" then
-		error(`Expected Value5 to be of type number, got {type(Value5)} instead.`)
+		error(`Expected Value5 to be of type number, got {type(Value5)} instead.{if type(Value5) == "table" or type(Value5) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 4, Value5)
 	buffer.writeu8(SendBuffer, BLOCK_START + 3, BITFIELD_1_0)
@@ -2447,7 +2447,7 @@ function SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value: number): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 34)
 	-- Value: InScopeEvent
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
@@ -2459,7 +2459,7 @@ function SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnoth
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 35)
 	-- Value: InAnotherScopeEvent
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
@@ -2471,7 +2471,7 @@ function SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value: number): ()
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 36)
 	-- Value: InScopeEvent
 	if typeof(Value) ~= "number" then
-		error(`Expected Value to be of type number, got {type(Value)} instead.`)
+		error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 	end
 	buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
 end
@@ -2525,7 +2525,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Allocate(3)
 				-- Value: Color
 				if typeof(Value) ~= "Color3" then
-					error(`Expected Value to be of type Color3, got {type(Value)} instead.`)
+					error(`Expected Value to be of type Color3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				local Color = Value
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
@@ -2574,7 +2574,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Allocate(4)
 				-- Value: ExactRange
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
 				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
@@ -2622,7 +2622,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Allocate(4)
 				-- Value: DecimalRange
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
 				if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
@@ -2671,7 +2671,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Allocate(1)
 				-- Value: NegativeRange
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
 				if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
@@ -2719,7 +2719,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Allocate(4)
 				-- Value: UnboundUpper
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
 				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
@@ -2766,7 +2766,7 @@ if not RunService:IsRunning() then
 				local BLOCK_START = Allocate(4)
 				-- Value: UnboundLower
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
 				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
@@ -2840,7 +2840,7 @@ if not RunService:IsRunning() then
 					Elements_1 += 1
 					-- Key_1: MapNested
 					if typeof(Key_1) ~= "string" then
-						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Key_1
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -2854,7 +2854,7 @@ if not RunService:IsRunning() then
 						Elements_2 += 1
 						-- Key_2: MapSimple
 						if typeof(Key_2) ~= "string" then
-							error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.`)
+							error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.{if type(Key_2) == "table" or type(Key_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Key_2
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -2863,7 +2863,7 @@ if not RunService:IsRunning() then
 						buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
 						-- Element_2: MapSimple
 						if typeof(Element_2) ~= "number" then
-							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
+							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.{if type(Element_2) == "table" or type(Element_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local OFFSET_0 = Allocate(1)
 						buffer.writeu8(SendBuffer, OFFSET_0, Element_2)
@@ -2983,17 +2983,17 @@ if not RunService:IsRunning() then
 				-- Value: Standalone
 				-- Value.One: One
 				if typeof(Value.One) ~= "number" then
-					error(`Expected Value.One to be of type number, got {type(Value.One)} instead.`)
+					error(`Expected Value.One to be of type number, got {type(Value.One)} instead.{if type(Value.One) == "table" or type(Value.One) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.One)
 				-- Value.Two: Two
 				if typeof(Value.Two) ~= "number" then
-					error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.`)
+					error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.{if type(Value.Two) == "table" or type(Value.Two) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Two)
 				-- Value.Three: Three
 				if typeof(Value.Three) ~= "number" then
-					error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.`)
+					error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.{if type(Value.Three) == "table" or type(Value.Three) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
 				-- Value.Event: Event
@@ -3005,7 +3005,7 @@ if not RunService:IsRunning() then
 					do
 						-- Value.Event.Name: Name
 						if typeof(Value.Event.Name) ~= "string" then
-							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.{if type(Value.Event.Name) == "table" or type(Value.Event.Name) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Value.Event.Name
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -3015,7 +3015,7 @@ if not RunService:IsRunning() then
 					end
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				elseif Value.Event.Type == "Chat" then
@@ -3025,13 +3025,13 @@ if not RunService:IsRunning() then
 					-- Value.Event: Chat
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 					do
 						-- Value.Event.Message: Message
 						if typeof(Value.Event.Message) ~= "string" then
-							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.{if type(Value.Event.Message) == "table" or type(Value.Event.Message) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Value.Event.Message
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -3046,7 +3046,7 @@ if not RunService:IsRunning() then
 					-- Value.Event: Leave
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				else
@@ -3056,7 +3056,7 @@ if not RunService:IsRunning() then
 				do
 					-- Value.Nested.Four: Four
 					if typeof(Value.Nested.Four) ~= "string" then
-						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.{if type(Value.Nested.Four) == "table" or type(Value.Nested.Four) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Value.Nested.Four
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -3067,7 +3067,7 @@ if not RunService:IsRunning() then
 				do
 					-- Value.Nested.Five: Five
 					if typeof(Value.Nested.Five) ~= "string" then
-						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.{if type(Value.Nested.Five) == "table" or type(Value.Nested.Five) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Value.Nested.Five
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -3916,6 +3916,12 @@ local function SavePlayerBuffer(Player: Player)
     --> every reliable send to a player, and the entry also carries its shrink count.
     local Entry = PlayersMap[Player]
     if Entry == nil then
+        --> Checked here, where a player's first send lands, rather than on every send: a call made with
+        --> `:` -- `Net.Event:Fire(...)` -- passes the event's table as the player, and failed in the
+        --> line below as "attempt to call a nil value".
+        if type(Player) == "table" then
+            error("[BlinkBlox]: Expected a Player to send to, got a table instead. Call a send with '.', as Net.Event.Fire(Player, ...), not with ':'.", 3)
+        end
         if Player:IsDescendantOf(Players) then
             PlayersMap[Player] = Save()
             if SharedCursor > 0 then
@@ -4407,7 +4413,7 @@ local Returns = table.freeze({
 				local BLOCK_START = Allocate(3)
 				-- Value: Color
 				if typeof(Value) ~= "Color3" then
-					error(`Expected Value to be of type Color3, got {type(Value)} instead.`)
+					error(`Expected Value to be of type Color3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				local Color = Value
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, math.clamp(math.round(Color.R * 255), 0, 255))
@@ -4456,7 +4462,7 @@ local Returns = table.freeze({
 				local BLOCK_START = Allocate(4)
 				-- Value: ExactRange
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
 				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
@@ -4504,7 +4510,7 @@ local Returns = table.freeze({
 				local BLOCK_START = Allocate(4)
 				-- Value: DecimalRange
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
 				if not (Value <= 10.5) then error(`Expected "Value" to be smaller than or equal to 10.5, got {Value} instead.`) end
@@ -4553,7 +4559,7 @@ local Returns = table.freeze({
 				local BLOCK_START = Allocate(1)
 				-- Value: NegativeRange
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
 				if not (Value <= 10) then error(`Expected "Value" to be smaller than or equal to 10, got {Value} instead.`) end
@@ -4601,7 +4607,7 @@ local Returns = table.freeze({
 				local BLOCK_START = Allocate(4)
 				-- Value: UnboundUpper
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
 				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
@@ -4648,7 +4654,7 @@ local Returns = table.freeze({
 				local BLOCK_START = Allocate(4)
 				-- Value: UnboundLower
 				if typeof(Value) ~= "number" then
-					error(`Expected Value to be of type number, got {type(Value)} instead.`)
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
 				buffer.writef32(SendBuffer, BLOCK_START + 0, Value)
@@ -4722,7 +4728,7 @@ local Returns = table.freeze({
 					Elements_1 += 1
 					-- Key_1: MapNested
 					if typeof(Key_1) ~= "string" then
-						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.`)
+						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Key_1
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -4736,7 +4742,7 @@ local Returns = table.freeze({
 						Elements_2 += 1
 						-- Key_2: MapSimple
 						if typeof(Key_2) ~= "string" then
-							error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.`)
+							error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.{if type(Key_2) == "table" or type(Key_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Key_2
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -4745,7 +4751,7 @@ local Returns = table.freeze({
 						buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
 						-- Element_2: MapSimple
 						if typeof(Element_2) ~= "number" then
-							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.`)
+							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.{if type(Element_2) == "table" or type(Element_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local OFFSET_0 = Allocate(1)
 						buffer.writeu8(SendBuffer, OFFSET_0, Element_2)
@@ -4865,17 +4871,17 @@ local Returns = table.freeze({
 				-- Value: Standalone
 				-- Value.One: One
 				if typeof(Value.One) ~= "number" then
-					error(`Expected Value.One to be of type number, got {type(Value.One)} instead.`)
+					error(`Expected Value.One to be of type number, got {type(Value.One)} instead.{if type(Value.One) == "table" or type(Value.One) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.One)
 				-- Value.Two: Two
 				if typeof(Value.Two) ~= "number" then
-					error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.`)
+					error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.{if type(Value.Two) == "table" or type(Value.Two) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Two)
 				-- Value.Three: Three
 				if typeof(Value.Three) ~= "number" then
-					error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.`)
+					error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.{if type(Value.Three) == "table" or type(Value.Three) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
 				-- Value.Event: Event
@@ -4887,7 +4893,7 @@ local Returns = table.freeze({
 					do
 						-- Value.Event.Name: Name
 						if typeof(Value.Event.Name) ~= "string" then
-							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.`)
+							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.{if type(Value.Event.Name) == "table" or type(Value.Event.Name) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Value.Event.Name
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -4897,7 +4903,7 @@ local Returns = table.freeze({
 					end
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				elseif Value.Event.Type == "Chat" then
@@ -4907,13 +4913,13 @@ local Returns = table.freeze({
 					-- Value.Event: Chat
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 					do
 						-- Value.Event.Message: Message
 						if typeof(Value.Event.Message) ~= "string" then
-							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.`)
+							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.{if type(Value.Event.Message) == "table" or type(Value.Event.Message) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Value.Event.Message
 						if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -4928,7 +4934,7 @@ local Returns = table.freeze({
 					-- Value.Event: Leave
 					-- Value.Event.UserId: UserId
 					if typeof(Value.Event.UserId) ~= "number" then
-						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.`)
+						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 				else
@@ -4938,7 +4944,7 @@ local Returns = table.freeze({
 				do
 					-- Value.Nested.Four: Four
 					if typeof(Value.Nested.Four) ~= "string" then
-						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.`)
+						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.{if type(Value.Nested.Four) == "table" or type(Value.Nested.Four) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Value.Nested.Four
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
@@ -4949,7 +4955,7 @@ local Returns = table.freeze({
 				do
 					-- Value.Nested.Five: Five
 					if typeof(Value.Nested.Five) ~= "string" then
-						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.`)
+						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.{if type(Value.Nested.Five) == "table" or type(Value.Nested.Five) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Value.Nested.Five
 					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end

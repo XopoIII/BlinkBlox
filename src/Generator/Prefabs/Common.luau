@@ -137,9 +137,12 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 			end
 
 			if Block == Write and Type ~= "any" then
+				--> A table where a value belongs is most often the event itself, handed over by a call made
+				--> with `:`, and a Player -- userdata -- is what a server send's value becomes when its
+				--> arguments are shifted that way. The hint costs nothing until the check has failed.
 				Block:Compare(`typeof({TargetVariable})`, `"{Type}"`, "Not")
 					:Line(
-						`error(\`Expected {TargetVariable} to be of type {Type}, got \{type({TargetVariable})} instead.\`)`
+						`error(\`Expected {TargetVariable} to be of type {Type}, got \{type({TargetVariable})} instead.\{if type({TargetVariable}) == "table" or type({TargetVariable}) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}\`)`
 					)
 					:End()
 			end
