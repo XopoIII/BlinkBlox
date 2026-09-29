@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Install the BlinkBlox compiler with Rokit, pesde or a release archive, and the Studio plugin from the Creator Store.
+description: Install the BlinkBlox compiler with Rokit, pesde or a release archive, use it as a library from Wally, and install the Studio plugin from the Creator Store.
 ---
 
 import { Aside, Tabs, TabItem, LinkCard } from '@astrojs/starlight/components';
@@ -28,7 +28,7 @@ This downloads the build for your platform and records it in `rokit.toml`. `blin
 your `PATH` inside the project. To pin an exact version, name it:
 
 ```sh
-rokit add XopoIII/BlinkBlox@1.0.0 blinkblox
+rokit add XopoIII/BlinkBlox@1.0.1 blinkblox
 ```
 
 To move to the newest release later:
@@ -101,6 +101,40 @@ blinkblox --version
 
 It prints `BlinkBlox` followed by the version number. The [command-line page](/BlinkBlox/getting-started/cli/)
 covers every flag.
+
+## The compiler as a library (Wally)
+
+A game does not depend on BlinkBlox at runtime: it uses the modules the compiler generated, which
+need nothing else. The [Wally](https://wally.run) package is for code that runs the compiler itself
+inside Roblox -- a plugin, an in-Studio build step, an editor -- and holds the same lexer, parser and
+generator as the command line and the Studio plugin, in one module.
+
+```toml title="wally.toml"
+[dev-dependencies]
+BlinkBlox = "xopoiii/blinkblox@1.0.1"
+```
+
+```luau
+local BlinkBlox = require(Packages.BlinkBlox)
+
+local Output = BlinkBlox.Compile([[
+event Hit {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}
+]])
+
+-- Output.Server, Output.Client and Output.Types are the modules' source text.
+```
+
+`Compile(Schema, Options?)` returns the three modules' text and a list of the warnings it raised,
+rather than printing them. A schema that does not compile raises its diagnostic; inside Roblox it is
+formatted with rich text, as the Studio plugin shows it. `Options.Profile` compiles under a
+[profile](/BlinkBlox/language/profiles/), and `Options.Files` maps the names an `import` writes to
+the schemas it reads: `import "Shared"` reads `Files.Shared`. `BlinkBlox.VERSION` is the version the
+modules' headers name.
 
 ## The Studio plugin
 

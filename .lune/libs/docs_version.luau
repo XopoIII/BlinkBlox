@@ -1,5 +1,6 @@
 --!strict
---> The version as the docs print it. Two spellings carry it: the rokit pin, `XopoIII/BlinkBlox@0.36.2`,
+--> The version as the docs print it. The rokit pin, `XopoIII/BlinkBlox@0.36.2`, and the Wally one,
+--> `xopoiii/blinkblox@0.36.2`, carry it,
 --> and the banner the CLI prints on a line of its own, `BlinkBlox 0.36.2`. Prose that names a release
 --> ("the run was made on BlinkBlox 0.36.2") is history rather than a pin, and neither pattern matches it.
 -->
@@ -31,6 +32,7 @@ local function rewrite(contents: string, version: string): string
 	local lines = string.split(contents, "\n")
 	for index, line in lines do
 		line = string.gsub(line, `XopoIII/BlinkBlox@{VERSION}`, `XopoIII/BlinkBlox@{version}`)
+		line = string.gsub(line, `xopoiii/blinkblox@{VERSION}`, `xopoiii/blinkblox@{version}`)
 		line = string.gsub(line, `^(%s*)BlinkBlox {VERSION}(%s*)$`, `%1BlinkBlox {version}%2`)
 		lines[index] = line
 	end

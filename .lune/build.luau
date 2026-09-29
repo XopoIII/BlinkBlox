@@ -3,6 +3,7 @@ local fs = require("@lune/fs")
 local log = require("./libs/log")
 local process = require("@lune/process")
 local runtime = require("./libs/runtime")
+local serde = require("@lune/serde")
 
 --> Each executable carries the runtime that builds it, so a release built anywhere but LuneBlox
 --> would ship players a compiler on a different Luau than the one every test and figure ran on.
@@ -21,6 +22,8 @@ local PLUGIN_RELEASE_DIR = `{RELEASE_DIR}/plugin`
 local CLI_PATH = "src/CLI/init.luau"
 local BUNDLE_PATH = `{RELEASE_DIR}/blinkblox.luau`
 local PESDE_RELEASE_PATH = `{RELEASE_DIR}/blinkblox_pesde.luau`
+local LIBRARY_PATH = "src/Library.luau"
+local WALLY_RELEASE_DIR = `{RELEASE_DIR}/wally`
 
 local BUNDLE_CONFIG = "build/.darklua.json"
 local PLUGIN_ROJO_CONFIG = "build/plugin.project.json"
@@ -69,6 +72,52 @@ local function build_pesde()
 		process.exec("darklua", { "process", "--config", BUNDLE_CONFIG, CLI_PATH, PESDE_RELEASE_PATH })
 	assert(darklua_result.ok, darklua_result.stderr)
 	log("Build pesde source")
+end
+
+--- The Wally package: the compiler as a library for code running inside Roblox (src/Library.luau),
+--- bundled into one module with the version injected, as the Studio plugin is. `wally publish
+--- --project-path release/wally` publishes it. Its manifest is written here, from the version the
+--- bundle carries, so the version is still recorded in only the two files `bump` writes.
+local function build_wally()
+	local Recorded: string? = nil
+	for _, Rule in (serde.decode("json", fs.readFile(BUNDLE_CONFIG)) :: any).rules do
+		if type(Rule) == "table" and Rule.identifier == "VERSION" then
+			Recorded = Rule.value
+		end
+	end
+	assert(Recorded, `no VERSION in {BUNDLE_CONFIG}`)
+
+	fs.writeDir(`{WALLY_RELEASE_DIR}/src`)
+	local bundle_result = process.exec(
+		"darklua",
+		{ "process", "--config", BUNDLE_CONFIG, LIBRARY_PATH, `{WALLY_RELEASE_DIR}/src/init.luau` }
+	)
+	assert(bundle_result.ok, bundle_result.stderr)
+
+	fs.writeFile(
+		`{WALLY_RELEASE_DIR}/wally.toml`,
+		table.concat({
+			"[package]",
+			'name = "xopoiii/blinkblox"',
+			`version = "{Recorded}"`,
+			'registry = "https://github.com/UpliftGames/wally-index"',
+			'realm = "shared"',
+			'license = "MIT"',
+			'description = "The BlinkBlox compiler as a library: a schema in, the generated network modules out"',
+			'authors = ["XopoIII", "1axen"]',
+			'repository = "https://github.com/XopoIII/BlinkBlox"',
+			"",
+			"[dependencies]",
+			"",
+		}, "\n")
+	)
+	fs.writeFile(
+		`{WALLY_RELEASE_DIR}/default.project.json`,
+		'{\n  "name": "BlinkBlox",\n  "tree": {\n    "$path": "src"\n  }\n}\n'
+	)
+	fs.copy("README.md", `{WALLY_RELEASE_DIR}/README.md`)
+	fs.copy("LICENSE", `{WALLY_RELEASE_DIR}/LICENSE`)
+	log("Built Wally package")
 end
 
 local function build_executables()
@@ -124,6 +173,7 @@ end
 
 local start = os.clock()
 build_pesde()
+build_wally()
 build_executables()
 build_studio_plugin()
 

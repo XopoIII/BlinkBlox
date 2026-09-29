@@ -116,6 +116,7 @@ hashes `WIRE_VERSION`, a number the compiler bumps by hand whenever a type's byt
 | 0.42.0 | No change to the format. Packets are decoded and flushed faster, and `PackedBooleanReader` decides how a `boolean[]` is read, not how it is written. | 0.40.0 onward. |
 | 0.42.1 | Nothing: the compiler emits exactly what 0.42.0 did. The release is the toolchain, LuneBlox 0.10.10, and CI. | 0.40.0 onward. |
 | 1.0.0 | No existing type's encoding changed. `Vector2`, `UDim`, `UDim2`, `NumberRange`, `ColorSequence`, `TweenInfo` and `Enum(Name)` are added; they are opt-in and part of the schema signature, so only schemas that use them are affected. `RemotesFolder` moves where the remotes are, so both sides must be built with the same one. | 0.40.0 onward. |
+| 1.0.1 | Nothing: the compiler emits exactly what 1.0.0 did. The release adds the Wally package. | 0.40.0 onward. |
 
 Modules from different releases with the same `WIRE_VERSION` interoperate, but a fix to how a value is
 read or handled applies only on the side built by the release that has it. Ship both sides from one
