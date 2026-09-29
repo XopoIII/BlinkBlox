@@ -299,11 +299,28 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 			Connection:Line(`DecodeRemaining = {MaxEvents}`)
 		end
 		Connection:Line("Decoding = -1")
+		--> A packet that failed after a read raised the flag, and before its event's check cleared it,
+		--> must not refuse the first event of the next one.
+		if Prefabs.Missing.Count > 0 then
+			Connection:Line("MissingInstance = false")
+		end
 		Connection:Line("while true do")
 		Connection:Line(`\tlocal Parsed: boolean, Failure: any = pcall(DecodeLoop, {LoopArguments})`)
 		Connection:Line("\tif Parsed then")
 		Connection:Line("\t\tbreak")
 		Connection:Line("\tend")
+		--> An event refused for an Instance that did not arrive: its reader raised the signal once its
+		--> payload was read, so the cursor is at the next event and the packet goes on from there.
+		if Prefabs.Missing.Count > 0 then
+			Connection:Line("\tif Failure == MISSING_SIGNAL then")
+			if OnServer then
+				Connection:Line(`\t\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], MISSING_INSTANCE)`)
+			else
+				Connection:Line(`\t\tReportMissingInstance(EventNames.{Name}[Decoding])`)
+			end
+			Connection:Line("\t\tcontinue")
+			Connection:Line("\tend")
+		end
 		Connection:Line("\tif Decoding > -2 then")
 		Connection:Line(`\t\tReportDecodeFailure({Sender}EventNames.{Name}[Decoding], Failure)`)
 		Connection:Line("\t\tbreak")
@@ -360,6 +377,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
 		(if Prefabs.Required.PackedRows then Fragments.PACKED_ROWS else {}),
 		(if Prefabs.Required.PackedCalibration then Fragments.PACKED_CALIBRATION else {}),
+		(if Prefabs.Missing.Count > 0 then Fragments.MISSING_INSTANCE else {}),
 		Bodies.RateTemplate(),
 		Bodies.Ordering(),
 		Bodies.UnreliableGuard(),
@@ -385,6 +403,11 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 			State.Context,
 			State.Options,
 			Table.Merge(
+				(
+					if Prefabs.Missing.Count > 0 and State.Context == "Client"
+						then Fragments.MISSING_INSTANCE_CLIENT
+						else {}
+				),
 				DecodeLoop,
 				Replication.DumpLines(),
 				ReliableDecoder.Content,
@@ -423,6 +446,7 @@ function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 		(if Prefabs.Required.Rotation then Fragments.ROTATION_HELPERS else {}),
 		(if Prefabs.Required.PackedRows then Fragments.PACKED_ROWS else {}),
 		(if Prefabs.Required.PackedCalibration then Fragments.PACKED_CALIBRATION else {}),
+		(if Prefabs.Missing.Count > 0 then Fragments.MISSING_INSTANCE else {}),
 		State.LuauTypes.DumpLines(),
 		{ "\n" },
 		State.UserTypes.DumpLines(),

@@ -622,6 +622,13 @@ local PACKED_BY_ROWS = (function(): boolean
 	end
 	return Rows < Bits
 end)()
+
+--> Raised by a read that found no Instance where the sender wrote one, and cleared by the check
+--> after the event's payload, which refuses that event alone.
+local MissingInstance = false
+--> What an event's reader raises to refuse its event; see CloseDecode.
+local MISSING_SIGNAL = table.freeze({})
+local MISSING_INSTANCE = "An Instance it carried did not arrive: it is not streamed in or not replicated to this side, or it was destroyed before the packet came. Only this event was dropped."
 local RATE_TEMPLATE = table.freeze({10, 0, 0, 0, 10, 0, 0, 0, 2, 0, 0, 0})
 
 --> Sequence numbers for ordered unreliable events, per player and per event, both ways.
@@ -1002,16 +1009,23 @@ function SerdesFunctions.ReadEVENT_UnreliableInstances(): (buffer, { Instance })
 	-- START ARRAY
 	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 	if not (Length <= 4) then error(`Expected "Length" to be smaller than or equal to 4, got {Length} instead.`) end
-	if Length > #RecieveInstances - RecieveInstanceCursor then error(`Expected "Value2" to fit in the {#RecieveInstances - RecieveInstanceCursor} values left beside the packet, got a length of {Length} instead.`) end
+	if Length > 256 - RecieveInstanceCursor then error(`Expected "Value2" to fit in the {256 - RecieveInstanceCursor} values a packet may carry beside it, got a length of {Length} instead.`) end
 	local Value2 = table.create(Length)
 	for Slot_1 = 1, Length do
 		-- Item_1: UnreliableInstances
 		RecieveInstanceCursor += 1
 		local Item_1 = RecieveInstances[RecieveInstanceCursor]
-		if typeof(Item_1) ~= "Instance" then error(`Expected an Instance, got {typeof(Item_1)} instead.`) end
+		if typeof(Item_1) ~= "Instance" then
+			if Item_1 ~= nil then error(`Expected an Instance, got {typeof(Item_1)} instead.`) end
+			MissingInstance = true
+		end
 		Value2[Slot_1] = Item_1
 	end
 	-- END ARRAY
+	if MissingInstance == true then
+		MissingInstance = false
+		error(MISSING_SIGNAL, 0)
+	end
 	return Value1, Value2
 end
 
@@ -1180,6 +1194,7 @@ function SerdesFunctions.ReadEVENT_ClientPollEvent(): ({ Field: number?, Float16
 		-- Value.Map: Map
 		Value.Map = {}
 		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+		if Elements_1 * 9 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Map" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 		for _ = 1, Elements_1 do
 			-- Key_1: GenericMap
 			local Length = ReadVarLength()
@@ -1350,6 +1365,7 @@ function SerdesFunctions.ReadEVENT_ClientUnreliablePollEvent(): ({ Field: number
 		-- Value.Map: Map
 		Value.Map = {}
 		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 2)
+		if Elements_1 * 9 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Map" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 		for _ = 1, Elements_1 do
 			-- Key_1: GenericMap
 			local Length = ReadVarLength()
@@ -3276,7 +3292,10 @@ function SerdesFunctions.ReadFUNCTION_DATA_TupleFunction(): (number, ("A" | "B" 
 	-- Value4: TupleFunction
 	RecieveInstanceCursor += 1
 	local Value4 = RecieveInstances[RecieveInstanceCursor]
-	if typeof(Value4) ~= "Instance" then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
+	if typeof(Value4) ~= "Instance" then
+		if Value4 ~= nil then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
+		MissingInstance = true
+	end
 	-- Value5: TupleFunction
 	local Value5
 	RecieveInstanceCursor += 1
@@ -3445,7 +3464,7 @@ function SerdesFunctions.ReadEVENT_UnknownInbound(): (any)
 	-- Value: UnknownInbound
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
-	if Value == nil then error(`Expected a value for "Value", the packet carried only {#RecieveInstances} of them.`) end
+	if Value == nil then error(MISSING_SIGNAL, 0) end
 	return Value
 end
 
@@ -6427,6 +6446,7 @@ if not RunService:IsRunning() then
 				-- Value: SizeMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
 					-- Key_1: SizeMap
 					local OFFSET_0 = Read(1)
@@ -8110,6 +8130,7 @@ if not RunService:IsRunning() then
 				-- Value: PackedMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if Elements_1 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
 					-- Key_1: PackedMap
 					local Length = ReadVarLength()
@@ -8362,6 +8383,7 @@ if not RunService:IsRunning() then
 				-- Value: MapNested
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
 					-- Key_1: MapNested
 					local Length = ReadVarLength()
@@ -8371,6 +8393,7 @@ if not RunService:IsRunning() then
 					local Element_1 = {}
 					local OFFSET_0 = Read(2)
 					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
+					if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
 					for _ = 1, Elements_2 do
 						-- Key_2: MapSimple
 						local Length = ReadVarLength()
@@ -11529,6 +11552,17 @@ local function DecodeReliable(Player: Player)
 				local BLOCK_START = Read(1)
 				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
 				local Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance? = SerdesFunctions.ReadFUNCTION_DATA_TupleFunction()
+				if MissingInstance then
+					MissingInstance = false
+					ReportDecodeFailure(Player, "Reliable", "TupleFunction", MISSING_INSTANCE)
+					LoadPlayer(Player)
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 42)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					SavePlayerBuffer(Player)
+					return
+				end
 				if Events.Reliable[42] ~= nil then
 					Spawn(Events.Reliable[42], Player, Value1, Value2, Value3, Value4, Value5, InvocationIdentifier)
 				else
@@ -11847,10 +11881,15 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	SerdesThread = coroutine.running()
 	DecodeRemaining = 64
 	Decoding = -1
+	MissingInstance = false
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Player, Size)
 		if Parsed then
 			break
+		end
+		if Failure == MISSING_SIGNAL then
+			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], MISSING_INSTANCE)
+			continue
 		end
 		if Decoding > -2 then
 			ReportDecodeFailure(Player, "Reliable", EventNames.Reliable[Decoding], Failure)
@@ -11893,10 +11932,15 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	SerdesThread = coroutine.running()
 	DecodeRemaining = 64
 	Decoding = -1
+	MissingInstance = false
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Player, Size)
 		if Parsed then
 			break
+		end
+		if Failure == MISSING_SIGNAL then
+			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], MISSING_INSTANCE)
+			continue
 		end
 		if Decoding > -2 then
 			ReportDecodeFailure(Player, "Unreliable", EventNames.Unreliable[Decoding], Failure)
@@ -14517,6 +14561,7 @@ local Returns = table.freeze({
 				-- Value: SizeMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
 					-- Key_1: SizeMap
 					local OFFSET_0 = Read(1)
@@ -16217,6 +16262,7 @@ local Returns = table.freeze({
 				-- Value: PackedMap
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if Elements_1 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
 					-- Key_1: PackedMap
 					local Length = ReadVarLength()
@@ -16614,6 +16660,7 @@ local Returns = table.freeze({
 				-- Value: MapNested
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
 					-- Key_1: MapNested
 					local Length = ReadVarLength()
@@ -16623,6 +16670,7 @@ local Returns = table.freeze({
 					local Element_1 = {}
 					local OFFSET_0 = Read(2)
 					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
+					if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
 					for _ = 1, Elements_2 do
 						-- Key_2: MapSimple
 						local Length = ReadVarLength()

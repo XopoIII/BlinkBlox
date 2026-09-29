@@ -252,13 +252,14 @@ do
 		Read = function(Variable: string, Block: Block)
 			Block:Line("RecieveInstanceCursor += 1")
 			Block:Line(`{Block:Declare(Variable)} = RecieveInstances[RecieveInstanceCursor]`)
-			--> The sender substitutes `Null` for a nil, so a nil here is never a value the client
-			--> meant to send -- it means the packet claimed more of them than it carried. Unlike an
-			--> `Instance`, whose class check fails on the same condition, `unknown` accepts anything
-			--> and would otherwise let a decode loop run on a table that ran out long ago.
-			Block:Line(
-				`if {Variable} == nil then error(\`Expected a value for "{Variable}", the packet carried only \{#RecieveInstances} of them.\`) end`
-			)
+			--> The sender substitutes `Null` for a nil, so a nil here is never a value the sender
+			--> meant: it is an Instance this side cannot see, as for `Instance` (Prefabs/Common), or a
+			--> packet that claimed more values than it carried. Either way the event is refused on its
+			--> own and the rest of the packet read on. A loop over such values cannot run on past the
+			--> table, since its count is checked against what the table holds before it starts
+			--> (Asserts.EmitCapacityGuard).
+			Common.Missing.Count += 1
+			Block:Line(`if {Variable} == nil then MissingInstance = true end`)
 		end,
 		Write = function(Value: string, Block: Block)
 			Block:Line(`table.insert(SendInstances, if {Value} == nil then Null else {Value})`)

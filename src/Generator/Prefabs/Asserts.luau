@@ -83,6 +83,32 @@ local function GenerateSpaceGuard(Length: string, Variable: string): string
 	return `if {Length} > buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR} then error(\`Expected "{Variable}" to fit in the \{buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR}} bytes left in the packet, got a length of \{{Length}} instead.\`) end`
 end
 
+--- Emits a guard on a count of elements already measured -- a map's entries, which are a key and a
+--- value sealed together (Size.MapEntry). A count whose elements cost nothing at all has nothing to
+--- be measured against and is left alone.
+local function EmitCountGuard(
+	Block: Block,
+	Length: string,
+	Variable: string,
+	Element: Size.Measurement,
+	InstanceCapacity: number?
+)
+	if Element.Min > 0 then
+		local Needed = if Element.Min == 1 then Length else `{Length} * {Element.Min}`
+		Block:Line(
+			`if {Needed} > buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR} then error(\`Expected "{Variable}" to fit in the \{buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR}} bytes left in the packet, got a length of \{{Length}} instead.\`) end`
+		)
+		return
+	end
+
+	if Element.Refs > 0 and InstanceCapacity then
+		local Needed = if Element.Refs == 1 then Length else `{Length} * {Element.Refs}`
+		Block:Line(
+			`if {Needed} > {InstanceCapacity} - RecieveInstanceCursor then error(\`Expected "{Variable}" to fit in the \{{InstanceCapacity} - RecieveInstanceCursor} values a packet may carry beside it, got a length of \{{Length}} instead.\`) end`
+		)
+	end
+end
+
 --- Emits a guard on a decoded element count, before the array behind it is allocated.
 ---
 --- `table.create(Length)` reserves every slot up front, so a count the packet cannot possibly back
@@ -94,7 +120,20 @@ end
 --- it, so the guard errs towards letting a packet through rather than refusing an honest one. An
 --- element that costs nothing either way is refused at compile time instead -- there is no resource
 --- left to measure it against.
-local function EmitCapacityGuard(Block: Block, Length: string, Variable: string, Of: Parser.TypeNode)
+---
+--- Elements that cost only Instances are measured against `InstanceCapacity`, the most a packet may
+--- carry -- not against the table the packet came with. An Instance that did not arrive is a nil, and
+--- the last one missing shortens `#` of that table: measured there, an honest array whose final Part
+--- was not streamed in threw the whole packet away instead of refusing its one event (see the
+--- Instance read in Common). The capacity is the server's inbound limit, which the packet has
+--- already been held to; the client, which trusts the server, passes nil and checks nothing here.
+local function EmitCapacityGuard(
+	Block: Block,
+	Length: string,
+	Variable: string,
+	Of: Parser.TypeNode,
+	InstanceCapacity: number?
+)
 	--> A packed boolean costs an eighth of a byte, which the per-element minimum below would round up
 	--> to one -- and then refuse an honest 800-element array for not fitting in its 100 bytes.
 	if Size.PacksBooleans(Of :: any) then
@@ -104,22 +143,7 @@ local function EmitCapacityGuard(Block: Block, Length: string, Variable: string,
 		return
 	end
 
-	local Element = Size.Sealed(Of :: any)
-
-	if Element.Min > 0 then
-		local Needed = if Element.Min == 1 then Length else `{Length} * {Element.Min}`
-		Block:Line(
-			`if {Needed} > buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR} then error(\`Expected "{Variable}" to fit in the \{buffer.len({RECIEVE_BUFFER}) - {RECIEVE_CURSOR}} bytes left in the packet, got a length of \{{Length}} instead.\`) end`
-		)
-		return
-	end
-
-	if Element.Refs > 0 then
-		local Needed = if Element.Refs == 1 then Length else `{Length} * {Element.Refs}`
-		Block:Line(
-			`if {Needed} > #RecieveInstances - RecieveInstanceCursor then error(\`Expected "{Variable}" to fit in the \{#RecieveInstances - RecieveInstanceCursor} values left beside the packet, got a length of \{{Length}} instead.\`) end`
-		)
-	end
+	EmitCountGuard(Block, Length, Variable, Size.Sealed(Of :: any), InstanceCapacity)
 end
 
 --- Emits the send-side check on a variable length, before the length is written. Unconditional,
@@ -158,4 +182,5 @@ return {
 	EmitLengthGuard = EmitLengthGuard,
 	GenerateSpaceGuard = GenerateSpaceGuard,
 	EmitCapacityGuard = EmitCapacityGuard,
+	EmitCountGuard = EmitCountGuard,
 }

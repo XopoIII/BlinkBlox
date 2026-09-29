@@ -895,10 +895,12 @@ local function DecodeReliable()
 			Decoding = -2 - Index
 			BOUND_LISTENER(Value)
 		else
-			if #Queue.Reliable[0] > 256 then
-				warn("[BlinkBlox]: Event queue of \"Score\" exceeded 256, did you forget to implement a listener?")
+			if #Queue.Reliable[0] < 256 then
+				table.insert(Queue.Reliable[0], table.pack(Value))
+				if #Queue.Reliable[0] == 256 then
+					warn("[BlinkBlox]: \"Score\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+				end
 			end
-			table.insert(Queue.Reliable[0], table.pack(Value))
 		end
 	else
 		error("[BlinkBlox]: Unknown event index.")

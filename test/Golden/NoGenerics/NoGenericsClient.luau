@@ -566,6 +566,13 @@ local PACKED_BY_ROWS = (function(): boolean
 	return Rows < Bits
 end)()
 
+--> Raised by a read that found no Instance where the sender wrote one, and cleared by the check
+--> after the event's payload, which refuses that event alone.
+local MissingInstance = false
+--> What an event's reader raises to refuse its event; see CloseDecode.
+local MISSING_SIGNAL = table.freeze({})
+local MISSING_INSTANCE = "An Instance it carried did not arrive: it is not streamed in or not replicated to this side, or it was destroyed before the packet came. Only this event was dropped."
+
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
 --> runtime, and says which event did it. Each Instance sent beside the buffer costs the
@@ -1347,6 +1354,7 @@ function SerdesFunctions.ReadEVENT_DynamicMap(): ({[number]: { Static: number, D
 	-- Value: DynamicMap
 	local Value = {}
 	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 	for _ = 1, Elements_1 do
 		-- Key_1: DynamicMap
 		local OFFSET_0 = Read(1)
@@ -1505,7 +1513,7 @@ function SerdesFunctions.ReadEVENT_Unknown(): (any)
 	-- Value: Unknown
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
-	if Value == nil then error(`Expected a value for "Value", the packet carried only {#RecieveInstances} of them.`) end
+	if Value == nil then error(MISSING_SIGNAL, 0) end
 	return Value
 end
 
@@ -1516,6 +1524,7 @@ function SerdesFunctions.ReadEVENT_MapEvent(): ({[string]: number})
 	-- Value: MapEvent
 	local Value = {}
 	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	if Elements_1 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 	for _ = 1, Elements_1 do
 		-- Key_1: MapSimple
 		local Length = ReadVarLength()
@@ -1539,6 +1548,7 @@ function SerdesFunctions.ReadEVENT_MapStructEvent(): ({ Map: {[string]: number} 
 		-- Value.Map: Map
 		Value.Map = {}
 		local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		if Elements_1 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Map" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 		for _ = 1, Elements_1 do
 			-- Key_1: Map
 			local Length = ReadVarLength()
@@ -1560,6 +1570,7 @@ function SerdesFunctions.ReadEVENT_MapComplexEvent(): ({[string]: { number }})
 	-- Value: MapComplexEvent
 	local Value = {}
 	local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+	if Elements_1 * 9 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 	for _ = 1, Elements_1 do
 		-- Key_1: MapComplex
 		local OFFSET_0 = Read(1)
@@ -1602,6 +1613,7 @@ function SerdesFunctions.ReadEVENT_MapReferenceEvent(): ({[("A" | "B" | "C" | "D
 		-- Value: MapReference
 		Value = {}
 		local Elements_2 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		if Elements_2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
 		local BITFIELD_3_0
 		for _ = 1, Elements_2 do
 			-- Key_2: MapReference
@@ -1778,7 +1790,10 @@ function SerdesFunctions.ReadEVENT_InstanceAny(): (Instance)
 	-- Value: InstanceAny
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
-	if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
+	if typeof(Value) ~= "Instance" then
+		if Value ~= nil then error(`Expected an Instance, got {typeof(Value)} instead.`) end
+		error(MISSING_SIGNAL, 0)
+	end
 	return Value
 end
 
@@ -1787,8 +1802,12 @@ function SerdesFunctions.ReadEVENT_InstanceOfType(): (Sound)
 	-- Value: InstanceOfType
 	RecieveInstanceCursor += 1
 	local Value = RecieveInstances[RecieveInstanceCursor]
-	if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
-	if not Value:IsA("Sound") then error(`Expected an Instance of type "Sound", got "{Value.ClassName}" instead.`) end
+	if typeof(Value) ~= "Instance" then
+		if Value ~= nil then error(`Expected an Instance, got {typeof(Value)} instead.`) end
+		error(MISSING_SIGNAL, 0)
+	elseif not Value:IsA("Sound") then
+		error(`Expected an Instance of type "Sound", got "{Value.ClassName}" instead.`)
+	end
 	return Value
 end
 
@@ -2206,7 +2225,10 @@ function SerdesFunctions.ReadEVENT_Tuple(): (number, ("A" | "B" | "C" | "D"), nu
 	-- Value4: Tuple
 	RecieveInstanceCursor += 1
 	local Value4 = RecieveInstances[RecieveInstanceCursor]
-	if typeof(Value4) ~= "Instance" then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
+	if typeof(Value4) ~= "Instance" then
+		if Value4 ~= nil then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
+		MissingInstance = true
+	end
 	-- Value5: Tuple
 	local Value5
 	RecieveInstanceCursor += 1
@@ -2232,6 +2254,10 @@ function SerdesFunctions.ReadEVENT_Tuple(): (number, ("A" | "B" | "C" | "D"), nu
 		Value6[Slot_1] = Item_1
 	end
 	-- END ARRAY
+	if MissingInstance == true then
+		MissingInstance = false
+		error(MISSING_SIGNAL, 0)
+	end
 	return Value1, Value2, Value3, Value4, Value5, Value6
 end
 
@@ -2269,7 +2295,10 @@ function SerdesFunctions.ReadEVENT_TupleUnreliable(): (number, ("A" | "B" | "C" 
 	-- Value4: TupleUnreliable
 	RecieveInstanceCursor += 1
 	local Value4 = RecieveInstances[RecieveInstanceCursor]
-	if typeof(Value4) ~= "Instance" then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
+	if typeof(Value4) ~= "Instance" then
+		if Value4 ~= nil then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
+		MissingInstance = true
+	end
 	-- Value5: TupleUnreliable
 	local Value5
 	RecieveInstanceCursor += 1
@@ -2279,6 +2308,10 @@ function SerdesFunctions.ReadEVENT_TupleUnreliable(): (number, ("A" | "B" | "C" 
 		RecieveInstanceCursor += 1
 		Value5 = RecieveInstances[RecieveInstanceCursor]
 		if typeof(Value5) ~= "Instance" then error(`Expected an Instance, got {typeof(Value5)} instead.`) end
+	end
+	if MissingInstance == true then
+		MissingInstance = false
+		error(MISSING_SIGNAL, 0)
 	end
 	return Value1, Value2, Value3, Value4, Value5
 end
@@ -2352,7 +2385,10 @@ function SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction(): (Instance?, Instan
 	-- Value2: TupleFunction
 	RecieveInstanceCursor += 1
 	local Value2 = RecieveInstances[RecieveInstanceCursor]
-	if typeof(Value2) ~= "Instance" then error(`Expected an Instance, got {typeof(Value2)} instead.`) end
+	if typeof(Value2) ~= "Instance" then
+		if Value2 ~= nil then error(`Expected an Instance, got {typeof(Value2)} instead.`) end
+		MissingInstance = true
+	end
 	-- Value3: TupleFunction
 	local Value3
 	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
@@ -2727,6 +2763,7 @@ if not RunService:IsRunning() then
 				-- Value: MapNested
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
 					-- Key_1: MapNested
 					local Length = ReadVarLength()
@@ -2736,6 +2773,7 @@ if not RunService:IsRunning() then
 					local Element_1 = {}
 					local OFFSET_0 = Read(2)
 					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
+					if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
 					for _ = 1, Elements_2 do
 						-- Key_2: MapSimple
 						local Length = ReadVarLength()
@@ -3376,6 +3414,17 @@ local function StepReplication()
         LastPacket = nil
     end
 end
+local MissingWarned: {[string]: true} = {}
+local function ReportMissingInstance(Event: string)
+	if DecodeHandler then
+		Spawn(DecodeHandler, Event, MISSING_INSTANCE)
+		return
+	end
+	if MissingWarned[Event] == nil then
+		MissingWarned[Event] = true
+		warn(`[BlinkBlox]: Dropped "{Event}". {MISSING_INSTANCE} Later drops of it are not printed; SetDecodeErrorHandler hears every one.`)
+	end
+end
 local Decoding = -1
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
@@ -3411,10 +3460,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[5] > 256 then
-						warn("[BlinkBlox]: Event queue of \"EmptyEvent\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[5] < 256 then
+						table.insert(Queue.Reliable[5], table.pack(Value))
+						if #Queue.Reliable[5] == 256 then
+							warn("[BlinkBlox]: \"EmptyEvent\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[5], table.pack(Value))
 				end
 			elseif Index == 6 then
 				-- Read BLOCK: 2 bytes
@@ -3442,10 +3493,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[7] > 256 then
-						warn("[BlinkBlox]: Event queue of \"Flags8\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[7] < 256 then
+						table.insert(Queue.Reliable[7], table.pack(Value))
+						if #Queue.Reliable[7] == 256 then
+							warn("[BlinkBlox]: \"Flags8\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[7], table.pack(Value))
 				end
 			elseif Index == 8 then
 				local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,} = SerdesFunctions.ReadEVENT_Flags16()
@@ -3455,10 +3508,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[8] > 256 then
-						warn("[BlinkBlox]: Event queue of \"Flags16\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[8] < 256 then
+						table.insert(Queue.Reliable[8], table.pack(Value))
+						if #Queue.Reliable[8] == 256 then
+							warn("[BlinkBlox]: \"Flags16\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[8], table.pack(Value))
 				end
 			elseif Index == 9 then
 				local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,} = SerdesFunctions.ReadEVENT_Flags32()
@@ -3468,10 +3523,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[9] > 256 then
-						warn("[BlinkBlox]: Event queue of \"Flags32\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[9] < 256 then
+						table.insert(Queue.Reliable[9], table.pack(Value))
+						if #Queue.Reliable[9] == 256 then
+							warn("[BlinkBlox]: \"Flags32\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[9], table.pack(Value))
 				end
 			elseif Index == 10 then
 				local Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,} = SerdesFunctions.ReadEVENT_Flags33()
@@ -3481,10 +3538,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[10] > 256 then
-						warn("[BlinkBlox]: Event queue of \"Flags33\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[10] < 256 then
+						table.insert(Queue.Reliable[10], table.pack(Value))
+						if #Queue.Reliable[10] == 256 then
+							warn("[BlinkBlox]: \"Flags33\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[10], table.pack(Value))
 				end
 			else
 				error("[BlinkBlox]: Unknown event index.")
@@ -3498,10 +3557,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[11] > 256 then
-						warn("[BlinkBlox]: Event queue of \"DynamicMap\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[11] < 256 then
+						table.insert(Queue.Reliable[11], table.pack(Value))
+						if #Queue.Reliable[11] == 256 then
+							warn("[BlinkBlox]: \"DynamicMap\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[11], table.pack(Value))
 				end
 			elseif Index == 12 then
 				local Value: { { Static: number, Dynamic: buffer } } = SerdesFunctions.ReadEVENT_DynamicArray()
@@ -3511,10 +3572,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[12] > 256 then
-						warn("[BlinkBlox]: Event queue of \"DynamicArray\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[12] < 256 then
+						table.insert(Queue.Reliable[12], table.pack(Value))
+						if #Queue.Reliable[12] == 256 then
+							warn("[BlinkBlox]: \"DynamicArray\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[12], table.pack(Value))
 				end
 			elseif Index == 13 then
 				local Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number } = SerdesFunctions.ReadEVENT_PlayerEvent()
@@ -3524,10 +3587,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[13] > 256 then
-						warn("[BlinkBlox]: Event queue of \"PlayerEvent\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[13] < 256 then
+						table.insert(Queue.Reliable[13], table.pack(Value))
+						if #Queue.Reliable[13] == 256 then
+							warn("[BlinkBlox]: \"PlayerEvent\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[13], table.pack(Value))
 				end
 			elseif Index == 15 then
 				local Value: any = SerdesFunctions.ReadEVENT_Unknown()
@@ -3537,10 +3602,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[15] > 256 then
-						warn("[BlinkBlox]: Event queue of \"Unknown\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[15] < 256 then
+						table.insert(Queue.Reliable[15], table.pack(Value))
+						if #Queue.Reliable[15] == 256 then
+							warn("[BlinkBlox]: \"Unknown\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[15], table.pack(Value))
 				end
 			elseif Index == 16 then
 				local Value: {[string]: number} = SerdesFunctions.ReadEVENT_MapEvent()
@@ -3550,10 +3617,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[16] > 256 then
-						warn("[BlinkBlox]: Event queue of \"MapEvent\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[16] < 256 then
+						table.insert(Queue.Reliable[16], table.pack(Value))
+						if #Queue.Reliable[16] == 256 then
+							warn("[BlinkBlox]: \"MapEvent\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[16], table.pack(Value))
 				end
 			elseif Index == 17 then
 				local Value: { Map: {[string]: number} } = SerdesFunctions.ReadEVENT_MapStructEvent()
@@ -3563,10 +3632,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[17] > 256 then
-						warn("[BlinkBlox]: Event queue of \"MapStructEvent\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[17] < 256 then
+						table.insert(Queue.Reliable[17], table.pack(Value))
+						if #Queue.Reliable[17] == 256 then
+							warn("[BlinkBlox]: \"MapStructEvent\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[17], table.pack(Value))
 				end
 			elseif Index == 18 then
 				local Value: {[string]: { number }} = SerdesFunctions.ReadEVENT_MapComplexEvent()
@@ -3576,10 +3647,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[18] > 256 then
-						warn("[BlinkBlox]: Event queue of \"MapComplexEvent\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[18] < 256 then
+						table.insert(Queue.Reliable[18], table.pack(Value))
+						if #Queue.Reliable[18] == 256 then
+							warn("[BlinkBlox]: \"MapComplexEvent\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[18], table.pack(Value))
 				end
 			elseif Index == 19 then
 				local Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}? = SerdesFunctions.ReadEVENT_MapReferenceEvent()
@@ -3589,10 +3662,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[19] > 256 then
-						warn("[BlinkBlox]: Event queue of \"MapReferenceEvent\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[19] < 256 then
+						table.insert(Queue.Reliable[19], table.pack(Value))
+						if #Queue.Reliable[19] == 256 then
+							warn("[BlinkBlox]: \"MapReferenceEvent\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[19], table.pack(Value))
 				end
 			else
 				error("[BlinkBlox]: Unknown event index.")
@@ -3611,10 +3686,12 @@ local function DecodeReliable()
 						if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 					end
 				else
-					if #Queue.Reliable[20] > 256 then
-						warn("[BlinkBlox]: Event queue of \"ManyReliableSync\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[20] < 256 then
+						table.insert(Queue.Reliable[20], table.pack(Value))
+						if #Queue.Reliable[20] == 256 then
+							warn("[BlinkBlox]: \"ManyReliableSync\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[20], table.pack(Value))
 				end
 			elseif Index == 21 then
 				local Value: number = SerdesFunctions.ReadEVENT_ManyReliableAsync()
@@ -3625,10 +3702,12 @@ local function DecodeReliable()
 						Spawn(Listener, Value)
 					end
 				else
-					if #Queue.Reliable[21] > 256 then
-						warn("[BlinkBlox]: Event queue of \"ManyReliableAsync\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[21] < 256 then
+						table.insert(Queue.Reliable[21], table.pack(Value))
+						if #Queue.Reliable[21] == 256 then
+							warn("[BlinkBlox]: \"ManyReliableAsync\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[21], table.pack(Value))
 				end
 			elseif Index == 22 then
 				local Value: number = SerdesFunctions.ReadEVENT_ReliableServer()
@@ -3638,10 +3717,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[22] > 256 then
-						warn("[BlinkBlox]: Event queue of \"ReliableServer\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[22] < 256 then
+						table.insert(Queue.Reliable[22], table.pack(Value))
+						if #Queue.Reliable[22] == 256 then
+							warn("[BlinkBlox]: \"ReliableServer\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[22], table.pack(Value))
 				end
 			elseif Index == 23 then
 				local Value: number = SerdesFunctions.ReadEVENT_ReliableServerAsync()
@@ -3649,10 +3730,12 @@ local function DecodeReliable()
 				if BOUND_LISTENER ~= nil then
 					Spawn(BOUND_LISTENER, Value)
 				else
-					if #Queue.Reliable[23] > 256 then
-						warn("[BlinkBlox]: Event queue of \"ReliableServerAsync\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[23] < 256 then
+						table.insert(Queue.Reliable[23], table.pack(Value))
+						if #Queue.Reliable[23] == 256 then
+							warn("[BlinkBlox]: \"ReliableServerAsync\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[23], table.pack(Value))
 				end
 			elseif Index == 25 then
 				local Value: Instance = SerdesFunctions.ReadEVENT_InstanceAny()
@@ -3662,10 +3745,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[25] > 256 then
-						warn("[BlinkBlox]: Event queue of \"InstanceAny\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[25] < 256 then
+						table.insert(Queue.Reliable[25], table.pack(Value))
+						if #Queue.Reliable[25] == 256 then
+							warn("[BlinkBlox]: \"InstanceAny\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[25], table.pack(Value))
 				end
 			elseif Index == 26 then
 				local Value: Sound = SerdesFunctions.ReadEVENT_InstanceOfType()
@@ -3675,10 +3760,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[26] > 256 then
-						warn("[BlinkBlox]: Event queue of \"InstanceOfType\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[26] < 256 then
+						table.insert(Queue.Reliable[26], table.pack(Value))
+						if #Queue.Reliable[26] == 256 then
+							warn("[BlinkBlox]: \"InstanceOfType\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[26], table.pack(Value))
 				end
 			elseif Index == 27 then
 				local Value: Instance? = SerdesFunctions.ReadEVENT_InstanceOptional()
@@ -3688,10 +3775,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[27] > 256 then
-						warn("[BlinkBlox]: Event queue of \"InstanceOptional\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[27] < 256 then
+						table.insert(Queue.Reliable[27], table.pack(Value))
+						if #Queue.Reliable[27] == 256 then
+							warn("[BlinkBlox]: \"InstanceOptional\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[27], table.pack(Value))
 				end
 			elseif Index == 28 then
 				local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_Reference()
@@ -3701,10 +3790,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[28] > 256 then
-						warn("[BlinkBlox]: Event queue of \"Reference\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[28] < 256 then
+						table.insert(Queue.Reliable[28], table.pack(Value))
+						if #Queue.Reliable[28] == 256 then
+							warn("[BlinkBlox]: \"Reference\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[28], table.pack(Value))
 				end
 			else
 				error("[BlinkBlox]: Unknown event index.")
@@ -3718,10 +3809,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[29] > 256 then
-						warn("[BlinkBlox]: Event queue of \"ReferenceArray\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[29] < 256 then
+						table.insert(Queue.Reliable[29], table.pack(Value))
+						if #Queue.Reliable[29] == 256 then
+							warn("[BlinkBlox]: \"ReferenceArray\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[29], table.pack(Value))
 				end
 			elseif Index == 30 then
 				local Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }? = SerdesFunctions.ReadEVENT_ReferenceOptional()
@@ -3731,10 +3824,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[30] > 256 then
-						warn("[BlinkBlox]: Event queue of \"ReferenceOptional\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[30] < 256 then
+						table.insert(Queue.Reliable[30], table.pack(Value))
+						if #Queue.Reliable[30] == 256 then
+							warn("[BlinkBlox]: \"ReferenceOptional\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[30], table.pack(Value))
 				end
 			elseif Index == 31 then
 				-- Read BLOCK: 2 bytes
@@ -3762,10 +3857,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value1, Value2, Value3, Value4, Value5, Value6)
 				else
-					if #Queue.Reliable[32] > 256 then
-						warn("[BlinkBlox]: Event queue of \"Tuple\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[32] < 256 then
+						table.insert(Queue.Reliable[32], table.pack(Value1, Value2, Value3, Value4, Value5, Value6))
+						if #Queue.Reliable[32] == 256 then
+							warn("[BlinkBlox]: \"Tuple\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[32], table.pack(Value1, Value2, Value3, Value4, Value5, Value6))
 				end
 			elseif Index == 33 then
 				-- Read BLOCK: 2 bytes
@@ -3776,7 +3873,12 @@ local function DecodeReliable()
 						if Answered ~= 1 then
 							error("The call failed on the side that answered it.")
 						end
-						return SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction()
+						local ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5 = SerdesFunctions.ReadFUNCTION_RETURN_TupleFunction()
+						if MissingInstance == true then
+							MissingInstance = false
+							error(`The reply to "TupleFunction" was dropped. {MISSING_INSTANCE}`, 0)
+						end
+						return ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5
 					end)
 				local Thread = TakeInvocation(Invocations, InvocationIdentifier, 33)
 				if Thread ~= nil then
@@ -3784,7 +3886,7 @@ local function DecodeReliable()
 						task.spawn(Thread, Success, ReturnValue1, ReturnValue2, ReturnValue3, ReturnValue4, ReturnValue5)
 					end
 				end
-				if Answered == 1 and Success ~= true then error(ReturnValue1, 0) end
+				if Answered == 1 and Success ~= true and not string.find(tostring(ReturnValue1), MISSING_INSTANCE, 1, true) then error(ReturnValue1, 0) end
 			elseif Index == 34 then
 				local Value: number = SerdesFunctions.AnotherScope_ReadEVENT_InScopeEvent()
 				local BOUND_LISTENER = Events.Reliable[34]
@@ -3793,10 +3895,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[34] > 256 then
-						warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[34] < 256 then
+						table.insert(Queue.Reliable[34], table.pack(Value))
+						if #Queue.Reliable[34] == 256 then
+							warn("[BlinkBlox]: \"InScopeEvent\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[34], table.pack(Value))
 				end
 			elseif Index == 35 then
 				local Value: number = SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_ReadEVENT_InAnotherScopeEvent()
@@ -3806,10 +3910,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[35] > 256 then
-						warn("[BlinkBlox]: Event queue of \"InAnotherScopeEvent\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[35] < 256 then
+						table.insert(Queue.Reliable[35], table.pack(Value))
+						if #Queue.Reliable[35] == 256 then
+							warn("[BlinkBlox]: \"InAnotherScopeEvent\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[35], table.pack(Value))
 				end
 			elseif Index == 36 then
 				local Value: number = SerdesFunctions.ExampleScope_ReadEVENT_InScopeEvent()
@@ -3819,10 +3925,12 @@ local function DecodeReliable()
 					Decoding = -2 - Index
 					BOUND_LISTENER(Value)
 				else
-					if #Queue.Reliable[36] > 256 then
-						warn("[BlinkBlox]: Event queue of \"InScopeEvent\" exceeded 256, did you forget to implement a listener?")
+					if #Queue.Reliable[36] < 256 then
+						table.insert(Queue.Reliable[36], table.pack(Value))
+						if #Queue.Reliable[36] == 256 then
+							warn("[BlinkBlox]: \"InScopeEvent\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+						end
 					end
-					table.insert(Queue.Reliable[36], table.pack(Value))
 				end
 			else
 				error("[BlinkBlox]: Unknown event index.")
@@ -3923,10 +4031,15 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
+	MissingInstance = false
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
 		if Parsed then
 			break
+		end
+		if Failure == MISSING_SIGNAL then
+			ReportMissingInstance(EventNames.Reliable[Decoding])
+			continue
 		end
 		if Decoding > -2 then
 			ReportDecodeFailure(EventNames.Reliable[Decoding], Failure)
@@ -3948,10 +4061,15 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
+	MissingInstance = false
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
 		if Parsed then
 			break
+		end
+		if Failure == MISSING_SIGNAL then
+			ReportMissingInstance(EventNames.Unreliable[Decoding])
+			continue
 		end
 		if Decoding > -2 then
 			ReportDecodeFailure(EventNames.Unreliable[Decoding], Failure)
@@ -4285,6 +4403,7 @@ local Returns = table.freeze({
 				-- Value: MapNested
 				local Value = {}
 				local Elements_1 = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				if Elements_1 * 3 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_1} instead.`) end
 				for _ = 1, Elements_1 do
 					-- Key_1: MapNested
 					local Length = ReadVarLength()
@@ -4294,6 +4413,7 @@ local Returns = table.freeze({
 					local Element_1 = {}
 					local OFFSET_0 = Read(2)
 					local Elements_2 = buffer.readu16(RecieveBuffer, OFFSET_0)
+					if Elements_2 * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Element_1" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Elements_2} instead.`) end
 					for _ = 1, Elements_2 do
 						-- Key_2: MapSimple
 						local Length = ReadVarLength()

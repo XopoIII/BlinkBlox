@@ -91,9 +91,15 @@ function Declarations.Function(Declaration: Parser.Function)
 		ReturnTypes, ReturnValues, _, ReturnArguments = Generators.LuauType(Value.Return :: Type, true, "Return", true)
 	end
 
+	local DataCarriesInstances, ReturnCarriesInstances = false, false
 	do
+		local MissingBefore = Prefabs.Missing.Count
 		local DataRead, DataWrite = Generators.Event(Value.Data :: Type, Index, DataIdentifier, "Data")
+		local MissingBetween = Prefabs.Missing.Count
 		local ReturnRead, ReturnWrite = Generators.Event(Value.Return :: Type, Index, ReturnIdentifier, "Return")
+		--> Whether either reader can arrive at a missing Instance; see Decode.MissingGuard.
+		DataCarriesInstances = MissingBetween > MissingBefore
+		ReturnCarriesInstances = Prefabs.Missing.Count > MissingBetween
 
 		--> By DIRECTION, not by context. The caller writes the arguments and reads the answer; the
 		--> listener reads the arguments and writes the answer. Keying this on `Context == "Client"`
@@ -123,6 +129,18 @@ function Declarations.Function(Declaration: Parser.Function)
 		--> Data recieve body
 		Types.u8.Read("InvocationIdentifier", Block)
 		Block:Line(`local {DataValues} = {Util.GetPath(DataIdentifier, false, State.Scope)}()`)
+
+		--> A call whose arguments lost an Instance on the way is answered with a failure, before any
+		--> limit counts it: nothing will run for it.
+		if DataCarriesInstances then
+			Decode.MissingGuard(Block, false, Name, function(Target: Blocks.Block)
+				if OnServer then
+					Queues.Refuse(Target, Index, Target.Indent + 1)
+				else
+					Queues.RefuseClient(Target, Index, Target.Indent + 1)
+				end
+			end)
+		end
 
 		--> A refused invocation still has to be ANSWERED; see Queue.Refuse.
 		local RateGuard = RateGuardExpression(Value, Name)
@@ -257,9 +275,20 @@ function Declarations.Function(Declaration: Parser.Function)
 			:Compare("Answered", "1", "Not")
 			:Line(`error("The call failed on the side that answered it.")`)
 			:End()
-			:Return(`{Util.GetPath(ReturnIdentifier, false, State.Scope)}()`)
-			:End()
-			:Wrap(`local Success, {ReturnArguments} = pcall(`, ")")
+
+		--> A reply that lost an Instance fails its caller, and the packet goes on: the payload was read
+		--> to its end, so unlike a reply that cannot be decoded it is not raised again below.
+		if ReturnCarriesInstances then
+			Deserialize:Line(`local {ReturnArguments} = {Util.GetPath(ReturnIdentifier, false, State.Scope)}()`)
+				:Compare("MissingInstance", "true", "Equals")
+				:Line("MissingInstance = false")
+				:Line(`error(\`The reply to "{Name}" was dropped. \{MISSING_INSTANCE}\`, 0)`)
+				:End()
+				:Return(ReturnArguments)
+		else
+			Deserialize:Return(`{Util.GetPath(ReturnIdentifier, false, State.Scope)}()`)
+		end
+		Deserialize = Deserialize:End():Wrap(`local Success, {ReturnArguments} = pcall(`, ")")
 
 		Types.u8.Read("InvocationIdentifier", Block)
 		Types.u8.Read("Answered", Block)
@@ -281,7 +310,13 @@ function Declarations.Function(Declaration: Parser.Function)
 			:End()
 
 		local Failure = string.split(ReturnArguments, ",")[1]
-		Block:Line(`if Answered == 1 and Success ~= true then error({Failure}, 0) end`)
+		if ReturnCarriesInstances then
+			Block:Line(
+				`if Answered == 1 and Success ~= true and not string.find(tostring({Failure}), MISSING_INSTANCE, 1, true) then error({Failure}, 0) end`
+			)
+		else
+			Block:Line(`if Answered == 1 and Success ~= true then error({Failure}, 0) end`)
+		end
 
 		local Error = `"There was an exception while processing \\"{Name}\\"."`
 		--> A server invoking has to say WHICH client it is asking.

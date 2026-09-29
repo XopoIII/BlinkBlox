@@ -984,10 +984,12 @@ local function DecodeReliable()
 		if BOUND_LISTENER ~= nil then
 			Spawn(BOUND_LISTENER, Value)
 		else
-			if #Queue.Reliable[1] > 256 then
-				warn("[BlinkBlox]: Event queue of \"Push\" exceeded 256, did you forget to implement a listener?")
+			if #Queue.Reliable[1] < 256 then
+				table.insert(Queue.Reliable[1], table.pack(Value))
+				if #Queue.Reliable[1] == 256 then
+					warn("[BlinkBlox]: \"Push\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+				end
 			end
-			table.insert(Queue.Reliable[1], table.pack(Value))
 		end
 	elseif Index == 3 then
 		-- Read BLOCK: 2 bytes

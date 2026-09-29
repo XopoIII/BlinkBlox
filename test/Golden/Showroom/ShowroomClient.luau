@@ -905,10 +905,12 @@ local function DecodeReliable()
 				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
 			end
 		else
-			if #Queue.Reliable[0] > 256 then
-				warn("[BlinkBlox]: Event queue of \"Announce\" exceeded 256, did you forget to implement a listener?")
+			if #Queue.Reliable[0] < 256 then
+				table.insert(Queue.Reliable[0], table.pack(Value))
+				if #Queue.Reliable[0] == 256 then
+					warn("[BlinkBlox]: \"Announce\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+				end
 			end
-			table.insert(Queue.Reliable[0], table.pack(Value))
 		end
 	elseif Index == 2 then
 		-- Read BLOCK: 2 bytes
@@ -936,10 +938,20 @@ local function DecodeReliable()
 		if Events.Reliable[3] ~= nil then
 			Spawn(Events.Reliable[3], Value, InvocationIdentifier)
 		else
-			if #Queue.Reliable[3] > 256 then
-				warn("[BlinkBlox]: Event queue of \"Confirm\" exceeded 256, did you forget to implement a listener?")
+			if #Queue.Reliable[3] >= 256 then
+				Settle()
+				local ReplyStart, ReplyInstances = SendCursor, #SendInstances
+				local Position = Allocate(3)
+				buffer.writeu8(SendBuffer, Position, 3)
+				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+				buffer.writeu8(SendBuffer, Position + 2, 0)
+				Close(ReplyStart, ReplyInstances)
+				return
 			end
 			table.insert(Queue.Reliable[3], table.pack(Value, InvocationIdentifier))
+			if #Queue.Reliable[3] == 256 then
+				warn("[BlinkBlox]: \"Confirm\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+			end
 		end
 	else
 		error("[BlinkBlox]: Unknown event index.")

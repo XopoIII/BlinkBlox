@@ -12,6 +12,7 @@ local Size = require("../Modules/Size")
 
 local Bits = require("./Bits")
 local Blocks = require("./Blocks")
+local Fragments = require("./Fragments")
 local PackedBooleans = require("./PackedBooleans")
 local Prefabs = require("./Prefabs")
 local Scope = require("./Scope")
@@ -29,6 +30,17 @@ type Type = Parser.TypeNode
 type NumberRange = Parser.NumberRange
 
 local Serde = {}
+
+--- The most Instances a packet this side decodes may carry, which a count of elements that cost only
+--- Instances is measured against: the server's inbound limit. Nil on the client, which trusts the
+--- server; see Prefabs.EmitCapacityGuard.
+local function InstanceCapacity(): number?
+	if State.Context ~= "Server" then
+		return nil
+	end
+
+	return State.Options.MaxInstancesPerPacket or Fragments.DEFAULT_MAX_INSTANCES_PER_PACKET
+end
 
 --- The recursive entry point, set once by the generator to Generators.UserType. Requiring it here
 --- instead would be a cycle: that function's whole job is to dispatch into this table.
@@ -151,6 +163,10 @@ function Serde.Map(Declaration: Parser.Map, Read: Blocks.Block, Write: Blocks.Bl
 	Read:Line(`{Read:Declare(Variable)} = \{\}`)
 	Write:Line(`local {ElementsVariable} = 0`)
 	Types.u16.Read(ElementsVariable, Read)
+	--> The count is two bytes, and each entry is read by a trip round the loop below: without this, a
+	--> map of Instances was bounded only by the first slot to come back empty, which is no longer an
+	--> error (see the Instance read in Prefabs/Common).
+	Prefabs.EmitCountGuard(Read, ElementsVariable, Variable, Size.MapEntry(Declaration :: any), InstanceCapacity())
 
 	local ReadLoop = Read:Loop("_ = 1", ElementsVariable)
 	local WriteLoop = Write:Iterator(KeyVariable, ElementVariable, Variable)
@@ -163,7 +179,14 @@ function Serde.Map(Declaration: Parser.Map, Read: Blocks.Block, Write: Blocks.Bl
 	WriteLoop:Line(`{ElementsVariable} += 1`)
 	Serde.Emit(Key :: Type, ReadLoop, WriteLoop, KeyVariable)
 	Serde.Emit(Value :: Type, ReadLoop, WriteLoop, ElementVariable)
-	ReadLoop:Line(`{Variable}[{KeyVariable}] = {ElementVariable}`)
+	--> A key that is an Instance can arrive as nil when it did not reach this side, and indexing with
+	--> nil throws. The read has already raised the flag that refuses the event, so the entry is left out.
+	local KeyKind = if Key.Type == "Primitive" then (Key :: Parser.Primitive).Tokens.Primitive.Value else nil
+	if KeyKind == "Instance" or KeyKind == "unknown" then
+		ReadLoop:Line(`if {KeyVariable} ~= nil then {Variable}[{KeyVariable}] = {ElementVariable} end`)
+	else
+		ReadLoop:Line(`{Variable}[{KeyVariable}] = {ElementVariable}`)
+	end
 
 	WriteLoop:End()
 	ReadLoop:End()
@@ -311,7 +334,7 @@ function Serde.Array(Declaration: Parser.Array, Read: Blocks.Block, Write: Block
 
 	--> Array
 	if IsVariableSize then
-		Prefabs.EmitCapacityGuard(Read, "Length", Variable, Of)
+		Prefabs.EmitCapacityGuard(Read, "Length", Variable, Of, InstanceCapacity())
 	end
 	Read:Line(`{Read:Declare(Variable)} = table.create(Length)`)
 
@@ -366,7 +389,10 @@ function Serde.Optional(Declaration: Parser.Optional, Read: Blocks.Block, Write:
 		Write = Write:Compare(Variable, "nil", "Not")
 	end
 
+	--> The Instance branch above has already seen one in the slot; see Prefabs.Present.
+	Prefabs.Present.Value = IsInstance
 	Serde.Emit(Declaration.Value.Of, Read, Write, Variable)
+	Prefabs.Present.Value = false
 	Read:End()
 
 	if not IsInstance then
