@@ -259,7 +259,13 @@ function Declarations.Function(Declaration: Parser.Function)
 		TrueListener:End()
 
 		local ListenerSignature = `Listener: ({if OnServer then "Player, " else ""}{DataTypes}) -> ({ReturnTypes})`
+		--> A function answers with one listener, and a second `.On` replaces the first. That is how it
+		--> works and stays, but it happened in silence, which an event's Single listener stopped doing
+		--> (upstream #167): two systems that each think they answer a call leave only the last one doing it.
 		local Listener = Blocks.Function(State.Casing.On, ListenerSignature, "()", true)
+			:Line(`if {Connection} ~= nil then`)
+			:Line(`\twarn("[BlinkBlox]: \\"{Name}\\" already has a listener. A function keeps only the newest one.")`)
+			:Line("end")
 			:Lines(TrueListener.Content, 1)
 			:Lines(FlushQueue.Content, 1)
 			:End()

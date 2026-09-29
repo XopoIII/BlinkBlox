@@ -5351,6 +5351,9 @@ local Returns = table.freeze({
 	},
 	EmptyFunction = {
 		On = function(Listener: (Player, nil) -> (nil)): ()
+			if Events.Reliable[6] ~= nil then
+				warn("[BlinkBlox]: \"EmptyFunction\" already has a listener. A function keeps only the newest one.")
+			end
 			Events.Reliable[6] = function(Player: Player, Value: nil, InvocationIdentifier: number): ()
 				local ReturnValue: nil;
 				local Success, Error = pcall(function ()
@@ -6494,6 +6497,9 @@ local Returns = table.freeze({
 	},
 	RemoteFunction = {
 		On = function(Listener: (Player, number) -> (number)): ()
+			if Events.Reliable[31] ~= nil then
+				warn("[BlinkBlox]: \"RemoteFunction\" already has a listener. A function keeps only the newest one.")
+			end
 			Events.Reliable[31] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
 				local ReturnValue: number;
 				local Success, Error = pcall(function ()
@@ -6612,6 +6618,9 @@ local Returns = table.freeze({
 	},
 	TupleFunction = {
 		On = function(Listener: (Player, number, ("A" | "B" | "C" | "D"), number?, Instance, Instance?) -> (Instance?, Instance, number?, ("A" | "B" | "C" | "D"), number)): ()
+			if Events.Reliable[33] ~= nil then
+				warn("[BlinkBlox]: \"TupleFunction\" already has a listener. A function keeps only the newest one.")
+			end
 			Events.Reliable[33] = function(Player: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, InvocationIdentifier: number): ()
 				local ReturnValue1: Instance?, ReturnValue2: Instance, ReturnValue3: number?, ReturnValue4: ("A" | "B" | "C" | "D"), ReturnValue5: number;
 				local Success, Error = pcall(function ()

@@ -2025,6 +2025,9 @@ local Returns = table.freeze({
 	},
 	Ask = {
 		On = function(Listener: (Player, number) -> (number)): ()
+			if Events.Reliable[3] ~= nil then
+				warn("[BlinkBlox]: \"Ask\" already has a listener. A function keeps only the newest one.")
+			end
 			Events.Reliable[3] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
 				local ReturnValue: number;
 				local Success, Error = pcall(function ()

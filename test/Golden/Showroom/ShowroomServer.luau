@@ -1716,6 +1716,9 @@ local Returns = table.freeze({
 	},
 	Price = {
 		on = function(Listener: (Player, number) -> (number)): ()
+			if Events.Reliable[2] ~= nil then
+				warn("[BlinkBlox]: \"Price\" already has a listener. A function keeps only the newest one.")
+			end
 			Events.Reliable[2] = function(Player: Player, Value: number, InvocationIdentifier: number): ()
 				local ReturnValue: number;
 				local Success, Error = pcall(function ()

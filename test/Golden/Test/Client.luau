@@ -18156,6 +18156,9 @@ local Returns = table.freeze({
 	},
 	AskClient = {
 		On = function(Listener: (number) -> (number)): ()
+			if Events.Reliable[52] ~= nil then
+				warn("[BlinkBlox]: \"AskClient\" already has a listener. A function keeps only the newest one.")
+			end
 			Events.Reliable[52] = function(Value: number, InvocationIdentifier: number): ()
 				local ReturnValue: number;
 				local Success, Error = pcall(function ()

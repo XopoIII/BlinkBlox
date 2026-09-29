@@ -1105,6 +1105,9 @@ local Returns = table.freeze({
 	},
 	Confirm = {
 		on = function(Listener: (number) -> (boolean)): ()
+			if Events.Reliable[3] ~= nil then
+				warn("[BlinkBlox]: \"Confirm\" already has a listener. A function keeps only the newest one.")
+			end
 			Events.Reliable[3] = function(Value: number, InvocationIdentifier: number): ()
 				local ReturnValue: boolean;
 				local Success, Error = pcall(function ()
