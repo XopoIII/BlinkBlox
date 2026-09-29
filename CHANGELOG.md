@@ -7,6 +7,21 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.0.1 — 2026-09-30
+
+The generated modules do not change: a schema compiles to exactly what 1.0.0 produced.
+
+### Added
+
+- **The compiler is on Wally**, as `xopoiii/blinkblox`, for code that runs it inside Roblox -- a
+  plugin, an in-Studio build step, an editor. `Compile(Schema, Options?)` returns the server, client
+  and types modules' text and the warnings it raised; `Options.Files` supplies what an `import`
+  names, and `Options.Profile` the profile. It is the same lexer, parser and generator as the CLI
+  and the Studio plugin, bundled into one module with the version built in (`src/Library.luau`,
+  built by `luneblox run build` into `release/wally`). A game still needs only the generated modules.
+- `luneblox run bump` rewrites the Wally pin in the docs too, and `scripts/check-versions.sh` fails
+  on a stale one.
+
 ## 1.0.0 — 2026-09-30
 
 A release built from other libraries' bug reports. The DevForum threads and issue trackers of

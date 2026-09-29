@@ -139,8 +139,8 @@ than one comparison after another.
 
 The methodology, the bandwidth, the random payloads, streams and the full percentiles are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
-[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What 0.42.0 changed is in
-[What's new in 0.42](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
+[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What 1.0.0 changed is in
+[What's new in 1.0](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
 
 ## Where it comes from
 
@@ -158,7 +158,8 @@ pesde add xopoiii/blinkblox --dev --target lune   # or through pesde
 
 Binaries for every platform, and the Studio plugin (`blinkblox-plugin.rbxm`), are attached to each
 [release](https://github.com/XopoIII/BlinkBlox/releases/latest). The plugin is also on the Creator
-Store as **BlinkBlox Editor**. See [Installation](https://xopoiii.github.io/BlinkBlox/getting-started/installation/).
+Store as **BlinkBlox Editor**. Code that runs the compiler inside Roblox -- a plugin, an in-Studio
+build step -- can take it from Wally as `xopoiii/blinkblox`. See [Installation](https://xopoiii.github.io/BlinkBlox/getting-started/installation/).
 
 ## Contributing
 

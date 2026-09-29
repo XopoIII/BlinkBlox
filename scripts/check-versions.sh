@@ -45,12 +45,13 @@ if [ "$status" -eq 0 ]; then
 	fi
 fi
 
-# The docs print the version in two spellings: the rokit pin `XopoIII/BlinkBlox@<version>`, and the
+# The docs print the version in three spellings: the rokit pin `XopoIII/BlinkBlox@<version>`, the
+# Wally one `xopoiii/blinkblox@<version>`, and the
 # CLI's banner, `BlinkBlox <version>` on a line of its own. They sat at 0.33.0 through three releases
 # because nothing compared them; `luneblox run bump` rewrites them now (.lune/libs/docs_version.luau), and
 # this fails on one it missed. Prose naming a past release matches neither pattern.
 if [ -n "$CLI" ]; then
-	PINS="$(grep -rnoE 'XopoIII/BlinkBlox@[0-9]+\.[0-9]+\.[0-9]+' docs/src/content/docs || true)"
+	PINS="$(grep -rnoE '(XopoIII/BlinkBlox|xopoiii/blinkblox)@[0-9]+\.[0-9]+\.[0-9]+' docs/src/content/docs || true)"
 	BANNERS="$(grep -rnE '^[[:space:]]*BlinkBlox [0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$' docs/src/content/docs || true)"
 	CURRENT="$(printf '%s' "$CLI" | sed 's/\./\\./g')"
 	STALE="$(printf '%s\n%s\n' "$PINS" "$BANNERS" | grep -E '[0-9]+\.[0-9]+\.[0-9]+' | grep -vE "[@ ]${CURRENT}[[:space:]]*\$" || true)"

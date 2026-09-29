@@ -15,6 +15,9 @@ local PathParser = require("./Path")
 
 local Utility = {}
 
+--- The schemas an import may name, by the path it writes, while Library.Compile runs; nil otherwise.
+Utility.Files = nil :: { [string]: string }?
+
 ---- Public Functions ----
 
 --- Returns the source, the directory it was found in, and the RESOLVED path.
@@ -23,6 +26,13 @@ local Utility = {}
 --- whichever file wrote it, so two files importing each other name the same file two different ways
 --- and only the resolved, normalised form matches up.
 function Utility.Read(Path: string, Directory: string): (string?, string?, string?)
+	--> Set by Library.Compile while it runs, from the files its caller handed it: a library user has
+	--> no folder in ServerStorage and no disk.
+	local Files = Utility.Files
+	if Files then
+		return Files[Path], "", Path
+	end
+
 	local IsROBLOX = (task ~= nil)
 	if IsROBLOX then
 		--> `FindFirstChild` rather than an index: the loop below already treats a missing level as
