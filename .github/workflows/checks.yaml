@@ -26,10 +26,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup rokit
-        uses: CompeyDev/setup-rokit@v0.1.0
+        uses: CompeyDev/setup-rokit@v0.2.1
 
       - name: Format
         run: stylua --check src test plugin .lune
@@ -65,12 +65,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: lts/*
           cache: npm
           cache-dependency-path: docs/package-lock.json
 
