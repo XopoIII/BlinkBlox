@@ -9,7 +9,7 @@
 
 [tools]
 rojo = "rojo-rbx/rojo@7.7.0"                # file <-> Studio sync, and sourcemaps for luau-lsp
-luneblox = "XopoIII/LuneBlox@0.10.9"        # Luau runtime: runs the compiler CLI, tests and benchmarks
+luneblox = "XopoIII/LuneBlox@0.10.10"       # Luau runtime: runs the compiler CLI, tests and benchmarks
 stylua = "JohnnyMorganz/StyLua@2.5.2"       # formatter
 selene = "Kampfkarren/selene@0.31.0"        # linter
 luau-lsp = "JohnnyMorganz/luau-lsp@1.70.1"  # editor LSP, and `luau-lsp analyze` for the type gate
