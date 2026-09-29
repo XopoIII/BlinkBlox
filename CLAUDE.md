@@ -118,7 +118,8 @@ shell out through `runtime.command` so a run stays on one runtime, and a release
 
 The compiler's own source must still run on upstream Lune: pesde runs the bundled compiler on the
 user's Lune, whatever its version. So `src/` uses no syntax or library newer than upstream Lune's Luau
-(`const`, `if local`); tests and benchmarks may.
+-- `const`, for one, which Luau 0.740 parses and 0.709 does not; tests and benchmarks may. (`if local`
+is not in Luau at all: it is an open RFC, #238.)
 
 ## Invariants that are easy to break
 

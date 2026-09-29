@@ -174,9 +174,3 @@ cd docs && npm install && npm run dev   # documentation site
 
 Originally written by [Axen](https://github.com/1Axen). This fork continues from v0.18.8 and remains
 MIT licensed.
-
-- [Zap](https://zap.redblox.dev/), for the range and array syntax.
-- [ArvidSilverlock](https://github.com/ArvidSilverlock), for the float16 implementation.
-- The Studio plugin's autocomplete icons come from [Microsoft](https://github.com/microsoft/vscode-icons),
-  under the [CC BY 4.0](https://github.com/microsoft/vscode-icons/blob/main/LICENSE) license.
-- <a href="https://www.flaticon.com/free-icons/speed" title="speed icons">Speed icons created by alkhalifi design - Flaticon</a>
