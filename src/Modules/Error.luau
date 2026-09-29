@@ -118,6 +118,7 @@ local Error = {
 	AnalyzeInvalidStream = 3033,
 	AnalyzeInvalidStamp = 3034,
 	AnalyzeInvalidPriority = 3035,
+	AnalyzeRepeatedImport = 3036,
 }
 
 Error.__index = Error

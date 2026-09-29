@@ -45,6 +45,9 @@ function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
 	--> importing parser's attribute state, which has to survive into it.
 	if Scope == nil then
 		AttributeParser.Reset(self.Attributes)
+		--> The plugin's editor parses with one parser per keystroke; what an earlier parse imported
+		--> is not imported twice by this one.
+		table.clear(self.Importing.Seen)
 	end
 	self.Scope = Scope or { Name = { Value = "", Start = 0, End = 0 } :: any, Symbols = { Types = {}, Scopes = {} } }
 	self.Source = Source
@@ -74,6 +77,20 @@ function Parser.Parse(self: Parser, Source: string, Scope: Scope?): Body
 		},
 		Tokens = {},
 	}
+end
+
+--- Whether `Declarations` hold an event or a function, in a nested scope or import too.
+local function Calls(Declarations: { Declaration }): boolean
+	for _, Declaration in Declarations do
+		local Type = Declaration.Type
+		if Type == "Event" or Type == "Function" then
+			return true
+		elseif Type == "Scope" and Calls(Declaration.Value.Values) then
+			return true
+		end
+	end
+
+	return false
 end
 
 function Parser.Import(self: Parser): ScopeNode
@@ -141,7 +158,7 @@ function Parser.Import(self: Parser): ScopeNode
 	--> (two files importing a third) reaches the same file twice by two routes and is perfectly
 	--> legal. Only a file reached while it is still being parsed is a cycle.
 	local Key = PathParser.Normalise(Resolved or ImportPath)
-	if self.Importing[Key] then
+	if self.Importing.Active[Key] then
 		error(
 			self:Diagnostic(Error.AnalyzeCyclicImport, `Cyclic import`)
 				:Primary(Path, `"{ImportPath}" is already being imported, so this would never finish`)
@@ -154,11 +171,11 @@ function Parser.Import(self: Parser): ScopeNode
 	--> it, so a diagnostic naming it could not be found again from anywhere else.
 	local ImportParser = Parser.new(ImportDirectory, Key, self.Importing, self.Attributes)
 
-	self.Importing[Key] = true
+	self.Importing.Active[Key] = true
 	local Success, ErrorText = pcall(function()
 		Imported = ImportParser:Parse(ImportSource, Scope)
 	end)
-	self.Importing[Key] = nil
+	self.Importing.Active[Key] = nil
 
 	--> Level 0: the text is already a rendered diagnostic, and re-raising it at the default level
 	--> prepends this file and line every time it passes through an import. A cycle three files deep
@@ -166,6 +183,21 @@ function Parser.Import(self: Parser): ScopeNode
 	if not Success then
 		error(ErrorText, 0)
 	end
+
+	--> A file imported twice is compiled twice (see the imports page), which costs nothing for types
+	--> and duplicates every event and function: two ids, two sets of listeners, and a Fire on one that
+	--> the other's listeners never hear. Legal, and almost never meant, hence a warning.
+	local Seen = self.Importing.Seen
+	local FirstBy = Seen[Key]
+	if FirstBy and Calls(Imported.Value.Declarations) then
+		self:Diagnostic(Error.AnalyzeRepeatedImport, `"{ImportPath}" is imported more than once`, "Warning")
+			:Primary(Path, "Its events and functions are compiled again here, as separate ones")
+			:Note(
+				`It was first imported by {FirstBy}. Import a file that holds events once, and share types through a file of types.`
+			)
+			:Warn()
+	end
+	Seen[Key] = Seen[Key] or self.File or "the compiled file"
 
 	Scope.Parent = Parent
 	self.Symbols[Name] = true

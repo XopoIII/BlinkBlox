@@ -1,0 +1,4 @@
+-- Imported twice by test/Imports.luau. Types only, which a second import duplicates harmlessly.
+struct Shape {
+    Sides: u8
+}

@@ -1,0 +1,7 @@
+-- Imported twice by RepeatedImport.blink. Holds an event, which is what makes a second import cost.
+event Pinged {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: u8
+}

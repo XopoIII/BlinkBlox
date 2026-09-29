@@ -58,9 +58,8 @@ export type State = {
 	Symbols: { [string]: true },
 	Generics: Generics?,
 
-	--> Files whose parse has STARTED and not yet finished, shared by every parser in one
-	--> compilation. See Parser.Import.
-	Importing: { [string]: true },
+	--> What one compilation's imports have reached, shared by every parser in it. See Parser.Import.
+	Importing: Imports,
 
 	--> The name being declared right now, so a reference to it from inside its own body can be
 	--> told apart from a reference to something that does not exist. See Parser.Declaration.
@@ -133,6 +132,13 @@ export type Methods = {
 	Struct: (self: Parser, Name: Token) -> Struct,
 }
 
+--- `Active`: files whose parse has STARTED and not yet finished, which is what makes a cycle.
+--- `Seen`: every file imported so far, with the file that first imported it.
+export type Imports = {
+	Active: { [string]: true },
+	Seen: { [string]: string },
+}
+
 export type Parser = State & Methods
 
 export type Class = Methods & {
@@ -140,7 +146,7 @@ export type Class = Methods & {
 	new: (
 		Directory: string?,
 		File: string?,
-		Importing: { [string]: true }?,
+		Importing: Imports?,
 		Attributes: AttributeParser.State?
 	) -> Parser,
 }
@@ -148,12 +154,7 @@ export type Class = Methods & {
 local Class: Class = {} :: any
 Class.__index = Class
 
-function Class.new(
-	Directory: string?,
-	File: string?,
-	Importing: { [string]: true }?,
-	Attributes: AttributeParser.State?
-): Parser
+function Class.new(Directory: string?, File: string?, Importing: Imports?, Attributes: AttributeParser.State?): Parser
 	local State: State = {
 		Source = "",
 		File = File,
@@ -164,7 +165,7 @@ function Class.new(
 		Scope = nil :: any,
 
 		--> Inherited when one parser spawns another for an import, fresh for a top-level parse.
-		Importing = Importing or {},
+		Importing = Importing or { Active = {}, Seen = {} },
 		Attributes = Attributes or AttributeParser.new(),
 	}
 
