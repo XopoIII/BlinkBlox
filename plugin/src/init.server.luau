@@ -6,6 +6,7 @@
 
 ---- Services ----
 
+local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local RunService = game:GetService("RunService")
 local Selection = game:GetService("Selection")
 local StudioService = game:GetService("StudioService")
@@ -179,7 +180,7 @@ local function LoadFiles()
 		end)
 
 		FileButtons.Delete.MouseButton1Click:Connect(function()
-			File:Destroy()
+			FileStore.Delete(File)
 			LoadFiles()
 		end)
 
@@ -393,3 +394,14 @@ QuickSave.MouseButton1Click:Connect(OnQuickSave)
 QuickClear.MouseButton1Click:Connect(OnQuickClear)
 EditorButton.Click:Connect(OnEditorButtonClicked)
 EditorWidget:GetPropertyChangedSignal("Enabled"):Connect(OnEditorWidgetEnabled)
+
+--> An undo can bring a deleted schema back or take a saved one away, whether the step was the
+--> plugin's or an edit in the Explorer, so the list is redrawn after either direction.
+local function OnHistoryChanged()
+	if not IsFirstTimeOpening then
+		LoadFiles()
+	end
+end
+
+ChangeHistoryService.OnUndo:Connect(OnHistoryChanged)
+ChangeHistoryService.OnRedo:Connect(OnHistoryChanged)
