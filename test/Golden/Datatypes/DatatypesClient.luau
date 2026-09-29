@@ -9,17 +9,18 @@
 -- This file is not meant to be edited
 
 _G._BLINK = _G._BLINK or {}
-if _G._BLINK["BLINK"] then
-	error("[BlinkBlox]: An instance of BlinkBlox is already running with the remote scope \"BLINK\". Change the remote scope of either instance to avoid conflicts.")
+if _G._BLINK["Datatypes"] then
+	error("[BlinkBlox]: An instance of BlinkBlox is already running with the remote scope \"Datatypes\". Change the remote scope of either instance to avoid conflicts.")
 end
-_G._BLINK["BLINK"] = true
+_G._BLINK["Datatypes"] = true
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
-local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "4a05135d44175e6f"
+local BASE_EVENT_NAME = "Datatypes_BLINK"
+local SCHEMA_SIGNATURE = "4aa46a1b99c833b1"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
+local REMOTES_FOLDER = "Network"
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -514,45 +515,397 @@ local EventNames: any = {
     Unreliable = {}
 }
 
+local EnumItemLookups: { [Enum]: { [number]: EnumItem } } = {}
+local function EnumItemOf(Type: Enum, Value: number): EnumItem
+    local Lookup = EnumItemLookups[Type]
+    if Lookup == nil then
+        local Built = {}
+        for _, Item in Type:GetEnumItems() do
+            Built[Item.Value] = Item
+        end
+        EnumItemLookups[Type] = Built
+        Lookup = Built
+    end
+
+    local Item = Lookup[Value]
+    if Item == nil then
+        error(`Expected a value of {Type}, got {Value} instead.`)
+    end
+    return Item
+end
+
+local function ReadColorSequence(): ColorSequence
+    local Count = buffer.readu8(RecieveBuffer, Read(1))
+    if not (Count >= 2 and Count <= 20) then
+        error(`Expected a ColorSequence of 2 to 20 keypoints, got {Count} instead.`)
+    end
+    if Count * 7 > buffer.len(RecieveBuffer) - RecieveCursor then
+        error(`Expected a ColorSequence of {Count} keypoints to fit in the packet.`)
+    end
+
+    local Offset = Read(Count * 7)
+    local Keypoints = table.create(Count) :: { ColorSequenceKeypoint }
+    local Previous = 0
+    for Index = 1, Count do
+        local At = Offset + (Index - 1) * 7
+        local Time = buffer.readf32(RecieveBuffer, At)
+        if not (Time >= Previous and Time <= 1) or (Index == 1 and Time ~= 0) or (Index == Count and Time ~= 1) then
+            error(`Expected ColorSequence keypoint times to run from 0 to 1 in order, got {Time} at {Index}.`)
+        end
+        Previous = Time
+        local Color = Color3.fromRGB(
+            buffer.readu8(RecieveBuffer, At + 4),
+            buffer.readu8(RecieveBuffer, At + 5),
+            buffer.readu8(RecieveBuffer, At + 6)
+        )
+        Keypoints[Index] = ColorSequenceKeypoint.new(Time, Color)
+    end
+    return ColorSequence.new(Keypoints)
+end
+
+local function WriteColorSequence(Value: ColorSequence)
+    local Keypoints = Value.Keypoints
+    local Count = #Keypoints
+    if not (Count >= 2 and Count <= 20) then
+        error(`Expected a ColorSequence of 2 to 20 keypoints, got {Count} instead.`)
+    end
+
+    local Offset = Allocate(1 + Count * 7)
+    buffer.writeu8(SendBuffer, Offset, Count)
+    for Index, Keypoint in Keypoints do
+        local At = Offset + 1 + (Index - 1) * 7
+        local Color = Keypoint.Value
+        buffer.writef32(SendBuffer, At, Keypoint.Time)
+        buffer.writeu8(SendBuffer, At + 4, math.clamp(math.round(Color.R * 255), 0, 255))
+        buffer.writeu8(SendBuffer, At + 5, math.clamp(math.round(Color.G * 255), 0, 255))
+        buffer.writeu8(SendBuffer, At + 6, math.clamp(math.round(Color.B * 255), 0, 255))
+    end
+end
+
+
+--> Roblox drops an unreliable payload past this size and tells nobody. The compiler
+--> refuses schemas that can never fit; this catches the ones that merely overflow at
+--> runtime, and says which event did it. Each Instance sent beside the buffer costs the
+--> payload bytes of its own, measured in Studio, so it counts against the same limit.
+local MAX_UNRELIABLE_SIZE = 980
+local UNRELIABLE_INSTANCE_BYTES = 6
+local function CheckUnreliableSize(Name: string): boolean
+	local Size = SendCursor + #SendInstances * UNRELIABLE_INSTANCE_BYTES
+	if Size <= MAX_UNRELIABLE_SIZE then
+		return true
+	end
+
+	warn(`[BlinkBlox]: Dropped unreliable event "{Name}", {Size} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+	return false
+end
 local MAX_PACKET_SIZE = 8192
 local MAX_EVENTS_PER_PACKET = 64
 local MAX_INSTANCES_PER_PACKET = 256
 local SerdesEvent = "?"
 local SerdesThread: thread?
-export type Number = number
-export type a = { foo: number }
-export type b = { bar: number }
-export type c<A,B,C> = { a: A, B: { bar: number }, C: C }
-export type d = { foo: number, bar: number, a: number, B: { bar: number }, C: number }
-function SerdesFunctions.WriteEVENT_PollingEvent(Value: nil): ()
-	-- Allocate BLOCK: 1 bytes
-	local BLOCK_START = Allocate(1)
-	-- EVENT_PollingEvent (0)
-	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+Queue.Reliable[0] = table.create(256)
+EventNames.Reliable[0] = "Styled"
+Queue.Unreliable[0] = table.create(256)
+EventNames.Unreliable[0] = "Fonts"
+export type Panel = { Size: UDim2, Padding: UDim, Anchor: Vector2, Spread: NumberRange, Fade: ColorSequence, Open: TweenInfo, Surface: Enum.Material, Key: Enum.KeyCode? }
+function SerdesFunctions.ReadEVENT_Styled(): ({ Size: UDim2, Padding: UDim, Anchor: Vector2, Spread: NumberRange, Fade: ColorSequence, Open: TweenInfo, Surface: Enum.Material, Key: Enum.KeyCode? })
+	-- Read BLOCK: 58 bytes
+	local BLOCK_START = Read(58)
+	local BITFIELD_1_0
+	local RecieveBuffer = RecieveBuffer
+	-- Value: Styled
+	local Value = {Size = false, Padding = false, Anchor = false, Spread = false, Fade = false, Open = false, Surface = false} :: any
+	do
+		-- Value.Size: Size
+		local ScaleX = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+		local OffsetX = buffer.readi32(RecieveBuffer, BLOCK_START + 4)
+		local ScaleY = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+		local OffsetY = buffer.readi32(RecieveBuffer, BLOCK_START + 12)
+		Value.Size = UDim2.new(ScaleX, OffsetX, ScaleY, OffsetY)
+	end
+	do
+		-- Value.Padding: Padding
+		local Scale = buffer.readf32(RecieveBuffer, BLOCK_START + 16)
+		local Offset = buffer.readi32(RecieveBuffer, BLOCK_START + 20)
+		Value.Padding = UDim.new(Scale, Offset)
+	end
+	do
+		-- Value.Anchor: Anchor
+		local VectorX = buffer.readf32(RecieveBuffer, BLOCK_START + 24)
+		local VectorY = buffer.readf32(RecieveBuffer, BLOCK_START + 28)
+		Value.Anchor = Vector2.new(VectorX, VectorY)
+	end
+	do
+		-- Value.Spread: Spread
+		local RangeMin = buffer.readf32(RecieveBuffer, BLOCK_START + 32)
+		local RangeMax = buffer.readf32(RecieveBuffer, BLOCK_START + 36)
+		if not (RangeMax >= RangeMin) then error(`Expected a NumberRange with Max at least Min, got {RangeMin} and {RangeMax} instead.`) end
+		Value.Spread = NumberRange.new(RangeMin, RangeMax)
+	end
+	-- Value.Fade: Fade
+	Value.Fade = ReadColorSequence()
+	do
+		-- Value.Open: Open
+		local TweenTime = buffer.readf32(RecieveBuffer, BLOCK_START + 40)
+		local TweenStyle = buffer.readu8(RecieveBuffer, BLOCK_START + 44)
+		local TweenDirection = buffer.readu8(RecieveBuffer, BLOCK_START + 45)
+		local TweenRepeats = buffer.readi32(RecieveBuffer, BLOCK_START + 46)
+		local TweenReverses = buffer.readu8(RecieveBuffer, BLOCK_START + 50)
+		local TweenDelay = buffer.readf32(RecieveBuffer, BLOCK_START + 51)
+		Value.Open = TweenInfo.new(TweenTime, EnumItemOf(Enum.EasingStyle, TweenStyle) :: Enum.EasingStyle, EnumItemOf(Enum.EasingDirection, TweenDirection) :: Enum.EasingDirection, TweenRepeats, TweenReverses ~= 0, TweenDelay)
+	end
+	do
+		-- Value.Surface: Surface
+		local EnumValue = buffer.readu16(RecieveBuffer, BLOCK_START + 55)
+		Value.Surface = EnumItemOf(Enum.Material, EnumValue) :: Enum.Material
+	end
+	-- Value.Key: Key
+	BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 57)
+	if bit32.btest(BITFIELD_1_0, 0x01) then
+		-- Read BLOCK: 2 bytes
+		local BLOCK_START = Read(2)
+		-- Value.Key: Key
+		local EnumValue = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+		Value.Key = EnumItemOf(Enum.KeyCode, EnumValue) :: Enum.KeyCode
+	end
+	return Value
 end
 
-function SerdesFunctions.WriteEVENT_ImplicitPollingEvent(Value: nil): ()
-	-- Allocate BLOCK: 1 bytes
-	local BLOCK_START = Allocate(1)
-	-- EVENT_ImplicitPollingEvent (1)
+function SerdesFunctions.WriteEVENT_Pressed(Value1: Enum.KeyCode, Value2: Vector2): ()
+	-- Allocate BLOCK: 11 bytes
+	local BLOCK_START = Allocate(11)
+	-- EVENT_Pressed (1)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+	-- Value: Pressed
+	-- Value1: Pressed
+	if typeof(Value1) ~= "EnumItem" or Value1.EnumType ~= Enum.KeyCode then error(`Expected Value1 to be an item of Enum.KeyCode, got {Value1} instead.`) end
+	local EnumValue = Value1.Value
+	if not (EnumValue >= 0 and EnumValue <= 65535) then error(`Expected Value1 to have a Value from 0 to 65535, got {EnumValue} instead.`) end
+	buffer.writeu16(SendBuffer, BLOCK_START + 1, EnumValue)
+	-- Value2: Pressed
+	if typeof(Value2) ~= "Vector2" then
+		error(`Expected Value2 to be of type Vector2, got {type(Value2)} instead.{if type(Value2) == "table" or type(Value2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+	end
+	local Vector = Value2
+	buffer.writef32(SendBuffer, BLOCK_START + 3, Vector.X)
+	buffer.writef32(SendBuffer, BLOCK_START + 7, Vector.Y)
+end
+
+function SerdesFunctions.ReadEVENT_Fonts(): ({ Enum.Font })
+	-- Read BLOCK: 1 bytes
+	local BLOCK_START = Read(1)
+	local RecieveBuffer = RecieveBuffer
+	-- Value: Fonts
+	-- START ARRAY
+	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if not (Length <= 8) then error(`Expected "Length" to be smaller than or equal to 8, got {Length} instead.`) end
+	if Length * 2 > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	local Value = table.create(Length) :: {any}
+		-- Read BLOCK: 2 bytes
+	local ARRAY_START_1 = Read(2 * Length)
+	for Slot_1 = 1, Length do
+		-- Item_1: Fonts
+		-- Read 2
+		local OPERATION_OFFSET_0 = ARRAY_START_1
+		ARRAY_START_1 += 2
+		local EnumValue = buffer.readu16(RecieveBuffer, OPERATION_OFFSET_0)
+		local Item_1 = EnumItemOf(Enum.Font, EnumValue) :: Enum.Font
+		Value[Slot_1] = Item_1
+	end
+	-- END ARRAY
+	return Value
 end
 
 if not RunService:IsRunning() then
 	local NOOP = function() end
 	local NOOP_RETURNING = function() return NOOP end
 	local Returns = table.freeze({
-		step_replication = NOOP,
-		set_rate_limit_handler = NOOP,
-		set_decode_error_handler = NOOP,
-		set_packet_drop_handler = NOOP,
-		set_listener_error_handler = NOOP,
-		remotes = REMOTE_NAMES,
-	PollingEvent = {
-		fire = NOOP
+		StepReplication = NOOP,
+		SetRateLimitHandler = NOOP,
+		SetDecodeErrorHandler = NOOP,
+		SetPacketDropHandler = NOOP,
+		SetListenerErrorHandler = NOOP,
+		Remotes = REMOTE_NAMES,
+	Panel = {
+		Read = function(Buffer: buffer): (Panel)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (Panel)
+				-- Read BLOCK: 58 bytes
+				local BLOCK_START = Read(58)
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
+				-- Value: Panel
+				local Value = {Size = false, Padding = false, Anchor = false, Spread = false, Fade = false, Open = false, Surface = false} :: any
+				do
+					-- Value.Size: Size
+					local ScaleX = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+					local OffsetX = buffer.readi32(RecieveBuffer, BLOCK_START + 4)
+					local ScaleY = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+					local OffsetY = buffer.readi32(RecieveBuffer, BLOCK_START + 12)
+					Value.Size = UDim2.new(ScaleX, OffsetX, ScaleY, OffsetY)
+				end
+				do
+					-- Value.Padding: Padding
+					local Scale = buffer.readf32(RecieveBuffer, BLOCK_START + 16)
+					local Offset = buffer.readi32(RecieveBuffer, BLOCK_START + 20)
+					Value.Padding = UDim.new(Scale, Offset)
+				end
+				do
+					-- Value.Anchor: Anchor
+					local VectorX = buffer.readf32(RecieveBuffer, BLOCK_START + 24)
+					local VectorY = buffer.readf32(RecieveBuffer, BLOCK_START + 28)
+					Value.Anchor = Vector2.new(VectorX, VectorY)
+				end
+				do
+					-- Value.Spread: Spread
+					local RangeMin = buffer.readf32(RecieveBuffer, BLOCK_START + 32)
+					local RangeMax = buffer.readf32(RecieveBuffer, BLOCK_START + 36)
+					if not (RangeMax >= RangeMin) then error(`Expected a NumberRange with Max at least Min, got {RangeMin} and {RangeMax} instead.`) end
+					Value.Spread = NumberRange.new(RangeMin, RangeMax)
+				end
+				-- Value.Fade: Fade
+				Value.Fade = ReadColorSequence()
+				do
+					-- Value.Open: Open
+					local TweenTime = buffer.readf32(RecieveBuffer, BLOCK_START + 40)
+					local TweenStyle = buffer.readu8(RecieveBuffer, BLOCK_START + 44)
+					local TweenDirection = buffer.readu8(RecieveBuffer, BLOCK_START + 45)
+					local TweenRepeats = buffer.readi32(RecieveBuffer, BLOCK_START + 46)
+					local TweenReverses = buffer.readu8(RecieveBuffer, BLOCK_START + 50)
+					local TweenDelay = buffer.readf32(RecieveBuffer, BLOCK_START + 51)
+					Value.Open = TweenInfo.new(TweenTime, EnumItemOf(Enum.EasingStyle, TweenStyle) :: Enum.EasingStyle, EnumItemOf(Enum.EasingDirection, TweenDirection) :: Enum.EasingDirection, TweenRepeats, TweenReverses ~= 0, TweenDelay)
+				end
+				do
+					-- Value.Surface: Surface
+					local EnumValue = buffer.readu16(RecieveBuffer, BLOCK_START + 55)
+					Value.Surface = EnumItemOf(Enum.Material, EnumValue) :: Enum.Material
+				end
+				-- Value.Key: Key
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 57)
+				if bit32.btest(BITFIELD_1_0, 0x01) then
+					-- Read BLOCK: 2 bytes
+					local BLOCK_START = Read(2)
+					-- Value.Key: Key
+					local EnumValue = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+					Value.Key = EnumItemOf(Enum.KeyCode, EnumValue) :: Enum.KeyCode
+				end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: Panel
+		end,
+		Write = function(Value: Panel): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 58 bytes
+				local BLOCK_START = Allocate(58)
+				local BITFIELD_1_0
+				-- Value: Panel
+				do
+					-- Value.Size: Size
+					if typeof(Value.Size) ~= "UDim2" then
+						error(`Expected Value.Size to be of type UDim2, got {type(Value.Size)} instead.{if type(Value.Size) == "table" or type(Value.Size) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Dimensions = Value.Size
+					buffer.writef32(SendBuffer, BLOCK_START + 0, Dimensions.X.Scale)
+					buffer.writei32(SendBuffer, BLOCK_START + 4, Dimensions.X.Offset)
+					buffer.writef32(SendBuffer, BLOCK_START + 8, Dimensions.Y.Scale)
+					buffer.writei32(SendBuffer, BLOCK_START + 12, Dimensions.Y.Offset)
+				end
+				do
+					-- Value.Padding: Padding
+					if typeof(Value.Padding) ~= "UDim" then
+						error(`Expected Value.Padding to be of type UDim, got {type(Value.Padding)} instead.{if type(Value.Padding) == "table" or type(Value.Padding) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Dimension = Value.Padding
+					buffer.writef32(SendBuffer, BLOCK_START + 16, Dimension.Scale)
+					buffer.writei32(SendBuffer, BLOCK_START + 20, Dimension.Offset)
+				end
+				do
+					-- Value.Anchor: Anchor
+					if typeof(Value.Anchor) ~= "Vector2" then
+						error(`Expected Value.Anchor to be of type Vector2, got {type(Value.Anchor)} instead.{if type(Value.Anchor) == "table" or type(Value.Anchor) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Vector = Value.Anchor
+					buffer.writef32(SendBuffer, BLOCK_START + 24, Vector.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 28, Vector.Y)
+				end
+				do
+					-- Value.Spread: Spread
+					if typeof(Value.Spread) ~= "NumberRange" then
+						error(`Expected Value.Spread to be of type NumberRange, got {type(Value.Spread)} instead.{if type(Value.Spread) == "table" or type(Value.Spread) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Range = Value.Spread
+					buffer.writef32(SendBuffer, BLOCK_START + 32, Range.Min)
+					buffer.writef32(SendBuffer, BLOCK_START + 36, Range.Max)
+				end
+				-- Value.Fade: Fade
+				if typeof(Value.Fade) ~= "ColorSequence" then
+					error(`Expected Value.Fade to be of type ColorSequence, got {type(Value.Fade)} instead.{if type(Value.Fade) == "table" or type(Value.Fade) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				WriteColorSequence(Value.Fade)
+				do
+					-- Value.Open: Open
+					if typeof(Value.Open) ~= "TweenInfo" then
+						error(`Expected Value.Open to be of type TweenInfo, got {type(Value.Open)} instead.{if type(Value.Open) == "table" or type(Value.Open) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Tween = Value.Open
+					buffer.writef32(SendBuffer, BLOCK_START + 40, Tween.Time)
+					buffer.writeu8(SendBuffer, BLOCK_START + 44, Tween.EasingStyle.Value)
+					buffer.writeu8(SendBuffer, BLOCK_START + 45, Tween.EasingDirection.Value)
+					buffer.writei32(SendBuffer, BLOCK_START + 46, Tween.RepeatCount)
+					buffer.writeu8(SendBuffer, BLOCK_START + 50, if Tween.Reverses then 1 else 0)
+					buffer.writef32(SendBuffer, BLOCK_START + 51, Tween.DelayTime)
+				end
+				do
+					-- Value.Surface: Surface
+					if typeof(Value.Surface) ~= "EnumItem" or Value.Surface.EnumType ~= Enum.Material then error(`Expected Value.Surface to be an item of Enum.Material, got {Value.Surface} instead.`) end
+					local EnumValue = Value.Surface.Value
+					if not (EnumValue >= 0 and EnumValue <= 65535) then error(`Expected Value.Surface to have a Value from 0 to 65535, got {EnumValue} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 55, EnumValue)
+				end
+				-- Value.Key: Key
+				BITFIELD_1_0 = 0
+				if Value.Key ~= nil then BITFIELD_1_0 += 0x01 end
+				if Value.Key ~= nil then
+					-- Allocate BLOCK: 2 bytes
+					local BLOCK_START = Allocate(2)
+					-- Value.Key: Key
+					if typeof(Value.Key) ~= "EnumItem" or Value.Key.EnumType ~= Enum.KeyCode then error(`Expected Value.Key to be an item of Enum.KeyCode, got {Value.Key} instead.`) end
+					local EnumValue = Value.Key.Value
+					if not (EnumValue >= 0 and EnumValue <= 65535) then error(`Expected Value.Key to have a Value from 0 to 65535, got {EnumValue} instead.`) end
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, EnumValue)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 57, BITFIELD_1_0)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
 	},
-	ImplicitPollingEvent = {
-		fire = NOOP
+	Styled = {
+		On = NOOP_RETURNING
+	},
+	Pressed = {
+		Fire = NOOP
+	},
+	Fonts = {
+		On = NOOP_RETURNING
 	},
 	})
 	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
@@ -578,8 +931,9 @@ local function Await(Parent: Instance, Name: string): Instance
     return Found :: Instance
 end
 
-local Reliable: RemoteEvent = Await(ReplicatedStorage, BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
-local Unreliable: UnreliableRemoteEvent = ReplicatedStorage:WaitForChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
+local RemoteContainer = Await(ReplicatedStorage, REMOTES_FOLDER)
+local Reliable: RemoteEvent = Await(RemoteContainer, BASE_EVENT_NAME .. "_RELIABLE_REMOTE") :: RemoteEvent
+local Unreliable: UnreliableRemoteEvent = RemoteContainer:WaitForChild(BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE") :: UnreliableRemoteEvent
 
 --> WaitForChild returns whatever carries that name. A client can create an instance of any class in
 --> ReplicatedStorage, so without this the first thing to answer to the name wins -- and every
@@ -787,14 +1141,41 @@ local function DecodeReliable(): ()
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
-	error("[BlinkBlox]: This channel receives no events.")
+	if Index == 0 then
+		local Value: { Size: UDim2, Padding: UDim, Anchor: Vector2, Spread: NumberRange, Fade: ColorSequence, Open: TweenInfo, Surface: Enum.Material, Key: Enum.KeyCode? } = SerdesFunctions.ReadEVENT_Styled()
+		local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "Styled"
+			Decoding = -2 - Index
+			BOUND_LISTENER(Value)
+		else
+			if #Queue.Reliable[0] < 256 then
+				table.insert(Queue.Reliable[0], table.pack(Value))
+				if #Queue.Reliable[0] == 256 then
+					warn("[BlinkBlox]: \"Styled\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+				end
+			end
+		end
+	else
+		error("[BlinkBlox]: Unknown event index.")
+	end
 end
 local function DecodeUnreliable(): ()
 	Decoding = -1
 	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
 	RecieveCursor += 1
 	Decoding = Index
-	error("[BlinkBlox]: This channel receives no events.")
+	if Index == 0 then
+		local Value: { Enum.Font } = SerdesFunctions.ReadEVENT_Fonts()
+		local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
+		if BOUND_LISTENER ~= nil then
+			SerdesEvent = "Fonts"
+			Decoding = -2 - Index
+			BOUND_LISTENER(Value)
+		end
+	else
+		error("[BlinkBlox]: Unknown event index.")
+	end
 end
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
@@ -848,24 +1229,221 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 end)
 
 local Returns = {}
-Returns.step_replication = StepReplication
-Returns.set_rate_limit_handler = SetRateLimitHandler
-Returns.set_decode_error_handler = SetDecodeErrorHandler
-Returns.set_packet_drop_handler = SetPacketDropHandler
-Returns.set_listener_error_handler = SetListenerErrorHandler
-Returns.remotes = REMOTE_NAMES
-Returns.PollingEvent = {
-	fire = function(Value: nil): ()
+Returns.StepReplication = StepReplication
+Returns.SetRateLimitHandler = SetRateLimitHandler
+Returns.SetDecodeErrorHandler = SetDecodeErrorHandler
+Returns.SetPacketDropHandler = SetPacketDropHandler
+Returns.SetListenerErrorHandler = SetListenerErrorHandler
+Returns.Remotes = REMOTE_NAMES
+Returns.Panel = {
+	Read = function(Buffer: buffer): (Panel)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (Panel)
+			-- Read BLOCK: 58 bytes
+			local BLOCK_START = Read(58)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: Panel
+			local Value = {Size = false, Padding = false, Anchor = false, Spread = false, Fade = false, Open = false, Surface = false} :: any
+			do
+				-- Value.Size: Size
+				local ScaleX = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+				local OffsetX = buffer.readi32(RecieveBuffer, BLOCK_START + 4)
+				local ScaleY = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+				local OffsetY = buffer.readi32(RecieveBuffer, BLOCK_START + 12)
+				Value.Size = UDim2.new(ScaleX, OffsetX, ScaleY, OffsetY)
+			end
+			do
+				-- Value.Padding: Padding
+				local Scale = buffer.readf32(RecieveBuffer, BLOCK_START + 16)
+				local Offset = buffer.readi32(RecieveBuffer, BLOCK_START + 20)
+				Value.Padding = UDim.new(Scale, Offset)
+			end
+			do
+				-- Value.Anchor: Anchor
+				local VectorX = buffer.readf32(RecieveBuffer, BLOCK_START + 24)
+				local VectorY = buffer.readf32(RecieveBuffer, BLOCK_START + 28)
+				Value.Anchor = Vector2.new(VectorX, VectorY)
+			end
+			do
+				-- Value.Spread: Spread
+				local RangeMin = buffer.readf32(RecieveBuffer, BLOCK_START + 32)
+				local RangeMax = buffer.readf32(RecieveBuffer, BLOCK_START + 36)
+				if not (RangeMax >= RangeMin) then error(`Expected a NumberRange with Max at least Min, got {RangeMin} and {RangeMax} instead.`) end
+				Value.Spread = NumberRange.new(RangeMin, RangeMax)
+			end
+			-- Value.Fade: Fade
+			Value.Fade = ReadColorSequence()
+			do
+				-- Value.Open: Open
+				local TweenTime = buffer.readf32(RecieveBuffer, BLOCK_START + 40)
+				local TweenStyle = buffer.readu8(RecieveBuffer, BLOCK_START + 44)
+				local TweenDirection = buffer.readu8(RecieveBuffer, BLOCK_START + 45)
+				local TweenRepeats = buffer.readi32(RecieveBuffer, BLOCK_START + 46)
+				local TweenReverses = buffer.readu8(RecieveBuffer, BLOCK_START + 50)
+				local TweenDelay = buffer.readf32(RecieveBuffer, BLOCK_START + 51)
+				Value.Open = TweenInfo.new(TweenTime, EnumItemOf(Enum.EasingStyle, TweenStyle) :: Enum.EasingStyle, EnumItemOf(Enum.EasingDirection, TweenDirection) :: Enum.EasingDirection, TweenRepeats, TweenReverses ~= 0, TweenDelay)
+			end
+			do
+				-- Value.Surface: Surface
+				local EnumValue = buffer.readu16(RecieveBuffer, BLOCK_START + 55)
+				Value.Surface = EnumItemOf(Enum.Material, EnumValue) :: Enum.Material
+			end
+			-- Value.Key: Key
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 57)
+			if bit32.btest(BITFIELD_1_0, 0x01) then
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				-- Value.Key: Key
+				local EnumValue = buffer.readu16(RecieveBuffer, BLOCK_START + 0)
+				Value.Key = EnumItemOf(Enum.KeyCode, EnumValue) :: Enum.KeyCode
+			end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: Panel
+	end,
+	Write = function(Value: Panel): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 58 bytes
+			local BLOCK_START = Allocate(58)
+			local BITFIELD_1_0
+			-- Value: Panel
+			do
+				-- Value.Size: Size
+				if typeof(Value.Size) ~= "UDim2" then
+					error(`Expected Value.Size to be of type UDim2, got {type(Value.Size)} instead.{if type(Value.Size) == "table" or type(Value.Size) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Dimensions = Value.Size
+				buffer.writef32(SendBuffer, BLOCK_START + 0, Dimensions.X.Scale)
+				buffer.writei32(SendBuffer, BLOCK_START + 4, Dimensions.X.Offset)
+				buffer.writef32(SendBuffer, BLOCK_START + 8, Dimensions.Y.Scale)
+				buffer.writei32(SendBuffer, BLOCK_START + 12, Dimensions.Y.Offset)
+			end
+			do
+				-- Value.Padding: Padding
+				if typeof(Value.Padding) ~= "UDim" then
+					error(`Expected Value.Padding to be of type UDim, got {type(Value.Padding)} instead.{if type(Value.Padding) == "table" or type(Value.Padding) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Dimension = Value.Padding
+				buffer.writef32(SendBuffer, BLOCK_START + 16, Dimension.Scale)
+				buffer.writei32(SendBuffer, BLOCK_START + 20, Dimension.Offset)
+			end
+			do
+				-- Value.Anchor: Anchor
+				if typeof(Value.Anchor) ~= "Vector2" then
+					error(`Expected Value.Anchor to be of type Vector2, got {type(Value.Anchor)} instead.{if type(Value.Anchor) == "table" or type(Value.Anchor) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Vector = Value.Anchor
+				buffer.writef32(SendBuffer, BLOCK_START + 24, Vector.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 28, Vector.Y)
+			end
+			do
+				-- Value.Spread: Spread
+				if typeof(Value.Spread) ~= "NumberRange" then
+					error(`Expected Value.Spread to be of type NumberRange, got {type(Value.Spread)} instead.{if type(Value.Spread) == "table" or type(Value.Spread) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Range = Value.Spread
+				buffer.writef32(SendBuffer, BLOCK_START + 32, Range.Min)
+				buffer.writef32(SendBuffer, BLOCK_START + 36, Range.Max)
+			end
+			-- Value.Fade: Fade
+			if typeof(Value.Fade) ~= "ColorSequence" then
+				error(`Expected Value.Fade to be of type ColorSequence, got {type(Value.Fade)} instead.{if type(Value.Fade) == "table" or type(Value.Fade) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			WriteColorSequence(Value.Fade)
+			do
+				-- Value.Open: Open
+				if typeof(Value.Open) ~= "TweenInfo" then
+					error(`Expected Value.Open to be of type TweenInfo, got {type(Value.Open)} instead.{if type(Value.Open) == "table" or type(Value.Open) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Tween = Value.Open
+				buffer.writef32(SendBuffer, BLOCK_START + 40, Tween.Time)
+				buffer.writeu8(SendBuffer, BLOCK_START + 44, Tween.EasingStyle.Value)
+				buffer.writeu8(SendBuffer, BLOCK_START + 45, Tween.EasingDirection.Value)
+				buffer.writei32(SendBuffer, BLOCK_START + 46, Tween.RepeatCount)
+				buffer.writeu8(SendBuffer, BLOCK_START + 50, if Tween.Reverses then 1 else 0)
+				buffer.writef32(SendBuffer, BLOCK_START + 51, Tween.DelayTime)
+			end
+			do
+				-- Value.Surface: Surface
+				if typeof(Value.Surface) ~= "EnumItem" or Value.Surface.EnumType ~= Enum.Material then error(`Expected Value.Surface to be an item of Enum.Material, got {Value.Surface} instead.`) end
+				local EnumValue = Value.Surface.Value
+				if not (EnumValue >= 0 and EnumValue <= 65535) then error(`Expected Value.Surface to have a Value from 0 to 65535, got {EnumValue} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 55, EnumValue)
+			end
+			-- Value.Key: Key
+			BITFIELD_1_0 = 0
+			if Value.Key ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value.Key ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value.Key: Key
+				if typeof(Value.Key) ~= "EnumItem" or Value.Key.EnumType ~= Enum.KeyCode then error(`Expected Value.Key to be an item of Enum.KeyCode, got {Value.Key} instead.`) end
+				local EnumValue = Value.Key.Value
+				if not (EnumValue >= 0 and EnumValue <= 65535) then error(`Expected Value.Key to have a Value from 0 to 65535, got {EnumValue} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, EnumValue)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 57, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.Styled = {
+	On = function(Listener: (Value: { Size: UDim2, Padding: UDim, Anchor: Vector2, Spread: NumberRange, Fade: ColorSequence, Open: TweenInfo, Surface: Enum.Material, Key: Enum.KeyCode? }) -> ()): () -> ()
+		if Events.Reliable[0] ~= nil then
+			warn("[BlinkBlox]: \"Styled\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Reliable[0] = Listener
+		local Pending = Queue.Reliable[0]
+		Queue.Reliable[0] = {}
+		for _, Arguments in Pending do
+			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, table.unpack(Arguments, 1, Arguments.n))
+			if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+		end
+		return function (): ()
+			if Events.Reliable[0] == Listener then
+				Events.Reliable[0] = nil
+			end
+		end
+	end
+}
+Returns.Pressed = {
+	Fire = function(Value1: Enum.KeyCode, Value2: Vector2): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_PollingEvent(Value)
+		SerdesFunctions.WriteEVENT_Pressed(Value1, Value2)
 		Commit()
 	end
 }
-Returns.ImplicitPollingEvent = {
-	fire = function(Value: nil): ()
-		Begin()
-		SerdesFunctions.WriteEVENT_ImplicitPollingEvent(Value)
-		Commit()
+Returns.Fonts = {
+	On = function(Listener: (Value: { Enum.Font }) -> ()): () -> ()
+		if Events.Unreliable[0] ~= nil then
+			warn("[BlinkBlox]: \"Fonts\" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.")
+		end
+		Events.Unreliable[0] = Listener
+		return function (): ()
+			if Events.Unreliable[0] == Listener then
+				Events.Unreliable[0] = nil
+			end
+		end
 	end
 }
 table.freeze(Returns)

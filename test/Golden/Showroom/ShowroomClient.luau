@@ -20,6 +20,7 @@ local SerdesFunctions = {}
 local BASE_EVENT_NAME = "Showroom_BLINK"
 local SCHEMA_SIGNATURE = "5bf1deb7b42990d3"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
+local REMOTES_FOLDER = "Showroom"
 local SendSize = 64
 local SendOffset = 0
 local SendCursor = 0
@@ -637,7 +638,11 @@ local function ConnectRemotes(): boolean
     end
 
     local Deadline = os.clock() + CONNECT_TIMEOUT
-    ConnectedReliable = ReplicatedStorage:WaitForChild(REMOTE_NAMES.Reliable, CONNECT_TIMEOUT)
+    local Container = ReplicatedStorage:WaitForChild(REMOTES_FOLDER, CONNECT_TIMEOUT)
+    if Container == nil then
+        return false
+    end
+    ConnectedReliable = Container:WaitForChild(REMOTE_NAMES.Reliable, math.max(Deadline - os.clock(), 0))
     if ConnectedReliable == nil then
         return false
     end
@@ -645,8 +650,8 @@ local function ConnectRemotes(): boolean
     --> The server creates both in the same frame, so what is left of the budget is plenty.
     local Remaining = Deadline - os.clock()
     ConnectedUnreliable = if Remaining > 0
-        then ReplicatedStorage:WaitForChild(REMOTE_NAMES.Unreliable, Remaining)
-        else ReplicatedStorage:FindFirstChild(REMOTE_NAMES.Unreliable)
+        then Container:WaitForChild(REMOTE_NAMES.Unreliable, Remaining)
+        else Container:FindFirstChild(REMOTE_NAMES.Unreliable)
     return ConnectedUnreliable ~= nil
 end
 

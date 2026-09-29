@@ -66,6 +66,7 @@ Grammar.OPTIONS = {
 	ManualReplication = "Boolean",
 	BatchUnreliable = "Boolean",
 	RemoteScope = "String",
+	RemotesFolder = "String",
 	MaxPacketSize = "Number",
 	MaxEventsPerPacket = "Number",
 	MaxInstancesPerPacket = "Number",
@@ -362,6 +363,8 @@ export type Options = {
 	ManualReplication: boolean?,
 	BatchUnreliable: boolean?,
 	RemoteScope: string?,
+	--> A folder in ReplicatedStorage to hold the remotes; see Generator/Folder.
+	RemotesFolder: string?,
 
 	--> Inbound limits. These bound what a hostile client can make the server do inside a single
 	--> packet; see the generator's INBOUND_GUARD.

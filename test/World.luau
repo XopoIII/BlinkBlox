@@ -34,8 +34,23 @@ export type World = {
 	Plant: (self: World, Name: string, ClassName: string, Signature: string?) -> Remote,
 }
 
+--- WaitForChild on `Children`, on the real clock, recorded in `World.Waits`.
+local function Wait(World: World, Children: { [string]: Remote }, Name: string, Timeout: number?): Remote?
+	table.insert(World.Waits, { Name = Name, Timeout = Timeout })
+	local Started = os.clock()
+	while Children[Name] == nil do
+		if Timeout and os.clock() - Started >= Timeout then
+			return nil
+		end
+		task.wait(1 / 120)
+	end
+	return Children[Name]
+end
+
 local function NewRemote(World: World, ClassName: string): Remote
 	local Attributes: { [string]: any } = {}
+	--> What is parented to this one: a folder under `option RemotesFolder` holds the remotes.
+	local Children: { [string]: Remote } = {}
 	local Fields: { [string]: any } = {
 		Name = ClassName,
 		ClassName = ClassName,
@@ -53,6 +68,13 @@ local function NewRemote(World: World, ClassName: string): Remote
 	end
 	Fields.IsA = function(_self, Queried: string): boolean
 		return Queried == ClassName
+	end
+	Fields.Children = Children
+	Fields.FindFirstChild = function(_self, Name: string): Remote?
+		return Children[Name]
+	end
+	Fields.WaitForChild = function(_self, Name: string, Timeout: number?): Remote?
+		return Wait(World, Children, Name, Timeout)
 	end
 	--> A loopback: what the client fires reaches the server's connections, and the other way round.
 	Fields.FireServer = function(_self, Buffer: buffer, Instances: { any })
@@ -74,6 +96,8 @@ local function NewRemote(World: World, ClassName: string): Remote
 			Fields[Key] = Value
 			if Key == "Parent" and Value == World.ReplicatedStorage then
 				World.Children[Fields.Name] = Remote :: any
+			elseif Key == "Parent" and type(Value) == "table" and Value.Children then
+				Value.Children[Fields.Name] = Remote :: any
 			end
 		end,
 	}) :: any
@@ -94,15 +118,7 @@ local function new(): World
 			return World.Children[Name]
 		end,
 		WaitForChild = function(_self, Name: string, Timeout: number?): Remote?
-			table.insert(World.Waits, { Name = Name, Timeout = Timeout })
-			local Started = os.clock()
-			while World.Children[Name] == nil do
-				if Timeout and os.clock() - Started >= Timeout then
-					return nil
-				end
-				task.wait(1 / 120)
-			end
-			return World.Children[Name]
+			return Wait(World, World.Children, Name, Timeout)
 		end,
 	}
 

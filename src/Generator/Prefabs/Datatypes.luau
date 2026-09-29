@@ -134,7 +134,7 @@ do
 			Types.u8.Read("TweenReverses", Block)
 			Types.f32.Read("TweenDelay", Block)
 			Block:Line(
-				`{Block:Declare(Variable)} = TweenInfo.new(TweenTime, EnumItemOf(Enum.EasingStyle, TweenStyle), EnumItemOf(Enum.EasingDirection, TweenDirection), TweenRepeats, TweenReverses ~= 0, TweenDelay)`
+				`{Block:Declare(Variable)} = TweenInfo.new(TweenTime, EnumItemOf(Enum.EasingStyle, TweenStyle) :: Enum.EasingStyle, EnumItemOf(Enum.EasingDirection, TweenDirection) :: Enum.EasingDirection, TweenRepeats, TweenReverses ~= 0, TweenDelay)`
 			)
 		end,
 		Write = function(Value: string, Block: Block)
@@ -176,7 +176,7 @@ do
 		Types.u16.Write("EnumValue", Write)
 
 		Types.u16.Read("EnumValue", Read)
-		Read:Line(`{Read:Declare(Target)} = EnumItemOf({EnumType}, EnumValue)`)
+		Read:Line(`{Read:Declare(Target)} = EnumItemOf({EnumType}, EnumValue) :: {EnumType}`)
 	end
 
 	Primitives.Enum = {

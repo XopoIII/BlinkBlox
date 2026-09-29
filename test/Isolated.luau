@@ -139,6 +139,8 @@ end
 local function Build(Tree: any, Scope: string, WithClient: boolean?, Globals: { [string]: any }?): Pair
 	local Options = table.clone(Tree.Value.Options)
 	Options.RemoteScope = Scope
+	--> The pair's remotes are the stubs below, planted where the modules look by default.
+	Options.RemotesFolder = nil
 	Options.ManualReplication = true
 
 	local Built = table.clone(Tree)

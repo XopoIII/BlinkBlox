@@ -3,6 +3,7 @@
 -- deferred start and the bounded wait; test/Lifecycle.luau runs them.
 option RemoteScope = "Showroom"
 option ClientConnectTimeout = 2.5
+option RemotesFolder = "Showroom"
 option AutoStart = false
 option Casing = Camel
 option ClientOutput = "../../Network/ShowroomClient.luau"

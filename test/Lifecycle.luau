@@ -213,6 +213,62 @@ RunClosure(
 	end
 )
 
+---- RemotesFolder ----
+
+--- The folder the server made, and that nothing else was put in ReplicatedStorage.
+local function FolderOf(Place: any, Name: string): any
+	local Made = Place.Children[Name]
+	Expect(Made ~= nil and Made.ClassName == "Folder", `no Folder called {Name} in ReplicatedStorage`)
+	Same(Count(Place.Children), 1, "children of ReplicatedStorage")
+	return Made
+end
+
+RunClosure("RemotesFolder puts both remotes in a folder, and the client finds them there", function()
+	local Place = World.new()
+	local Options = 'option RemotesFolder = "Net"\noption ManualReplication = true'
+	local Server = World.Load(Place, Build("RFOPEN", Options, "Server"), "Server")
+	local Client = World.Load(Place, Build("RFOPEN", Options, "Client"), "Client")
+
+	local Made = FolderOf(Place, "Net")
+	for _, Channel in { "Reliable", "Unreliable" } do
+		Expect(Made.Children[Server.Remotes[Channel]] ~= nil, `the {Channel} remote is not in the folder`)
+	end
+	Same(#Place.Warnings, 0, "warnings")
+
+	local Got: number? = nil
+	Server.Ready.On(function(_Player, Value)
+		Got = Value
+	end)
+	Client.Ready.Fire(7)
+	Client.StepReplication()
+	Same(Got, 7, "the value the server heard")
+end)
+
+RunClosure("RemotesFolder with ClientConnectTimeout waits for the folder within the timeout", function()
+	local Place = World.new()
+	local Options = 'option RemotesFolder = "Net"\noption ClientConnectTimeout = 3\noption ManualReplication = true'
+	local ServerPath = Build("RFLATE", Options, "Server")
+	local ClientPath = Build("RFLATE", Options, "Client")
+
+	task.delay(0.1, function()
+		World.Load(Place, ServerPath, "Server")
+	end)
+	local Client = World.Load(Place, ClientPath, "Client")
+	Same(Client.Connected, true, "Connected")
+	FolderOf(Place, "Net")
+
+	local Alone = World.new()
+	local Began = os.clock()
+	local Stubbed = World.Load(
+		Alone,
+		Build("RFNONE", 'option RemotesFolder = "Net"\noption ClientConnectTimeout = 0.3', "Client"),
+		"Client"
+	)
+	local Took = os.clock() - Began
+	Same(Stubbed.Connected, false, "Connected with no server")
+	Expect(Took >= 0.3 and Took < 0.8, `the require took {Took} seconds for a timeout of 0.3`)
+end)
+
 ---- AutoStart ----
 
 RunClosure("AutoStart = false creates nothing until Start, and Start twice changes nothing", function()

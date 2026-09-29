@@ -43,7 +43,7 @@ local function ReadColorSequence(): ColorSequence
     end
 
     local Offset = Read(Count * 7)
-    local Keypoints = table.create(Count)
+    local Keypoints = table.create(Count) :: { ColorSequenceKeypoint }
     local Previous = 0
     for Index = 1, Count do
         local At = Offset + (Index - 1) * 7

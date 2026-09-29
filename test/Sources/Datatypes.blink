@@ -1,0 +1,41 @@
+-- The Roblox datatypes of Prefabs/Datatypes in events and exports, and the remotes in a folder on a
+-- client that waits for them unbounded. The goldens are type-checked under both solvers;
+-- test/Datatypes.luau and test/Lifecycle.luau run them.
+option RemoteScope = "Datatypes"
+option RemotesFolder = "Network"
+option WriteValidations = true
+option ClientOutput = "../../Network/DatatypesClient.luau"
+option ServerOutput = "../../Network/DatatypesServer.luau"
+
+export struct Panel {
+    Size: UDim2,
+    Padding: UDim,
+    Anchor: Vector2,
+    Spread: NumberRange,
+    Fade: ColorSequence,
+    Open: TweenInfo,
+    Surface: Enum(Material),
+    Key: Enum(KeyCode)?,
+}
+
+event Styled {
+    From: Server,
+    Type: Reliable,
+    Call: SingleSync,
+    Data: Panel
+}
+
+event Pressed {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Rate: 30,
+    Data: (Enum(KeyCode), Vector2)
+}
+
+event Fonts {
+    From: Server,
+    Type: Unreliable,
+    Call: SingleSync,
+    Data: Enum(Font)[..8]
+}
