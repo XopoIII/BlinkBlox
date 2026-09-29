@@ -7,6 +7,18 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 0.42.1 — 2026-09-29
+
+Neither the wire nor the generated modules change.
+
+### Changed
+
+- The toolchain runs on LuneBlox 0.10.10, which keeps Luau 0.740 and Roblox's flags; only its CI
+  moved, so the benchmark figures stay comparable.
+- CI and the release workflow use the Node.js 24 majors of their actions -- GitHub deprecated the
+  Node.js 20 ones -- and `CompeyDev/setup-rokit` v0.2.1. The docs build on the current Node LTS, and
+  their dependencies are at their latest releases.
+
 ## 0.42.0 — 2026-09-29
 
 A release about the server's decode and the client's flush, measured against every library this fork
