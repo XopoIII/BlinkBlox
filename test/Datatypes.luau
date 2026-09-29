@@ -211,3 +211,12 @@ RunClosure("Enum(Name) refuses an item of another enum on send", function()
 	Check("Enum send", not Success, "an item of KeyCode was written as a Material")
 	Check("Enum send", string.find(tostring(Failure), "Enum.Material", 1, true) ~= nil, `refused with "{Failure}"`)
 end)
+
+RunClosure("A type named Enum is refused only beside the datatypes that name Enum", function()
+	local Alone = pcall(Isolated.Parse, "type Enum = u8\nexport type Plain = Enum")
+	Check("Enum alone", Alone, "a schema that uses no Roblox enum could not name a type Enum")
+
+	local Beside, Failure = pcall(Isolated.Parse, "type Enum = u8\nexport type Surface = Enum(Material)")
+	Check("Enum beside Enum(Name)", not Beside, "a type Enum was accepted beside Enum(Material)")
+	Check("Enum beside Enum(Name)", string.find(tostring(Failure), "E3005", 1, true) ~= nil, `refused with "{Failure}"`)
+end)

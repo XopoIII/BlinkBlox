@@ -1,0 +1,123 @@
+---
+title: Common pitfalls
+description: The mistakes that most often break networking in Roblox games, gathered from the bug reports of other networking libraries -- Actors, StreamingEnabled, loading order, ':' calls, listeners attached late -- and what BlinkBlox does about each.
+---
+
+The problems below are the ones reported again and again against Roblox networking libraries --
+BlinkBlox's own upstream, zap, ByteNet, Packet, Warp and QuickNet. Each section says what goes wrong,
+what BlinkBlox does about it, and what is left for the game to do.
+
+## Requiring a module from an Actor
+
+Every Actor is a Luau VM of its own. A generated module required in two VMs would find the same
+remotes and connect to them twice: every packet decoded twice, every listener called twice, two
+inbound budgets for one player, and a player's sends split across two batches with no order between
+them.
+
+BlinkBlox refuses the second copy when it is required:
+
+```text
+[BlinkBlox]: A server module using the remote "BLINK_RELIABLE_REMOTE" is already running in another
+Luau VM, such as an Actor's. Require it from one VM only, and hand work to Actors with messages or
+SharedTables.
+```
+
+Require the server module from one Script and the client module from one LocalScript, outside any
+Actor, and pass work to Actors with `Actor:SendMessage` or a `SharedTable`. Two schemas meant to run
+side by side need different [`RemoteScope`](/BlinkBlox/language/options/#remotescope)s.
+
+## StreamingEnabled and missing Instances
+
+An Instance travels as a reference, and the receiver sees `nil` when it does not have that Instance:
+not streamed in yet, never replicated to it, or destroyed while the packet was in flight. Under
+StreamingEnabled that is an everyday event for an honest player.
+
+BlinkBlox refuses only the event that carried the missing Instance, reports it, and reads the rest of
+the packet. The report says:
+
+```text
+An Instance it carried did not arrive: it is not streamed in or not replicated to this side, or it
+was destroyed before the packet came. Only this event was dropped.
+```
+
+On the server it reaches [`SetDecodeErrorHandler`](/BlinkBlox/reference/generated-api/) like any
+refused event; on the client, a handler hears every one, and without one each event warns once.
+
+- Declare an Instance that may be missing as optional, `Instance(Part)?`, and the listener gets
+  `nil` instead of the event being refused.
+- Do not punish a player for this message. It is the other side's view of the world, not a malformed
+  packet.
+
+## Requiring the client from ReplicatedFirst
+
+A LocalScript in ReplicatedFirst runs before the rest of the game has replicated, so the client
+module in ReplicatedStorage may not exist yet. Reach it with `WaitForChild`, as any script there must.
+
+The module then waits for the two remotes, which the server module creates when it is required. If
+they have not appeared after five seconds it says so once, naming the cause, and keeps waiting:
+
+```text
+[BlinkBlox]: Still waiting for "BLINK_RELIABLE_REMOTE" after 5 seconds. The server module creates it:
+require it from a server Script. To stop waiting after a while, set option ClientConnectTimeout.
+```
+
+In a place with no server module at all -- a showroom, a test place -- set
+[`ClientConnectTimeout`](/BlinkBlox/language/options/#clientconnecttimeout); see
+[Places without a server](/BlinkBlox/guides/places-without-a-server/).
+
+## Firing before the client has loaded
+
+A server may fire at a player as soon as `PlayerAdded` runs, long before that player's client has
+required its module. Reliable events are not lost: Roblox holds what arrives on a remote until the
+client module connects to it, and each event then waits in its own queue until the game calls `.On`
+for it. Each event's queue holds 256; past that the client drops the rest and warns once, since
+a listener nobody connects is a bug.
+
+Unreliable events are the exception, on purpose: one that arrives with no listener is dropped. An
+unreliable event says "this is the latest", and replaying stale ones to a late listener would be
+wrong. Connect listeners for unreliable events before the state they describe matters, and send
+state a late joiner needs reliably, or as a [stream](/BlinkBlox/guides/streaming-state/).
+
+## Calling with `:` instead of `.`
+
+Every send is a field of a table, not a method: `Net.Hit.Fire(Player, Damage)`. Written
+`Net.Hit:Fire(Player, Damage)`, the table itself becomes the first argument. BlinkBlox names that
+mistake instead of failing somewhere inside the serialiser:
+
+```text
+[BlinkBlox]: Expected a Player to send to, got a table instead. Call a send with '.', as
+Net.Event.Fire(Player, ...), not with ':'.
+```
+
+With [`WriteValidations`](/BlinkBlox/language/options/#writevalidations) on, a value of the wrong
+type says the same.
+
+## A second listener on a function
+
+A function has one listener, since one answer goes back to the caller. Calling `.On` again replaces
+the first, and warns:
+
+```text
+[BlinkBlox]: "GetStats" already has a listener. SingleSync keeps only the newest one, and the
+replaced listener's disconnect stops working.
+```
+
+An event declared `Call: ManySync` or `ManyAsync` is the one to use when several parts of a game
+listen.
+
+## Importing a file of events twice
+
+An `import` compiles its file again every time it is reached, so a file holding events imported
+twice -- directly, or through two files that each import it -- declares every event twice, each with
+its own id and its own listeners. A `Fire` on one is never heard by the other's listeners. The
+compiler warns with `W3036`. Keep events in files imported once, and share
+[types](/BlinkBlox/language/imports/#every-import-is-its-own-copy) through a file that holds only
+types.
+
+## A module that has grown very large
+
+Every event adds serialisers to the generated modules, and a schema with hundreds of rich events can
+produce modules of tens of thousands of lines, which take Studio and the client a long time to load.
+The compiler and the Studio plugin warn when a module passes 50,000 lines. Share structures between
+events rather than repeating them inline, and split a very large schema into
+[scopes](/BlinkBlox/language/scopes/) or separate schemas with their own `RemoteScope`.

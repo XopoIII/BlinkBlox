@@ -7,6 +7,106 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.0.0 — 2026-09-30
+
+A release built from other libraries' bug reports. The DevForum threads and issue trackers of
+upstream Blink, zap, ByteNet, Packet, Warp and QuickNet were read in full, about two hundred reports,
+and each was checked against this fork: most it already prevented, and this release closes the rest
+it could. It is 1.0.0 because the generated server is now what the fork set out to make -- safe to
+point at the open internet -- and because what it reports to a game changes (see Upgrading).
+
+The wire does not change: a module built by 1.0.0 talks to one built by 0.40.0 or later, unless the
+schema uses one of the new types, which the schema signature then tells apart.
+
+### Safer
+
+- **A missing Instance refuses its own event, not the rest of the packet.** An Instance the sender
+  had arrives as `nil` when it is not streamed in, not replicated to the receiver, or destroyed in
+  flight -- routine under StreamingEnabled. The read threw, and the packet's one pcall discarded every
+  event after it. The slot is read either way, so the cursor is sound: the event is refused once its
+  payload is read, reported, and the packet goes on. A call missing an Instance is answered with a
+  failure. A flat event is refused where the Instance is missing and pays nothing when it arrives, so
+  decoding is as fast as 0.42.1's.
+- An array of Instances was measured against the table beside the packet, which a missing last
+  Instance shortens, and threw the packet away; it is measured against `MaxInstancesPerPacket`. A
+  map's entry count had no check before its loop; it has one.
+- **A second copy of a module in another Luau VM errors at require.** Every Actor is a VM, and the
+  `_G` guard cannot see across them: a copy required from an Actor connected to the same remotes and
+  decoded every packet twice, with two inbound budgets for one player. The server and the client each
+  claim the remote with an attribute. Remotes the server makes are `Archivable = false`, so a place
+  saved while running does not keep them.
+- **The client's queues are capped.** An event with no listener queued without limit and warned on
+  every event past 256 -- zap's "death loop". It stops at 256, as the server's does, and warns once.
+
+### Added
+
+- `Vector2`, `UDim`, `UDim2`, `NumberRange`, `ColorSequence` and `TweenInfo`. A `ColorSequence` is 2
+  to 20 keypoints; its reader checks the count before reading for it, and that the times run from 0
+  to 1 in order, and a `NumberRange` that `Max` is not below `Min`, so a hostile packet is refused
+  with a message rather than by the constructor.
+- `Enum(Name)`, an item of a Roblox enum: its `Value` in a `u16`, looked up by `Value` on arrival --
+  never by position in `GetEnumItems()`, which can differ between client and server during an engine
+  rollout. The `Value` is checked on send whatever `WriteValidations` says. `Enum` is a type only
+  directly before its name, so a declaration already called `Enum` still parses; `E3037` for an
+  `Enum` with no name.
+- `option RemotesFolder = "Name"` keeps the two remotes in a folder in ReplicatedStorage.
+- `W3036` warns when a file holding events or functions is imported more than once: each import
+  compiles them again, as separate events.
+- A client still waiting for its remotes after five seconds says once why -- the server module makes
+  them -- and names `ClientConnectTimeout`, then keeps waiting.
+- A second `.On` on a function warns that it replaced the first.
+- A send called with `:` instead of `.` says so, on the server where a player's first send of a frame
+  lands and in the `WriteValidations` type error; ordinary sends pay nothing for it.
+- The CLI and the Studio plugin warn when a generated module passes 50,000 lines.
+- A [Common pitfalls](/BlinkBlox/guides/common-pitfalls/) guide.
+
+### Changed
+
+- **The generated modules keep their types under the new type solver.** Past about 200 events the
+  solver gave up on the returned table and a game's code lost every type; the table is now assembled a
+  member a statement. `scripts/type-check.sh` checks every golden under both solvers, and
+  `test/Consumers` checks that a game's use of the modules type-checks and its misuse does not.
+- **The Studio plugin's editor** parses the schema once typing pauses for 0.3 seconds and recolours it
+  once a frame: on a 1,200-line schema each cost about 15 ms, and both ran on every key.
+- **The plugin's changes are undo steps.** Deleting a schema destroyed it beyond any undo; saving,
+  deleting and generating are now each one step, and a generation whose write fails is rolled back.
+- The toolchain runs on LuneBlox 0.10.12, which fixes a Luau 0.740 native-code fault on ARM64 that
+  made native benchmarks die silently on Apple silicon.
+- Tests load modules with full channels, 256 events each way, natively.
+
+### Performance
+
+Against 0.42.1, `Runtime` over both releases' modules in one harness (`--sources`), LuneBlox 0.10.12
+on an Apple M1, releases alternated, three rounds of every bench and eight of the two below:
+nothing got slower. Fire, flush and decode stay within 1% on every bench, native and interpreted.
+
+| Native decode, ms a frame | 0.42.1 fastest / median | 1.0.0 fastest / median |
+|---|---|---|
+| Booleans | 4.426 / 4.435 | 4.431 / 4.473 |
+| EntitiesRandom | 7.050 / 7.885 | 6.982 / 8.065 |
+
+Those two medians moved with the machine, not the code: both releases' runs fall into the same two
+clusters (Booleans 4.43 or 4.98, EntitiesRandom 7.0 or 9.0), and the decoders differ only in type
+annotations, which the compiler erases. The checks this release adds sit at require, on a player's
+first send of a frame, or on the path of an event that failed.
+
+### Upgrading
+
+- Nothing to regenerate for the wire. Regenerate to get the fixes: each applies only to the side
+  built by 1.0.0.
+- **What reaches the decode-error handler changes.** A missing Instance used to fail the whole packet
+  with whatever the read threw; now each event that lost one is reported on its own, with a `Failure`
+  that begins "An Instance it carried did not arrive". On the server that is `SetDecodeErrorHandler`,
+  through the same once-a-second schedule. It describes the other side's view of the world, not a
+  malformed packet: a game that strikes or bans on decode errors should not count it. On the client a
+  handler hears every one, and without a handler each event warns once.
+- Requiring a module a second time from an Actor now errors. Require each module from one VM.
+- The client's queue for an event with no listener stops at 256 and warns once, rather than growing.
+- `Vector2`, `UDim`, `UDim2`, `NumberRange`, `ColorSequence` and `TweenInfo` are now types, so a
+  declaration of one of those names must be renamed (`E2002`). A top-level type named `Enum` or
+  `EnumItem` is refused (`E3005`) only in a schema that uses `Enum(Name)` or `TweenInfo`, and one
+  named `ColorSequenceKeypoint` only beside a `ColorSequence`.
+
 ## 0.42.1 — 2026-09-29
 
 Neither the wire nor the generated modules change.

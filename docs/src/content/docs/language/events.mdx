@@ -329,8 +329,9 @@ listener is dropped.
 
 The queue holds 256 events. On the server it is filled by clients, so once it is full further events
 are dropped without a word: an event the game declares but never listens to cannot be used to grow
-server memory or fill the output. On the client a queue past 256 warns instead, because there it
-usually means a listener somebody forgot.
+server memory or fill the output. On the client it stops at 256 too, and warns once when it fills,
+because there it usually means a listener somebody forgot. Before 1.0.0 the client's queue grew for as
+long as the server sent and warned on every event past 256.
 
 ### Packets that cannot be decoded
 A packet that fails to decode -- truncated, carrying an index no event has, or failing a range -- is
