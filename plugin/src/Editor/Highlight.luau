@@ -82,6 +82,14 @@ local function Bounds(Value: string, Palette: Palette): string?
 	return nil
 end
 
+--- A field name is painted as text rather than as an identifier, which is how `Name:` reads
+--- differently from a reference to `Name`. A map's key is a type, not a field, hence the guard.
+local function Identifier(Value: string, Palette: Palette, SourceLexer: Lexer.Lexer, Keyword: string): string
+	local LookAhead = SourceLexer:GetNextToken(true)
+	local IsField = (LookAhead and LookAhead.Type == "FieldAssign" and Keyword ~= "map")
+	return Color(Value, IsField and Palette.Text or Palette.Identifier)
+end
+
 --- One token's worth of markup. Split out from the loop so a spec can drive a single token without
 --- standing up a document.
 function Highlight.Token(
@@ -101,11 +109,7 @@ function Highlight.Token(
 	if Type == "Keyword" or Type == "Import" or Type == "As" then
 		return Color(Value, Palette.Keyword), Value
 	elseif Type == "Identifier" then
-		--> A field name is painted as text rather than as an identifier, which is how `Name:` reads
-		--> differently from a reference to `Name`. A map's key is a type, not a field, hence the guard.
-		local LookAhead = SourceLexer:GetNextToken(true)
-		local IsField = (LookAhead and LookAhead.Type == "FieldAssign" and Keyword ~= "map")
-		return Color(Value, IsField and Palette.Text or Palette.Identifier), Keyword
+		return Identifier(Value, Palette, SourceLexer, Keyword), Keyword
 	elseif Type == "Array" or Type == "Range" then
 		return Bounds(Value, Palette) or Escape(Value), Keyword
 	elseif Type == "Component" then

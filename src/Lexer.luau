@@ -271,6 +271,40 @@ function Lexer.Initialize(self: Lexer, Source: string, File: string?)
 	self.File = File
 end
 
+--> The two ways out of GetNextToken that are not a token of the source. Each happens once a file at
+--> most in a schema that compiles, so they are kept out of the function every token goes through.
+local function EndOfFile(Source: string): Token
+	return {
+		Type = "EndOfFile",
+		Value = "",
+		Start = #Source,
+		End = #Source,
+	}
+end
+
+--> No rule matched at `Position`: reported unless highlighting, and stepped over.
+local function Unknown(self: Lexer, Position: number, DontAdvanceCursor: boolean?): Token
+	local Source = self.Source
+	if self.Mode ~= "Highlighting" then
+		Error.new(Error.LexerUnexpectedToken, Source, "Unexpected token", self.File)
+			:Primary({ Start = self.Cursor, End = self.Cursor }, `Unexpected token`)
+			:Emit()
+	end
+
+	--> Attempt to recover the lexer
+	local Symbol = string.sub(Source, Position, Position)
+	if DontAdvanceCursor ~= true then
+		self.Cursor += 1
+	end
+
+	return {
+		Type = "Unknown",
+		Value = Symbol,
+		Start = Position,
+		End = Position,
+	}
+end
+
 function Lexer.GetNextToken(self: Lexer, DontAdvanceCursor: boolean?, StartAt: number?): Token
 	local Source = self.Source
 	local Size = self.Size
@@ -281,12 +315,7 @@ function Lexer.GetNextToken(self: Lexer, DontAdvanceCursor: boolean?, StartAt: n
 	--> over, and the search starts again from where they end.
 	while true do
 		if self.Cursor > Size then
-			return {
-				Type = "EndOfFile",
-				Value = "",
-				Start = #Source,
-				End = #Source,
-			}
+			return EndOfFile(Source)
 		end
 
 		local Skipped = false
@@ -343,24 +372,7 @@ function Lexer.GetNextToken(self: Lexer, DontAdvanceCursor: boolean?, StartAt: n
 			continue
 		end
 
-		if not IsHighlighting then
-			Error.new(Error.LexerUnexpectedToken, self.Source, "Unexpected token", self.File)
-				:Primary({ Start = self.Cursor, End = self.Cursor }, `Unexpected token`)
-				:Emit()
-		end
-
-		--> Attempt to recover the lexer
-		local Symbol = string.sub(Source, Position, Position)
-		if DontAdvanceCursor ~= true then
-			self.Cursor += 1
-		end
-
-		return {
-			Type = "Unknown",
-			Value = Symbol,
-			Start = Position,
-			End = Position,
-		}
+		return Unknown(self, Position, DontAdvanceCursor)
 	end
 end
 

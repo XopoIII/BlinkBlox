@@ -34,6 +34,25 @@ local function Declared(Source: string, Channel: string): { [number]: string }
 	return Names
 end
 
+--- Judges what the server reported for one index sent alone: `Expected` is the declaration that
+--- has it, if one does.
+local function Judge(File: string, Channel: string, Index: number, Expected: string?, Reports: { { Event: string? } })
+	local Report = Reports[1]
+	if #Reports > 1 then
+		ErrorPrint(`Failed "{File}" {Channel} index {Index}: reported {#Reports} times for one packet.`)
+	elseif Expected == nil and (Report == nil or Report.Event ~= nil) then
+		ErrorPrint(
+			`Failed "{File}" {Channel} index {Index}: no declaration has it, and it was {if Report
+				then `reported as "{Report.Event}"`
+				else "never reported"}.`
+		)
+	elseif Expected ~= nil and Report and Report.Event ~= Expected then
+		ErrorPrint(
+			`Failed "{File}" {Channel} index {Index}: declared as "{Expected}", reported as {Report.Event or "unknown"}.`
+		)
+	end
+end
+
 RunClosure("Every event index is routed or refused, on every test schema's server", function()
 	local Schemas = 0
 	for _, File in fs.readDir("./Sources") do
@@ -77,21 +96,7 @@ RunClosure("Every event index is routed or refused, on every test schema's serve
 				buffer.writeu8(Packet, 0, Index)
 				Pair.Feed(Channel == "Reliable", Packet)
 
-				local Expected = Names[Index]
-				local Report = Reports[1]
-				if #Reports > 1 then
-					ErrorPrint(`Failed "{File}" {Channel} index {Index}: reported {#Reports} times for one packet.`)
-				elseif Expected == nil and (Report == nil or Report.Event ~= nil) then
-					ErrorPrint(
-						`Failed "{File}" {Channel} index {Index}: no declaration has it, and it was {if Report
-							then `reported as "{Report.Event}"`
-							else "never reported"}.`
-					)
-				elseif Expected ~= nil and Report and Report.Event ~= Expected then
-					ErrorPrint(
-						`Failed "{File}" {Channel} index {Index}: declared as "{Expected}", reported as {Report.Event or "unknown"}.`
-					)
-				end
+				Judge(File, Channel, Index, Names[Index], Reports)
 			end
 		end
 

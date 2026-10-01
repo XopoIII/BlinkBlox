@@ -205,11 +205,14 @@ into `src/Parser/`, the generator into `Event`, `Function`, `Generators` and `Pr
 editor into `Completion`, `Spans`, `Gutter` and the rest. A file that reaches the cap is split the
 same way, not exempted.
 
-A function is capped as a file is: selene's `high_cyclomatic_complexity` denies one past 20, in
+A function is capped as a file is: selene's `high_cyclomatic_complexity` denies one past 15, in
 `selene.toml` and `plugin/selene.toml`, with no `selene: allow` anywhere. The line cap left a file
-free to be one function -- `Declarations.Event` was 430 lines and scored 50 -- and seventeen were
-split when the lint went in. A long `if`/`elseif` over a node's kind becomes a table of handlers or
-named local functions, and the output must not change: the goldens are the proof. Selene and not
+free to be one function -- `Declarations.Event` was 430 lines and scored 50 -- so seventeen were
+split when the lint went in at 20, and nineteen more when it came down to 15. A long `if`/`elseif`
+over a node's kind becomes a table of handlers or named local functions, and the output must not
+change: the goldens are the proof. On a hot path -- the lexer, `Parser.Type`, `Generators.LuauType`
+-- the rare branches move out and the common one stays inline, because a call a token is not free;
+a split is timed like any other change. Selene and not
 Lizard, which was tried: its Lua reader knows neither Luau's type annotations nor backtick strings,
 and found 25 of `Generator/Blocks.luau`'s 33 functions.
 

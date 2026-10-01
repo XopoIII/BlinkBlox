@@ -111,6 +111,101 @@ local function GetTypeToUseByBits(UpperBits: number): TypePrefab
 	error("Value is too large to be written to a buffer.")
 end
 
+--> The checks of a ranged value, on the side of the range it can reach.
+local function RangeAsserts(
+	Block: Block,
+	Receiving: boolean,
+	AssertGenerator: AssertGenerator,
+	WireRange: NumberRange,
+	Primitive: string,
+	IsVariableSize: boolean?,
+	TargetVariable: string,
+	Measure: string?
+)
+	local Min, Max = WireRange.Min, WireRange.Max
+	--> A side the value can reach. An open side of a float range is infinite, and every
+	--> value passes it; on receipt, a side an integer's read already meets passes too -- a
+	--> scaled one's included, since it is checked in the steps it was read as. Either line is
+	--> left out rather than emitted -- `inf` would read as a nil global -- and NaN is still
+	--> refused, because a float's remaining side is `not (x >= Min)`.
+	local Floor, Ceiling = -math.huge, math.huge
+	if Receiving then
+		Min, Max = Narrow.Bounds(Primitive, Min, Max)
+		Floor, Ceiling = Narrow.Readable(Primitive)
+	end
+
+	local Assert = AssertGenerator(TargetVariable, Min, Max, Measure)
+	if not IsVariableSize and Assert.Exact then
+		Block:Line(Assert.Exact)
+	else
+		if WireRange.Min > Floor then
+			Block:Line(Assert.Lower)
+		end
+		if WireRange.Max < Ceiling then
+			Block:Line(Assert.Upper)
+		end
+	end
+end
+
+--> The check of an Instance's class: `Exact` is the assert its generator emitted for it.
+local function InstanceAsserts(Block: Block, Sending: boolean, TargetVariable: string, Class: string, Exact: string)
+	if Sending then
+		--> Nil passes on send: an Instance the other side cannot see arrives as nil anyway,
+		--> and the receiver is the one that refuses it. The value is typed as a
+		--> non-optional Instance, which strict mode will not compare with nil, hence the
+		--> cast.
+		Block:Compare(`({TargetVariable} :: any)`, "nil", "Not"):Multiline(Exact, Block.Indent + 1):End()
+	elseif Present.Value then
+		Block:Multiline(Exact, Block.Indent)
+	else
+		--> A nil on receipt is an Instance the sender had and this side does not: not
+		--> streamed in, not replicated here, or destroyed before the packet arrived. An
+		--> honest player meets that every day, and throwing here threw away every event
+		--> after this one in the packet. The cursor is sound -- the slot was read, it is
+		--> just empty -- so only this event is refused: the flag is raised, the read goes
+		--> on, and the event's branch checks it once the whole payload is decoded
+		--> (Decode.MissingGuard). Anything else in the slot is a value no sender writes,
+		--> and still stops the packet.
+		-->
+		--> The type is tested first and nil only once it has failed, so an Instance that
+		--> did arrive pays the one comparison it always did: testing for nil first cost a
+		--> decode of a hundred events carrying a part 6% more, interpreted.
+		Missing.Count += 1
+		Block:Line(`if typeof({TargetVariable}) ~= "Instance" then`)
+		Block:Line(
+			`\tif {TargetVariable} ~= nil then error(\`Expected an Instance, got \{typeof({TargetVariable})} instead.\`) end`
+		)
+		Block:Line("\tMissingInstance = true")
+		if Class ~= "Instance" then
+			Block:Line(`elseif not {TargetVariable}:IsA("{Class}") then`)
+			Block:Line(
+				`\terror(\`Expected an Instance of type "{Class}", got "\{{TargetVariable}.ClassName}" instead.\`)`
+			)
+		end
+		Block:Line("end")
+	end
+end
+
+--> Where a number checked on receipt is held while it is checked: a local, when it is read into a
+--> field and there is a side of its range to check, and the target itself otherwise.
+local function CheckedLocal(
+	Type: string,
+	Modified: boolean,
+	WireRange: NumberRange?,
+	Target: string,
+	Primitive: string,
+	IsVariableSize: boolean?
+): string
+	if Type == "number" and not Modified and WireRange and string.find(Target, "[%.%[]") then
+		local Floor, Ceiling = Narrow.Readable(Primitive)
+		if not IsVariableSize or WireRange.Min > Floor or WireRange.Max < Ceiling then
+			return "Checked"
+		end
+	end
+
+	return Target
+end
+
 local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertGenerator: AssertGenerator?): Generate
 	return function(
 		Declaration: Parser.Primitive,
@@ -160,72 +255,22 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 			end
 
 			if WireRange then
-				local Min, Max = WireRange.Min, WireRange.Max
-				--> A side the value can reach. An open side of a float range is infinite, and every
-				--> value passes it; on receipt, a side an integer's read already meets passes too -- a
-				--> scaled one's included, since it is checked in the steps it was read as. Either line is
-				--> left out rather than emitted -- `inf` would read as a nil global -- and NaN is still
-				--> refused, because a float's remaining side is `not (x >= Min)`.
-				local Floor, Ceiling = -math.huge, math.huge
-				if Block == Read then
-					Min, Max = Narrow.Bounds(Primitive, Min, Max)
-					Floor, Ceiling = Narrow.Readable(Primitive)
-				end
-
-				local Assert = AssertGenerator(TargetVariable, Min, Max, Measure)
-				if not IsVariableSize and Assert.Exact then
-					Block:Line(Assert.Exact)
-				else
-					if WireRange.Min > Floor then
-						Block:Line(Assert.Lower)
-					end
-					if WireRange.Max < Ceiling then
-						Block:Line(Assert.Upper)
-					end
-				end
+				RangeAsserts(
+					Block,
+					Block == Read,
+					AssertGenerator,
+					WireRange,
+					Primitive,
+					IsVariableSize,
+					TargetVariable,
+					Measure
+				)
 			elseif Primitive == "Instance" and Class then
-				local Assert = AssertGenerator(TargetVariable, Class)
 				--> `Exact` is optional on AssertPrefab because range asserts may omit it; the Instance
 				--> generator always sets it. Reading it into a local narrows the type without a cast.
-				local Exact = Assert.Exact
+				local Exact = AssertGenerator(TargetVariable, Class).Exact
 				if Exact then
-					if Block == Write then
-						--> Nil passes on send: an Instance the other side cannot see arrives as nil anyway,
-						--> and the receiver is the one that refuses it. The value is typed as a
-						--> non-optional Instance, which strict mode will not compare with nil, hence the
-						--> cast.
-						Block:Compare(`({TargetVariable} :: any)`, "nil", "Not")
-							:Multiline(Exact, Block.Indent + 1)
-							:End()
-					elseif Present.Value then
-						Block:Multiline(Exact, Block.Indent)
-					else
-						--> A nil on receipt is an Instance the sender had and this side does not: not
-						--> streamed in, not replicated here, or destroyed before the packet arrived. An
-						--> honest player meets that every day, and throwing here threw away every event
-						--> after this one in the packet. The cursor is sound -- the slot was read, it is
-						--> just empty -- so only this event is refused: the flag is raised, the read goes
-						--> on, and the event's branch checks it once the whole payload is decoded
-						--> (Decode.MissingGuard). Anything else in the slot is a value no sender writes,
-						--> and still stops the packet.
-						-->
-						--> The type is tested first and nil only once it has failed, so an Instance that
-						--> did arrive pays the one comparison it always did: testing for nil first cost a
-						--> decode of a hundred events carrying a part 6% more, interpreted.
-						Missing.Count += 1
-						Block:Line(`if typeof({TargetVariable}) ~= "Instance" then`)
-						Block:Line(
-							`\tif {TargetVariable} ~= nil then error(\`Expected an Instance, got \{typeof({TargetVariable})} instead.\`) end`
-						)
-						Block:Line("\tMissingInstance = true")
-						if Class ~= "Instance" then
-							Block:Line(`elseif not {TargetVariable}:IsA("{Class}") then`)
-							Block:Line(
-								`\terror(\`Expected an Instance of type "{Class}", got "\{{TargetVariable}.ClassName}" instead.\`)`
-							)
-						end
-						Block:Line("end")
-					end
+					InstanceAsserts(Block, Block == Write, TargetVariable, Class, Exact)
 				end
 			end
 		end
@@ -234,13 +279,7 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 		--> Checked where it was stored, each comparison read the field back out of its table, and on a
 		--> struct of three ranged numbers that was a third of the time spent decoding it. The local lives
 		--> in the field's own scope (Generator/Scope.luau), so it costs no register past the field.
-		local Checked = Target
-		if Type == "number" and not Modified and WireRange and string.find(Target, "[%.%[]") then
-			local Floor, Ceiling = Narrow.Readable(Primitive)
-			if not IsVariableSize or WireRange.Min > Floor or WireRange.Max < Ceiling then
-				Checked = "Checked"
-			end
-		end
+		local Checked = CheckedLocal(Type, Modified, WireRange, Target, Primitive, IsVariableSize)
 
 		if Modified then
 			Fixed.Write(Declaration, Target, Write, WriteValidations, function(Converted: string)

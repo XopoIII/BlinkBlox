@@ -74,6 +74,56 @@ local function IsInteger(Number: number): boolean
 	return (Number // 1) == Number
 end
 
+--> A numeric option's value, checked against what the option admits.
+local function NumericValue(Reader: Reader, Name: string, Value: Lexer.Token): number?
+	--> Number tokens carry their text; every consumer of a numeric option wants the number.
+	local Numeric = tonumber(Value.Value)
+	local Minimum = MINIMUMS[Name] or 1
+	local Invalid = if FRACTIONAL[Name]
+		then not Numeric or not (Numeric > 0) or Numeric == math.huge
+		else not Numeric or Numeric < Minimum or not IsInteger(Numeric)
+	if Invalid then
+		local Expected = if FRACTIONAL[Name]
+			then "a positive number of seconds"
+			elseif Minimum == 1 then "a positive whole number"
+			else `a whole number, {Minimum} or more`
+		Error.new(Error.ParserUnknownOption, Reader.Source, `Invalid value for option "{Name}"`, Reader.File)
+			:Primary(Value, `Expected {Expected}`)
+			:Emit()
+	end
+
+	return Numeric
+end
+
+--> The options whose value is one of a set, or must not be empty.
+local function CheckValue(Reader: Reader, Name: string, Value: Lexer.Token)
+	--> An unknown casing used to get all the way to the GENERATOR, which raised a plain Lua
+	--> error mid-emit: no code, no source span, and a stack trace through the compiler in
+	--> place of a line number. Every other bad option value is a diagnostic, and this is the
+	--> last point at which the token is still around to point at.
+	if Name == "Casing" and Settings.Casings[Value.Value] == nil then
+		Error.new(Error.ParserUnknownOption, Reader.Source, `Invalid value for option "Casing"`, Reader.File)
+			:Primary(Value, `Expected one of {ListKeys(Settings.Casings)}`)
+			:Emit()
+	end
+	if Name == "PackedBooleanReader" and Settings.PackedBooleanReaders[Value.Value] == nil then
+		Error.new(
+			Error.ParserUnknownOption,
+			Reader.Source,
+			`Invalid value for option "PackedBooleanReader"`,
+			Reader.File
+		)
+			:Primary(Value, `Expected one of {ListKeys(Settings.PackedBooleanReaders)}`)
+			:Emit()
+	end
+
+	if Name == "RemotesFolder" and Value.Value == "" then
+		Error.new(Error.ParserUnknownOption, Reader.Source, `Invalid value for option "RemotesFolder"`, Reader.File)
+			:Primary(Value, "Expected the name of a folder")
+			:Emit()
+	end
+end
+
 ---- Public Functions ----
 
 function Utility.Parse(Reader: Reader): Options
@@ -143,61 +193,15 @@ function Utility.Parse(Reader: Reader): Options
 		end
 
 		local Value = Reader:Consume(Type)
+		local Parsed: any = Value.Value
 		if Type == "Number" then
-			--> Number tokens carry their text; every consumer of a numeric option wants the number.
-			local Numeric = tonumber(Value.Value)
-			local Minimum = MINIMUMS[Name] or 1
-			local Invalid = if FRACTIONAL[Name]
-				then not Numeric or not (Numeric > 0) or Numeric == math.huge
-				else not Numeric or Numeric < Minimum or not IsInteger(Numeric)
-			if Invalid then
-				local Expected = if FRACTIONAL[Name]
-					then "a positive number of seconds"
-					elseif Minimum == 1 then "a positive whole number"
-					else `a whole number, {Minimum} or more`
-				Error.new(Error.ParserUnknownOption, Reader.Source, `Invalid value for option "{Name}"`, Reader.File)
-					:Primary(Value, `Expected {Expected}`)
-					:Emit()
-			end
-
-			if not Excluded then
-				Options[Name] = Numeric
-			end
+			Parsed = NumericValue(Reader, Name, Value)
 		else
-			--> An unknown casing used to get all the way to the GENERATOR, which raised a plain Lua
-			--> error mid-emit: no code, no source span, and a stack trace through the compiler in
-			--> place of a line number. Every other bad option value is a diagnostic, and this is the
-			--> last point at which the token is still around to point at.
-			if Name == "Casing" and Settings.Casings[Value.Value] == nil then
-				Error.new(Error.ParserUnknownOption, Reader.Source, `Invalid value for option "Casing"`, Reader.File)
-					:Primary(Value, `Expected one of {ListKeys(Settings.Casings)}`)
-					:Emit()
-			end
-			if Name == "PackedBooleanReader" and Settings.PackedBooleanReaders[Value.Value] == nil then
-				Error.new(
-					Error.ParserUnknownOption,
-					Reader.Source,
-					`Invalid value for option "PackedBooleanReader"`,
-					Reader.File
-				)
-					:Primary(Value, `Expected one of {ListKeys(Settings.PackedBooleanReaders)}`)
-					:Emit()
-			end
+			CheckValue(Reader, Name, Value)
+		end
 
-			if Name == "RemotesFolder" and Value.Value == "" then
-				Error.new(
-					Error.ParserUnknownOption,
-					Reader.Source,
-					`Invalid value for option "RemotesFolder"`,
-					Reader.File
-				)
-					:Primary(Value, "Expected the name of a folder")
-					:Emit()
-			end
-
-			if not Excluded then
-				Options[Name] = Value.Value
-			end
+		if not Excluded then
+			Options[Name] = Parsed
 		end
 	end
 

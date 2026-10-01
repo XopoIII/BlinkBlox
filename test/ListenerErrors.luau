@@ -321,6 +321,16 @@ local function Reply(Index: number, Id: number): { number }?
 	return nil
 end
 
+--- A reply's bytes for a failure message, or what stands for one that never came.
+local function Bytes(Found: { number }?): string | { number }?
+	return Found and table.concat(Found, ",")
+end
+
+--- Whether a reply came, is `Length` bytes long and ends in `Last`.
+local function Is(Found: { number }?, Length: number, Last: number): boolean
+	return Found ~= nil and #Found == Length and Found[Length] == Last
+end
+
 RunClosure("A function listener that throws is answered with a failure and reported", function()
 	Reset()
 	local Reports = Record()
@@ -330,22 +340,8 @@ RunClosure("A function listener that throws is answered with a failure and repor
 	Server.SetListenerErrorHandler(nil)
 
 	local Failed, Answered, Unserialised = Reply(RELIABLE.Ask, 7), Reply(RELIABLE.Ask, 8), Reply(RELIABLE.BadReturn, 9)
-	local Shown =
-		`{Failed and table.concat(Failed, ",")} / {Answered and table.concat(Answered, ",")} / {Unserialised and table.concat(
-			Unserialised,
-			","
-		)}`
-	if
-		not Failed
-		or #Failed ~= 3
-		or Failed[3] ~= 0
-		or not Answered
-		or #Answered ~= 4
-		or Answered[4] ~= 5
-		or not Unserialised
-		or #Unserialised ~= 3
-		or Unserialised[3] ~= 0
-	then
+	local Shown = `{Bytes(Failed)} / {Bytes(Answered)} / {Bytes(Unserialised)}`
+	if not (Is(Failed, 3, 0) and Is(Answered, 4, 5) and Is(Unserialised, 3, 0)) then
 		ErrorPrint(`Failed "Function": the replies were {Shown}, expected a failure, an answer of 5, a failure.`)
 	end
 

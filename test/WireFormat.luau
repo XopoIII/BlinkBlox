@@ -212,21 +212,9 @@ RunClosure("Bit packing", function()
 	end
 end)
 
-RunClosure("Packed boolean arrays", function()
-	--> A pattern that is neither all one value nor periodic in eight, so a wrong mask, a wrong byte
-	--> offset or a bit order reversed within the byte all show up as a changed element.
-	local Seed = 0
-	local function Pattern(Count: number): { boolean }
-		local Values = table.create(Count)
-		for Index = 1, Count do
-			Seed = (Seed * 1103515245 + 12345) % 2147483648
-			table.insert(Values, (Index % 3 == 0) ~= (Seed % 2 == 0))
-		end
-		return Values
-	end
-
-	--> The length prefix is a varint -- one byte under 128 elements, two under 16384 -- then one byte
-	--> per eight elements, rounded up.
+--> The length prefix is a varint -- one byte under 128 elements, two under 16384 -- then one byte
+--> per eight elements, rounded up.
+local function PackedSizes(Pattern: (Count: number) -> { boolean })
 	local Cases = {
 		{ Count = 0, Bytes = 1 },
 		{ Count = 1, Bytes = 2 },
@@ -254,10 +242,12 @@ RunClosure("Packed boolean arrays", function()
 			ErrorPrint(`Failed "Packed boolean arrays": {Case.Count} elements did not survive the round trip.`)
 		end
 	end
+end
 
-	--> The server tests each bit, where native code inlines it, and the client copies a byte's eight
-	--> elements from a table of rows, which interprets faster: every byte, at every length of a last
-	--> partial byte and a whole one, written by one side and read by the other both ways.
+--> The server tests each bit, where native code inlines it, and the client copies a byte's eight
+--> elements from a table of rows, which interprets faster: every byte, at every length of a last
+--> partial byte and a whole one, written by one side and read by the other both ways.
+local function PackedSides(): boolean
 	for Byte = 0, 255 do
 		for Length = 1, 16 do
 			local Value = table.create(Length)
@@ -268,20 +258,17 @@ RunClosure("Packed boolean arrays", function()
 			local FromClient = Server.PackedBooleans.Read(Client.PackedBooleans.Write(Value))
 			if not Equals(FromServer, Value) or not Equals(FromClient, Value) then
 				ErrorPrint(`Failed "Packed boolean arrays": byte {Byte} at length {Length} read differently on a side.`)
-				return
+				return false
 			end
 		end
 	end
 
-	--> Bit order is part of the format: element one is the least significant bit, like `Block.Bit`.
-	local Ordered = Client.PackedBooleans.Write({ true, false, false, false, false, false, false, false, true })
-	--> After the one-byte length.
-	if buffer.readu8(Ordered, 1) ~= 0x01 or buffer.readu8(Ordered, 2) ~= 0x01 then
-		ErrorPrint(`Failed "Packed boolean arrays": the first element is not the least significant bit.`)
-	end
+	return true
+end
 
-	--> Every other shape a packed run can sit in. The fixed and ranged lengths, the run beside plain
-	--> booleans that share the struct's bitfield, one per map value, nested, and through an alias.
+--> Every other shape a packed run can sit in. The fixed and ranged lengths, the run beside plain
+--> booleans that share the struct's bitfield, one per map value, nested, and through an alias.
+local function PackedShapes(Pattern: (Count: number) -> { boolean })
 	local Shapes: { { Name: string, Value: any, Bytes: number? } } = {
 		{ Name = "PackedFixed", Value = Pattern(10), Bytes = 2 },
 		{ Name = "PackedRanged", Value = Pattern(3), Bytes = 2 },
@@ -310,9 +297,11 @@ RunClosure("Packed boolean arrays", function()
 			ErrorPrint(`Failed "Packed boolean arrays": {Shape.Name} did not survive the round trip.`)
 		end
 	end
+end
 
-	--> Under WriteValidations a non-boolean is refused by the index of the first one, whether it sits
-	--> in a whole byte, which is tested eight elements at once, or in the partial byte at the end.
+--> Under WriteValidations a non-boolean is refused by the index of the first one, whether it sits
+--> in a whole byte, which is tested eight elements at once, or in the partial byte at the end.
+local function PackedRefusals(Pattern: (Count: number) -> { boolean })
 	local Refusals = {
 		{ Index = 3, Count = 16, Expected = "Value[3] to be of type boolean, got number" },
 		{ Index = 12, Count = 16, Expected = "Value[12] to be of type boolean, got string" },
@@ -336,4 +325,33 @@ RunClosure("Packed boolean arrays", function()
 			)
 		end
 	end
+end
+
+RunClosure("Packed boolean arrays", function()
+	--> A pattern that is neither all one value nor periodic in eight, so a wrong mask, a wrong byte
+	--> offset or a bit order reversed within the byte all show up as a changed element.
+	local Seed = 0
+	local function Pattern(Count: number): { boolean }
+		local Values = table.create(Count)
+		for Index = 1, Count do
+			Seed = (Seed * 1103515245 + 12345) % 2147483648
+			table.insert(Values, (Index % 3 == 0) ~= (Seed % 2 == 0))
+		end
+		return Values
+	end
+
+	PackedSizes(Pattern)
+	if not PackedSides() then
+		return
+	end
+
+	--> Bit order is part of the format: element one is the least significant bit, like `Block.Bit`.
+	local Ordered = Client.PackedBooleans.Write({ true, false, false, false, false, false, false, false, true })
+	--> After the one-byte length.
+	if buffer.readu8(Ordered, 1) ~= 0x01 or buffer.readu8(Ordered, 2) ~= 0x01 then
+		ErrorPrint(`Failed "Packed boolean arrays": the first element is not the least significant bit.`)
+	end
+
+	PackedShapes(Pattern)
+	PackedRefusals(Pattern)
 end)

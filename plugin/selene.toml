@@ -17,4 +17,4 @@ roblox_incorrect_roblox_env = "deny"
 high_cyclomatic_complexity = "deny"
 
 [config]
-high_cyclomatic_complexity = { maximum_complexity = 20 }
+high_cyclomatic_complexity = { maximum_complexity = 15 }

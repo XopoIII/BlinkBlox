@@ -95,6 +95,41 @@ local function SameWide(Struct: Node, Sent: { [string]: any }, Got: { [string]: 
 	return nil
 end
 
+--- One round: a `Wide` alone, a few in an array, a few in a map. Returns what failed, or nil.
+local function CheckRound(Wide: Node, Round: number, Send: (Name: string, Value: any) -> any): string?
+	local Value = DrawWide(Wide)
+	local Failure = SameWide(Wide, Value, Send("One", Value) or {})
+	if Failure then
+		return `Failed "One", round {Round}: {Failure}`
+	end
+
+	local List = {}
+	for Index = 1, math.random(0, 3) do
+		List[Index] = DrawWide(Wide)
+	end
+	local Arrived = Send("Many", List) or {}
+	for Index, Item in List do
+		Failure = if Arrived[Index] then SameWide(Wide, Item, Arrived[Index]) else "missing"
+		if Failure then
+			return `Failed "Many", round {Round}, element {Index}: {Failure}`
+		end
+	end
+
+	local Keyed = {}
+	for _ = 1, math.random(0, 2) do
+		Keyed[math.random(0, 255)] = DrawWide(Wide)
+	end
+	local Mapped = Send("Keyed", Keyed) or {}
+	for Key, Item in Keyed do
+		Failure = if Mapped[Key] then SameWide(Wide, Item, Mapped[Key]) else "missing"
+		if Failure then
+			return `Failed "Keyed", round {Round}, key {Key}: {Failure}`
+		end
+	end
+
+	return nil
+end
+
 RunClosure("A struct wider than a function's locals loads and arrives intact", function()
 	if not Built then
 		ErrorPrint(`Failed: the generated modules did not load: {Pair}`)
@@ -127,37 +162,10 @@ RunClosure("A struct wider than a function's locals loads and arrives intact", f
 
 	math.randomseed(71)
 	for Round = 1, ROUNDS do
-		local Value = DrawWide(Wide)
-		local Failure = SameWide(Wide, Value, Send("One", Value) or {})
-		if Failure then
-			ErrorPrint(`Failed "One", round {Round}: {Failure}`)
+		local Failed = CheckRound(Wide, Round, Send)
+		if Failed then
+			ErrorPrint(Failed)
 			return
-		end
-
-		local List = {}
-		for Index = 1, math.random(0, 3) do
-			List[Index] = DrawWide(Wide)
-		end
-		local Arrived = Send("Many", List) or {}
-		for Index, Item in List do
-			Failure = if Arrived[Index] then SameWide(Wide, Item, Arrived[Index]) else "missing"
-			if Failure then
-				ErrorPrint(`Failed "Many", round {Round}, element {Index}: {Failure}`)
-				return
-			end
-		end
-
-		local Keyed = {}
-		for _ = 1, math.random(0, 2) do
-			Keyed[math.random(0, 255)] = DrawWide(Wide)
-		end
-		local Mapped = Send("Keyed", Keyed) or {}
-		for Key, Item in Keyed do
-			Failure = if Mapped[Key] then SameWide(Wide, Item, Mapped[Key]) else "missing"
-			if Failure then
-				ErrorPrint(`Failed "Keyed", round {Round}, key {Key}: {Failure}`)
-				return
-			end
 		end
 	end
 end)
