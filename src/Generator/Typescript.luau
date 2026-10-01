@@ -37,11 +37,14 @@ local function GetPrefix(Indent: number): string
 	return Indent == 0 and "declare " or ""
 end
 
+local TupleType: (State: State, Declaration: Parser.Tuple) -> (string, string)
+
 local function GetTypescriptType(State: State, Declaration: Type): (string, string)
 	local Type = ""
-	local Values = ""
 
-	if Declaration.Type == "Primitive" then
+	if Declaration.Type == "Tuple" then
+		return TupleType(State, Declaration :: Parser.Tuple)
+	elseif Declaration.Type == "Primitive" then
 		local Tokens = (Declaration :: Parser.Primitive).Tokens
 		local Primitive = Primitives[Tokens.Primitive.Value]
 		if type(Primitive.Type) == "function" then
@@ -74,24 +77,6 @@ local function GetTypescriptType(State: State, Declaration: Type): (string, stri
 		end, true)
 	elseif Declaration.Type == "Generic" then
 		Type = `{Declaration.Value.Generic}`
-	elseif Declaration.Type == "Tuple" then
-		local Value = (Declaration :: Parser.Tuple).Value
-		local TupleValues = Value.Values
-
-		local Types = {}
-		local VariableTypes = {}
-
-		--> A named element keeps its name here too, so the .d.ts parameter reads the same as the Luau
-		--> one. An unnamed element stays positional.
-		for Index, TupleValue in TupleValues do
-			local Variable = Value.Names[Index] or `Value{Index}`
-			local ValueType = GetTypescriptType(State, TupleValue)
-			table.insert(Types, ValueType)
-			table.insert(VariableTypes, `{Variable}: {ValueType}`)
-		end
-
-		Type = `{table.concat(Types, ", ")}`
-		Values = table.concat(VariableTypes, ", ")
 	elseif Declaration.Type == "Array" then
 		local Value = Declaration.Value
 		Type = `{GetTypescriptType(State, Value.Of)}[]`
@@ -101,13 +86,26 @@ local function GetTypescriptType(State: State, Declaration: Type): (string, stri
 	end
 
 	--> Generalized type generation, works for everything except tuples
-	if Declaration.Type ~= "Tuple" then
-		Values = `Value: {Type}`
-	else
-		Type = `LuaTuple<[{Type}]>`
+	return Type, `Value: {Type}`
+end
+
+--> A pack: a `LuaTuple` of its elements' types, and its parameters.
+function TupleType(State: State, Declaration: Parser.Tuple): (string, string)
+	local Value = Declaration.Value
+
+	local Types = {}
+	local VariableTypes = {}
+
+	--> A named element keeps its name here too, so the .d.ts parameter reads the same as the Luau
+	--> one. An unnamed element stays positional.
+	for Index, TupleValue in Value.Values do
+		local Variable = Value.Names[Index] or `Value{Index}`
+		local ValueType = GetTypescriptType(State, TupleValue)
+		table.insert(Types, ValueType)
+		table.insert(VariableTypes, `{Variable}: {ValueType}`)
 	end
 
-	return Type, Values
+	return `LuaTuple<[{table.concat(Types, ", ")}]>`, table.concat(VariableTypes, ", ")
 end
 
 function Generators.Type(State: State, Type: Type)

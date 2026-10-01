@@ -169,6 +169,101 @@ local function CaptureGoldens(File: string)
 	end
 end
 
+--- Compiles every schema and checks each one's output against its golden.
+local function CompileSources()
+	PrettyPrint("blue", "Compiling source files...")
+	for _, File in Sources do
+		local Metadata = fs.metadata(`./Sources/{File}`)
+		if Metadata.kind ~= "file" then
+			continue
+		end
+
+		local Path = `../../test/Sources/{File}`
+		PrettyPrint("cyan", `Compiling: {File}...`, true)
+		local Result = process.exec(runtime.command, { "run", Compiler, Path, "--", "--yes" }, { cwd = "../src/CLI" })
+		if not Result.ok then
+			ErrorPrint(`{File} failed to compile!\n{Result.stderr}`)
+		else
+			CaptureGoldens(File)
+			OkPrint(`{File} compiled successfully.`)
+		end
+	end
+
+	PrettyPrint("green", `Successfully compiled {#Sources}/{#Sources} source files!`)
+end
+
+local function CheckDeterminism()
+	--> Compiling the same schema twice must produce byte-identical output. Nothing downstream can
+	--> diff a build against the last one if the compiler is free to reorder its own output, and the
+	--> golden check above would turn into noise the first time something introduced a hash order or
+	--> a random identifier.
+	PrettyPrint("blue", "Checking output determinism...")
+	local Before = {}
+	for _, Basename in GetOutputs(fs.readFile("./Sources/Test.blink")) do
+		Before[Basename] = fs.readFile(`../Network/{Basename}`)
+	end
+
+	local Repeat = process.exec(
+		runtime.command,
+		{ "run", Compiler, COMPILE_TEST_FILE, "--", "--yes" },
+		{ cwd = "../src/CLI" }
+	)
+	if not Repeat.ok then
+		ErrorPrint(`Test.blink failed to recompile!\n{Repeat.stderr}`)
+	end
+
+	for Basename, Expected in Before do
+		local Got = fs.readFile(`../Network/{Basename}`)
+		if Expected ~= Got then
+			ErrorPrint(`Recompiling Test.blink produced different output for {Basename}.{Diff(Expected, Got)}`)
+		end
+	end
+
+	OkPrint("Output is deterministic across recompiles.")
+end
+
+local function CheckDiagnostics()
+	--> Schemas that must NOT compile, plus the ones that must compile while warning. Until this
+	--> existed the suite could only prove that a VALID schema works; a diagnostic that stopped
+	--> firing -- or fired with the wrong code -- broke nothing that anyone would notice.
+	--> Each file states what it expects in its first line: `-- expect E3008`.
+	PrettyPrint("blue", "Checking diagnostics...")
+	for _, File in fs.readDir("./Sources/Invalid") do
+		local Path = `./Sources/Invalid/{File}`
+		if fs.metadata(Path).kind ~= "file" then
+			continue
+		end
+
+		local Expectation = string.match(fs.readFile(Path), "^%-%-%s*expect%s+([EW]%d+)")
+		if not Expectation then
+			ErrorPrint(`{File} is missing its "-- expect <code>" header.`)
+		end
+
+		local Result = process.exec(
+			runtime.command,
+			{ "run", Compiler, `../../test/Sources/Invalid/{File}`, "--", "--yes", "--compact" },
+			{ cwd = "../src/CLI" }
+		)
+
+		local Output = `{Result.stdout}{Result.stderr}`
+		if not string.find(Output, `[{Expectation}]`, 1, true) then
+			ErrorPrint(`{File} was expected to report {Expectation}. Got:\n{Output}`)
+		end
+
+		--> An error has to stop the compile and a warning has to not. Checking the code alone would
+		--> pass a "warning" that quietly aborted the build.
+		if string.sub(Expectation :: string, 1, 1) == "E" then
+			if Result.ok then
+				ErrorPrint(`{File} reported {Expectation} but still compiled successfully.`)
+			end
+		elseif not Result.ok then
+			ErrorPrint(`{File} warns with {Expectation} but failed to compile. Got:\n{Output}`)
+		end
+
+		OkPrint(`{File} reports {Expectation}.`)
+	end
+end
+
 --- Compiles every schema, verifies the goldens and the diagnostics, and leaves the generated
 --- modules on disk for the specs to load. Does nothing when `--no-compile` was passed.
 local function Prepare()
@@ -180,97 +275,9 @@ local function Prepare()
 			OkPrint(`Cleared Network folder.`)
 		end
 
-		PrettyPrint("blue", "Compiling source files...")
-		for _, File in Sources do
-			local Metadata = fs.metadata(`./Sources/{File}`)
-			if Metadata.kind ~= "file" then
-				continue
-			end
-
-			local Path = `../../test/Sources/{File}`
-			PrettyPrint("cyan", `Compiling: {File}...`, true)
-			local Result = process.exec(
-				runtime.command,
-				{ "run", Compiler, Path, "--", "--yes" },
-				{ cwd = "../src/CLI" }
-			)
-			if not Result.ok then
-				ErrorPrint(`{File} failed to compile!\n{Result.stderr}`)
-			else
-				CaptureGoldens(File)
-				OkPrint(`{File} compiled successfully.`)
-			end
-		end
-
-		PrettyPrint("green", `Successfully compiled {#Sources}/{#Sources} source files!`)
-
-		--> Compiling the same schema twice must produce byte-identical output. Nothing downstream can
-		--> diff a build against the last one if the compiler is free to reorder its own output, and the
-		--> golden check above would turn into noise the first time something introduced a hash order or
-		--> a random identifier.
-		PrettyPrint("blue", "Checking output determinism...")
-		local Before = {}
-		for _, Basename in GetOutputs(fs.readFile("./Sources/Test.blink")) do
-			Before[Basename] = fs.readFile(`../Network/{Basename}`)
-		end
-
-		local Repeat = process.exec(
-			runtime.command,
-			{ "run", Compiler, COMPILE_TEST_FILE, "--", "--yes" },
-			{ cwd = "../src/CLI" }
-		)
-		if not Repeat.ok then
-			ErrorPrint(`Test.blink failed to recompile!\n{Repeat.stderr}`)
-		end
-
-		for Basename, Expected in Before do
-			local Got = fs.readFile(`../Network/{Basename}`)
-			if Expected ~= Got then
-				ErrorPrint(`Recompiling Test.blink produced different output for {Basename}.{Diff(Expected, Got)}`)
-			end
-		end
-
-		OkPrint("Output is deterministic across recompiles.")
-
-		--> Schemas that must NOT compile, plus the ones that must compile while warning. Until this
-		--> existed the suite could only prove that a VALID schema works; a diagnostic that stopped
-		--> firing -- or fired with the wrong code -- broke nothing that anyone would notice.
-		--> Each file states what it expects in its first line: `-- expect E3008`.
-		PrettyPrint("blue", "Checking diagnostics...")
-		for _, File in fs.readDir("./Sources/Invalid") do
-			local Path = `./Sources/Invalid/{File}`
-			if fs.metadata(Path).kind ~= "file" then
-				continue
-			end
-
-			local Expectation = string.match(fs.readFile(Path), "^%-%-%s*expect%s+([EW]%d+)")
-			if not Expectation then
-				ErrorPrint(`{File} is missing its "-- expect <code>" header.`)
-			end
-
-			local Result = process.exec(
-				runtime.command,
-				{ "run", Compiler, `../../test/Sources/Invalid/{File}`, "--", "--yes", "--compact" },
-				{ cwd = "../src/CLI" }
-			)
-
-			local Output = `{Result.stdout}{Result.stderr}`
-			if not string.find(Output, `[{Expectation}]`, 1, true) then
-				ErrorPrint(`{File} was expected to report {Expectation}. Got:\n{Output}`)
-			end
-
-			--> An error has to stop the compile and a warning has to not. Checking the code alone would
-			--> pass a "warning" that quietly aborted the build.
-			if string.sub(Expectation :: string, 1, 1) == "E" then
-				if Result.ok then
-					ErrorPrint(`{File} reported {Expectation} but still compiled successfully.`)
-				end
-			elseif not Result.ok then
-				ErrorPrint(`{File} warns with {Expectation} but failed to compile. Got:\n{Output}`)
-			end
-
-			OkPrint(`{File} reports {Expectation}.`)
-		end
+		CompileSources()
+		CheckDeterminism()
+		CheckDiagnostics()
 	end
 end
 

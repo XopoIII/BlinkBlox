@@ -129,6 +129,45 @@ local function OutputPaths(FileDirectory: string, Option: string): (string, stri
 	return `{FileDirectory}{Output}`, `{FileDirectory}{Typescript}`
 end
 
+--- The output path a schema has to set for a side.
+local function Required(Path: string?, Side: string): string
+	--> Level 0: the line of this file that noticed is no help to someone whose schema lacks the option.
+	if not Path then
+		error(`A {Side} output path must be defined.`, 0)
+	end
+
+	return Path
+end
+
+--- Warns of a module too large for Roblox to load.
+local function SizeWarnings(ServerSource: string, ClientSource: string, Options: CompileOptions)
+	for _, Output in { { "server", ServerSource }, { "client", ClientSource } } do
+		local Warning = OutputSize.Warning(Output[1], Output[2])
+		if Warning then
+			Message("yellow", Options, `[WARNING]: {Warning}`)
+		end
+	end
+end
+
+--- Says what the compile did. A verify says it itself, once its comparisons are in.
+local function Finished(Options: CompileOptions)
+	if not Options.Verify then
+		Message(
+			"green",
+			Options,
+			if Options.Check then "Schema checked, nothing written." else "Network files generated!"
+		)
+	end
+end
+
+local function Timings(ParseTime: number, ServerGenerateTime: number, ClientGenerateTime: number, FilesTime: number)
+	print(`[DEBUG]: Parsed source in {FormatTime(ParseTime)}.`)
+	print(`[DEBUG]: Generated server luau in {FormatTime(ServerGenerateTime)}.`)
+	print(`[DEBUG]: Generated client luau in {FormatTime(ClientGenerateTime)}.`)
+	print(`[DEBUG]: Generated files in {FormatTime(FilesTime)}.`)
+	print(`[DEBUG]: Completed everything in {FormatTime(ParseTime + FilesTime)}.`)
+end
+
 --- The whole compile. `Results` collects every path written, for `--json` to report.
 local function Build(Path: string, Options: CompileOptions, Results: Results)
 	local FilePath = GetDefinitionFilePath(Path)
@@ -155,17 +194,8 @@ local function Build(Path: string, Options: CompileOptions, Results: Results)
 	end
 
 	local FileOptions = AbstractSyntaxTree.Value.Options
-	local ClientOutputPath = FileOptions.ClientOutput
-	local ServerOutputPath = FileOptions.ServerOutput
-
-	--> Level 0: the line of this file that noticed is no help to someone whose schema lacks the option.
-	if not ClientOutputPath then
-		error("A client output path must be defined.", 0)
-	end
-
-	if not ServerOutputPath then
-		error("A server output path must be defined.", 0)
-	end
+	local ClientOutputPath = Required(FileOptions.ClientOutput, "client")
+	local ServerOutputPath = Required(FileOptions.ServerOutput, "server")
 
 	local ClientOutput, ClientTypescriptPath = OutputPaths(FileDirectory, ClientOutputPath)
 	local ServerOutput, ServerTypescriptPath = OutputPaths(FileDirectory, ServerOutputPath)
@@ -207,12 +237,7 @@ local function Build(Path: string, Options: CompileOptions, Results: Results)
 	end
 
 	local FilesTime = (os.clock() - FilesStart)
-	for _, Output in { { "server", ServerSource }, { "client", ClientSource } } do
-		local Warning = OutputSize.Warning(Output[1], Output[2])
-		if Warning then
-			Message("yellow", Options, `[WARNING]: {Warning}`)
-		end
-	end
+	SizeWarnings(ServerSource, ClientSource, Options)
 
 	Write(ServerOutput, ServerSource, Options, Results)
 	Write(ClientOutput, ClientSource, Options, Results)
@@ -230,20 +255,9 @@ local function Build(Path: string, Options: CompileOptions, Results: Results)
 		Write(ServerTypescriptPath, ServerTypescriptSource, Options, Results)
 	end
 
-	if not Options.Verify then
-		Message(
-			"green",
-			Options,
-			if Options.Check then "Schema checked, nothing written." else "Network files generated!"
-		)
-	end
-
+	Finished(Options)
 	if Options.Debug and not Options.Silent then
-		print(`[DEBUG]: Parsed source in {FormatTime(ParseTime)}.`)
-		print(`[DEBUG]: Generated server luau in {FormatTime(ServerGenerateTime)}.`)
-		print(`[DEBUG]: Generated client luau in {FormatTime(ClientGenerateTime)}.`)
-		print(`[DEBUG]: Generated files in {FormatTime(FilesTime)}.`)
-		print(`[DEBUG]: Completed everything in {FormatTime(ParseTime + FilesTime)}.`)
+		Timings(ParseTime, ServerGenerateTime, ClientGenerateTime, FilesTime)
 	end
 end
 

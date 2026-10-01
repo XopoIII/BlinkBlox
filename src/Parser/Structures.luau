@@ -47,6 +47,35 @@ function Parser.GetOptionFromToken(self: Parser, Token: Token, Structure: { Even
 	)
 end
 
+--> A field whose value is a number -- `Rate`, `Burst`, `Concurrency` -- read and checked.
+local function NumericField(self: Parser, Option: EventOption): number?
+	local Token = self:Consume(Option.Type)
+	local Numeric = tonumber(Token.Value)
+
+	if not Numeric or Numeric <= 0 then
+		self:Diagnostic(Error.ParserUnknownOption, `Invalid value for "{Option.Key}"`)
+			:Primary(Token, "Expected a number greater than zero")
+			:Emit()
+	end
+
+	--> An event spends one whole token, so a bucket that can never hold one refuses every
+	--> event however long the client waits.
+	if Option.Key == "Burst" and Numeric and Numeric < 1 then
+		self:Diagnostic(Error.ParserUnknownOption, `Invalid value for "Burst"`)
+			:Primary(Token, "Expected at least 1: each event spends one whole token")
+			:Emit()
+	end
+
+	--> A count of calls, so a whole one: `Concurrency: 1.5` has no meaning to round towards.
+	if Option.Key == "Concurrency" and Numeric and Numeric ~= math.floor(Numeric) then
+		self:Diagnostic(Error.ParserUnknownOption, `Invalid value for "Concurrency"`)
+			:Primary(Token, "Expected a whole number of calls")
+			:Emit()
+	end
+
+	return Numeric
+end
+
 function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption }): { [string]: any }
 	local Fields: { [string]: any } = {}
 
@@ -77,32 +106,8 @@ function Parser.Structure(self: Parser, Name: Token, Structure: { EventOption })
 
 		--> Parse non data/return field
 		if Option.Numeric then
-			local Token = self:Consume(Option.Type)
-			local Numeric = tonumber(Token.Value)
-
-			if not Numeric or Numeric <= 0 then
-				self:Diagnostic(Error.ParserUnknownOption, `Invalid value for "{Option.Key}"`)
-					:Primary(Token, "Expected a number greater than zero")
-					:Emit()
-			end
-
-			--> An event spends one whole token, so a bucket that can never hold one refuses every
-			--> event however long the client waits.
-			if Option.Key == "Burst" and Numeric and Numeric < 1 then
-				self:Diagnostic(Error.ParserUnknownOption, `Invalid value for "Burst"`)
-					:Primary(Token, "Expected at least 1: each event spends one whole token")
-					:Emit()
-			end
-
-			--> A count of calls, so a whole one: `Concurrency: 1.5` has no meaning to round towards.
-			if Option.Key == "Concurrency" and Numeric and Numeric ~= math.floor(Numeric) then
-				self:Diagnostic(Error.ParserUnknownOption, `Invalid value for "Concurrency"`)
-					:Primary(Token, "Expected a whole number of calls")
-					:Emit()
-			end
-
 			--> Stored as a number: every consumer does arithmetic with it.
-			Value = Numeric
+			Value = NumericField(self, Option)
 		elseif Option.Fields then
 			--> A block of fields of its own, `Stream: { Rate: 10 }`, checked the same way as this one.
 			Value = self:Structure(Name, Option.Fields)

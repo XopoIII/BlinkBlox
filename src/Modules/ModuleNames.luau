@@ -56,6 +56,57 @@ local function Refuse(Source: string, File: string?, Declaration: Declaration, L
 	Diagnostic:Note(Note):Emit()
 end
 
+--> Refuses one top-level declaration whose name the module already has a use for.
+local function Judge(
+	Source: string,
+	File: string?,
+	Declaration: Declaration,
+	Members: { [string]: string },
+	Added: { [string]: string },
+	LimitsMember: string?
+)
+	local Name = Declaration.Name
+	local Kind = Declaration.Type
+	local Member = Members[Name]
+
+	--> Only what becomes a key of the module: a type that is not exported is a Luau type, which
+	--> lives in a namespace of its own.
+	local Keyed = Kind == "Event" or Kind == "Function" or Kind == "Scope" or Declaration.Value.Export == true
+	if Name == LimitsMember then
+		Refuse(
+			Source,
+			File,
+			Declaration,
+			`"{Name}" is the module's Limits`,
+			"`option ExportLimits` adds a Limits member to the module, and this would replace it. Rename it."
+		)
+	elseif Added[Name] and Keyed then
+		Refuse(
+			Source,
+			File,
+			Declaration,
+			`"{Name}" is the module's {Added[Name]}`,
+			"A top-level declaration becomes a member of the module, and this one would replace it. Rename it."
+		)
+	elseif Member and (Name ~= Member or Kind == "Scope") then
+		Refuse(
+			Source,
+			File,
+			Declaration,
+			`"{Name}" is the module's {Member}`,
+			"A top-level declaration becomes a member of the module, and this one would replace it. Rename it."
+		)
+	elseif MODULE_TYPES[Name] and Kind ~= "Scope" and Kind ~= "Event" and Kind ~= "Function" then
+		Refuse(
+			Source,
+			File,
+			Declaration,
+			`"{Name}" is a type the generated module declares`,
+			"A declared type is exported under its own name and would redefine it. Rename the declaration."
+		)
+	end
+end
+
 local function Check(Source: string, File: string?, Declarations: { Declaration }, Options: any)
 	local Casing = Settings.GetCasing((Options.Casing :: Settings.Case) or "Pascal")
 
@@ -84,46 +135,7 @@ local function Check(Source: string, File: string?, Declarations: { Declaration 
 		else nil
 
 	for _, Declaration in Declarations do
-		local Name = Declaration.Name
-		local Kind = Declaration.Type
-		local Member = Members[Name]
-
-		--> Only what becomes a key of the module: a type that is not exported is a Luau type, which
-		--> lives in a namespace of its own.
-		local Keyed = Kind == "Event" or Kind == "Function" or Kind == "Scope" or Declaration.Value.Export == true
-		if Name == LimitsMember then
-			Refuse(
-				Source,
-				File,
-				Declaration,
-				`"{Name}" is the module's Limits`,
-				"`option ExportLimits` adds a Limits member to the module, and this would replace it. Rename it."
-			)
-		elseif Added[Name] and Keyed then
-			Refuse(
-				Source,
-				File,
-				Declaration,
-				`"{Name}" is the module's {Added[Name]}`,
-				"A top-level declaration becomes a member of the module, and this one would replace it. Rename it."
-			)
-		elseif Member and (Name ~= Member or Kind == "Scope") then
-			Refuse(
-				Source,
-				File,
-				Declaration,
-				`"{Name}" is the module's {Member}`,
-				"A top-level declaration becomes a member of the module, and this one would replace it. Rename it."
-			)
-		elseif MODULE_TYPES[Name] and Kind ~= "Scope" and Kind ~= "Event" and Kind ~= "Function" then
-			Refuse(
-				Source,
-				File,
-				Declaration,
-				`"{Name}" is a type the generated module declares`,
-				"A declared type is exported under its own name and would redefine it. Rename the declaration."
-			)
-		end
+		Judge(Source, File, Declaration, Members, Added, LimitsMember)
 	end
 end
 

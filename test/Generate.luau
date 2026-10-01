@@ -194,6 +194,49 @@ local function WildFloat(): number
 	return (math.random() * 2 - 1) * Pick({ 1, 1000, 1e6, 1e-3, 1e-6, 1e40 })
 end
 
+--- One candidate for `Float`: an edge of the type's encoding as often as not.
+local function FloatCandidate(Name: string, Range: any): number
+	local Value: number
+	if Name == "f16" then
+		local Bits = if Chance(0.3)
+			then Pick({ 0x0000, 0x8000, 0x0001, 0x8001, 0x03FF, 0x0400, 0x7BFF, 0xFBFF, 0x7C00, 0xFC00, 0x7E00 })
+			else math.random(0, 0xFFFF)
+		Value = Generate.HalfFromBits(Bits)
+	elseif Name == "f24" then
+		local Bits = if Chance(0.3)
+			then Pick({
+				0x000000,
+				0x800000,
+				0x000001,
+				0x800001,
+				0x01FFFF,
+				0x020000,
+				0x7DFFFF,
+				0xFDFFFF,
+				0x7E0000,
+				0xFE0000,
+				0x7F0000,
+			})
+			else math.random(0, 0xFFFFFF)
+		Value = Generate.Float24FromBits(Bits)
+	elseif Chance(0.3) then
+		Value = Pick({ 0, -0, 1, -1, math.huge, -math.huge, 0 / 0, 2 ^ 24, 2 ^ 24 + 2, 1e-45, 3.4e38, 1e300, -1e300 })
+		if Range and Chance(0.5) then
+			Value = Pick({ Range.Min, Range.Max })
+		end
+	else
+		local Scale = Pick({ 1, 1000, 1e6, 1e-3 })
+		Value = (math.random() * 2 - 1) * Scale
+		if Range then
+			local Low = math.max(Range.Min, -1e6)
+			local High = math.min(Range.Max, 1e6)
+			Value = Low + math.random() * (High - Low)
+		end
+	end
+
+	return Value
+end
+
 --- A float the type holds exactly, so that it must come back unchanged.
 local function Float(Node: Node): number
 	local Name = PrimitiveName(Node)
@@ -204,44 +247,7 @@ local function Float(Node: Node): number
 	end
 
 	for _ = 1, 32 do
-		local Value: number
-		if Name == "f16" then
-			local Bits = if Chance(0.3)
-				then Pick({ 0x0000, 0x8000, 0x0001, 0x8001, 0x03FF, 0x0400, 0x7BFF, 0xFBFF, 0x7C00, 0xFC00, 0x7E00 })
-				else math.random(0, 0xFFFF)
-			Value = Generate.HalfFromBits(Bits)
-		elseif Name == "f24" then
-			local Bits = if Chance(0.3)
-				then Pick({
-					0x000000,
-					0x800000,
-					0x000001,
-					0x800001,
-					0x01FFFF,
-					0x020000,
-					0x7DFFFF,
-					0xFDFFFF,
-					0x7E0000,
-					0xFE0000,
-					0x7F0000,
-				})
-				else math.random(0, 0xFFFFFF)
-			Value = Generate.Float24FromBits(Bits)
-		elseif Chance(0.3) then
-			Value =
-				Pick({ 0, -0, 1, -1, math.huge, -math.huge, 0 / 0, 2 ^ 24, 2 ^ 24 + 2, 1e-45, 3.4e38, 1e300, -1e300 })
-			if Range and Chance(0.5) then
-				Value = Pick({ Range.Min, Range.Max })
-			end
-		else
-			local Scale = Pick({ 1, 1000, 1e6, 1e-3 })
-			Value = (math.random() * 2 - 1) * Scale
-			if Range then
-				local Low = math.max(Range.Min, -1e6)
-				local High = math.min(Range.Max, 1e6)
-				Value = Low + math.random() * (High - Low)
-			end
-		end
+		local Value = FloatCandidate(Name, Range)
 
 		if Name == "f32" then
 			Value = F32(Value)

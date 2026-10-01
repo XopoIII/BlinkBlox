@@ -52,4 +52,4 @@ high_cyclomatic_complexity = "deny"
 
 [config]
 # No exceptions, as with the line cap: a function that reaches this is split, not allowed inline.
-high_cyclomatic_complexity = { maximum_complexity = 20 }
+high_cyclomatic_complexity = { maximum_complexity = 15 }

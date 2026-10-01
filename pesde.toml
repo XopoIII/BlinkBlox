@@ -11,7 +11,7 @@ includes = [
 license = "MIT"
 name = "xopoiii/blinkblox"
 repository = "https://github.com/XopoIII/BlinkBlox"
-version = "1.0.2"
+version = "1.0.3"
 
 [indices]
 default = "https://github.com/pesde-pkg/index"

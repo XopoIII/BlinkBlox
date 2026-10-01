@@ -34,6 +34,8 @@ type Event = any
 --- discovered in production.
 local DEFAULT_MAX_UNRELIABLE_SIZE = Grammar.DEFAULTS.MaxUnreliableSize
 local INSTANCE_BYTES = Grammar.DEFAULTS.UnreliableInstanceBytes
+--- What an event with no `Data` measures as.
+local NO_DATA = { Min = 0, Max = 0, Refs = 0, Unbounded = false } :: any
 
 --- Checks the rate limiting fields. Same file-scoping rule as AnalyzeUnreliableSizes: imported
 --- declarations are diagnosed by the parse of the file they came from.
@@ -113,7 +115,7 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 		end
 
 		local Data = Event.Value.Data
-		local Measured = if Data then Size.Sealed(Data :: any) else nil
+		local Measured: Size.Measurement = if Data then Size.Sealed(Data :: any) else NO_DATA
 
 		--> The event index is one byte, written ahead of the payload, and an ordered event adds its
 		--> sequence number on top of that -- all but a stream, which is ordered by its server time.
@@ -122,7 +124,7 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 		--> Instances cost the payload bytes of their own, beside the buffer. `Refs` counts the most an
 		--> event can carry, not the fewest, so it raises the maximum only: the minimum is what makes
 		--> E3018 an error, and an optional Instance must not make an event that can fit refuse to build.
-		local Minimum = Header + (if Measured then Measured.Min else 0)
+		local Minimum = Header + Measured.Min
 
 		--> A stream's state travels as optional, since nil is how a clear arrives, and an absent optional
 		--> costs nothing: measured as written, a state that can never fit would pass as one that might
@@ -131,7 +133,7 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 		if Stream then
 			Minimum += Size.Sealed(Stream.Value).Min
 		end
-		local Maximum = Header + (if Measured then Measured.Max + Measured.Refs * INSTANCE_BYTES else 0)
+		local Maximum = Header + Measured.Max + Measured.Refs * INSTANCE_BYTES
 		local Identifier = Event.Tokens.Identifier
 
 		if Minimum > Limit then
@@ -156,7 +158,7 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 
 		--> An unbounded type reports a real but absurd maximum -- a map of structs measures in the
 		--> gigabytes -- and quoting that number reads as a compiler bug rather than as advice.
-		local Bound = if (Measured and Measured.Unbounded)
+		local Bound = if Measured.Unbounded
 			then `Unbounded, and the limit is {Limit} bytes`
 			else `Up to {Maximum} bytes, the limit is {Limit}`
 
@@ -168,7 +170,7 @@ local function UnreliableSizes(Source: string, File: string?, Declarations: { De
 			"Warning"
 		):Primary(Identifier, Bound)
 
-		local Culprit = if Measured then Measured.Culprit else nil
+		local Culprit = Measured.Culprit
 		if Culprit then
 			Diagnostic:Secondary(Culprit, "This has no upper bound")
 		end

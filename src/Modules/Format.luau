@@ -63,7 +63,51 @@ local INDENT = string.rep(" ", 3)
 
 local function Noop() end
 
-local function Format(Value: any, Filter: ((Value: any) -> boolean)?, Depth: number?): string
+local Format: (Value: any, Filter: ((Value: any) -> boolean)?, Depth: number?) -> string
+
+local function FormatNumber(Value: number): string
+	if Value == math.huge then
+		return Color("math.huge", "cyan")
+	end
+	if Value == -math.huge then
+		return Color("-math.huge", "cyan")
+	end
+	return Color(Value, "cyan")
+end
+
+local function FormatTable(Value: any, FilterFunction: (Value: any) -> boolean, CurrentDepth: number): string
+	local Address = string.match(tostring(Value), "0x[%w]+")
+	if Cache[Value] then
+		return `{Color("{CACHED}", "red")} {Style(Address, "dim")}`
+	end
+
+	local Tabs = string.rep(INDENT, CurrentDepth)
+	local Newline = ("\n" .. INDENT .. Tabs)
+	local Text = Style(`\{ ({Address})`, "dim") .. Newline
+
+	Cache[Value] = true
+
+	local First = true
+	for Key, Entry in Value do
+		if FilterFunction(Key) == false then
+			continue
+		end
+
+		local KeyText = ShouldntWrap(Key) and Key or `["{Format(Key, FilterFunction, CurrentDepth + 1)}"]`
+
+		if not First then
+			Text ..= Style(",", "dim") .. Newline
+		end
+
+		First = false
+		Text ..= `{KeyText} = {Format(Entry, FilterFunction, CurrentDepth + 1)}`
+	end
+
+	Text ..= "\n" .. Tabs .. Style("}", "dim")
+	return Text
+end
+
+function Format(Value: any, Filter: ((Value: any) -> boolean)?, Depth: number?): string
 	local CurrentDepth = Depth or 0
 	local FilterFunction = (Filter or Noop) :: (Value: any) -> boolean
 
@@ -79,45 +123,11 @@ local function Format(Value: any, Filter: ((Value: any) -> boolean)?, Depth: num
 	if Type == "string" then
 		return Color(`"{Value}"`, "green")
 	elseif Type == "number" then
-		if Value == math.huge then
-			return Color("math.huge", "cyan")
-		end
-		if Value == -math.huge then
-			return Color("-math.huge", "cyan")
-		end
-		return Color(Value, "cyan")
+		return FormatNumber(Value)
 	elseif Type == "boolean" then
 		return Color(Value, "yellow")
 	elseif Type == "table" then
-		local Address = string.match(tostring(Value), "0x[%w]+")
-		if Cache[Value] then
-			return `{Color("{CACHED}", "red")} {Style(Address, "dim")}`
-		end
-
-		local Tabs = string.rep(INDENT, CurrentDepth)
-		local Newline = ("\n" .. INDENT .. Tabs)
-		local Text = Style(`\{ ({Address})`, "dim") .. Newline
-
-		Cache[Value] = true
-
-		local First = true
-		for Key, Entry in Value do
-			if FilterFunction(Key) == false then
-				continue
-			end
-
-			local KeyText = ShouldntWrap(Key) and Key or `["{Format(Key, FilterFunction, CurrentDepth + 1)}"]`
-
-			if not First then
-				Text ..= Style(",", "dim") .. Newline
-			end
-
-			First = false
-			Text ..= `{KeyText} = {Format(Entry, FilterFunction, CurrentDepth + 1)}`
-		end
-
-		Text ..= "\n" .. Tabs .. Style("}", "dim")
-		return Text
+		return FormatTable(Value, FilterFunction, CurrentDepth)
 	end
 
 	return `<{Type}>`

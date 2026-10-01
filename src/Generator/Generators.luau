@@ -60,6 +60,29 @@ function Generators.UserType(Declaration: Type, Read: Blocks.Block, Write: Block
 	end
 end
 
+--> A pack's type, its annotated parameters and the variables they name.
+local function TupleType(Declaration: Parser.Tuple, Prefix: string, Positional: boolean?): (string, string, string)
+	local Value = (Declaration :: Parser.Tuple).Value
+
+	local TupleTypes = { "nil" }
+	local Variables = { "Value" }
+	local AnnotatedVariables = { "Value: nil" }
+
+	--> The prefix applies to a named element too: a function's Data and Return packs share a scope
+	--> in the generated body, so it is what keeps `(id: u8)` and `(id: string)` from colliding.
+	for Index, TupleValue in Value.Values do
+		local Name = if Positional then nil else Value.Names[Index]
+		local Variable = `{Prefix}{Name or `Value{Index}`}`
+		local ValueType = Generators.LuauType(TupleValue)
+
+		TupleTypes[Index] = ValueType
+		Variables[Index] = Variable
+		AnnotatedVariables[Index] = `{Variable}: {ValueType}`
+	end
+
+	return table.concat(TupleTypes, ", "), table.concat(AnnotatedVariables, ", "), table.concat(Variables, ", ")
+end
+
 --- `Positional` names a pack's elements `Value1`, `Value2`... whatever the schema called them. The
 --- names a schema gives belong in what the game sees -- a Fire's parameters, a listener's type -- and
 --- nowhere else: inside a serialiser, a decode branch or a listener's reply they shared a scope with
@@ -76,11 +99,12 @@ function Generators.LuauType(
 	Prefix = Prefix or ""
 
 	local Type = "nil"
-	local Values = "Value: nil"
 	local Export = Util.GetExportName(Declaration.Name, State.Scope)
-	local Returns = `{Prefix}Value`
 
-	if Declaration.Type == "Primitive" then
+	if Declaration.Type == "Tuple" then
+		local TupleTypes, Values, Returns = TupleType(Declaration :: Parser.Tuple, Prefix :: string, Positional)
+		return TupleTypes, Values, Export, Returns
+	elseif Declaration.Type == "Primitive" then
 		local Tokens = (Declaration :: Parser.Primitive).Tokens
 		local Primitive = Primitives[Tokens.Primitive.Value]
 		if type(Primitive.Type) == "function" then
@@ -109,28 +133,6 @@ function Generators.LuauType(
 		end, false)
 	elseif Declaration.Type == "Generic" then
 		Type = `{Declaration.Value.Generic}`
-	elseif Declaration.Type == "Tuple" then
-		local Value = (Declaration :: Parser.Tuple).Value
-
-		local TupleTypes = { "nil" }
-		local Variables = { "Value" }
-		local AnnotatedVariables = { "Value: nil" }
-
-		--> The prefix applies to a named element too: a function's Data and Return packs share a scope
-		--> in the generated body, so it is what keeps `(id: u8)` and `(id: string)` from colliding.
-		for Index, TupleValue in Value.Values do
-			local Name = if Positional then nil else Value.Names[Index]
-			local Variable = `{Prefix}{Name or `Value{Index}`}`
-			local ValueType = Generators.LuauType(TupleValue)
-
-			TupleTypes[Index] = ValueType
-			Variables[Index] = Variable
-			AnnotatedVariables[Index] = `{Variable}: {ValueType}`
-		end
-
-		Type = table.concat(TupleTypes, ", ")
-		Values = table.concat(AnnotatedVariables, ", ")
-		Returns = table.concat(Variables, ", ")
 	elseif Declaration.Type == "Array" then
 		local Value = Declaration.Value
 		Type = `\{ {Generators.LuauType(Value.Of)} }`
@@ -140,11 +142,7 @@ function Generators.LuauType(
 	end
 
 	--> Generalized type generation, works for everything except tuples
-	if Declaration.Type ~= "Tuple" then
-		Values = `{Prefix}Value: {UseTypeAsValue and Type or Export}`
-	end
-
-	return Type, Values, Export, Returns
+	return Type, `{Prefix}Value: {UseTypeAsValue and Type or Export}`, Export, `{Prefix}Value`
 end
 
 function Generators.Type(Declaration: Type)
@@ -270,6 +268,28 @@ end
 local BLOCK_READ = "local BLOCK_START = Read%("
 local INSTANCE_STEP = "RecieveInstanceCursor %+= 1"
 
+--> How many Instances a flat reader steps over, or nil where its text is not what RaiseWhereMissing
+--> can rewrite: it reads past its one block, moves a cursor itself, or loops.
+local function InstanceSteps(Content: { string }): number?
+	local Reserved, Steps = 0, 0
+	for _, Line in Content do
+		if string.find(Line, BLOCK_READ) then
+			if Steps > 0 then
+				return nil
+			end
+			Reserved += 1
+		elseif string.find(Line, "%f[%w_]Read%(") or string.find(Line, "RecieveCursor") then
+			return nil
+		elseif string.find(Line, "RecieveInstanceCursor %-= ") or string.find(Line, "^%s*for ") then
+			return nil
+		elseif string.find(Line, INSTANCE_STEP) then
+			Steps += 1
+		end
+	end
+
+	return if Reserved > 1 then nil else Steps
+end
+
 --- For an event whose payload is flat (IsFlat) and whose reader reserves its bytes in one block before
 --- it reads any Instance, a missing Instance can refuse the event where it is found, and the reader
 --- needs no check at its end -- which is what that check costs every event that does arrive whole.
@@ -282,23 +302,8 @@ local function RaiseWhereMissing(Data: Type, Content: { string }): boolean
 		return false
 	end
 
-	local Reserved, Steps = 0, 0
-	for _, Line in Content do
-		if string.find(Line, BLOCK_READ) then
-			if Steps > 0 then
-				return false
-			end
-			Reserved += 1
-		elseif string.find(Line, "%f[%w_]Read%(") or string.find(Line, "RecieveCursor") then
-			return false
-		elseif string.find(Line, "RecieveInstanceCursor %-= ") or string.find(Line, "^%s*for ") then
-			return false
-		elseif string.find(Line, INSTANCE_STEP) then
-			Steps += 1
-		end
-	end
-
-	if Reserved > 1 then
+	local Steps = InstanceSteps(Content)
+	if not Steps then
 		return false
 	end
 

@@ -7,6 +7,29 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.0.3 — 2026-10-02
+
+The generated modules do not change: all eighty outputs of the sixteen test schemas -- server,
+client, shared types and both TypeScript declarations -- are byte for byte what 1.0.2 produced.
+Nothing to do on upgrading.
+
+### Changed
+
+- **The complexity limit is 15**, down from the 20 it went in at. Nineteen more functions were over
+  it and each was split, none exempted. On the compiler's hot paths the rare branches moved out and
+  the common one stayed inline: the lexer's end-of-file and unknown-character exits left
+  `GetNextToken`, and a pack left `Generators.LuauType`, whose other types no longer test for one
+  on the way out.
+- TypeScript declarations are not among the committed snapshots, so they were compared directly,
+  old compiler against new, with the Luau outputs beside them.
+
+### Speed
+
+- No slower than 1.0.2, measured as before with both compilers in one process and their runs
+  alternated on Test.blink (mean of the faster half of 800 runs, Apple M1): lexing 2.14 ms against
+  2.15, parsing 7.47 against 7.47 over six runs, generating the server module 29.31 against 29.34
+  and the client 28.89 against 28.90.
+
 ## 1.0.2 — 2026-10-02
 
 The generated modules do not change: a schema compiles to exactly what 1.0.1 produced, and every
