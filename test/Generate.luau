@@ -279,25 +279,63 @@ function Generate.Value(Node: Node): any
 	return Draw(Node)
 end
 
+local function DrawPrimitive(Node: Node): any
+	local Name = PrimitiveName(Node)
+	if INTEGERS[Name] then
+		return Integer(Node)
+	elseif FLOATS[Name] then
+		return Float(Node)
+	elseif Name == "boolean" then
+		return Chance(0.5)
+	elseif Name == "string" or Name == "buffer" then
+		local Range = Node.Value.Range
+		local Count = Length(if Range then Range.Min else 0, if Range then Range.Max else 65535)
+		local Text = Bytes(Count)
+		return if Name == "string" then Text else buffer.fromstring(Text)
+	end
+
+	error(Generate.Unsupported, 0)
+end
+
+local function DrawArray(Node: Node): any
+	local Value = Node.Value
+	local Range = Value.Range
+	local Count = Length(Range.Min, Range.Max)
+	local Elements = table.create(Count)
+	--> Only a fixed-length array has a length that holes cannot change: a variable one is sent
+	--> with `#`, which a trailing nil shortens.
+	local Holes = Range.Min == Range.Max
+	for Index = 1, Count do
+		local Element = Draw(Value.Of)
+		while Element == nil and not Holes do
+			Element = Draw(Value.Of)
+		end
+
+		Elements[Index] = Element
+	end
+
+	return Elements
+end
+
+local function DrawMap(Node: Node): any
+	local Value = Node.Value
+	local Map = {}
+	for _ = 1, Length(0, SMALL) do
+		local Key = Draw(Value.Values[1])
+		--> NaN cannot index a table.
+		if Key == Key then
+			Map[Key] = Draw(Value.Values[2])
+		end
+	end
+
+	return Map
+end
+
 function Draw(Node: Node): any
 	local Value = Node.Value
 
 	if Node.Type == "Primitive" then
-		local Name = PrimitiveName(Node)
-		if INTEGERS[Name] then
-			return Integer(Node)
-		elseif FLOATS[Name] then
-			return Float(Node)
-		elseif Name == "boolean" then
-			return Chance(0.5)
-		elseif Name == "string" or Name == "buffer" then
-			local Range = Value.Range
-			local Count = Length(if Range then Range.Min else 0, if Range then Range.Max else 65535)
-			local Text = Bytes(Count)
-			return if Name == "string" then Text else buffer.fromstring(Text)
-		end
-
-		error(Generate.Unsupported, 0)
+		return DrawPrimitive(Node)
 	elseif Node.Type == "Optional" then
 		return if Chance(0.3) then nil else Draw(Value.Of)
 	elseif Node.Type == "Enum" then
@@ -322,33 +360,9 @@ function Draw(Node: Node): any
 		Fields[Value.Tag] = Variant.Name
 		return Fields
 	elseif Node.Type == "Array" then
-		local Range = Value.Range
-		local Count = Length(Range.Min, Range.Max)
-		local Elements = table.create(Count)
-		--> Only a fixed-length array has a length that holes cannot change: a variable one is sent
-		--> with `#`, which a trailing nil shortens.
-		local Holes = Range.Min == Range.Max
-		for Index = 1, Count do
-			local Element = Draw(Value.Of)
-			while Element == nil and not Holes do
-				Element = Draw(Value.Of)
-			end
-
-			Elements[Index] = Element
-		end
-
-		return Elements
+		return DrawArray(Node)
 	elseif Node.Type == "Map" then
-		local Map = {}
-		for _ = 1, Length(0, SMALL) do
-			local Key = Draw(Value.Values[1])
-			--> NaN cannot index a table.
-			if Key == Key then
-				Map[Key] = Draw(Value.Values[2])
-			end
-		end
-
-		return Map
+		return DrawMap(Node)
 	end
 
 	error(Generate.Unsupported, 0)

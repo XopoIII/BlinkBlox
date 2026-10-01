@@ -249,6 +249,121 @@ local function Offer(Items: { Item }, Icon: string, Typed: string, Label: string
 	end
 end
 
+--- The fields of `Block` that `Body` has not written yet: each goes in once.
+local function OfferFields(Items: { Item }, Typed: string, Block: { Grammar.EventOption }, Body: string)
+	for _, Field in Block do
+		if not string.find(Body, `%f[%w_]{Field.Key}%s*:`) then
+			Offer(Items, ICONS.Field, Typed, Field.Key, `{Field.Key}: `)
+		end
+	end
+end
+
+--- What opens a line: a field in an event or a function, a keyword or an attribute everywhere else.
+local function OfferLineStart(Items: { Item }, Text: string, Typed: string, WordStart: number)
+	local Block, Body = Enclosing(Text, WordStart)
+	if Block then
+		OfferFields(Items, Typed, Block, Body)
+		return
+	end
+
+	for _, Symbol in KEYWORDS do
+		Offer(Items, ICONS.Keyword, Typed, Symbol.Label, Symbol.Insert)
+	end
+	Offer(Items, ICONS.Snippet, Typed, "@profile", '@profile("%s")')
+end
+
+--- `saturate` goes in a number's brackets, first or after a scale: `u16<sat`, `u16<0.1, sat`. It is
+--- an identifier rather than a keyword, so this is the one place it is offered. Whether the cursor
+--- was in such brackets.
+local function OfferSaturate(Items: { Item }, Typed: string, Previous: string): boolean
+	local Number, Partial = string.match(Typed, "^([%a_][%w_]*)<(%a*)$")
+	if not Number and string.match(Typed, "^%a+$") then
+		Number, Partial = string.match(Previous, "^([%a_][%w_]*)<[^>]*,$"), Typed
+	end
+
+	local Primitive = if Number then Settings.Primtives[Number] else nil
+	if Primitive and Primitive.Component and Primitive.Bounds and Partial then
+		local Head = string.sub(Typed, 1, #Typed - #Partial)
+		Offer(Items, ICONS.Keyword, Partial, "saturate", `{Head}saturate`)
+		return true
+	end
+
+	return false
+end
+
+--- `option` is followed by the option's name, and `option Name =` by its value.
+local function OfferOption(Items: { Item }, Line: string, Typed: string, Index: number, Previous: Utility.Range)
+	if Index == 2 then
+		for _, Symbol in OPTIONS do
+			Offer(Items, ICONS.Keyword, Typed, Symbol.Label, Symbol.Insert)
+		end
+	elseif Index == 4 and Previous.Text == "=" then
+		local Name = Utility.GetWordRangeBeforePosition(Line, Previous.Start - 1).Text
+		local Values: { string } = OPTION_VALUES[Name] or {}
+		for _, Value in Values do
+			Offer(Items, ICONS.Keyword, Typed, Value, Value)
+		end
+	end
+end
+
+--- A nested block is often written on one line, `Stream: { Rate: 10, Fa`: there its fields follow
+--- the brace or a comma, once each. Whether the cursor was in one.
+local function OfferNested(Items: { Item }, Text: string, Typed: string, WordStart: number, Previous: string): boolean
+	if Previous ~= "{" and not string.match(Previous, ",$") then
+		return false
+	end
+
+	local Block, Body, Nested = Enclosing(Text, WordStart)
+	if Block and Nested then
+		OfferFields(Items, Typed, Block, Body)
+		return true
+	end
+
+	return false
+end
+
+--- A field of an event or a function takes its own values, and `Data` and `Return` a type. Only a
+--- key one of them has is worth finding the enclosing declaration for. Whether the field settles
+--- what is offered, which one taking a type does not.
+local function OfferValues(Items: { Item }, Text: string, Typed: string, WordStart: number, Previous: string): boolean
+	local Key = string.match(Previous, "^([%a_][%w_]*):$")
+	local Block = if Key and FIELD_KEYS[Key] then Enclosing(Text, WordStart) else nil
+	if not Block or not Key then
+		return false
+	end
+
+	for _, Field in Block do
+		if Field.Key == Key and #Field.Values > 0 then
+			for _, Value in Field.Values do
+				Offer(Items, ICONS.Keyword, Typed, tostring(Value), tostring(Value))
+			end
+
+			return true
+		elseif Field.Key == Key and (Field.Numeric or Field.Fields) then
+			return true
+		end
+	end
+
+	return false
+end
+
+--- A type follows a field's `:` or a declaration's `=`.
+local function OfferTypes(Items: { Item }, Typed: string, Previous: string, Symbols: { [string]: true }?)
+	if not string.match(Previous, ":$") and Previous ~= "=" then
+		return
+	end
+
+	for _, Symbol in PRIMITIVES do
+		Offer(Items, ICONS.Primitive, Typed, Symbol.Label, Symbol.Label)
+	end
+
+	if Symbols then
+		for Symbol in Symbols do
+			Offer(Items, ICONS.Variable, Typed, Symbol, Symbol)
+		end
+	end
+end
+
 local Completion = {}
 
 --- The items to offer with the cursor at `Cursor` in `Text`. `Symbols` are the names the last
@@ -275,108 +390,29 @@ function Completion.Match(Text: string, Cursor: number, Symbols: { [string]: tru
 
 	local WordStart = Line.Start + Word.Start - 1
 	if Word.Index == 1 then
-		local Block, Body = Enclosing(Text, WordStart)
-		if Block then
-			--> A field opens a line in an event or a function, once each.
-			for _, Field in Block do
-				local Written = string.find(Body, `%f[%w_]{Field.Key}%s*:`)
-				if not Written then
-					Offer(Items, ICONS.Field, Typed, Field.Key, `{Field.Key}: `)
-				end
-			end
-		else
-			--> A keyword or an attribute opens a line everywhere else.
-			for _, Symbol in KEYWORDS do
-				Offer(Items, ICONS.Keyword, Typed, Symbol.Label, Symbol.Insert)
-			end
-			Offer(Items, ICONS.Snippet, Typed, "@profile", '@profile("%s")')
-		end
-
+		OfferLineStart(Items, Text, Typed, WordStart)
 		return Items
 	end
 
 	local Previous = Utility.GetWordRangeBeforePosition(Line.Text, Word.Start - 1)
-	if Previous.Text == "" then
+	if Previous.Text == "" or OfferSaturate(Items, Typed, Previous.Text) then
 		return Items
 	end
 
-	--> `saturate` goes in a number's brackets, first or after a scale: `u16<sat`, `u16<0.1, sat`. It is
-	--> an identifier rather than a keyword, so this is the one place it is offered.
-	local Number, Partial = string.match(Typed, "^([%a_][%w_]*)<(%a*)$")
-	if not Number and string.match(Typed, "^%a+$") then
-		Number, Partial = string.match(Previous.Text, "^([%a_][%w_]*)<[^>]*,$"), Typed
-	end
-	local Primitive = if Number then Settings.Primtives[Number] else nil
-	if Primitive and Primitive.Component and Primitive.Bounds and Partial then
-		local Head = string.sub(Typed, 1, #Typed - #Partial)
-		Offer(Items, ICONS.Keyword, Partial, "saturate", `{Head}saturate`)
-		return Items
-	end
-
-	--> `option` is followed by the option's name, and `option Name =` by its value.
 	local Leading = Utility.GetWordRangeAtPosition(Line.Text, 1)
 	if Leading.Text == "option" then
-		if Word.Index == 2 then
-			for _, Symbol in OPTIONS do
-				Offer(Items, ICONS.Keyword, Typed, Symbol.Label, Symbol.Insert)
-			end
-		elseif Word.Index == 4 and Previous.Text == "=" then
-			local Name = Utility.GetWordRangeBeforePosition(Line.Text, Previous.Start - 1).Text
-			local Values: { string } = OPTION_VALUES[Name] or {}
-			for _, Value in Values do
-				Offer(Items, ICONS.Keyword, Typed, Value, Value)
-			end
-		end
-
+		OfferOption(Items, Line.Text, Typed, Word.Index, Previous)
 		return Items
 	end
 
-	--> A nested block is often written on one line, `Stream: { Rate: 10, Fa`: there its fields follow
-	--> the brace or a comma, once each.
-	if Previous.Text == "{" or string.match(Previous.Text, ",$") then
-		local Block, Body, Nested = Enclosing(Text, WordStart)
-		if Block and Nested then
-			for _, Field in Block do
-				if not string.find(Body, `%f[%w_]{Field.Key}%s*:`) then
-					Offer(Items, ICONS.Field, Typed, Field.Key, `{Field.Key}: `)
-				end
-			end
-
-			return Items
-		end
+	if
+		OfferNested(Items, Text, Typed, WordStart, Previous.Text)
+		or OfferValues(Items, Text, Typed, WordStart, Previous.Text)
+	then
+		return Items
 	end
 
-	--> A field of an event or a function takes its own values, and `Data` and `Return` a type. Only a
-	--> key one of them has is worth finding the enclosing declaration for.
-	local Key = string.match(Previous.Text, "^([%a_][%w_]*):$")
-	local Block = if Key and FIELD_KEYS[Key] then Enclosing(Text, WordStart) else nil
-	if Block and Key then
-		for _, Field in Block do
-			if Field.Key == Key and #Field.Values > 0 then
-				for _, Value in Field.Values do
-					Offer(Items, ICONS.Keyword, Typed, tostring(Value), tostring(Value))
-				end
-
-				return Items
-			elseif Field.Key == Key and (Field.Numeric or Field.Fields) then
-				return Items
-			end
-		end
-	end
-
-	--> A type follows a field's `:` or a declaration's `=`.
-	if string.match(Previous.Text, ":$") or Previous.Text == "=" then
-		for _, Symbol in PRIMITIVES do
-			Offer(Items, ICONS.Primitive, Typed, Symbol.Label, Symbol.Label)
-		end
-
-		if Symbols then
-			for Symbol in Symbols do
-				Offer(Items, ICONS.Variable, Typed, Symbol, Symbol)
-			end
-		end
-	end
-
+	OfferTypes(Items, Typed, Previous.Text, Symbols)
 	return Items
 end
 

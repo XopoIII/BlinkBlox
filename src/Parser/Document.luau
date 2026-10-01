@@ -215,6 +215,61 @@ function Parser.Import(self: Parser): ScopeNode
 	}
 end
 
+--- The declaration a keyword of class `Type` opens, its keyword and name already consumed.
+local function ParseDeclaration(self: Parser, Type: string, Name: Token, Keyword: Token): Declaration
+	local Declaration: Declaration
+	if Type == "Type" then
+		local Node = self:Type(Name, Keyword)
+		local Value: Attributes = Node.Value
+		Value.Scope = self.Scope
+		Declaration = Node
+	elseif Type == "Event" then
+		Declaration = self:Event(Name)
+	elseif Type == "Function" then
+		Declaration = self:Function(Name)
+	elseif Type == "Scope" then
+		Declaration = self:Namespace(Name)
+	end
+
+	return Declaration
+end
+
+--- Refuses an `export` on a declaration that cannot be one.
+local function CheckExport(
+	self: Parser,
+	Export: Token,
+	Keyword: Token,
+	Name: Token,
+	Declaration: Declaration,
+	Exportable: boolean?,
+	Generics: Generics?
+)
+	--> Prevent non exportable types from being exported
+	if not Exportable then
+		self:Diagnostic(Error.AnalyzeInvalidExport, `Declaration of type "{Keyword.Value}" is not exportable`)
+			:Primary(Export, `Remove export here`)
+			:Emit()
+	--> Prevent types with generics from being exported
+	elseif Generics then
+		self:Diagnostic(Error.AnalyzeInvalidExport, `Generic types can't be exported`)
+			:Primary(Export, `Remove export here`)
+			:Emit()
+	end
+
+	--> An exported type gets a standalone Read/Write pair. Instances and unknowns are never
+	--> encoded into the buffer -- they are appended to a table that travels as the remote's
+	--> second argument -- and an export has no remote and no such table, so the value would
+	--> be silently lost on write and read back as nil. Nothing checked this before.
+	local Measured = Size.Sealed(Declaration :: any)
+	if Measured.Refs > 0 then
+		self:Diagnostic(Error.AnalyzeInvalidExport, `Types containing an Instance or unknown can't be exported`)
+			:Primary(Export, "Remove export here")
+			:Secondary(Name, `"{Name.Value}" carries a value that travels beside the buffer`)
+			:Note("An exported Read/Write pair only has the buffer, so such a value cannot survive it.")
+			:Emit()
+	end
+end
+
 function Parser.Declarations(self: Parser): { Declaration }
 	local Declarations = {}
 	while true do
@@ -241,7 +296,6 @@ function Parser.Declarations(self: Parser): { Declaration }
 
 		local Keyword = self:Consume("Keyword")
 		local Name = self:ConsumeText()
-		local Declaration: Declaration
 
 		if Keyword.Value == "option" then
 			self:Diagnostic(Error.AnalyzeOptionAfterStart, "Option set after start of file")
@@ -276,49 +330,14 @@ function Parser.Declarations(self: Parser): { Declaration }
 		local Enclosing = self.Declaring
 		self.Declaring = Name.Value
 
-		if Type == "Type" then
-			local Node = self:Type(Name, Keyword)
-			local Value: Attributes = Node.Value
-			Value.Scope = self.Scope
-			Declaration = Node
-		elseif Type == "Event" then
-			Declaration = self:Event(Name)
-		elseif Type == "Function" then
-			Declaration = self:Function(Name)
-		elseif Type == "Scope" then
-			Declaration = self:Namespace(Name)
-		end
+		local Declaration = ParseDeclaration(self, Type, Name, Keyword)
 
 		self.Declaring = Enclosing
 
 		AttributeParser.Close(self :: any, Previous, Declaration, Declarations)
 
 		if Export then
-			--> Prevent non exportable types from being exported
-			if not KeywordSettings.Exportable then
-				self:Diagnostic(Error.AnalyzeInvalidExport, `Declaration of type "{Keyword.Value}" is not exportable`)
-					:Primary(Export, `Remove export here`)
-					:Emit()
-			--> Prevent types with generics from being exported
-			elseif Generics then
-				self:Diagnostic(Error.AnalyzeInvalidExport, `Generic types can't be exported`)
-					:Primary(Export, `Remove export here`)
-					:Emit()
-			end
-
-			--> An exported type gets a standalone Read/Write pair. Instances and unknowns are never
-			--> encoded into the buffer -- they are appended to a table that travels as the remote's
-			--> second argument -- and an export has no remote and no such table, so the value would
-			--> be silently lost on write and read back as nil. Nothing checked this before.
-			local Measured = Size.Sealed(Declaration :: any)
-			if Measured.Refs > 0 then
-				self:Diagnostic(Error.AnalyzeInvalidExport, `Types containing an Instance or unknown can't be exported`)
-					:Primary(Export, "Remove export here")
-					:Secondary(Name, `"{Name.Value}" carries a value that travels beside the buffer`)
-					:Note("An exported Read/Write pair only has the buffer, so such a value cannot survive it.")
-					:Emit()
-			end
-
+			CheckExport(self, Export, Keyword, Name, Declaration, KeywordSettings.Exportable, Generics)
 			Declaration.Value.Export = true
 		end
 

@@ -129,6 +129,98 @@ local function Corrupt(Bytes: buffer): buffer
 	return Result
 end
 
+--- How long reading `Damaged` takes, and what the read returned.
+local function TimedRead(Serde: any, Damaged: buffer): (number, boolean, any)
+	local Started = os.clock()
+	local Accepted, Decoded = pcall(Serde.Read, Damaged)
+	local Took = os.clock() - Started
+
+	--> A read over the limit is timed twice more on the same bytes, and only the fastest counts. A
+	--> loop the bytes do not bound is slow every time; a garbage collection that lands inside one
+	--> read is not, and late in the suite, with the heap at its largest, one did: a read whose
+	--> slowest honest case takes 22 ms was clocked at 330.
+	for _ = 1, 2 do
+		if Took <= SLOW_READ then
+			break
+		end
+
+		local Retried = os.clock()
+		pcall(Serde.Read, Damaged)
+		Took = math.min(Took, os.clock() - Retried)
+	end
+
+	return Took, Accepted, Decoded
+end
+
+--- Property 6, for one encoding: whatever a corrupted copy of it decodes to is a value of the type,
+--- and one the sender would write.
+local function CheckCorrupted(Node: Node, Serde: any, Bytes: buffer): string?
+	for _ = 1, CORRUPTIONS do
+		local Damaged = Corrupt(Bytes)
+		local Took, Accepted, Decoded = TimedRead(Serde, Damaged)
+
+		if Took > SLOW_READ then
+			return `reading {buffer.len(Damaged)} corrupted bytes took {Took}s\n  bytes: {Hex(Damaged)}`
+		elseif Accepted then
+			local Reason = Oracle.Valid(Node, Decoded)
+			if Reason then
+				return `corrupted bytes decoded to a value outside the type: {Reason}\n  bytes: {Hex(Damaged)}`
+			end
+
+			local Rewrote, Failure = pcall(Serde.Write, Decoded)
+			if not Rewrote then
+				return `corrupted bytes decoded to {Describe(Decoded)}, which the sender refuses to write: {Failure}\n  bytes: {Hex(
+					Damaged
+				)}`
+			end
+		end
+	end
+
+	return nil
+end
+
+--- Property 7: a value the receiver would not take -- a length past its bound, an integer past its
+--- range, a float between representable values -- may be refused by either side. What the sender
+--- does write:
+---   a. is read to its last byte and no further, whatever the options. A length prefix that
+---      wrapped on send was this: the receiver took a shorter value and read the rest of the
+---      packet from the wrong place.
+---   b. under WriteValidations, arrives as what was sent, floats narrowed to their precision.
+---      Without it, cutting an exact-length value to size is the documented behaviour.
+local function CheckWild(Node: Node, Serde: any, Validated: boolean): string?
+	Generate.Wild = true
+	local Drew, Wild = pcall(Generate.Value, Node)
+	Generate.Wild = false
+	if not Drew then
+		return nil
+	end
+
+	local Sent, Encoded = pcall(Serde.Write, Wild)
+	if not Sent then
+		return nil
+	end
+
+	local Received, Arrived = pcall(Serde.Read, Encoded)
+	if not Received then
+		return nil
+	end
+
+	local Written = buffer.len(Encoded)
+	if Written > 0 then
+		local Short = buffer.create(Written - 1)
+		buffer.copy(Short, 0, Encoded, 0, Written - 1)
+		if pcall(Serde.Read, Short) then
+			return `{Describe(Wild)} was written in {Written} bytes, and fewer of them decode\n  bytes: {Hex(Encoded)}`
+		end
+	end
+
+	if Validated and not Oracle.Equal(Node, Wild, Arrived, true) then
+		return `{Describe(Wild)} was written and read back as {Describe(Arrived)}\n  bytes: {Hex(Encoded)}`
+	end
+
+	return nil
+end
+
 --- Checks one draw of one type. Returns why it failed, or nil.
 local function Check(Node: Node, Serde: any, Bounds: Size.Measurement, Validated: boolean): string?
 	local Value = Generate.Value(Node)
@@ -175,84 +267,8 @@ local function Check(Node: Node, Serde: any, Bounds: Size.Measurement, Validated
 		end
 	end
 
-	--> 6. Whatever a corrupted encoding decodes to is a value of the type, and one the sender would
-	-->    write.
-	for _ = 1, CORRUPTIONS do
-		local Damaged = Corrupt(Bytes)
-		local Started = os.clock()
-		local Accepted, Decoded = pcall(Serde.Read, Damaged)
-		local Took = os.clock() - Started
-
-		--> A read over the limit is timed twice more on the same bytes, and only the fastest counts. A
-		--> loop the bytes do not bound is slow every time; a garbage collection that lands inside one
-		--> read is not, and late in the suite, with the heap at its largest, one did: a read whose
-		--> slowest honest case takes 22 ms was clocked at 330.
-		for _ = 1, 2 do
-			if Took <= SLOW_READ then
-				break
-			end
-
-			local Retried = os.clock()
-			pcall(Serde.Read, Damaged)
-			Took = math.min(Took, os.clock() - Retried)
-		end
-
-		if Took > SLOW_READ then
-			return `reading {buffer.len(Damaged)} corrupted bytes took {Took}s\n  bytes: {Hex(Damaged)}`
-		elseif Accepted then
-			local Reason = Oracle.Valid(Node, Decoded)
-			if Reason then
-				return `corrupted bytes decoded to a value outside the type: {Reason}\n  bytes: {Hex(Damaged)}`
-			end
-
-			local Rewrote, Failure = pcall(Serde.Write, Decoded)
-			if not Rewrote then
-				return `corrupted bytes decoded to {Describe(Decoded)}, which the sender refuses to write: {Failure}\n  bytes: {Hex(
-					Damaged
-				)}`
-			end
-		end
-	end
-
-	--> 7. A value the receiver would not take -- a length past its bound, an integer past its range,
-	-->    a float between representable values -- may be refused by either side. What the sender
-	-->    does write:
-	-->    a. is read to its last byte and no further, whatever the options. A length prefix that
-	-->       wrapped on send was this: the receiver took a shorter value and read the rest of the
-	-->       packet from the wrong place.
-	-->    b. under WriteValidations, arrives as what was sent, floats narrowed to their precision.
-	-->       Without it, cutting an exact-length value to size is the documented behaviour.
-	Generate.Wild = true
-	local Drew, Wild = pcall(Generate.Value, Node)
-	Generate.Wild = false
-	if not Drew then
-		return nil
-	end
-
-	local Sent, Encoded = pcall(Serde.Write, Wild)
-	if not Sent then
-		return nil
-	end
-
-	local Received, Arrived = pcall(Serde.Read, Encoded)
-	if not Received then
-		return nil
-	end
-
-	local Written = buffer.len(Encoded)
-	if Written > 0 then
-		local Short = buffer.create(Written - 1)
-		buffer.copy(Short, 0, Encoded, 0, Written - 1)
-		if pcall(Serde.Read, Short) then
-			return `{Describe(Wild)} was written in {Written} bytes, and fewer of them decode\n  bytes: {Hex(Encoded)}`
-		end
-	end
-
-	if Validated and not Oracle.Equal(Node, Wild, Arrived, true) then
-		return `{Describe(Wild)} was written and read back as {Describe(Arrived)}\n  bytes: {Hex(Encoded)}`
-	end
-
-	return nil
+	--> 6 and 7.
+	return CheckCorrupted(Node, Serde, Bytes) or CheckWild(Node, Serde, Validated)
 end
 
 PrettyPrint("blue", `Checking serialiser properties (seed {SEED})...`)

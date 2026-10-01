@@ -164,12 +164,56 @@ end
 
 local Measure: (Node) -> Measurement
 
+--> A measurement of exactly this many bytes.
+local function Fixed(Bytes: number): Measurement
+	local Result = Empty()
+	Result.Min = Bytes
+	Result.Max = Bytes
+	return Result
+end
+
+--> A string or a buffer: its bytes, behind a prefix unless the length is exact.
+local function MeasureLength(Range: Settings.NumberRange?, Culprit: any): Measurement
+	--> An exact length needs no prefix at all -- the reader already knows how far to advance.
+	if Range and Range.Min == Range.Max then
+		return Fixed(Range.Min)
+	end
+
+	local Upper = if Range then Range.Max else DEFAULT_LENGTH
+	local Lower = if Range then Range.Min else 0
+	local _, PrefixMin, PrefixMax = LengthPrefix(Upper - Lower, Range ~= nil)
+
+	local Result = Empty()
+	Result.Min = PrefixMin + Lower
+	Result.Max = PrefixMax + Upper
+	Result.Unbounded = (Range == nil)
+	Result.Culprit = if Result.Unbounded then Culprit else nil
+	return Result
+end
+
+local function MeasureCFrame(Components: { string }?): Measurement
+	--> Mirrors the prefab exactly, including its asymmetry: the position is written through the
+	--> vector prefab, which reads the LAST component, while the three orientation values use the
+	--> first. Measuring it any other way would be measuring a different compiler.
+	local Position = if Components then Components[#Components] else nil
+	local Rotation = if Components then Components[1] else nil
+	local Bytes = (ComponentBytes(Position) * 3) + (ComponentBytes(Rotation) * 3)
+
+	--> `quat` may stand in either slot; the rotation is then its fixed seven bytes, and the
+	--> position is whichever component remains.
+	if Components and table.find(Components, "quat") then
+		local Other = if Components[1] == "quat" then Components[2] else Components[1]
+		Bytes = (ComponentBytes(Other) * 3) + PRIMITIVES.quat.Bytes
+	end
+
+	return Fixed(Bytes)
+end
+
 local function MeasurePrimitive(Node: Node): Measurement
 	local Value = Node.Value
 	local Tokens = Node.Tokens
 	local Name: string = Tokens.Primitive.Value
 	local Primitive = PRIMITIVES[Name]
-	local Range = Value.Range
 
 	--> Instances and unknowns are never encoded: they are appended to the instance table and travel
 	--> as the remote's second argument. Zero bytes, one slot.
@@ -180,57 +224,16 @@ local function MeasurePrimitive(Node: Node): Measurement
 	end
 
 	if Name == "string" or Name == "buffer" then
-		local Result = Empty()
-
-		--> An exact length needs no prefix at all -- the reader already knows how far to advance.
-		if Range and Range.Min == Range.Max then
-			Result.Min = Range.Min
-			Result.Max = Range.Max
-			return Result
-		end
-
-		local Upper = if Range then Range.Max else DEFAULT_LENGTH
-		local Lower = if Range then Range.Min else 0
-		local _, PrefixMin, PrefixMax = LengthPrefix(Upper - Lower, Range ~= nil)
-
-		Result.Min = PrefixMin + Lower
-		Result.Max = PrefixMax + Upper
-		Result.Unbounded = (Range == nil)
-		Result.Culprit = if Result.Unbounded then Tokens.Primitive else nil
-		return Result
+		return MeasureLength(Value.Range, Tokens.Primitive)
 	end
 
 	if Name == "vector" then
 		local Components: { string }? = Value.Components
-		local Component = if Components then Components[#Components] else nil
-		local Bytes = ComponentBytes(Component) * 3
-
-		local Result = Empty()
-		Result.Min = Bytes
-		Result.Max = Bytes
-		return Result
+		return Fixed(ComponentBytes(if Components then Components[#Components] else nil) * 3)
 	end
 
 	if Name == "CFrame" then
-		--> Mirrors the prefab exactly, including its asymmetry: the position is written through the
-		--> vector prefab, which reads the LAST component, while the three orientation values use the
-		--> first. Measuring it any other way would be measuring a different compiler.
-		local Components: { string }? = Value.Components
-		local Position = if Components then Components[#Components] else nil
-		local Rotation = if Components then Components[1] else nil
-		local Bytes = (ComponentBytes(Position) * 3) + (ComponentBytes(Rotation) * 3)
-
-		--> `quat` may stand in either slot; the rotation is then its fixed seven bytes, and the
-		--> position is whichever component remains.
-		if Components and table.find(Components, "quat") then
-			local Other = if Components[1] == "quat" then Components[2] else Components[1]
-			Bytes = (ComponentBytes(Other) * 3) + PRIMITIVES.quat.Bytes
-		end
-
-		local Result = Empty()
-		Result.Min = Bytes
-		Result.Max = Bytes
-		return Result
+		return MeasureCFrame(Value.Components)
 	end
 
 	--> A boolean is one bit in the enclosing scope's bitfield rather than a byte of its own.

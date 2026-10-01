@@ -27,13 +27,20 @@ export type Palette = {
 local DOTS = "%.%."
 local NUMBER = "%-?%d*%.?%d+"
 
-local BRACKETS = {
-	OpenParentheses = true,
-	CloseParentheses = true,
-	OpenBraces = true,
-	CloseBraces = true,
-	OpenBrackets = true,
-	CloseBrackets = true,
+--> Tokens painted whole, in one colour of the palette.
+local PLAIN: { [string]: string } = {
+	Attribute = "Keyword",
+	Primitive = "Primitive",
+	String = "String",
+	Boolean = "Boolean",
+	Comment = "Comment",
+	Unknown = "Error",
+	OpenParentheses = "Bracket",
+	CloseParentheses = "Bracket",
+	OpenBraces = "Bracket",
+	CloseBraces = "Bracket",
+	OpenBrackets = "Bracket",
+	CloseBrackets = "Bracket",
 }
 
 --- Only the two that would otherwise open a rich-text tag. Ampersand is left alone on purpose: the
@@ -58,6 +65,23 @@ local function Escape(Text: string): string
 	return Text
 end
 
+--- An array's or a range's bounds: the numbers are painted, the brackets and dots are not.
+local function Bounds(Value: string, Palette: Palette): string?
+	local Single = string.match(Value, `%[({NUMBER})%]`) or string.match(Value, `%(({NUMBER})%)`)
+	local Lower = string.match(Value, `%[({NUMBER}){DOTS}`) or string.match(Value, `%(({NUMBER}){DOTS}`)
+	local Upper = string.match(Value, `{DOTS}({NUMBER})%]`) or string.match(Value, `{DOTS}({NUMBER})%)`)
+
+	if Single then
+		return (string.gsub(Value, Single, Color(Single, Palette.Number)))
+	elseif Lower and Upper then
+		local Open = string.sub(Value, 1, 1)
+		local Close = string.sub(Value, #Value, #Value)
+		return `{Open}{Color(Lower, Palette.Number)}..{Color(Upper, Palette.Number)}{Close}`
+	end
+
+	return nil
+end
+
 --- One token's worth of markup. Split out from the loop so a spec can drive a single token without
 --- standing up a document.
 function Highlight.Token(
@@ -68,50 +92,31 @@ function Highlight.Token(
 ): (string, string)
 	local Type: Lexer.Types = Token.Type
 	local Value = Token.Value
-	local String = Escape(Value)
+
+	local Plain = PLAIN[Type]
+	if Plain then
+		return Color(Value, (Palette :: any)[Plain]), Keyword
+	end
 
 	if Type == "Keyword" or Type == "Import" or Type == "As" then
 		return Color(Value, Palette.Keyword), Value
-	elseif Type == "Attribute" then
-		String = Color(Value, Palette.Keyword)
-	elseif Type == "Primitive" then
-		String = Color(Value, Palette.Primitive)
 	elseif Type == "Identifier" then
 		--> A field name is painted as text rather than as an identifier, which is how `Name:` reads
 		--> differently from a reference to `Name`. A map's key is a type, not a field, hence the guard.
 		local LookAhead = SourceLexer:GetNextToken(true)
 		local IsField = (LookAhead and LookAhead.Type == "FieldAssign" and Keyword ~= "map")
-		String = Color(Value, IsField and Palette.Text or Palette.Identifier)
+		return Color(Value, IsField and Palette.Text or Palette.Identifier), Keyword
 	elseif Type == "Array" or Type == "Range" then
-		local Single = string.match(Value, `%[({NUMBER})%]`) or string.match(Value, `%(({NUMBER})%)`)
-		local Lower = string.match(Value, `%[({NUMBER}){DOTS}`) or string.match(Value, `%(({NUMBER}){DOTS}`)
-		local Upper = string.match(Value, `{DOTS}({NUMBER})%]`) or string.match(Value, `{DOTS}({NUMBER})%)`)
-
-		if Single then
-			String = string.gsub(Value, Single, Color(Single, Palette.Number))
-		elseif Lower and Upper then
-			local Open = string.sub(Value, 1, 1)
-			local Close = string.sub(Value, #Value, #Value)
-			String = `{Open}{Color(Lower, Palette.Number)}..{Color(Upper, Palette.Number)}{Close}`
-		end
+		return Bounds(Value, Palette) or Escape(Value), Keyword
 	elseif Type == "Component" then
 		local Primitive = string.match(Value, "(%w+)") or ""
-		String = `{Color("<", Palette.Bracket)}{Color(Primitive, Palette.Primitive)}{Color(">", Palette.Bracket)}`
-	elseif BRACKETS[Type] then
-		String = Color(Value, Palette.Bracket)
+		return `{Color("<", Palette.Bracket)}{Color(Primitive, Palette.Primitive)}{Color(">", Palette.Bracket)}`,
+			Keyword
 	elseif Type == "Class" then
-		String = `({Color(string.sub(Value, 2, #Value - 1), Palette.Class)})`
-	elseif Type == "String" then
-		String = Color(Value, Palette.String)
-	elseif Type == "Boolean" then
-		String = Color(Value, Palette.Boolean)
-	elseif Type == "Comment" then
-		String = Color(Value, Palette.Comment)
-	elseif Type == "Unknown" then
-		String = Color(Value, Palette.Error)
+		return `({Color(string.sub(Value, 2, #Value - 1), Palette.Class)})`, Keyword
 	end
 
-	return String, Keyword
+	return Escape(Value), Keyword
 end
 
 --- The whole document. `SourceLexer` is handed in rather than created here so the editor keeps using

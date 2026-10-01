@@ -115,6 +115,20 @@ local function Write(Path: string, Contents: string, Options: CompileOptions, Re
 	table.insert(Results.Outputs, PathParser.Normalise(Path))
 end
 
+--- Where one side's module goes, and its TypeScript declarations beside it: the schema's output
+--- option with the extension added, under the schema's directory unless the option is absolute.
+local function OutputPaths(FileDirectory: string, Option: string): (string, string)
+	local Directory, Filename = PathParser.Components(Option)
+	local TypescriptFilename = if Filename == "init" then "index" else Filename
+	local Output = `{Directory}/{Filename}.luau`
+	local Typescript = `{Directory}/{TypescriptFilename}.d.ts`
+	if PathParser.PathType(Output) == "absolute" then
+		return Output, Typescript
+	end
+
+	return `{FileDirectory}{Output}`, `{FileDirectory}{Typescript}`
+end
+
 --- The whole compile. `Results` collects every path written, for `--json` to report.
 local function Build(Path: string, Options: CompileOptions, Results: Results)
 	local FilePath = GetDefinitionFilePath(Path)
@@ -153,43 +167,9 @@ local function Build(Path: string, Options: CompileOptions, Results: Results)
 		error("A server output path must be defined.", 0)
 	end
 
-	local ClientTypescriptPath
-	local ServerTypescriptPath
-
-	do
-		local Directory, Filename = PathParser.Components(ClientOutputPath)
-		local TypescriptFilename = if Filename == "init" then "index" else Filename
-		ClientOutputPath = `{Directory}/{Filename}.luau`
-		ClientTypescriptPath = if PathParser.PathType(ClientOutputPath) == "absolute"
-			then `{Directory}/{TypescriptFilename}.d.ts`
-			else `{FileDirectory}{Directory}/{TypescriptFilename}.d.ts`
-	end
-
-	do
-		local Directory, Filename = PathParser.Components(ServerOutputPath)
-		local TypescriptFilename = if Filename == "init" then "index" else Filename
-		ServerOutputPath = `{Directory}/{Filename}.luau`
-		ServerTypescriptPath = if PathParser.PathType(ServerOutputPath) == "absolute"
-			then `{Directory}/{TypescriptFilename}.d.ts`
-			else `{FileDirectory}{Directory}/{TypescriptFilename}.d.ts`
-	end
-
+	local ClientOutput, ClientTypescriptPath = OutputPaths(FileDirectory, ClientOutputPath)
+	local ServerOutput, ServerTypescriptPath = OutputPaths(FileDirectory, ServerOutputPath)
 	local TypesOutput: string
-
-	local ClientOutput: string
-	local ServerOutput: string
-
-	if PathParser.PathType(ClientOutputPath) == "absolute" then
-		ClientOutput = ClientOutputPath
-	else
-		ClientOutput = `{FileDirectory}{ClientOutputPath}`
-	end
-
-	if PathParser.PathType(ServerOutputPath) == "absolute" then
-		ServerOutput = ServerOutputPath
-	else
-		ServerOutput = `{FileDirectory}{ServerOutputPath}`
-	end
 
 	if not Options.Check then
 		CreateDirectoryIfNotFound(ClientOutput, Options)

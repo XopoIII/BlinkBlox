@@ -120,41 +120,157 @@ local function Count(Table: { [any]: any }): number
 	return Total
 end
 
+local function ValidNumber(Node: Node, Name: string, Value: any): string?
+	local Body = Node.Value
+	if type(Value) ~= "number" then
+		return `expected a number, got {typeof(Value)}`
+	elseif not Oracle.Admits(Node, Value) then
+		return `{Value} is not a {Name}{if Body.Range then ` in {Body.Range.Min}..{Body.Range.Max}` else ""}`
+	elseif Name == "f16" and Value == Value and Narrow.f16(Value) ~= Value then
+		return `{Value} is not a half-precision value`
+	elseif Name == "f24" and Value == Value and not Oracle.IsFloat24(Value) then
+		return `{Value} is not an f24 value`
+	end
+
+	return nil
+end
+
+local function ValidPrimitive(Node: Node, Value: any): string?
+	local Body = Node.Value
+	local Name = PrimitiveName(Node)
+	if INTEGERS[Name] or FLOATS[Name] then
+		return ValidNumber(Node, Name, Value)
+	elseif Name == "boolean" then
+		return if type(Value) == "boolean" then nil else `expected a boolean, got {typeof(Value)}`
+	end
+
+	local Wanted = if Name == "string" then "string" else "buffer"
+	if typeof(Value) ~= Wanted then
+		return `expected a {Wanted}, got {typeof(Value)}`
+	end
+
+	local Size = if Name == "string" then #Value else buffer.len(Value)
+	local Range = Body.Range or { Min = 0, Max = 65535 }
+	if Size < Range.Min or Size > Range.Max then
+		return `a length of {Size} is outside {Range.Min}..{Range.Max}`
+	end
+
+	return nil
+end
+
+local function ValidSet(Node: Node, Value: any): string?
+	local Body = Node.Value
+	if Count(Value) ~= #Body.Values then
+		return `a set of {#Body.Values} flags decoded with {Count(Value)} entries`
+	end
+
+	for _, Flag in Body.Values do
+		if type(Value[Flag]) ~= "boolean" then
+			return `flag "{Flag}" is not a boolean`
+		end
+	end
+
+	return nil
+end
+
+--- A struct's fields, or those of the variant a tagged enum's tag names.
+local function ValidFields(Node: Node, Value: any): string?
+	local Body = Node.Value
+	local Fields: { Node } = Body.Values
+	local Expected = 0
+	if Node.Type == "TagEnum" then
+		local Variant: Node? = nil
+		for _, Candidate in Body.Values do
+			if Candidate.Name == Value[Body.Tag] then
+				Variant = Candidate
+			end
+		end
+
+		if not Variant then
+			return `"{Value[Body.Tag]}" is not a variant`
+		end
+
+		Fields = (Variant :: Node).Value.Values
+		Expected = 1
+	end
+
+	for _, Field in Fields do
+		local Reason = Oracle.Valid(Field, Value[Field.Name])
+		if Reason then
+			return `{Field.Name}: {Reason}`
+		end
+
+		if Value[Field.Name] ~= nil then
+			Expected += 1
+		end
+	end
+
+	return if Count(Value) == Expected then nil else `decoded {Count(Value)} fields, expected {Expected}`
+end
+
+local function ValidArray(Node: Node, Value: any): string?
+	local Body = Node.Value
+	--> The length of a decoded array is its highest index, not `#`: an array of optionals keeps
+	--> its holes, and `#` may stop at any of them. Trailing nils leave no trace in a table, so
+	--> only an array that cannot hold nil is held to its lower bound.
+	local Range = Body.Range
+	local Highest = 0
+	for Key in Value do
+		if type(Key) ~= "number" or Key < 1 or Key ~= math.floor(Key) then
+			return `an array has the key {Key}`
+		end
+
+		Highest = math.max(Highest, Key)
+	end
+
+	local Size = if Range.Min == Range.Max then Range.Max else Highest
+	local Holes = Body.Of.Type == "Optional"
+	if Highest > Range.Max or (not Holes and (Size < Range.Min or Count(Value) ~= Size)) then
+		return `{Count(Value)} elements up to index {Highest}, outside {Range.Min}..{Range.Max}`
+	end
+
+	for Index = 1, Size do
+		local Reason = Oracle.Valid(Body.Of, Value[Index])
+		if Reason then
+			return `[{Index}]: {Reason}`
+		end
+	end
+
+	return nil
+end
+
+local function ValidMap(Node: Node, Value: any): string?
+	local Body = Node.Value
+	if Count(Value) > 65535 then
+		return `a map of {Count(Value)} entries`
+	end
+
+	for Key, Entry in Value do
+		local Reason = Oracle.Valid(Body.Values[1], Key) or Oracle.Valid(Body.Values[2], Entry)
+		if Reason then
+			return `[{Key}]: {Reason}`
+		end
+	end
+
+	return nil
+end
+
+--> The types a table stands for, each judged by its own shape.
+local VALID_TABLE: { [string]: (Node: Node, Value: any) -> string? } = {
+	Set = ValidSet,
+	Struct = ValidFields,
+	TagEnum = ValidFields,
+	Array = ValidArray,
+	Map = ValidMap,
+}
+
 --- Why `Value` is not a value of `Node`, or nil when it is. Strict about shape: a decoder that adds a
 --- field, leaves one out or fills a hole is as wrong as one that decodes a number out of range.
 function Oracle.Valid(Node: Node, Value: any): string?
 	local Body = Node.Value
 
 	if Node.Type == "Primitive" then
-		local Name = PrimitiveName(Node)
-		if INTEGERS[Name] or FLOATS[Name] then
-			if type(Value) ~= "number" then
-				return `expected a number, got {typeof(Value)}`
-			elseif not Oracle.Admits(Node, Value) then
-				return `{Value} is not a {Name}{if Body.Range then ` in {Body.Range.Min}..{Body.Range.Max}` else ""}`
-			elseif Name == "f16" and Value == Value and Narrow.f16(Value) ~= Value then
-				return `{Value} is not a half-precision value`
-			elseif Name == "f24" and Value == Value and not Oracle.IsFloat24(Value) then
-				return `{Value} is not an f24 value`
-			end
-
-			return nil
-		elseif Name == "boolean" then
-			return if type(Value) == "boolean" then nil else `expected a boolean, got {typeof(Value)}`
-		end
-
-		local Wanted = if Name == "string" then "string" else "buffer"
-		if typeof(Value) ~= Wanted then
-			return `expected a {Wanted}, got {typeof(Value)}`
-		end
-
-		local Size = if Name == "string" then #Value else buffer.len(Value)
-		local Range = Body.Range or { Min = 0, Max = 65535 }
-		if Size < Range.Min or Size > Range.Max then
-			return `a length of {Size} is outside {Range.Min}..{Range.Max}`
-		end
-
-		return nil
+		return ValidPrimitive(Node, Value)
 	elseif Node.Type == "Optional" then
 		return if Value == nil then nil else Oracle.Valid(Body.Of, Value)
 	elseif Node.Type == "Enum" then
@@ -163,93 +279,40 @@ function Oracle.Valid(Node: Node, Value: any): string?
 		return `expected a table for {Node.Type}, got {typeof(Value)}`
 	end
 
-	if Node.Type == "Set" then
-		if Count(Value) ~= #Body.Values then
-			return `a set of {#Body.Values} flags decoded with {Count(Value)} entries`
-		end
-
-		for _, Flag in Body.Values do
-			if type(Value[Flag]) ~= "boolean" then
-				return `flag "{Flag}" is not a boolean`
-			end
-		end
-
-		return nil
-	elseif Node.Type == "Struct" or Node.Type == "TagEnum" then
-		local Fields: { Node } = Body.Values
-		local Expected = 0
-		if Node.Type == "TagEnum" then
-			local Variant: Node? = nil
-			for _, Candidate in Body.Values do
-				if Candidate.Name == Value[Body.Tag] then
-					Variant = Candidate
-				end
-			end
-
-			if not Variant then
-				return `"{Value[Body.Tag]}" is not a variant`
-			end
-
-			Fields = (Variant :: Node).Value.Values
-			Expected = 1
-		end
-
-		for _, Field in Fields do
-			local Reason = Oracle.Valid(Field, Value[Field.Name])
-			if Reason then
-				return `{Field.Name}: {Reason}`
-			end
-
-			if Value[Field.Name] ~= nil then
-				Expected += 1
-			end
-		end
-
-		return if Count(Value) == Expected then nil else `decoded {Count(Value)} fields, expected {Expected}`
-	elseif Node.Type == "Array" then
-		--> The length of a decoded array is its highest index, not `#`: an array of optionals keeps
-		--> its holes, and `#` may stop at any of them. Trailing nils leave no trace in a table, so
-		--> only an array that cannot hold nil is held to its lower bound.
-		local Range = Body.Range
-		local Highest = 0
-		for Key in Value do
-			if type(Key) ~= "number" or Key < 1 or Key ~= math.floor(Key) then
-				return `an array has the key {Key}`
-			end
-
-			Highest = math.max(Highest, Key)
-		end
-
-		local Size = if Range.Min == Range.Max then Range.Max else Highest
-		local Holes = Body.Of.Type == "Optional"
-		if Highest > Range.Max or (not Holes and (Size < Range.Min or Count(Value) ~= Size)) then
-			return `{Count(Value)} elements up to index {Highest}, outside {Range.Min}..{Range.Max}`
-		end
-
-		for Index = 1, Size do
-			local Reason = Oracle.Valid(Body.Of, Value[Index])
-			if Reason then
-				return `[{Index}]: {Reason}`
-			end
-		end
-
-		return nil
-	elseif Node.Type == "Map" then
-		if Count(Value) > 65535 then
-			return `a map of {Count(Value)} entries`
-		end
-
-		for Key, Entry in Value do
-			local Reason = Oracle.Valid(Body.Values[1], Key) or Oracle.Valid(Body.Values[2], Entry)
-			if Reason then
-				return `[{Key}]: {Reason}`
-			end
-		end
-
-		return nil
+	local Judge = VALID_TABLE[Node.Type]
+	if Judge then
+		return Judge(Node, Value)
 	end
 
 	return `unexpected node {Node.Type}`
+end
+
+--- f24, rounded to nearest: within half a unit of the binade the sent value is in, and infinity from
+--- half a unit past the largest finite value.
+local function NarrowedFloat24(Sent: number, Got: number): boolean
+	if Got ~= Got or not Oracle.IsFloat24(Got) then
+		return false
+	elseif math.abs(Sent) >= 4294959104 then
+		return Got == (if Sent > 0 then math.huge else -math.huge)
+	elseif (1 / Sent > 0) ~= (1 / Got > 0) then
+		return false
+	end
+
+	local _, Exponent = math.frexp(math.abs(Sent))
+	return math.abs(Got - Sent) <= math.ldexp(1, math.max(Exponent - 18, -47)) / 2
+end
+
+local function NarrowedHalf(Sent: number, Got: number): boolean
+	if Got ~= Got or (Got ~= 0 and math.abs(Got) ~= math.huge and Narrow.f16(Got) ~= Got) then
+		return false
+	elseif math.abs(Sent) > 65504 then
+		return Got == (if Sent > 0 then math.huge else -math.huge)
+	elseif (1 / Sent > 0) ~= (1 / Got > 0) and Got ~= 0 then
+		return false
+	end
+
+	local Unit = math.max(math.ldexp(1, math.floor(math.log(math.abs(Sent), 2)) - 10), math.ldexp(1, -24))
+	return math.abs(Got - Sent) <= Unit
 end
 
 --- Whether `Got` is what a float of type `Name` may legitimately become of `Sent` on the wire. Worked
@@ -267,30 +330,10 @@ function Oracle.Narrowed(Name: string, Sent: number, Got: number): boolean
 	end
 
 	if Name == "f24" then
-		--> Rounded to nearest: within half a unit of the binade the sent value is in, and infinity
-		--> from half a unit past the largest finite value.
-		if Got ~= Got or not Oracle.IsFloat24(Got) then
-			return false
-		elseif math.abs(Sent) >= 4294959104 then
-			return Got == (if Sent > 0 then math.huge else -math.huge)
-		elseif (1 / Sent > 0) ~= (1 / Got > 0) then
-			return false
-		end
-
-		local _, Exponent = math.frexp(math.abs(Sent))
-		return math.abs(Got - Sent) <= math.ldexp(1, math.max(Exponent - 18, -47)) / 2
+		return NarrowedFloat24(Sent, Got)
 	end
 
-	if Got ~= Got or (Got ~= 0 and math.abs(Got) ~= math.huge and Narrow.f16(Got) ~= Got) then
-		return false
-	elseif math.abs(Sent) > 65504 then
-		return Got == (if Sent > 0 then math.huge else -math.huge)
-	elseif (1 / Sent > 0) ~= (1 / Got > 0) and Got ~= 0 then
-		return false
-	end
-
-	local Unit = math.max(math.ldexp(1, math.floor(math.log(math.abs(Sent), 2)) - 10), math.ldexp(1, -24))
-	return math.abs(Got - Sent) <= Unit
+	return NarrowedHalf(Sent, Got)
 end
 
 --- Whether `Got` is what a number with modifiers may arrive as, sent as `Sent` under WriteValidations.
@@ -317,6 +360,87 @@ function Oracle.Delivered(Node: Node, Sent: number, Got: number): boolean
 	return Oracle.Admits(Node, Got) and math.abs(Got - Sent) <= Step / 2 * (1 + 1e-9)
 end
 
+local function EqualArray(Node: Node, Left: any, Right: any, Loose: boolean?): boolean
+	local Body = Node.Value
+	local Size = if Body.Range.Min == Body.Range.Max then Body.Range.Max else math.max(#Left, #Right)
+	for Index = 1, Size do
+		if not Oracle.Equal(Body.Of, Left[Index], Right[Index], Loose) then
+			return false
+		end
+	end
+
+	return Count(Left) == Count(Right)
+end
+
+local function EqualMap(Node: Node, Left: any, Right: any, Loose: boolean?): boolean
+	for Key, Entry in Left do
+		if not Oracle.Equal(Node.Value.Values[2], Entry, Right[Key], Loose) then
+			return false
+		end
+	end
+
+	return Count(Left) == Count(Right)
+end
+
+--- A struct's fields, or those of the variant both sides' tag names.
+local function EqualFields(Node: Node, Left: any, Right: any, Loose: boolean?): boolean
+	local Body = Node.Value
+	local Fields: { Node } = Body.Values
+	if Node.Type == "TagEnum" then
+		if Left[Body.Tag] ~= Right[Body.Tag] then
+			return false
+		end
+
+		for _, Variant in Body.Values do
+			if Variant.Name == Left[Body.Tag] then
+				Fields = Variant.Value.Values
+			end
+		end
+	end
+
+	for _, Field in Fields do
+		if not Oracle.Equal(Field, Left[Field.Name], Right[Field.Name], Loose) then
+			return false
+		end
+	end
+
+	return true
+end
+
+local function EqualSet(Node: Node, Left: any, Right: any, _Loose: boolean?): boolean
+	for _, Flag in Node.Value.Values do
+		if Left[Flag] ~= Right[Flag] then
+			return false
+		end
+	end
+
+	return true
+end
+
+--- Two numbers: as the wire may deliver one for the other when `Loose`, and bit for bit otherwise.
+local function EqualNumbers(Node: Node, Left: number, Right: number, Loose: boolean?): boolean
+	if Loose and Node.Type == "Primitive" then
+		if Node.Value.Scale or Node.Value.Saturate then
+			return Oracle.Delivered(Node, Left, Right)
+		end
+
+		return Oracle.Narrowed(PrimitiveName(Node), Left, Right)
+	elseif Left ~= Left then
+		return Right ~= Right
+	end
+
+	return Left == Right and (Left ~= 0 or 1 / Left == 1 / Right)
+end
+
+--> The types two tables are compared as.
+local EQUAL_TABLE: { [string]: (Node: Node, Left: any, Right: any, Loose: boolean?) -> boolean } = {
+	Array = EqualArray,
+	Map = EqualMap,
+	Struct = EqualFields,
+	TagEnum = EqualFields,
+	Set = EqualSet,
+}
+
 --- Whether two values of `Node` are the same value. Floats compare by bits: NaN equals NaN, and -0
 --- does not equal 0, since both are values a sender can mean.
 function Oracle.Equal(Node: Node, Left: any, Right: any, Loose: boolean?): boolean
@@ -326,76 +450,16 @@ function Oracle.Equal(Node: Node, Left: any, Right: any, Loose: boolean?): boole
 		return Oracle.Equal(Node.Value.Of, Left, Right, Loose)
 	end
 
-	if Loose and Node.Type == "Primitive" and type(Left) == "number" and type(Right) == "number" then
-		if Node.Value.Scale or Node.Value.Saturate then
-			return Oracle.Delivered(Node, Left, Right)
-		end
-
-		return Oracle.Narrowed(PrimitiveName(Node), Left, Right)
-	elseif type(Left) == "number" and type(Right) == "number" then
-		if Left ~= Left then
-			return Right ~= Right
-		end
-
-		return Left == Right and (Left ~= 0 or 1 / Left == 1 / Right)
+	if type(Left) == "number" and type(Right) == "number" then
+		return EqualNumbers(Node, Left, Right, Loose)
 	elseif typeof(Left) == "buffer" and typeof(Right) == "buffer" then
 		return buffer.tostring(Left) == buffer.tostring(Right)
 	elseif type(Left) ~= "table" or type(Right) ~= "table" then
 		return Left == Right
 	end
 
-	local Body = Node.Value
-	if Node.Type == "Optional" then
-		return Oracle.Equal(Body.Of, Left, Right, Loose)
-	elseif Node.Type == "Array" then
-		local Size = if Body.Range.Min == Body.Range.Max then Body.Range.Max else math.max(#Left, #Right)
-		for Index = 1, Size do
-			if not Oracle.Equal(Body.Of, Left[Index], Right[Index], Loose) then
-				return false
-			end
-		end
-
-		return Count(Left) == Count(Right)
-	elseif Node.Type == "Map" then
-		for Key, Entry in Left do
-			if not Oracle.Equal(Body.Values[2], Entry, Right[Key], Loose) then
-				return false
-			end
-		end
-
-		return Count(Left) == Count(Right)
-	elseif Node.Type == "Struct" or Node.Type == "TagEnum" then
-		local Fields: { Node } = Body.Values
-		if Node.Type == "TagEnum" then
-			if Left[Body.Tag] ~= Right[Body.Tag] then
-				return false
-			end
-
-			for _, Variant in Body.Values do
-				if Variant.Name == Left[Body.Tag] then
-					Fields = Variant.Value.Values
-				end
-			end
-		end
-
-		for _, Field in Fields do
-			if not Oracle.Equal(Field, Left[Field.Name], Right[Field.Name], Loose) then
-				return false
-			end
-		end
-
-		return true
-	elseif Node.Type == "Set" then
-		for _, Flag in Body.Values do
-			if Left[Flag] ~= Right[Flag] then
-				return false
-			end
-		end
-
-		return true
-	end
-
-	return false
+	local Compare = EQUAL_TABLE[Node.Type]
+	return Compare ~= nil and Compare(Node, Left, Right, Loose)
 end
 
 return Oracle

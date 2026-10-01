@@ -47,149 +47,155 @@ local function IsDeclarationTypeSimiliar(A: Declarations, B: Declarations): bool
 	return false
 end
 
-function Parser.Type(self: Parser, Name: Token, Keyword: Token?, IsDataField: boolean?): TypeNode
-	local Declaration: TypeNode
+--> The parser method each declaring keyword hands its body to. `type` is here for the fast path
+--> alone: a `type` keyword never stands where a type is written.
+local function KeywordBody(self: Parser, Value: string, Name: Token, AllowType: boolean): TypeNode?
+	if Value == "map" then
+		return self:Map(Name)
+	elseif Value == "set" then
+		return self:Set(Name)
+	elseif Value == "enum" then
+		return self:Enum(Name)
+	elseif Value == "type" and AllowType then
+		return self:Primitive(Name)
+	elseif Value == "struct" then
+		return self:Struct(Name)
+	end
 
-	--> Fast path: We know the exact type
-	if Keyword then
-		local Value = Keyword.Value
-		if Value ~= "struct" then
-			self:Consume("Assign")
+	return nil
+end
 
-			--> Handle reference declarations
-			local Type = KEYWORDS[Value].Type
-			local Token = self:Peek()
+--> Fast path: We know the exact type
+local function DeclaredType(self: Parser, Name: Token, Keyword: Token): TypeNode
+	local Declaration: TypeNode?
 
-			if Token.Type == "Identifier" then
-				Declaration = self:Declaration(Name)
-				if not IsDeclarationTypeSimiliar(Declaration.Type, Type :: Declarations) then
-					self:Diagnostic(Error.AnalyzeReferenceInvalidType, `Cannot cast "{Declaration.Type}" to "{Type}"`)
-						:Primary(Token, `Expected a reference to "{Type}", got "{Declaration.Type}" instead`)
-						:Emit()
-				end
-			end
-		end
+	local Value = Keyword.Value
+	if Value ~= "struct" then
+		self:Consume("Assign")
 
-		--> Wasn't a reference declaration
-		if not Declaration then
-			if Value == "map" then
-				Declaration = self:Map(Name)
-			elseif Value == "set" then
-				Declaration = self:Set(Name)
-			elseif Value == "enum" then
-				Declaration = self:Enum(Name)
-			elseif Value == "type" then
-				Declaration = self:Primitive(Name)
-			elseif Value == "struct" then
-				Declaration = self:Struct(Name)
+		--> Handle reference declarations
+		local Type = KEYWORDS[Value].Type
+		local Token = self:Peek()
+
+		if Token.Type == "Identifier" then
+			local Reference = self:Declaration(Name)
+			Declaration = Reference
+			if not IsDeclarationTypeSimiliar(Reference.Type, Type :: Declarations) then
+				self:Diagnostic(Error.AnalyzeReferenceInvalidType, `Cannot cast "{Reference.Type}" to "{Type}"`)
+					:Primary(Token, `Expected a reference to "{Type}", got "{Reference.Type}" instead`)
+					:Emit()
 			end
 		end
 	end
 
-	--> Slow path: We have to figure out what we're declaring :)
-	if not Keyword then
-		local Peek = self:Peek()
-		local Type: Lexer.Types = Peek.Type :: Lexer.Types
+	--> Wasn't a reference declaration
+	return (Declaration or KeywordBody(self, Value, Name, true)) :: TypeNode
+end
 
-		if Type == "Keyword" then
-			local Value = Peek.Value
-			self:Consume("Keyword")
+--> Slow path: We have to figure out what we're declaring :)
+local function InferredType(self: Parser, Name: Token, IsDataField: boolean?): TypeNode
+	local Declaration: TypeNode?
+	local Peek = self:Peek()
+	local Type: Lexer.Types = Peek.Type :: Lexer.Types
 
-			if Value == "map" then
-				Declaration = self:Map(Name)
-			elseif Value == "set" then
-				Declaration = self:Set(Name)
-			elseif Value == "enum" then
-				Declaration = self:Enum(Name)
-			elseif Value == "struct" then
-				Declaration = self:Struct(Name)
-			end
-		elseif Type == "Primitive" then
-			Declaration = self:Primitive(Name)
-		elseif Type == "Identifier" then
-			Declaration = self:Declaration(Name)
-		elseif Type == "OpenParentheses" and IsDataField then
-			Declaration = self:Tuple(Name)
+	if Type == "Keyword" then
+		local Value = Peek.Value
+		self:Consume("Keyword")
+		Declaration = KeywordBody(self, Value, Name, false)
+	elseif Type == "Primitive" then
+		Declaration = self:Primitive(Name)
+	elseif Type == "Identifier" then
+		Declaration = self:Declaration(Name)
+	elseif Type == "OpenParentheses" and IsDataField then
+		Declaration = self:Tuple(Name)
+	end
+
+	if not Declaration then
+		self:Diagnostic(Error.ParserUnexpectedToken, `Unexpected token`)
+			:Primary(Peek, `Expected one of "Identifier" or "Primitive" or "Keyword", got "{Type}" instead`)
+			:Emit()
+	end
+
+	return Declaration :: TypeNode
+end
+
+--> A primitive's own attributes, ex: vector<u8> and u8(0..00)
+local function PrimitiveAttributes(self: Parser, Declaration: Primitive)
+	local Primitive = Declaration.Value.Primitive
+	local Value = Declaration.Value :: Attributes
+	local Tokens = Declaration.Tokens :: AttributesTokens
+
+	if self:IsNumber(Primitive) then
+		local Modifiers = self:NumberModifiers(Primitive, Declaration.Tokens.Primitive)
+		if Modifiers then
+			Value.Scale = Modifiers.Scale
+			Value.Saturate = Modifiers.Saturate
+			Tokens.Modifiers = Modifiers.Token
+		end
+	else
+		local Components = self:Components(Primitive)
+		if Components then
+			Value.Components = Components
+		end
+	end
+
+	local Range = self:Range(Primitive, Value.Scale)
+	if Range then
+		if not Primitive.AllowsRange then
+			local PrimitiveToken = Declaration.Tokens.Primitive
+			self:Diagnostic(Error.AnalyzeInvalidRangeType, `Type doesn't accept a range`)
+				:Primary(Range.Token, "Remove this range")
+				:Secondary(PrimitiveToken, `"{PrimitiveToken.Value}" has no bounds to constrain`)
+				:Emit()
 		end
 
-		if not Declaration then
-			self:Diagnostic(Error.ParserUnexpectedToken, `Unexpected token`)
-				:Primary(Peek, `Expected one of "Identifier" or "Primitive" or "Keyword", got "{Type}" instead`)
+		Value.Range = Range.Range
+		Tokens.Range = Range.Token
+	end
+
+	if Value.Scale and not Primitive.Integer then
+		self:Quantize(Declaration, Value.Range)
+	end
+end
+
+--> ex: u8?
+--> A function of the module and not a closure inside Parser.Type: that one was made anew for every
+--> type parsed, with the declaration it wraps boxed as its upvalue.
+local function WrapInOptional(self: Parser, Name: Token, Declaration: TypeNode): TypeNode
+	local Optional = self:Optional()
+	if not Optional then
+		return Declaration
+	end
+
+	if Declaration.Type == "Primitive" then
+		local Node = Declaration :: Primitive
+		if not Node.Value.Primitive.AllowsOptional then
+			self:Diagnostic(Error.AnalyzeInvalidOptionalType, `Type cannot be optional`)
+				:Primary(Optional, "Remove this optional")
+				:Secondary(Node.Tokens.Primitive, `"{Node.Tokens.Primitive.Value}" has no way to encode absence`)
 				:Emit()
 		end
 	end
 
+	return {
+		Type = "Optional",
+		Name = Name.Value,
+		Value = { Of = Declaration },
+		Tokens = {},
+	} :: Optional
+end
+
+function Parser.Type(self: Parser, Name: Token, Keyword: Token?, IsDataField: boolean?): TypeNode
+	local Declaration: TypeNode = if Keyword
+		then DeclaredType(self, Name, Keyword)
+		else InferredType(self, Name, IsDataField)
+
 	--> Set type attributes
-	local Primitive: Settings.Primitive?
 	if Declaration.Type == "Primitive" then
-		Primitive = (Declaration :: Primitive).Value.Primitive
+		PrimitiveAttributes(self, Declaration :: Primitive)
 	end
 
-	local Value = Declaration.Value :: Attributes
-	local Tokens = Declaration.Tokens :: AttributesTokens
-
-	-- ex: vector<u8> and u8(0..00)
-	if Primitive then
-		if self:IsNumber(Primitive) then
-			local Modifiers = self:NumberModifiers(Primitive, (Declaration :: Primitive).Tokens.Primitive)
-			if Modifiers then
-				Value.Scale = Modifiers.Scale
-				Value.Saturate = Modifiers.Saturate
-				Tokens.Modifiers = Modifiers.Token
-			end
-		else
-			local Components = self:Components(Primitive)
-			if Components then
-				Value.Components = Components
-			end
-		end
-
-		local Range = self:Range(Primitive, Value.Scale)
-		if Range then
-			if not Primitive.AllowsRange then
-				local PrimitiveToken = (Declaration :: Primitive).Tokens.Primitive
-				self:Diagnostic(Error.AnalyzeInvalidRangeType, `Type doesn't accept a range`)
-					:Primary(Range.Token, "Remove this range")
-					:Secondary(PrimitiveToken, `"{PrimitiveToken.Value}" has no bounds to constrain`)
-					:Emit()
-			end
-
-			Value.Range = Range.Range
-			Tokens.Range = Range.Token
-		end
-
-		if Value.Scale and not Primitive.Integer then
-			self:Quantize(Declaration :: Primitive, Value.Range)
-		end
-	end
-
-	local function WrapInOptional()
-		-- ex: u8?
-		local Optional = self:Optional()
-		if Optional then
-			if Declaration.Type == "Primitive" then
-				local Node = Declaration :: Primitive
-				if not Node.Value.Primitive.AllowsOptional then
-					self:Diagnostic(Error.AnalyzeInvalidOptionalType, `Type cannot be optional`)
-						:Primary(Optional, "Remove this optional")
-						:Secondary(
-							Node.Tokens.Primitive,
-							`"{Node.Tokens.Primitive.Value}" has no way to encode absence`
-						)
-						:Emit()
-				end
-			end
-
-			Declaration = {
-				Type = "Optional",
-				Name = Name.Value,
-				Value = { Of = Declaration },
-				Tokens = {},
-			} :: Optional
-		end
-	end
-
-	WrapInOptional()
+	Declaration = WrapInOptional(self, Name, Declaration)
 
 	-- ex: u8[][][]
 	while true do
@@ -208,7 +214,7 @@ function Parser.Type(self: Parser, Name: Token, Keyword: Token?, IsDataField: bo
 			} :: Array
 		end
 
-		WrapInOptional()
+		Declaration = WrapInOptional(self, Name, Declaration)
 
 		if Array == nil then
 			break

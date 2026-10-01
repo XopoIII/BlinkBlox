@@ -59,27 +59,52 @@ local function Table(Entries: { { Key: string | number, Limit: Limit } }): Limit
 	return if #Entries > 0 then { Entries = Entries } else nil
 end
 
+--> A primitive bounds something when it is a number with a range, a scale or `saturate`, or anything
+--> else with a range: a string's length, say.
+local function OfPrimitive(Value: any): Limit?
+	local Primitive: Settings.Primitive = Value.Primitive
+	local IsNumber = Primitive.Component and Primitive.Bounds ~= nil
+	if IsNumber and (Value.Range or Value.Scale or Value.Saturate) then
+		local Scale: number? = Value.Scale
+		local Bounds = Primitive.Bounds :: Settings.NumberRange
+		local Declared = Value.Range
+			or if Scale
+				then { Min = FixedPoint.Decode(Bounds.Min, Scale), Max = FixedPoint.Decode(Bounds.Max, Scale) }
+				else Bounds
+		return Range(Declared.Min, Declared.Max, Scale)
+	elseif not IsNumber and Value.Range then
+		return Range(Value.Range.Min, Value.Range.Max)
+	end
+
+	return nil
+end
+
+--> The limits of each field, variant or element that has any, under its name.
+local function OfFields(
+	Kind: string,
+	Value: any,
+	Word: (string) -> string,
+	Of: (Node, (string) -> string) -> Limit?
+): Limit?
+	local Entries = {}
+	for Index, Field in Value.Values do
+		local Inner = Of(Field, Word)
+		if Inner then
+			local Key: string | number = if Kind == "Tuple" then (Value.Names[Index] or Index) else Field.Name
+			table.insert(Entries, { Key = Key, Limit = Inner })
+		end
+	end
+
+	return Table(Entries)
+end
+
 --- The limits inside one type node, or nil when it bounds nothing.
 function Limits.Of(Node: Node, Word: (string) -> string): Limit?
 	local Value = Node.Value
 	local Kind = Node.Type
 
 	if Kind == "Primitive" then
-		local Primitive: Settings.Primitive = Value.Primitive
-		local IsNumber = Primitive.Component and Primitive.Bounds ~= nil
-		if IsNumber and (Value.Range or Value.Scale or Value.Saturate) then
-			local Scale: number? = Value.Scale
-			local Bounds = Primitive.Bounds :: Settings.NumberRange
-			local Declared = Value.Range
-				or if Scale
-					then { Min = FixedPoint.Decode(Bounds.Min, Scale), Max = FixedPoint.Decode(Bounds.Max, Scale) }
-					else Bounds
-			return Range(Declared.Min, Declared.Max, Scale)
-		elseif not IsNumber and Value.Range then
-			return Range(Value.Range.Min, Value.Range.Max)
-		end
-
-		return nil
+		return OfPrimitive(Value)
 	elseif Kind == "Optional" then
 		return Limits.Of(Value.Of, Word)
 	elseif Kind == "Array" then
@@ -105,16 +130,7 @@ function Limits.Of(Node: Node, Word: (string) -> string): Limit?
 
 		return Table(Entries)
 	elseif Kind == "Struct" or Kind == "TagEnum" or Kind == "Tuple" then
-		local Entries = {}
-		for Index, Field in Value.Values do
-			local Inner = Limits.Of(Field, Word)
-			if Inner then
-				local Key: string | number = if Kind == "Tuple" then (Value.Names[Index] or Index) else Field.Name
-				table.insert(Entries, { Key = Key, Limit = Inner })
-			end
-		end
-
-		return Table(Entries)
+		return OfFields(Kind, Value, Word, Limits.Of)
 	end
 
 	return nil
