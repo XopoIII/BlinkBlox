@@ -43,3 +43,13 @@ deprecated = "warn"
 # `_G.WATCH_THREAD` marks the CLI's watch thread, and `_G._BLINK` is part of the generated runtime's
 # own scope-collision protocol. None of these can be restructured away without changing the build.
 global_usage = "allow"
+# The 500-line cap bounds a file, and a file can still be one function. This bounds the function:
+# every branch, loop and `and`/`or` counts one. Off in selene by default, where its limit is 40.
+# Selene rather than a standalone analyser such as Lizard, which was tried: its Lua reader does not
+# know Luau's type annotations or backtick strings and found 25 of `Generator/Blocks.luau`'s 33
+# functions -- a gate that reports clean over code it never read.
+high_cyclomatic_complexity = "deny"
+
+[config]
+# No exceptions, as with the line cap: a function that reaches this is split, not allowed inline.
+high_cyclomatic_complexity = { maximum_complexity = 20 }

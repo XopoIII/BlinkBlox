@@ -7,6 +7,34 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.0.2 — 2026-10-02
+
+The generated modules do not change: a schema compiles to exactly what 1.0.1 produced, and every
+committed snapshot in `test/Golden` is byte for byte what it was. Nothing to do on upgrading.
+
+### Changed
+
+- **A function's complexity is a gate.** The compiler's files were capped at 500 lines, which left a
+  file free to be one function: the one emitting an `event` was 430 lines and scored 50 on cyclomatic
+  complexity. selene's `high_cyclomatic_complexity` now denies a function past 20, in the compiler,
+  the Studio plugin and the tests alike, with no exemptions. Seventeen functions were over it and
+  each was split: the receiving side of an event into `Generator/EventReceive.luau`, the answering
+  side of a function into `Generator/FunctionAnswer.luau`, the connections and the decode loop into
+  `Generator/Packets.luau`, and the rest into named functions or handler tables in place.
+- The test oracle was among the seventeen. Its old and new copies were given the same 32,700 drawn
+  values of Test.blink's 131 exported types and agreed on all 564,328 answers, and the generator
+  drew the same values from the same seed.
+- Lizard was tried for this first and dropped: its Lua reader knows neither Luau's type annotations
+  nor backtick strings, and found 25 of the 33 functions in `Generator/Blocks.luau`.
+
+### Faster
+
+- Parsing a type no longer makes a closure for it. `Parser.Type` built one, with the declaration it
+  wraps boxed as an upvalue, for every type in the schema; it is a function of the module now.
+  Measured with both compilers loaded in one process and their runs alternated, on Test.blink: parse
+  7.48 ms against 1.0.1's 7.50, generating the server module 30.65 against 30.71 and the client
+  29.74 against 29.86, each the mean of the faster half of 800 runs on an Apple M1.
+
 ## 1.0.1 — 2026-09-30
 
 The generated modules do not change: a schema compiles to exactly what 1.0.0 produced.

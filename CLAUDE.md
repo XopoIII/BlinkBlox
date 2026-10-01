@@ -205,6 +205,14 @@ into `src/Parser/`, the generator into `Event`, `Function`, `Generators` and `Pr
 editor into `Completion`, `Spans`, `Gutter` and the rest. A file that reaches the cap is split the
 same way, not exempted.
 
+A function is capped as a file is: selene's `high_cyclomatic_complexity` denies one past 20, in
+`selene.toml` and `plugin/selene.toml`, with no `selene: allow` anywhere. The line cap left a file
+free to be one function -- `Declarations.Event` was 430 lines and scored 50 -- and seventeen were
+split when the lint went in. A long `if`/`elseif` over a node's kind becomes a table of handlers or
+named local functions, and the output must not change: the goldens are the proof. Selene and not
+Lizard, which was tried: its Lua reader knows neither Luau's type annotations nor backtick strings,
+and found 25 of `Generator/Blocks.luau`'s 33 functions.
+
 Every `.luau` file declares its type-checking mode on line 1, and `scripts/check-strict.sh` enforces
 it. This is not cosmetic: Luau defaults to `nonstrict`, so a file without a directive is *unchecked*
 rather than merely unannotated — the lexer, the generator, `Settings` and the diagnostics renderer
@@ -223,6 +231,8 @@ src/Generator/init.luau    the Luau emitter: assembles one module from the parts
 src/Generator/State.luau   everything one generation run builds up, shared by the files here
 src/Generator/Generators   Luau types and serialisers for declarations, and the declaration walk
 src/Generator/Event.luau   one `event`; Function.luau one `function`; Decode.luau their guards
+src/Generator/EventReceive the side of an event that hears it; FunctionAnswer the side that answers
+src/Generator/Packets.luau the connections, the decode loop and each channel's decoder
 src/Generator/Stream.luau  what a `Stream` event adds; Send.luau the server's sends to one and to many
 src/Generator/Stamp.luau   what a `Stamp` adds: the client's stamped Fire, the server's clamp
 src/Generator/Outbound.luau the per-player outbound budget and what `Priority: Low` leaves out

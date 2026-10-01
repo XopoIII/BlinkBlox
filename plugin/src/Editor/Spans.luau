@@ -80,7 +80,7 @@ function Spans.Draw(Options: Options)
 			local Prefix = string.sub(Slice, 1, (Start - First) - 1)
 			if Prefix ~= "" then
 				local PrefixBounds = Spans.Measure(Prefix, Options.TextSize, Options.Font)
-				Fill.Position = UDim2.new(0, PrefixBounds.X, 0, Options.FillOffset)
+				Fill.Position = UDim2.fromOffset(PrefixBounds.X, Options.FillOffset)
 			end
 		end
 

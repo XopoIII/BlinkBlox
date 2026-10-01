@@ -12,3 +12,9 @@ shadowing = "warn"
 multiple_statements = "warn"
 deprecated = "warn"
 roblox_incorrect_roblox_env = "deny"
+# The same limit as the root config, which explains it; CI and the hooks lint the plugin with that
+# one, and this copy keeps an editor reading this file in agreement.
+high_cyclomatic_complexity = "deny"
+
+[config]
+high_cyclomatic_complexity = { maximum_complexity = 20 }

@@ -153,6 +153,122 @@ local function Slice(Packet: buffer, Length: number): buffer
 	return Result
 end
 
+--- 2. Fires each item alone: its packet, and where it ends in the combined one.
+local function Apart(Items: { Fired }): ({ string }, { number }, number)
+	local Parts: { string } = {}
+	local Ends: { number } = {}
+	local Total = 0
+	for _, Item in Items do
+		Fire(Item)
+		local Part = buffer.tostring(Flush())
+		table.insert(Parts, Part)
+		Total += #Part
+		table.insert(Ends, Total)
+	end
+
+	return Parts, Ends, Total
+end
+
+--- 1. The same sequence comes out.
+local function CheckDelivery(Sequence: number, Items: { Fired }, Packet: buffer)
+	local Got, Reported = Deliver(Packet)
+	if #Reported > 0 or #Got ~= #Items then
+		ErrorPrint(
+			`Failed "composition" (seed {SEED}, sequence {Sequence}): {#Items} events fired, {#Got} delivered, {#Reported} reported.`
+		)
+	end
+
+	for Index, Item in Items do
+		if not Matches(Item, Got[Index]) then
+			ErrorPrint(
+				`Failed "composition" (seed {SEED}, sequence {Sequence}): event {Index}, {Describe(Item)}, arrived changed.`
+			)
+		end
+	end
+end
+
+--- 3. Fires the items again with a fire the sender refuses somewhere among them, which must leave no
+--- trace in the packet. Returns whether a fire was refused.
+local function CheckRefusal(Sequence: number, Items: { Fired }, Packet: buffer): boolean
+	local At = math.random(0, #Items)
+	local Target = Events[math.random(1, #Events)]
+	local Refused = false
+	for Index = 1, #Items + 1 do
+		if Index == At + 1 and #Target.Elements == 1 then
+			Generate.Wild = true
+			local Drew, Wild = pcall(Draw, Target)
+			Generate.Wild = false
+			if Drew then
+				Refused = not pcall(Fire, Wild)
+				if not Refused then
+					break
+				end
+			end
+		end
+
+		if Items[Index] then
+			Fire(Items[Index])
+		end
+	end
+
+	local Again = Flush()
+	if Refused and buffer.tostring(Again) ~= buffer.tostring(Packet) then
+		ErrorPrint(
+			`Failed "composition" (seed {SEED}, sequence {Sequence}): a refused {Target.Name} fire changed the packet.`
+		)
+	end
+
+	return Refused
+end
+
+--- Where to cut a packet short: on and around every boundary, and at a few places between.
+local function CutsOf(Ends: { number }, Total: number): { number }
+	local Cuts: { number } = {}
+	for _, End in Ends do
+		for Offset = -1, 1 do
+			if End + Offset > 0 and End + Offset < Total then
+				table.insert(Cuts, End + Offset)
+			end
+		end
+	end
+
+	for _ = 1, 8 do
+		if Total > 1 then
+			table.insert(Cuts, math.random(1, Total - 1))
+		end
+	end
+
+	return Cuts
+end
+
+--- 4. Delivers the packet cut at `Cut`. Returns whether the cut fell inside an event.
+local function CheckCut(Sequence: number, Items: { Fired }, Packet: buffer, Ends: { number }, Cut: number): boolean
+	local Total = Ends[#Ends]
+	local Complete, Inside = 0, nil
+	for Index, End in Ends do
+		if End <= Cut then
+			Complete = Index
+		elseif Inside == nil then
+			Inside = if (Ends[Index - 1] or 0) == Cut then nil else Items[Index]
+			break
+		end
+	end
+
+	local Delivered, Said = Deliver(Slice(Packet, Cut))
+	local Expected = if Inside then 1 else 0
+	if #Delivered ~= Complete or #Said ~= Expected then
+		ErrorPrint(
+			`Failed "composition" (seed {SEED}, sequence {Sequence}): cut at {Cut} of {Total}, expected {Complete} delivered and {Expected} reported, got {#Delivered} and {#Said}.`
+		)
+	elseif Inside and Said[1].Event ~= Inside.Event.Name then
+		ErrorPrint(
+			`Failed "composition" (seed {SEED}, sequence {Sequence}): cut inside {Inside.Event.Name}, reported as {Said[1].Event or "unknown"}.`
+		)
+	end
+
+	return Inside ~= nil
+end
+
 RunClosure("Events fired together arrive together, and apart", function()
 	math.randomseed(SEED)
 	Flush()
@@ -166,17 +282,7 @@ RunClosure("Events fired together arrive together, and apart", function()
 			table.insert(Items, Draw(Events[math.random(1, #Events)]))
 		end
 
-		--> 2. Each alone first: its packet, and where it ends in the combined one.
-		local Parts: { string } = {}
-		local Ends: { number } = {}
-		local Total = 0
-		for _, Item in Items do
-			Fire(Item)
-			local Part = buffer.tostring(Flush())
-			table.insert(Parts, Part)
-			Total += #Part
-			table.insert(Ends, Total)
-		end
+		local Parts, Ends, Total = Apart(Items)
 
 		for _, Item in Items do
 			Fire(Item)
@@ -189,91 +295,12 @@ RunClosure("Events fired together arrive together, and apart", function()
 			)
 		end
 
-		--> 1. The same sequence comes out.
-		local Got, Reported = Deliver(Packet)
-		if #Reported > 0 or #Got ~= #Items then
-			ErrorPrint(
-				`Failed "composition" (seed {SEED}, sequence {Sequence}): {#Items} events fired, {#Got} delivered, {#Reported} reported.`
-			)
-		end
+		CheckDelivery(Sequence, Items, Packet)
 
-		for Index, Item in Items do
-			if not Matches(Item, Got[Index]) then
-				ErrorPrint(
-					`Failed "composition" (seed {SEED}, sequence {Sequence}): event {Index}, {Describe(Item)}, arrived changed.`
-				)
-			end
-		end
+		RefusedFires += if CheckRefusal(Sequence, Items, Packet) then 1 else 0
 
-		--> 3. A refused fire in the middle leaves no trace.
-		local At = math.random(0, #Items)
-		local Target = Events[math.random(1, #Events)]
-		local Refused = false
-		for Index = 1, #Items + 1 do
-			if Index == At + 1 and #Target.Elements == 1 then
-				Generate.Wild = true
-				local Drew, Wild = pcall(Draw, Target)
-				Generate.Wild = false
-				if Drew then
-					Refused = not pcall(Fire, Wild)
-					if not Refused then
-						break
-					end
-				end
-			end
-
-			if Items[Index] then
-				Fire(Items[Index])
-			end
-		end
-
-		local Again = Flush()
-		RefusedFires += if Refused then 1 else 0
-		if Refused and buffer.tostring(Again) ~= buffer.tostring(Packet) then
-			ErrorPrint(
-				`Failed "composition" (seed {SEED}, sequence {Sequence}): a refused {Target.Name} fire changed the packet.`
-			)
-		end
-
-		--> 4. Cut short: on and around every boundary, and at a few places between.
-		local Cuts: { number } = {}
-		for _, End in Ends do
-			for Offset = -1, 1 do
-				if End + Offset > 0 and End + Offset < Total then
-					table.insert(Cuts, End + Offset)
-				end
-			end
-		end
-
-		for _ = 1, 8 do
-			if Total > 1 then
-				table.insert(Cuts, math.random(1, Total - 1))
-			end
-		end
-
-		for _, Cut in Cuts do
-			local Complete, Inside = 0, nil
-			for Index, End in Ends do
-				if End <= Cut then
-					Complete = Index
-				elseif Inside == nil then
-					Inside = if (Ends[Index - 1] or 0) == Cut then nil else Items[Index]
-					break
-				end
-			end
-
-			CutsInside += if Inside then 1 else 0
-			local Delivered, Said = Deliver(Slice(Packet, Cut))
-			local Expected = if Inside then 1 else 0
-			if #Delivered ~= Complete or #Said ~= Expected then
-				ErrorPrint(
-					`Failed "composition" (seed {SEED}, sequence {Sequence}): cut at {Cut} of {Total}, expected {Complete} delivered and {Expected} reported, got {#Delivered} and {#Said}.`
-				)
-			elseif Inside and Said[1].Event ~= Inside.Event.Name then
-				ErrorPrint(
-					`Failed "composition" (seed {SEED}, sequence {Sequence}): cut inside {Inside.Event.Name}, reported as {Said[1].Event or "unknown"}.`
-				)
-			end
+		for _, Cut in CutsOf(Ends, Total) do
+			CutsInside += if CheckCut(Sequence, Items, Packet, Ends, Cut) then 1 else 0
 		end
 	end
 

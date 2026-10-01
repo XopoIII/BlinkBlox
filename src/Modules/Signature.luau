@@ -79,15 +79,19 @@ local function Components(Value: Node): string
 	return `c{table.concat(Declared, ",")}`
 end
 
-function Serialise(Node: Node): string
-	if type(Node) ~= "table" or not Node.Type then
-		return "_"
+--> A struct's fields or a tagged enum's variants, each under its name.
+local function Named(Values: { Node }): string
+	local Parts = table.create(#Values)
+	for Index, Part in Values do
+		Parts[Index] = `{Part.Name}={Serialise(Part)}`
 	end
 
-	local Kind = Node.Type
-	local Value = Node.Value
+	return table.concat(Parts, ",")
+end
 
-	if Kind == "Primitive" then
+--> One serialiser a kind of node. A kind with none here is written as `?:` and its name.
+local SERIALISERS: { [string]: (Node: Node, Value: any) -> string } = {
+	Primitive = function(Node, Value)
 		--> The primitive's NAME lives on the token, not on the value: `Value.Primitive` is the shared
 		--> Settings table describing how to read it, which has no identity to write down. Size.luau
 		--> never needed the name because it reads `.Bytes`; this is the first consumer that does.
@@ -96,31 +100,29 @@ function Serialise(Node: Node): string
 		local Class = if Value.Class then `({Value.Class})` else ""
 
 		return `p:{Name}{Class}{Range(Value)}{Components(Value)}{Scale(Value)}`
-	elseif Kind == "Array" then
+	end,
+	Array = function(_, Value)
 		return `a:[{Serialise(Value.Of)}]{Range(Value)}`
-	elseif Kind == "Optional" then
+	end,
+	Optional = function(_, Value)
 		return `o:{Serialise(Value.Of)}`
-	elseif Kind == "Struct" then
-		local Fields = table.create(#Value.Values)
-		for Index, Field in Value.Values do
-			Fields[Index] = `{Field.Name}={Serialise(Field)}`
-		end
-
-		return `s:\{{table.concat(Fields, ",")}\}`
-	elseif Kind == "Map" then
+	end,
+	Struct = function(_, Value)
+		return `s:\{{Named(Value.Values)}\}`
+	end,
+	Map = function(_, Value)
 		return `m:\{{Serialise(Value.Values[1])}=>{Serialise(Value.Values[2])}\}`
-	elseif Kind == "Enum" then
+	end,
+	Enum = function(_, Value)
 		return `e:[{table.concat(Value.Values, ",")}]`
-	elseif Kind == "Set" then
+	end,
+	Set = function(_, Value)
 		return `n:[{table.concat(Value.Values, ",")}]`
-	elseif Kind == "TagEnum" then
-		local Variants = table.create(#Value.Values)
-		for Index, Variant in Value.Values do
-			Variants[Index] = `{Variant.Name}={Serialise(Variant)}`
-		end
-
-		return `g:{Value.Tag}\{{table.concat(Variants, ",")}\}`
-	elseif Kind == "Tuple" then
+	end,
+	TagEnum = function(_, Value)
+		return `g:{Value.Tag}\{{Named(Value.Values)}\}`
+	end,
+	Tuple = function(_, Value)
 		local Elements = table.create(#Value.Values)
 		for Index, Element in Value.Values do
 			local Name = Value.Names and Value.Names[Index]
@@ -128,13 +130,22 @@ function Serialise(Node: Node): string
 		end
 
 		return `u:({table.concat(Elements, ",")})`
-	elseif Kind == "Generic" then
+	end,
+	Generic = function(_, Value)
 		--> Substituted by the time a declaration is reachable from an event, so this only shows up in
 		--> an uninstantiated template, which nothing sends.
 		return `?:{Value.Generic}`
+	end,
+}
+
+function Serialise(Node: Node): string
+	if type(Node) ~= "table" or not Node.Type then
+		return "_"
 	end
 
-	return `?:{Kind}`
+	local Kind = Node.Type
+	local Serialiser = SERIALISERS[Kind]
+	return if Serialiser then Serialiser(Node, Node.Value) else `?:{Kind}`
 end
 
 ---- Walk ----
