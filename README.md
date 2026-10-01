@@ -171,7 +171,7 @@ cd docs && npm install && npm run dev   # documentation site
 
 `CLAUDE.md` describes the architecture and the gates that CI and the git hooks run.
 
-## Credits
+## License
 
-Originally written by [Axen](https://github.com/1Axen). This fork continues from v0.18.8 and remains
-MIT licensed.
+MIT. See [LICENSE](LICENSE). Originally written by [Axen](https://github.com/1Axen); this fork
+continues from v0.18.8 and keeps the upstream copyright.
