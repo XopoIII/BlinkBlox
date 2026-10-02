@@ -15,9 +15,3 @@
 .bb-changelog > h1:first-child {
 	display: none;
 }
-
-/* Home page hero art. */
-.hero img {
-	border-radius: 1rem;
-	box-shadow: 0 1.5rem 3rem -1.5rem rgb(0 0 0 / 0.5);
-}
