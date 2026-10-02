@@ -41,7 +41,20 @@ change, so nothing needs recompiling for the other side's sake.
   a mix of diverged and undiverged players, and a cut client batch, each held to the exact bytes
   the stub remote was fired with and to the channel never counting less than its events.
 
+### Speed
+
+- No slower than 1.0.3. Both compilers in one process, their runs alternated on 1.0.3's Test.blink
+  (mean of the faster half of 300 to 400 runs, in both orders, Apple M1): parsing 4.55 to 4.67 ms
+  against 4.55 to 4.66, generating the server module 19.11 to 19.34 against 19.06 to 19.33, the
+  client module 18.25 to 18.69 against 18.23 to 18.67 -- within 0.4% either way. The two modules
+  generated from that schema are byte for byte 1.0.3's after the version line, so the runtime is
+  unchanged.
+- The compiler's own code differs from 1.0.3 in one file, `src/Generator/Traffic.luau`, whose new
+  work runs only under `option TrafficStats`. The converters are loaded only under `--from`.
+
 ## 1.1.0 — 2026-10-02
+
+Not published on its own: it went out as part of 1.1.1, the same day.
 
 A release for games that are somewhere else: converters and guides for coming from zap, ByteNet,
 Packet, QuickNet, Warp and plain remotes. The generated modules do not change: apart from the version
