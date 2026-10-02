@@ -118,7 +118,11 @@ modules have two more members:
   `FireList` one per entry of the list, a player listed twice counting twice; `FireExcept` one per
   player but the one left out; `FireAll` one per player in `Players:GetPlayers()` when it is called,
   also for an unreliable event, which goes out through `FireAllClients` once. A server with no players
-  counts nothing. The server's `Reliable` counts one packet per player flushed.
+  counts nothing. The server's `Reliable` counts one packet per player flushed: a player's own batch
+  is one, and the broadcast batch is one for every player it is sent to, each counted with the
+  batch's bytes, though it goes out in a single `FireAllClients` when it can. A client's batch cut to
+  the server's packet limits counts each packet it is cut into. So a channel's `SentBytes` is, after
+  the flush, never less than the `SentBytes` of the events it carried.
 - **A [stream](/BlinkBlox/language/streams/) is counted when the scheduler sends it**, as a
   `FireList` to every player is: once per player, under the stream's name in `Events` and in
   `Unreliable`. Its bytes include the two-byte stamp and, for a state, the optional's flag byte. A

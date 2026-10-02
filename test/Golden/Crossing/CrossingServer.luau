@@ -1477,10 +1477,14 @@ local function StepReplication()
         buffer.copy(Buffer, 0, SharedBuffer, 0, Shared)
         if next(Diverged) == nil then
             Reliable:FireAllClients(Buffer, SharedInstances)
+            TrafficCounters[1] += Shared * #Players:GetPlayers()
+            TrafficCounters[2] += #Players:GetPlayers()
         else
             for _, Player in Players:GetPlayers() do
                 if not Diverged[Player] then
                     Reliable:FireClient(Player, Buffer, SharedInstances)
+                    TrafficCounters[1] += Shared
+                    TrafficCounters[2] += 1
                 end
             end
         end
