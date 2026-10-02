@@ -1,0 +1,64 @@
+-- Converted from ByteNet 0.4.3 definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what ByteNet's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-bytenet/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+struct Shape1 {
+	crouched: boolean,
+	health: u8,
+	id: u16,
+	moving: boolean,
+	x: f32,
+	y: f32,
+	z: f32
+}
+
+scope Scenarios {
+	event Input {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Unreliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: struct { jump: boolean, move: u8, sprint: boolean, turn: i16 }
+	}
+
+	event SelfState {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Unreliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: Shape1
+	}
+
+	event Snapshot {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Reliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: Shape1
+	}
+
+	event Touch {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Reliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: struct { force: u8, part: Instance }
+	}
+
+	-- TODO(convert): a client sends this; bound the value (array length)
+	event WorldState {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Unreliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: Shape1[]
+	}
+}

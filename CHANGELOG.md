@@ -22,6 +22,18 @@ upgrading.
   marked; an unbounded array in an event the server fires is the server's own. What has no
   equivalent -- a union, a set, `AlignedCFrame`, an option -- is named in the list the command
   prints, with its line, and nothing is dropped silently.
+- **`--from bytenet` records ByteNet 0.4.3 definitions into a draft schema.** ByteNet's packets are
+  defined by running Luau, so the command runs the definitions file against a stand-in for ByteNet
+  that records each namespace and packet instead of sending anything: with placeholders for `game`
+  and `script`, with a module beside the file run in the same way, and with no filesystem, network
+  or process library. A ByteNet packet has no direction, so each event is left for the reader to
+  give one, written `From: Client` until then -- the direction that is checked and rate limited. A
+  struct that one function builds for several packets is declared once. A name the stand-in does not
+  know stops the command, so a later ByteNet's type cannot go missing from a draft.
+- **A guide, [Coming from ByteNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-bytenet/)**,
+  with a wrapper that answers to `send`, `sendTo`, `sendToAll` and `listen` and turns the arguments
+  around: the player goes first in a schema's calls.
+- **The converter is loaded only under `--from`**, so a compile does not read it.
 - **A guide, [Coming from zap](https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/)**: the
   conversion, a table of what maps to what, the call sites that differ, and a short wrapper that
   gives a generated module zap's names (`SetCallback`, `Call`, `FireSet`, `SendEvents`) so a game can

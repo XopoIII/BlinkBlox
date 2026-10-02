@@ -13,7 +13,6 @@ require("@self/Utility/Relaunch")(debug.info(1, "s"))
 
 local Attributes = require("./Modules/Attributes")
 local Compile = require("@self/Utility/Compile")
-local Convert = require("@self/Utility/Convert")
 local Watch = require("@self/Utility/Watch")
 
 ---- Settings ----
@@ -67,7 +66,7 @@ local ARGUMENTS: { [string]: Argument } = {
 	},
 	From = {
 		Aliases = { "--from" },
-		Description = "Read [CONFIG] as another tool's definitions and write a draft schema beside it. Takes a value: zap.",
+		Description = "Read [CONFIG] as another tool's definitions and write a draft schema beside it. Takes a value: zap or bytenet.",
 	},
 	OutputAst = {
 		Hidden = true,
@@ -161,11 +160,15 @@ if ProfileAt then
 end
 
 --> `--from` takes a value as well: the tool whose definitions [CONFIG] holds. See Utility/Convert.
+--> The converter is required only here: a compile never loads it.
 local From: string?
+local Convert: typeof(require("@self/Utility/Convert"))?
 local FromAt = table.find(RawArguments, "--from")
 if FromAt then
+	local Loaded = require("@self/Utility/Convert")
+	Convert = Loaded
 	From = RawArguments[FromAt + 1]
-	local IsTool, Tools = Convert.IsTool(From)
+	local IsTool, Tools = Loaded.IsTool(From)
 	if not IsTool then
 		print(Color(`Expected a tool after "--from": {Tools}`, "red"))
 		process.exit(1)
@@ -237,7 +240,7 @@ if not Path then
 	return nil
 end
 
-if From then
+if From and Convert then
 	Convert.Convert(From, Path, {
 		Silent = Arguments.Silent,
 		YesToEverything = Arguments.YesToAll,

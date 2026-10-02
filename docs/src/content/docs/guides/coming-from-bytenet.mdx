@@ -1,0 +1,320 @@
+---
+title: Coming from ByteNet
+description: Moving a game from ByteNet to BlinkBlox -- recording the packet definitions with --from bytenet, stating each packet's direction, and a bridge that keeps ByteNet's call names while the call sites move.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+ByteNet defines packets in Luau, at runtime: a module calls `defineNamespace` and `definePacket`, and
+the library builds its serialisers when the game starts. BlinkBlox compiles a schema ahead of time
+into a server module and a client module. So the move has two halves: the definitions become a
+schema, and the calls go to the generated modules.
+
+The first half is mechanical. `blinkblox --from bytenet` runs your definitions file against a
+stand-in for ByteNet that records every packet instead of sending anything, and writes them out as a
+schema.
+
+Two things ByteNet's definitions do not hold, and the draft asks you for: which side sends each
+packet, and how often a client may.
+
+This page was written against ByteNet 0.4.3.
+
+## The short version
+
+<Steps>
+
+1. Install `blinkblox`. See [Installation](/BlinkBlox/getting-started/installation/).
+2. Record the definitions: `blinkblox Packets.luau --from bytenet`. It writes `Packets.blink` beside
+   the file and prints what you have to decide.
+3. Work through the `TODO(convert)` marks: the direction of each event, a `Rate` for each one a client
+   fires, an upper bound for each length a client sends, and the two output paths.
+4. Compile it: `blinkblox Packets`. Both libraries can run in one game, each on its own remotes, so
+   packets can move one at a time.
+5. Change the call sites (below), or wrap the modules in the [bridge](#a-bridge-for-the-call-sites)
+   and change them later.
+6. Install the server's handlers. See [Securing the server](/BlinkBlox/guides/securing-the-server/).
+
+</Steps>
+
+## Recording the definitions
+
+```sh
+blinkblox Packets.luau --from bytenet
+```
+
+<Aside type="caution" title="The file is run">
+Definitions are code, so the command runs the file, as `require` would. It runs with a stand-in for
+ByteNet, placeholders for `game`, `script` and the other Roblox globals, and no filesystem, network
+or process library. Point it at your own definitions.
+</Aside>
+
+How the file reaches ByteNet does not matter. A `require` whose path, alias or Instance ends in
+`ByteNet` -- `require(ReplicatedStorage.Packages.ByteNet)`, `require("@pkg/bytenet")` -- gets the
+stand-in. A `require` of a module that sits beside the file is run too, so constants and helpers the
+definitions take from a sibling module work. Any other `require` gets a placeholder, and is named in
+the printed list: whatever the definitions took from it is missing from the draft.
+
+The draft is written beside the file under the same name, with `.blink` for an extension, and is not
+replaced without `--yes`. With `--check` nothing is written and the draft goes to standard output.
+
+For these definitions:
+
+```luau title="Packets.luau"
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ByteNet = require(ReplicatedStorage.Packages.ByteNet)
+
+return ByteNet.defineNamespace("Combat", function()
+	return {
+		Hit = ByteNet.definePacket({
+			value = ByteNet.struct({
+				target = ByteNet.inst,
+				damage = ByteNet.uint8,
+				note = ByteNet.string,
+			}),
+		}),
+		Health = ByteNet.definePacket({
+			value = ByteNet.uint8,
+			reliabilityType = "unreliable",
+		}),
+	}
+end)
+```
+
+it writes:
+
+```blink title="Packets.blink"
+-- Converted from ByteNet 0.4.3 definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what ByteNet's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-bytenet/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+scope Combat {
+	event Health {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Unreliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: u8
+	}
+
+	-- TODO(convert): a client sends this; bound note (string length)
+	event Hit {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Reliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: struct { damage: u8, note: string, target: Instance }
+	}
+}
+```
+
+and prints:
+
+```text
+Draft written to Packets.blink.
+Before it is used:
+  - 2 event(s) whose direction you must state: Combat.Health, Combat.Hit
+  - 2 event(s) a client fires with no Rate: Combat.Health, Combat.Hit
+  - 1 length(s) or value(s) a client sends with no bound; each is marked
+  - Add option ServerOutput and option ClientOutput: where the two modules are written.
+  - Set option RequireRates = true once every event a client fires has a Rate.
+  - On the server, set SetRateLimitHandler, SetDecodeErrorHandler, SetPacketDropHandler and SetListenerErrorHandler: they are how the game hears of a refusal.
+  - Check MaxPacketSize, MaxEventsPerPacket and InboundBytesPerSecond against what the game sends.
+```
+
+The draft always compiles, and what it could not know is a comment, never a guess.
+
+## Stating the direction
+
+A ByteNet packet has no direction: the client may `send` it and the server may `sendTo` it. A
+BlinkBlox event has one, because the two directions are not alike -- what a client sends is checked,
+bounded and rate limited, and what the server sends is not.
+
+Until you say otherwise the draft writes `From: Client`, the direction that gets the checks. For each
+event, state the side that sends it, and delete the `Rate` mark from the ones the server sends:
+
+```blink title="Packets.blink"
+option ServerOutput = "src/server/Network.luau"
+option ClientOutput = "src/shared/Network.luau"
+option RequireRates = true
+
+scope Combat {
+	event Health {
+		From: Server,
+		Type: Unreliable,
+		Call: ManyAsync,
+		Data: u8
+	}
+
+	event Hit {
+		From: Client,
+		Type: Reliable,
+		Call: ManyAsync,
+		Rate: 10,
+		Data: struct { damage: u8, note: string(..64), target: Instance }
+	}
+}
+```
+
+A packet the game sends both ways becomes two events, one for each direction: `HitRequest` from the
+client and `HitConfirmed` from the server, say. They are different messages already; ByteNet let
+them share a name.
+
+[`Rate` and `Burst`](/BlinkBlox/language/events/#rate-burst) are the events a second accepted from
+one player and how many may arrive at once. Bounds are written on the type: `string(..64)`,
+`u8[..16]`. See [types](/BlinkBlox/language/types/).
+
+## What converts, and what does not
+
+| ByteNet | BlinkBlox | |
+|---|---|---|
+| `defineNamespace("Combat", ...)` | `scope Combat { .. }` | |
+| `definePacket({ value = .. })` | `event Name { .. }` | Named by its key in the namespace. |
+| `reliabilityType = "unreliable"` | `Type: Unreliable` | Reliable otherwise. |
+| `uint8`, `uint16`, `uint32` | `u8`, `u16`, `u32` | |
+| `int8`, `int16`, `int32` | `i8`, `i16`, `i32` | |
+| `float32`, `float64` | `f32`, `f64` | |
+| `bool`, `string`, `buff` | `boolean`, `string`, `buffer` | |
+| `vec3`, `vec2`, `cframe` | `vector`, `Vector2`, `CFrame` | |
+| `inst`, `unknown` | `Instance`, `unknown` | `unknown` is not validated. |
+| `nothing` | an event with no `Data` | |
+| `struct({ .. })` | `struct { .. }` | |
+| `array(T)`, `optional(T)`, `map(K, V)` | `T[]`, `T?`, `map { [K]: V }` | |
+
+Three things come out differently from how they were written:
+
+- **Fields and packets are in alphabetical order.** A Luau table keeps no order, so the order in the
+  file is not there to record. Nothing depends on it: the schema's own wire format is new either way.
+- **A struct used by more than one packet is declared once**, as `Shape1`, `Shape2` and so on. A
+  function that builds a struct gives it no name the converter can see, so choose one.
+- **Every event is `Call: ManyAsync`**: ByteNet calls each of a packet's listeners on a thread of its
+  own, and a packet may have several. A listener that never yields can be made
+  [`ManySync`](/BlinkBlox/language/events/#call).
+
+A name the stand-in does not know -- one a later ByteNet added -- stops the command and says so,
+instead of leaving a packet out.
+
+## The call sites
+
+| | ByteNet | BlinkBlox |
+|---|---|---|
+| Client to server | `Packet.send(Data)` | `Net.Event.Fire(Data)` |
+| Server to one player | `Packet.sendTo(Data, Player)` | `Net.Event.Fire(Player, Data)` |
+| Server to everyone | `Packet.sendToAll(Data)` | `Net.Event.FireAll(Data)` |
+| Server to a list | `Packet.sendToList(Data, Players)` | `Net.Event.FireList(Players, Data)` |
+| Server to all but one | `Packet.sendToAllExcept(Data, Player)` | `Net.Event.FireExcept(Player, Data)` |
+| Listen on the server | `Packet.listen(function(Data, Player)` | `Net.Event.On(function(Player, Data)` |
+| Listen on the client | `Packet.listen(function(Data)` | `Net.Event.On(function(Data)` |
+
+The player moves to the front everywhere: it is the first argument of a send and of a server's
+listener. `On` also returns a function that disconnects the listener, which `listen` does not.
+
+The whole generated API is in the [reference](/BlinkBlox/reference/generated-api/).
+
+### A bridge for the call sites
+
+To move the definitions first and the call sites later, wrap each module once. The wrapper answers to
+ByteNet's names and puts the arguments in BlinkBlox's order:
+
+```luau bridge title="ByteNetNames.luau"
+--- A BlinkBlox module under ByteNet's names and argument order. Temporary: delete it once the call
+--- sites use Fire, FireAll and On themselves.
+local function IsEvent(Value)
+	return Value.Fire ~= nil or Value.On ~= nil
+end
+
+local function ByteNetNames(Net, IsServer)
+	local Packets = {}
+	for Name, Value in Net do
+		if type(Value) ~= "table" then
+			continue
+		elseif not IsEvent(Value) then
+			-- A scope, which was a namespace.
+			Packets[Name] = ByteNetNames(Value, IsServer)
+			continue
+		end
+
+		local Packet = {}
+		if IsServer and Value.Fire then
+			function Packet.sendTo(Data, Player)
+				Value.Fire(Player, Data)
+			end
+			function Packet.sendToList(Data, Players)
+				Value.FireList(Players, Data)
+			end
+			function Packet.sendToAllExcept(Data, Except)
+				Value.FireExcept(Except, Data)
+			end
+			Packet.sendToAll = Value.FireAll
+		elseif Value.Fire then
+			Packet.send = Value.Fire
+		end
+
+		if Value.On then
+			function Packet.listen(Callback)
+				if not IsServer then
+					return Value.On(Callback)
+				end
+
+				return Value.On(function(Player, Data)
+					Callback(Data, Player)
+				end)
+			end
+		end
+
+		Packets[Name] = Packet
+	end
+
+	return Packets
+end
+
+return ByteNetNames
+```
+
+```luau
+local Packets = require(ReplicatedStorage.ByteNetNames)(require(ServerScriptService.Network), true)
+
+Packets.Combat.Hit.listen(function(Data, Player)
+	-- unchanged
+end)
+```
+
+Pass `true` on the server and `false` on the client. An event has only the members of its direction,
+so a call the schema no longer allows -- the server sending an event declared `From: Client` -- is a
+missing function here, where under ByteNet it was sent.
+
+The wrapper is untyped, so the call sites behind it lose their type checking until they move.
+
+## Moving one packet at a time
+
+ByteNet and BlinkBlox each create their own remotes, so both can run in the same game:
+
+<Steps>
+
+1. Record the definitions and keep only the packets you are moving in the draft.
+2. Delete those packets from the ByteNet definitions.
+3. Point their call sites at the new modules.
+4. Repeat until no packet is left, then remove ByteNet.
+
+</Steps>
+
+BlinkBlox's own server and client modules have to ship together: a client refuses to run against a
+server compiled from a different schema. See
+[wire compatibility](/BlinkBlox/reference/wire-compatibility/).
+
+## What a running game will notice
+
+- **A client that fires too fast is refused**, and the server is told through `SetRateLimitHandler`.
+  Choose rates an honest client never reaches.
+- **A packet the server refuses is reported**, with the player who sent it: through
+  `SetPacketDropHandler` when it is refused before it is read, and through `SetDecodeErrorHandler`
+  when an event in it does not decode.
+- **A listener that errors is reported** through `SetListenerErrorHandler`.
+- **An event has one direction.** Sending it the other way is no longer possible.
+
+[Securing the server](/BlinkBlox/guides/securing-the-server/) is the checklist for all of it, and
+[common pitfalls](/BlinkBlox/guides/common-pitfalls/) lists what tends to go wrong.

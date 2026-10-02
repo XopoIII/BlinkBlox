@@ -1,0 +1,98 @@
+-- Converted from ByteNet 0.4.3 definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what ByteNet's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-bytenet/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+-- TODO(convert): a client sends this; bound name (string length)
+struct Shape1 { id: u16, name: string, tint: vector? }
+
+scope Inventory {
+	event Clear {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Reliable,
+		Call: ManyAsync
+		-- TODO(convert): Rate: ?, Burst: ?
+	}
+
+	-- TODO(convert): a client sends this; bound the value (array length)
+	event Contents {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Reliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: Shape1[]
+	}
+
+	event Equip {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Reliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: struct { item: Shape1, slot: u8 }
+	}
+}
+
+scope World {
+	-- TODO(convert): a client sends this; bound the value (unknown is not validated)
+	event Anything {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Reliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: unknown
+	}
+
+	-- TODO(convert): a client sends this; bound the value (buffer length)
+	event Chunk {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Reliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: buffer
+	}
+
+	event Move {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Unreliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: struct {
+			aim: Vector2,
+			at: CFrame,
+			frame: i32,
+			grounded: boolean,
+			height: f64,
+			lean: i8,
+			seed: u32,
+			speed: f32,
+			turn: i16
+		}
+	}
+
+	event Pick {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Reliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: Instance
+	}
+
+	-- TODO(convert): a client sends this; bound the value (a map cannot be bounded: prefer a bounded array), [key] (string length)
+	event Scores {
+		-- TODO(convert): ByteNet does not say which side sends this; say it here
+		From: Client,
+		Type: Reliable,
+		Call: ManyAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: map { [string]: u32 }
+	}
+}
