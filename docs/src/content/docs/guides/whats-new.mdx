@@ -1,9 +1,29 @@
 ---
-title: What's new in 1.0
-description: What 1.0.0 changed -- a missing Instance costs one event rather than the packet, Actors and other silent mistakes named, Vector2, UDim2, ColorSequence, TweenInfo and Roblox enums, types that survive the new solver -- and what 0.42 brought before it, with how to upgrade.
+title: What's new in 1.1
+description: What 1.1.0 added -- converters and guides for games coming from zap, ByteNet, Packet, QuickNet, Warp and plain remotes; what 1.0.0 changed -- a missing Instance costs one event rather than the packet, Actors and other silent mistakes named, Vector2, UDim2, ColorSequence, TweenInfo and Roblox enums, types that survive the new solver -- and what 0.42 brought before it, with how to upgrade.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+
+## 1.1.0
+
+A release for games that are somewhere else. The generated modules do not change, so there is
+nothing to do on upgrading.
+
+- **`--from` converts another library's definitions into a draft schema.**
+  `blinkblox net.zap --from zap` reads a zap config; `--from bytenet`, `packet`, `quicknet` and
+  `warp` run a Luau definitions file against a stand-in for the library that records what it defines.
+  See [the command line](/BlinkBlox/getting-started/cli/#converting-another-tools-definitions).
+- **The draft does not guess.** What the other library has no way to say -- how often a client may
+  fire, how long an array may be, which side sends a packet -- is a `TODO(convert)` comment where the
+  answer goes, and is listed when the command finishes. What has no equivalent is named, with its
+  line. The draft is compiled before it is handed over.
+- **A guide for each**: [plain remotes](/BlinkBlox/guides/coming-from-remote-events/),
+  [zap](/BlinkBlox/guides/coming-from-zap/), [ByteNet](/BlinkBlox/guides/coming-from-bytenet/),
+  [Packet](/BlinkBlox/guides/coming-from-packet/), [QuickNet](/BlinkBlox/guides/coming-from-quicknet/)
+  and [Warp](/BlinkBlox/guides/coming-from-warp/). Each has a short wrapper that gives the generated
+  modules the other library's call names, so a game can move its definitions first and its call
+  sites after, one event at a time.
 
 ## 1.0.0
 
