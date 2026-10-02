@@ -293,4 +293,46 @@ RunClosure("The Warp guide's bridge takes an event's name, and ignores the relia
 	Check("Disconnect", Heard[2] == 3, "a disconnected listener was still called")
 end)
 
+RunClosure("The RemoteEvents guide's bridge answers to a remote's own methods", function()
+	local RemoteNames = luau.load(Bridge("coming-from-remote-events"))()
+	local Pair = Isolated.Build(Isolated.Parse(SEVERAL_VALUES), "BRIDGEREMOTES")
+	local Server, Client = RemoteNames(Pair.Server, true), RemoteNames(Pair.Client, false)
+
+	local Heard: { any } = {}
+	local Connection = Server.Equip.OnServerEvent:Connect(function(Player, Slot, Name)
+		Heard = { Player, Slot, Name }
+	end)
+
+	local Stock: { number } = {}
+	Client.Stock.OnClientEvent:Connect(function(Value)
+		table.insert(Stock, Value)
+	end)
+
+	Server.Price.OnServerInvoke = function(_Player, Id: number)
+		return Id * 2
+	end
+
+	local Price: number?
+	task.spawn(function()
+		Price = Client.Price:InvokeServer(21)
+	end)
+
+	Client.Equip:FireServer(3, "sword")
+	Server.Stock:FireClient(Shared.Player, 1)
+	Server.Stock:FireAllClients(2)
+	Exchange(Pair)
+	Exchange(Pair)
+
+	Check("Connect", Heard[1] == Shared.Player and Heard[2] == 3 and Heard[3] == "sword", "the server heard nothing")
+	Check("Fire", table.concat(Stock, ",") == "1,2", `the client heard {table.concat(Stock, ",")}`)
+	Check("Invoke", Price == 42, `the call returned {Price}`)
+	--> A client cannot fire what the schema says the server sends.
+	Check("Direction", Client.Stock.FireServer == nil, "a send the schema forbids exists")
+
+	Connection:Disconnect()
+	Client.Equip:FireServer(4, "bow")
+	Exchange(Pair)
+	Check("Disconnect", Heard[2] == 3, "a disconnected listener was still called")
+end)
+
 return {}

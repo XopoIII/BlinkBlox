@@ -1,0 +1,282 @@
+---
+title: Coming from RemoteEvents
+description: Moving a game from plain RemoteEvents and RemoteFunctions to BlinkBlox -- writing the schema from the remotes you have, what the hand-written checks become, and a bridge that keeps FireServer, FireClient and OnServerEvent while the call sites move.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+A game on plain remotes has no definitions to convert: what a `RemoteEvent` carries is whatever the
+call sites pass it, and what the server accepts is whatever each listener checks by hand. Moving to
+BlinkBlox means writing that down once, as a schema, and letting the generated modules do the
+checking.
+
+There is no command for this one. The schema is short to write, and the remotes you have already
+tell you what goes in it.
+
+A game on a networking library has a guide of its own, and for most a converter:
+[zap](/BlinkBlox/guides/coming-from-zap/), [ByteNet](/BlinkBlox/guides/coming-from-bytenet/),
+[Packet](/BlinkBlox/guides/coming-from-packet/), [QuickNet](/BlinkBlox/guides/coming-from-quicknet/),
+[Warp](/BlinkBlox/guides/coming-from-warp/) and [Blink](/BlinkBlox/guides/migrating-from-blink/).
+
+## The short version
+
+<Steps>
+
+1. Install `blinkblox`. See [Installation](/BlinkBlox/getting-started/installation/).
+2. List the remotes, and for each one who fires it and what it carries.
+3. Write an `event` for each `RemoteEvent` and a `function` for each `RemoteFunction`, with a type
+   for each argument.
+4. Give every event a client fires a `Rate`, and bound every string and array a client sends.
+5. Compile it: `blinkblox net`. The generated modules use two remotes of their own, so the remotes
+   you have keep working and events can move one at a time.
+6. Change the call sites (below), or wrap the modules in the [bridge](#a-bridge-for-the-call-sites)
+   and change them later.
+7. Install the server's handlers. See [Securing the server](/BlinkBlox/guides/securing-the-server/).
+
+</Steps>
+
+## Writing the schema
+
+Take one remote at a time. Its listener on the server already says most of what the schema needs:
+
+```luau title="Before"
+Remotes.Hit.OnServerEvent:Connect(function(Player, Target, Damage)
+	if typeof(Target) ~= "Instance" or not Target:IsA("Model") then
+		return
+	end
+	if type(Damage) ~= "number" or Damage ~= Damage or Damage < 0 or Damage > 100 then
+		return
+	end
+
+	-- the game's own rules: is the target in reach, is the player alive
+end)
+
+Remotes.Health:FireClient(Player, Humanoid.Health)
+
+Remotes.Price.OnServerInvoke = function(Player, ItemId)
+	return Prices[ItemId] or 0
+end
+```
+
+Each remote becomes a declaration, and each check on an argument becomes that argument's type:
+
+```blink title="net.blink"
+option ServerOutput = "src/server/Network.luau"
+option ClientOutput = "src/shared/Network.luau"
+option RequireRates = true
+
+event Hit {
+	From: Client,
+	Type: Reliable,
+	Call: SingleAsync,
+	Rate: 10,
+	Data: (Target: Instance(Model), Damage: u8(..100))
+}
+
+event Health {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: u8
+}
+
+function Price {
+	Yield: Coroutine,
+	Rate: 5,
+	Concurrency: 1,
+	Data: u16,
+	Return: u32
+}
+```
+
+| What you have | What to write |
+|---|---|
+| a `RemoteEvent` the client fires | `event` with `From: Client` and a `Rate` |
+| a `RemoteEvent` the server fires | `event` with `From: Server` |
+| a `RemoteEvent` fired both ways | two events, one for each direction |
+| an `UnreliableRemoteEvent` | `Type: Unreliable` |
+| a `RemoteFunction` the client invokes | `function` |
+| a `RemoteFunction` the server invokes | `function` with `From: Server` |
+| a listener that may yield | `Call: SingleAsync`, or `ManyAsync` for several listeners |
+| a listener that never yields | `Call: SingleSync` or `ManySync` |
+| `typeof(X) == "Instance" and X:IsA("Model")` | `Instance(Model)` |
+| a number checked against a range | `u8(..100)`, `f32(-1..1)` |
+| a string checked for length | `string(1..32)` |
+| a table of fixed fields | a `struct` |
+| a list | `T[..16]` |
+| a value that may be nil | `T?` |
+
+The types and their bounds are in [Types](/BlinkBlox/language/types/), an event's fields in
+[Events](/BlinkBlox/language/events/), a function's in [Functions](/BlinkBlox/language/functions/).
+
+An event may carry several values, as a remote's arguments do. Naming them, as `Hit`'s are above, is
+optional.
+
+<Aside title="What to choose when the code does not say">
+A remote takes any number and the code may never have said which. Choose the smallest type that
+holds every value the game sends: `u8` for a count under 256, `u16` for an item id, `f32` for a
+position component. A whole number that can pass 4,294,967,295 -- a UserId -- is an `f64`.
+</Aside>
+
+## What the checks become
+
+The checks at the top of a listener are what a schema replaces. Once an argument has a type, a value
+of another type, outside its range or over its length never reaches the listener: the event is not
+delivered, the rest of its packet is dropped, and the decode-error handler is told who sent it.
+
+So the listener keeps only the game's own rules:
+
+```luau title="After"
+Net.Hit.On(function(Player, Target, Damage)
+	-- Target is a Model and Damage is a whole number from 0 to 100.
+	-- the game's own rules: is the target in reach, is the player alive
+end)
+```
+
+What a schema cannot check is anything about the game: that the target is in reach, that the player
+owns the item, that the price is right. Those stay.
+
+Two things the hand-written code usually did not do at all:
+
+- **A rate limit.** A remote accepts as many calls as a client makes. [`Rate` and
+  `Burst`](/BlinkBlox/language/events/#rate-burst) are the events a second accepted from one player
+  and how many may arrive at once; with `option RequireRates` an event a client fires cannot be
+  added without one.
+- **A bound on length.** A remote accepts a string or a table of any size. Bound each one a client
+  sends: `string(1..32)`, `u16[..64]`.
+
+## The call sites
+
+| | Remotes | BlinkBlox |
+|---|---|---|
+| Client to server | `Remotes.Hit:FireServer(...)` | `Net.Hit.Fire(...)` |
+| Server to one player | `Remotes.Health:FireClient(Player, ...)` | `Net.Health.Fire(Player, ...)` |
+| Server to everyone | `Remotes.Health:FireAllClients(...)` | `Net.Health.FireAll(...)` |
+| Listen on the server | `Remotes.Hit.OnServerEvent:Connect(Listener)` | `Net.Hit.On(Listener)` |
+| Listen on the client | `Remotes.Health.OnClientEvent:Connect(Listener)` | `Net.Health.On(Listener)` |
+| Call | `Remotes.Price:InvokeServer(...)` | `Net.Price.Invoke(...)` |
+| Answer | `Remotes.Price.OnServerInvoke = Listener` | `Net.Price.On(Listener)` |
+
+Calls use a dot, not a colon. `On` returns a function that disconnects the listener where `Connect`
+returns a connection. The server also gets `FireList` and `FireExcept`, which send to a list of
+players and to all but one.
+
+There is nothing to create or to wait for: no `Instance.new("RemoteEvent")`, no `WaitForChild`. The
+server module makes its two remotes when it is required, and the client module finds them.
+
+The whole generated API is in the [reference](/BlinkBlox/reference/generated-api/).
+
+### A bridge for the call sites
+
+To write the schema first and move the call sites later, wrap each module once. The wrapper answers
+to a remote's own methods:
+
+```luau bridge title="RemoteNames.luau"
+--- A BlinkBlox module under the names of RemoteEvent and RemoteFunction. Temporary: delete it once
+--- the call sites use Fire, FireAll, On and Invoke themselves.
+local function Signal(On)
+	return {
+		Connect = function(_, Listener)
+			return { Disconnect = On(Listener) }
+		end,
+	}
+end
+
+local function RemoteNames(Net, IsServer)
+	local Remotes = {}
+	for Name, Value in Net do
+		if type(Value) ~= "table" or not (Value.Fire or Value.On or Value.Invoke) then
+			continue
+		end
+
+		local Remote = {}
+		if Value.Invoke and IsServer then
+			function Remote:InvokeClient(Player, ...)
+				return Value.Invoke(Player, ...)
+			end
+		elseif Value.Invoke then
+			function Remote:InvokeServer(...)
+				return Value.Invoke(...)
+			end
+		elseif Value.FireAll then
+			function Remote:FireClient(Player, ...)
+				Value.Fire(Player, ...)
+			end
+			function Remote:FireAllClients(...)
+				Value.FireAll(...)
+			end
+		elseif Value.Fire then
+			function Remote:FireServer(...)
+				Value.Fire(...)
+			end
+		end
+
+		if Value.On then
+			-- An event's listeners connect to the signal; a function's one listener is assigned.
+			Remote.OnServerEvent = Signal(Value.On)
+			Remote.OnClientEvent = Remote.OnServerEvent
+			setmetatable(Remote, {
+				__newindex = function(_, Key, Listener)
+					if Key == "OnServerInvoke" or Key == "OnClientInvoke" then
+						Value.On(Listener)
+					end
+				end,
+			})
+		end
+
+		Remotes[Name] = Remote
+	end
+
+	return Remotes
+end
+
+return RemoteNames
+```
+
+```luau
+local Remotes = require(ReplicatedStorage.RemoteNames)(require(ServerScriptService.Network), true)
+
+Remotes.Hit.OnServerEvent:Connect(function(Player, Target, Damage)
+	-- unchanged, less the checks
+end)
+```
+
+Pass `true` on the server and `false` on the client. An event has only the members of its direction,
+so a call the schema does not allow -- a client firing an event declared `From: Server` -- is a
+missing method here.
+
+The wrapper is untyped, so the call sites behind it lose the type checking the generated modules
+give until they move.
+
+## Moving one remote at a time
+
+The generated modules do not touch the remotes a game already has, so nothing has to move at once:
+
+<Steps>
+
+1. Write the schema with the remotes you are moving first.
+2. Point their call sites at the generated modules, and delete those remotes.
+3. Add the next remotes to the schema, compile, and repeat.
+
+</Steps>
+
+BlinkBlox's own server and client modules have to ship together: a client refuses to run against a
+server compiled from a different schema. See
+[wire compatibility](/BlinkBlox/reference/wire-compatibility/).
+
+## What a running game will notice
+
+- **Reliable events are batched.** A reliable send is written into a batch that goes out on the next
+  `Heartbeat`, so many small events cost one remote call. See
+  [Bandwidth](/BlinkBlox/guides/bandwidth/).
+- **A client that fires too fast is refused**, and the server is told through `SetRateLimitHandler`.
+  Choose rates an honest client never reaches.
+- **A packet the server refuses is reported**, with the player who sent it: through
+  `SetPacketDropHandler` when it is refused before it is read, and through `SetDecodeErrorHandler`
+  when an event in it does not decode.
+- **A send can throw.** A string or an array outside its bounds is an error where it is sent, and with
+  [`WriteValidations`](/BlinkBlox/language/options/) so is a value of the wrong type or range. A
+  remote would have sent it.
+
+[Securing the server](/BlinkBlox/guides/securing-the-server/) is the checklist for all of it, and
+[common pitfalls](/BlinkBlox/guides/common-pitfalls/) lists what tends to go wrong.

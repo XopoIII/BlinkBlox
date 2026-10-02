@@ -140,7 +140,7 @@ than one comparison after another.
 The methodology, the bandwidth, the random payloads, streams and the full percentiles are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
 [`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What 1.0.0 changed is in
-[What's new in 1.0](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
+[What's new in 1.1](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
 
 ## Where it comes from
 
@@ -148,6 +148,16 @@ BlinkBlox is a maintained fork of [Blink](https://github.com/1Axen/blink). Upstr
 of the compiler and began a rewrite. It left reported defects open, including an unbounded parse of
 a hostile client buffer. This fork fixes them and continues from `v0.18.8`. See
 [Migrating from Blink](https://xopoiii.github.io/BlinkBlox/guides/migrating-from-blink/).
+
+A game on another library has a guide of its own:
+[plain remotes](https://xopoiii.github.io/BlinkBlox/guides/coming-from-remote-events/),
+[zap](https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/),
+[ByteNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-bytenet/),
+[Packet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-packet/),
+[QuickNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-quicknet/) and
+[Warp](https://xopoiii.github.io/BlinkBlox/guides/coming-from-warp/). For the five libraries,
+`blinkblox <definitions> --from <library>` writes a draft schema from the definitions the game
+already has.
 
 ## Install
 

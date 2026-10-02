@@ -7,10 +7,11 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
-## Unreleased
+## 1.1.0 — 2026-10-02
 
-The generated modules do not change: no schema's output differs from 1.0.3's. Nothing to do on
-upgrading.
+A release for games that are somewhere else: converters and guides for coming from zap, ByteNet,
+Packet, QuickNet, Warp and plain remotes. The generated modules do not change: apart from the version
+in its first line, no schema's output differs from 1.0.3's. Nothing to do on upgrading.
 
 ### Added
 
@@ -59,6 +60,12 @@ upgrading.
   is the same on every run.
 - **A guide, [Coming from Warp](https://xopoiii.github.io/BlinkBlox/guides/coming-from-warp/)**, with a
   wrapper that takes an event's name as `Fire`, `Fires` and `Connect` do.
+- **A guide, [Coming from RemoteEvents](https://xopoiii.github.io/BlinkBlox/guides/coming-from-remote-events/)**,
+  for a game on plain remotes, which has no definitions to convert: how each remote becomes a
+  declaration, how the checks at the top of a listener become types, and a wrapper that answers to
+  `:FireServer`, `:FireClient`, `OnServerEvent:Connect` and `:InvokeServer`.
+- Every wrapper the guides print is run by the test suite against generated modules, as every
+  schema in the docs is compiled.
 - **The converter is loaded only under `--from`**, so a compile does not read it.
 - **A guide, [Coming from zap](https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/)**: the
   conversion, a table of what maps to what, the call sites that differ, and a short wrapper that
