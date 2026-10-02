@@ -1,0 +1,60 @@
+-- Converted from zap 0.6.29 definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what zap's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+-- TODO(convert): zap writes its own modules to these paths; choose others.
+option ServerOutput = "../runtime/rivals/zap/Server.luau"
+option ClientOutput = "../runtime/rivals/zap/Client.luau"
+-- zap checks what it sends unless write_checks is false; a schema checks only when asked.
+option WriteValidations = true
+
+-- Scenarios.blink's events, as zap declares them; see benchmark/Rivals.luau.
+struct Unit {
+	id: u16,
+	x: f32,
+	y: f32,
+	z: f32,
+	health: u8,
+	moving: boolean,
+	crouched: boolean
+}
+
+event Snapshot {
+	From: Server,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: Unit
+}
+
+event Input {
+	From: Client,
+	Type: Unreliable,
+	Call: SingleSync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct { move: u8, turn: i16, jump: boolean, sprint: boolean }
+}
+
+event Touch {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct { part: Instance, force: u8 }
+}
+
+event WorldState {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: Unit[0..16]
+}
+
+event SelfState {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: Unit
+}

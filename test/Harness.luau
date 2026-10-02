@@ -125,6 +125,32 @@ local function Diff(Expected: string, Got: string): string
 	return Report
 end
 
+--- Compares `Got` with the golden at `Path`, or records it there under `--update-goldens`. For a
+--- spec whose output is text of its own -- a converter's draft -- rather than a schema's modules.
+local function Golden(Path: string, Got: string)
+	if UpdateGoldens then
+		local Directory = string.match(Path, "^(.*)/[^/]+$")
+		if Directory and not fs.isDir(Directory) then
+			fs.writeDir(Directory)
+		end
+
+		fs.writeFile(Path, Got)
+		return
+	end
+
+	if not fs.isFile(Path) then
+		ErrorPrint(`No golden at {Path}. Run "luneblox run Test --yes --update-goldens" and commit the result.`)
+	end
+
+	local Expected = fs.readFile(Path)
+	if Expected ~= Got then
+		ErrorPrint(
+			`Output no longer matches its golden at {Path}.{Diff(Expected, Got)}\n`
+				.. `If the change is intended, rerun with --update-goldens and review the diff.`
+		)
+	end
+end
+
 --- Copies this schema's freshly generated modules into its golden directory, or compares them
 --- against what is already there. Called immediately after each compile because several schemas
 --- write to the SAME output paths -- Test.blink and NoGenerics.blink both produce Client.luau -- so
@@ -292,4 +318,5 @@ return {
 	ErrorPrint = ErrorPrint,
 	PrettyPrint = PrettyPrint,
 	HasArgument = HasArgument,
+	Golden = Golden,
 }

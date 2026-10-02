@@ -79,14 +79,15 @@ not a flag -- `blinkblox --yes net` and `blinkblox net --yes` are the same comma
 | `--verify` | Compiles in memory as a real build would, writes nothing, and compares every file it would write with the one on disk. Exits with `1` if any is stale or missing. See [verifying committed output](#verifying-committed-output). |
 | `--json` | Prints the result as one JSON document on standard output instead of rendering diagnostics, and prints nothing else. See [JSON output](#json-output). |
 | `-p`, `--profile` | Compiles under a [profile](/BlinkBlox/language/profiles/): `dev`, `debug`, `test` or `release`. Takes a value: `--profile dev`. Without it the build is `release`. |
+| `--from` | Reads `CONFIG` as another tool's definitions and writes a draft schema beside it, compiling nothing. Takes a value, the tool: `--from zap`. See [converting another tool's definitions](#converting-another-tools-definitions). |
 
 Flags are matched whole, so short flags do not combine: write `-q -y`, not `-qy`. An argument the
 compiler does not recognise as a flag is taken for the schema's path, so a mistyped flag in front of
 the schema shows up as a missing file named after it.
 
-`--profile` is the only flag that takes a value, and its value is never mistaken for the schema:
-`blinkblox --profile dev net` compiles `net` under `dev`. A missing or misspelt profile stops the
-compiler before it reads anything:
+`--profile` and `--from` are the two flags that take a value, and the value is never mistaken for
+the schema: `blinkblox --profile dev net` compiles `net` under `dev`. A missing or misspelt value
+stops the compiler before it reads anything:
 
 ```text
 Expected a profile after "--profile": dev, debug, test or release
@@ -156,7 +157,7 @@ Every code, and what to do about it, is listed in the
 | Code | When |
 |---|---|
 | `0` | The modules were written (or, with `--check`, would have been), or `--help` or `--version` was asked for. Warnings do not change it. |
-| `1` | Anything else: a diagnostic error in the schema, an unknown `--profile`, a schema file that does not exist, a schema without `ServerOutput` or `ClientOutput`, a refused directory prompt, a stale or missing file under `--verify`, or `--json` or `--verify` combined with `--watch`. |
+| `1` | Anything else: a diagnostic error in the schema, an unknown `--profile`, a schema file that does not exist, a schema without `ServerOutput` or `ClientOutput`, a refused directory prompt, a stale or missing file under `--verify`, `--json` or `--verify` combined with `--watch`, or a [`--from`](#converting-another-tools-definitions) that named an unknown tool, could not read the definitions, or found a draft already there. |
 
 Only diagnostics are rendered as above. A missing schema file or a refused prompt is reported as a
 plain error message followed by a stack trace. Under [`--json`](#json-output) every failure of a
@@ -333,6 +334,35 @@ or as a CI step:
 A build under a profile verifies under the same one: `blinkblox net/Game.blink --verify --profile
 dev`. Unlike regenerating and asking git for a diff, it leaves the working tree as it was and needs
 no repository.
+
+## Converting another tool's definitions
+
+```sh
+blinkblox net.zap --from zap
+```
+
+`--from` reads `CONFIG` as the definitions of the tool it names and writes a draft schema beside
+them: `net.zap` becomes `net.blink`. The path is used exactly as given, with no extension added. It
+compiles nothing, and prints what the draft still needs from you -- a `Rate` for each event a client
+fires, a bound for each length a client sends -- each of which is also marked in the draft with a
+`TODO(convert)` comment.
+
+| Tool | Reads | Guide |
+|---|---|---|
+| `zap` | a zap config, as zap 0.6.29 reads it | [Coming from zap](/BlinkBlox/guides/coming-from-zap/) |
+
+- **A draft already there is not replaced** unless `--yes` is passed. There is no prompt: without
+  `--yes` the command stops with exit code `1`.
+- **`--check` writes nothing** and prints the draft on standard output, with no banner in front of
+  it. The list of what is left to decide goes to standard error, so `--check > draft.blink` captures
+  the draft alone.
+- **`--quiet`** writes the draft and prints nothing.
+- **The draft is compiled before it is written out as finished.** One that does not compile is a
+  fault in the converter and is reported as one, with exit code `1`; the draft is still written, so
+  it can be attached to the report.
+- Definitions the tool itself would refuse stop the command with the line and what was expected.
+- It cannot be combined with `--watch`, `--verify` or `--json`, and an unknown tool is refused with
+  the list of those it reads.
 
 ## Watch mode
 

@@ -7,6 +7,27 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+The generated modules do not change: no schema's output differs from 1.0.3's. Nothing to do on
+upgrading.
+
+### Added
+
+- **`blinkblox <config> --from zap` converts a zap config into a draft schema**, written beside it
+  as `.blink`. It reads zap 0.6.29's whole grammar -- options, types, events, functions, namespaces --
+  and compiles the draft itself before handing it over. What zap has no way to say is left for the
+  reader as a `TODO(convert)` comment where the answer belongs, never guessed: a `Rate` for each
+  event a client fires, an upper bound for each length a client sends. Only what a client sends is
+  marked; an unbounded array in an event the server fires is the server's own. What has no
+  equivalent -- a union, a set, `AlignedCFrame`, an option -- is named in the list the command
+  prints, with its line, and nothing is dropped silently.
+- **A guide, [Coming from zap](https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/)**: the
+  conversion, a table of what maps to what, the call sites that differ, and a short wrapper that
+  gives a generated module zap's names (`SetCallback`, `Call`, `FireSet`, `SendEvents`) so a game can
+  move its config first and its call sites after. The wrapper is run by the test suite against
+  generated modules, as every schema in the docs is compiled.
+
 ## 1.0.3 — 2026-10-02
 
 The generated modules do not change: all eighty outputs of the sixteen test schemas -- server,

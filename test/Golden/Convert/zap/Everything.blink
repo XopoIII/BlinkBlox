@@ -1,0 +1,171 @@
+-- Converted from zap 0.6.29 definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what zap's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+-- Every construct of zap 0.6.29's grammar, for test/ConvertZap.luau: what converts, what converts
+-- with a loss, and what has no equivalent at all.
+-- TODO(convert): zap writes its own modules to these paths; choose others.
+option ServerOutput = "./network/Server.luau"
+option ClientOutput = "./network/Client.luau"
+option TypesOutput = "./network/Types.luau"
+option Casing = Camel
+option Typescript = true
+option ManualReplication = true
+option RemoteScope = "GAME"
+option RemotesFolder = "Remotes"
+-- zap checks what it sends unless write_checks is false; a schema checks only when asked.
+option WriteValidations = true
+option PromiseLibrary = "game:GetService('ReplicatedStorage').Promise"
+
+-- Numbers, with every shape of range.
+type Health = u8(0..100)
+type Damage = u8(..100)
+type Level = u16(1..)
+type Slot = u8(3)
+type Anything = i32
+type Aim = f32(-1..1)
+type Precise = f64(0.5..1.5)
+
+-- Strings and buffers,
+--     bounded and not.
+type Username = string(3..20)
+type Blob = string
+type Chunk = buffer(..800)
+type Loose = buffer
+type Position = vector
+type Cell = vector<i16>
+type Flat = vector<u8>
+type Mixed = vector
+type Where = vector
+type Pose = CFrame
+type Snapped = CFrame
+type Tint = Color3
+type Team = BrickColor
+type Joined = DateTime
+type Seen = DateTimeMillis
+type Corner = Vector2
+type Target = Instance(Player)
+type Part = Instance(BasePart)
+type Any = Instance
+type Maybe = Instance(Player)?
+type Names = string[]
+type Party = string(3..20)[1..8]
+type Recent = f64[..50]
+type Corners = vector[4]
+type Sparse = u8?[]
+type MaybeList = u8[]?
+enum Status = { Idle, Walking, Running_fast }
+
+enum Mouse = "Type" {
+	Move { Delta: vector, Position: vector },
+	Click {
+		Button: enum { Left, Right },
+		Position: vector
+	}
+}
+
+-- in coins
+-- TODO(convert): a client sends this; bound name (string length), display_name (string length)
+struct Item { name: string, price: u16, tags: string(..16)[..4], display_name: string? }
+
+-- TODO(convert): a client sends this; bound the value (a map cannot be bounded: prefer a bounded array), [key] (string length)
+map Prices = { [string]: u16 }
+
+map Flags = { [string]: boolean }
+map Optional = { [u8]: string }
+struct OffersValue { item: Item, until: DateTime }
+-- zap's Offers is written out where it was used: a schema cannot name it.
+
+-- TODO(convert): zap wrote (string | u32 | Instance.Player) where this says unknown
+-- TODO(convert): a client sends this; bound the value (unknown is not validated)
+type Either = unknown
+
+type Free = unknown
+type FreeMaybe = unknown
+
+scope Shop {
+	type ItemId = u16
+
+	-- A client names what it buys.
+	-- TODO(convert): a client sends this; bound note (string length)
+	event Buy {
+		From: Client,
+		Type: Reliable,
+		Call: SingleAsync,
+		-- TODO(convert): Rate: ?, Burst: ?
+		Data: (item: ItemId, count: u8, note: string)
+	}
+
+	scope Admin {
+		event SetPrice {
+			From: Client,
+			Type: Reliable,
+			Call: ManySync,
+			-- TODO(convert): Rate: ?, Burst: ?
+			Data: Prices
+		}
+	}
+
+	function Quote {
+		Yield: Promise,
+		-- TODO(convert): Rate: ?, Concurrency: ?
+		Data: ItemId,
+		Return: (price: u16, stock: u8)
+	}
+}
+
+event Hello {
+	From: Server,
+	Type: Reliable,
+	Call: ManySync
+}
+
+event Move {
+	From: Client,
+	Type: Unreliable,
+	Call: Polling,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (Position, Aim)
+}
+
+event Ordered {
+	From: Server,
+	Type: OrderedUnreliable,
+	Call: SingleSync,
+	Data: OffersValue[..32]
+}
+
+-- TODO(convert): zap wrote (string | u8) where this says unknown
+-- TODO(convert): a client sends this; bound the value (array length), [] (unknown is not validated)
+event Pick {
+	From: Client,
+	Type: Reliable,
+	Call: ManySync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: unknown[]
+}
+
+-- TODO(convert): a client sends this; bound items (array length)
+event Inventory {
+	From: Client,
+	Type: Reliable,
+	Call: ManySync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct { items: Item[], owner: Shop.ItemId, extra: Either }
+}
+
+function Ping {
+	Yield: Promise
+	-- TODO(convert): Rate: ?, Concurrency: ?
+}
+
+-- TODO(convert): a client sends this; bound label (string length)
+function Rename {
+	Yield: Promise,
+	-- TODO(convert): Rate: ?, Concurrency: ?
+	Data: (id: u8, label: string),
+	Return: boolean
+}

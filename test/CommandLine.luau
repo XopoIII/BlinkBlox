@@ -196,4 +196,49 @@ RunClosure("CLI refuses --json with --watch", function()
 	assert(not Result.ok, "--json --watch was accepted")
 end)
 
+--> `--from` is the second flag with a value, and what it writes is a file beside its input: so the
+--> specs are that the file appears, that one already there is not replaced unasked, and that the
+--> value is never taken for the path.
+local ZAP = "../../test/Network/Converted.zap"
+local DRAFT = "Network/Converted.blink"
+
+local function ConvertZap(...: string): process.ExecResult
+	fs.writeFile("Network/Converted.zap", "event Ping = { from: Client, type: Reliable, call: SingleSync, data: u8 }\n")
+	return process.exec(runtime.command, { "run", Compiler, ... }, { cwd = "../src/CLI" })
+end
+
+RunClosure("CLI --from zap writes a draft beside the definitions", function()
+	pcall(fs.removeFile, DRAFT)
+	local Result = ConvertZap("--", "--from", "zap", ZAP)
+	assert(Result.ok, Result.stdout .. Result.stderr)
+	assert(string.find(fs.readFile(DRAFT), "event Ping {", 1, true), "the draft holds no event")
+	assert(string.find(Result.stdout, "with no Rate: Ping", 1, true), `no checklist was printed: {Result.stdout}`)
+end)
+
+RunClosure("CLI --from will not replace a draft without --yes", function()
+	fs.writeFile(DRAFT, "-- mine")
+	local Refused = ConvertZap(ZAP, "--", "--from", "zap")
+	assert(not Refused.ok and fs.readFile(DRAFT) == "-- mine", "a draft was replaced without --yes")
+
+	local Result = ConvertZap(ZAP, "--", "--from", "zap", "--yes")
+	assert(Result.ok and fs.readFile(DRAFT) ~= "-- mine", "--yes did not replace the draft")
+end)
+
+RunClosure("CLI --from --check prints the draft alone and writes nothing", function()
+	pcall(fs.removeFile, DRAFT)
+	local Result = ConvertZap(ZAP, "--", "--from", "zap", "--check")
+	assert(Result.ok, Result.stdout .. Result.stderr)
+	assert(not fs.isFile(DRAFT), "--check wrote the draft")
+	assert(string.sub(Result.stdout, 1, 2) == "--", `something was printed before the draft: {Result.stdout}`)
+	assert(string.find(Result.stderr, "with no Rate: Ping", 1, true), "the checklist is not on standard error")
+end)
+
+RunClosure("CLI refuses an unknown tool, and --from with --watch", function()
+	local Unknown = ConvertZap(ZAP, "--", "--from", "carrier-pigeon")
+	assert(not Unknown.ok, "an unknown tool was accepted")
+
+	local Watched = ConvertZap(ZAP, "--", "--from", "zap", "--watch")
+	assert(not Watched.ok, "--from --watch was accepted")
+end)
+
 return {}
