@@ -262,4 +262,35 @@ RunClosure("The QuickNet guide's bridge answers to QuickNet's methods, signals a
 	Check("Disconnect", Heard[2] == 3, "a disconnected listener was still called")
 end)
 
+RunClosure("The Warp guide's bridge takes an event's name, and ignores the reliability it is passed", function()
+	local WarpNames = luau.load(Bridge("coming-from-warp"))()
+	local Pair = Isolated.Build(Isolated.Parse(ONE_VALUE), "BRIDGEWARP")
+	local Server, Client = WarpNames(Pair.Server.Shop, true), WarpNames(Pair.Client.Shop, false)
+	local Root = WarpNames(Pair.Server, true)
+
+	local Heard: { any } = {}
+	local Connection = Root.Connect("Equip", function(Player, Data)
+		Heard = { Player, Data.slot, Data.name }
+	end)
+
+	local Stock: { number } = {}
+	Client.Connect("Stock", function(Value)
+		table.insert(Stock, Value)
+	end)
+
+	WarpNames(Pair.Client, false).Fire("Equip", false, { slot = 3, name = "sword" })
+	Server.Fire("Stock", true, Shared.Player, 1)
+	Server.Fires("Stock", false, 2)
+	Exchange(Pair)
+
+	Check("Connect", Heard[1] == Shared.Player and Heard[2] == 3 and Heard[3] == "sword", "the server heard nothing")
+	Check("Fire", table.concat(Stock, ",") == "1,2", `the client heard {table.concat(Stock, ",")}`)
+	Check("Unknown", not pcall(Root.Fire, "Nothing", true, Shared.Player), "an event that is not there was fired")
+
+	Connection.Disconnect()
+	WarpNames(Pair.Client, false).Fire("Equip", true, { slot = 4, name = "bow" })
+	Exchange(Pair)
+	Check("Disconnect", Heard[2] == 3, "a disconnected listener was still called")
+end)
+
 return {}

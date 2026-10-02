@@ -16,6 +16,7 @@ local Packet = require("@compiler/Convert/Stubs/Packet")
 local Print = require("@compiler/Convert/Print")
 local QuickNet = require("@compiler/Convert/Stubs/QuickNet")
 local Sandbox = require("@compiler/CLI/Utility/Sandbox")
+local Warp = require("@compiler/Convert/Stubs/Warp")
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 
@@ -31,6 +32,8 @@ local CASES: { Case } = {
 	{ Stub = Packet, Golden = "packet/Packets", Path = "./Sources/Convert/Packet/Packets.luau" },
 	{ Stub = QuickNet, Golden = "quicknet/Scenarios", Path = "../benchmark/runtime/rivals/modes/quicknet.luau" },
 	{ Stub = QuickNet, Golden = "quicknet/Events", Path = "./Sources/Convert/QuickNet/Events.luau" },
+	{ Stub = Warp, Golden = "warp/Scenarios", Path = "../benchmark/runtime/rivals/modes/warp.luau" },
+	{ Stub = Warp, Golden = "warp/Remotes", Path = "./Sources/Convert/Warp/Remotes.luau" },
 }
 
 local function Check(Name: string, Condition: boolean, Detail: string)
@@ -202,6 +205,43 @@ RunClosure("QuickNet: a function carries its rate and is asked for its concurren
 		Has(Text, "function Price {\n\tYield: Coroutine,\n\tRate: 60,\n\t-- TODO(convert): Concurrency: ?"),
 		Text
 	)
+end)
+
+RunClosure("Warp: every event's direction and reliability are asked for", function()
+	local _, Checklist = Print.Render(Sandbox.Record("./Sources/Convert/Warp/Remotes.luau", Warp))
+	local List = table.concat(Checklist, "\n")
+
+	Check("Direction", Has(List, "13 event(s) whose direction you must state"), List)
+	Check("Reliability", Has(List, "13 event(s) whose reliability you must state"), List)
+end)
+
+RunClosure("Warp: an event named with no schema is kept as unknown, and said to be", function()
+	local Text, Checklist = Print.Render(Sandbox.Record("./Sources/Convert/Warp/Remotes.luau", Warp))
+	local List = table.concat(Checklist, "\n")
+
+	--> Notify and Ping are in reg_namespaces alone, Chat is only connected to; Equip has a schema.
+	for _, Name in { "Chat", "Notify", "Ping" } do
+		Check(Name, Has(Text, `event {Name} \{`), `{Name} is missing from the draft`)
+	end
+	Check("Said", Has(List, "give it no schema") and Has(List, "(and in 2 more place(s))"), List)
+	Check("Schema", Has(Text, "Data: struct { item: Shape1, slot: u8 }"), Text)
+end)
+
+RunClosure("Warp: a custom datatype and the types with no equivalent are each said", function()
+	local _, Checklist = Print.Render(Sandbox.Record("./Sources/Convert/Warp/Remotes.luau", Warp))
+	local List = table.concat(Checklist, "\n")
+
+	for _, Missing in { "the custom datatype u64", "Schema.rect", "Schema.ray", "Schema.font" } do
+		Check(Missing, Has(List, Missing), List)
+	end
+end)
+
+RunClosure("Warp: schemas handed over from a table come out in the same order every time", function()
+	local First = Print.Render(Sandbox.Record("./Sources/Convert/Warp/Remotes.luau", Warp))
+	for _ = 1, 5 do
+		local Again = Print.Render(Sandbox.Record("./Sources/Convert/Warp/Remotes.luau", Warp))
+		Check("Order", Again == First, "two runs gave two drafts")
+	end
 end)
 
 return {}

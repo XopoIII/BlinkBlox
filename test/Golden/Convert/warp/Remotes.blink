@@ -1,0 +1,180 @@
+-- Converted from Warp 1.1.0-pre7 definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what Warp's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-warp/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+-- TODO(convert): a client sends this; bound name (string length)
+struct Shape1 { id: u16, name: string, tint: Color3? }
+
+-- TODO(convert): Warp wrote no schema at all where this says unknown
+-- TODO(convert): a client sends this; bound the value (unknown is not validated)
+event Chat {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: unknown
+}
+
+-- TODO(convert): a client sends this; bound the value (buffer length)
+event Chunk {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: buffer
+}
+
+-- TODO(convert): a client sends this; bound the value (array length)
+event Contents {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: Shape1[]
+}
+
+event Equip {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct { item: Shape1, slot: u8 }
+}
+
+event Looks {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct {
+		fade: ColorSequence,
+		joined: DateTime,
+		open: TweenInfo,
+		pad: UDim,
+		size: UDim2,
+		span: NumberRange,
+		team: BrickColor,
+		tint: Color3
+	}
+}
+
+event Move {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct {
+		aim: Vector2,
+		at: CFrame,
+		cell: vector<i16>,
+		grid: Vector2,
+		velocity: vector<f16>
+	}
+}
+
+-- TODO(convert): Warp wrote no schema at all where this says unknown
+-- TODO(convert): a client sends this; bound the value (unknown is not validated)
+event Notify {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: unknown
+}
+
+event Numbers {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct {
+		a: i8,
+		b: i16,
+		c: i32,
+		d: u32,
+		e: f16,
+		f: f32,
+		g: f64,
+		h: boolean
+	}
+}
+
+event Pick {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: Instance
+}
+
+-- TODO(convert): Warp wrote no schema at all where this says unknown
+-- TODO(convert): a client sends this; bound the value (unknown is not validated)
+event Ping {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: unknown
+}
+
+-- TODO(convert): Warp wrote Schema.ray where this says unknown
+-- TODO(convert): Warp wrote Schema.rect where this says unknown
+-- TODO(convert): Warp wrote Schema.numbersequence where this says unknown
+-- TODO(convert): a client sends this; bound aim (unknown is not validated), area (unknown is not validated), curve (unknown is not validated)
+event Region {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct { aim: unknown, area: unknown, curve: unknown }
+}
+
+-- TODO(convert): a client sends this; bound the value (a map cannot be bounded: prefer a bounded array), [key] (string length)
+event Scores {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: map { [string]: u32 }
+}
+
+-- TODO(convert): Warp wrote the custom datatype u64 where this says unknown
+-- TODO(convert): Warp wrote Schema.font where this says unknown
+-- TODO(convert): Warp wrote Schema.physicalproperties where this says unknown
+-- TODO(convert): a client sends this; bound big (unknown is not validated), face (unknown is not validated), material (unknown is not validated)
+event Surface {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct { big: unknown, face: unknown, material: unknown }
+}

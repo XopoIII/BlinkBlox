@@ -61,7 +61,7 @@ const sidebar = [
 			'guides/benchmarks',
 			{
 				label: 'Coming from',
-				items: ['guides/migrating-from-blink', 'guides/coming-from-zap', 'guides/coming-from-bytenet', 'guides/coming-from-packet', 'guides/coming-from-quicknet'],
+				items: ['guides/migrating-from-blink', 'guides/coming-from-zap', 'guides/coming-from-bytenet', 'guides/coming-from-packet', 'guides/coming-from-quicknet', 'guides/coming-from-warp'],
 			},
 			'guides/roblox-ts',
 			'guides/ai-assistants',
