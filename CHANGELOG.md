@@ -64,6 +64,9 @@ in its first line, no schema's output differs from 1.0.3's. Nothing to do on upg
   for a game on plain remotes, which has no definitions to convert: how each remote becomes a
   declaration, how the checks at the top of a listener become types, and a wrapper that answers to
   `:FireServer`, `:FireClient`, `OnServerEvent:Connect` and `:InvokeServer`.
+- **An overview, [Switching to BlinkBlox](https://xopoiii.github.io/BlinkBlox/guides/switching/)**: the
+  converters in one table, what each library's draft carries over and what it asks for, and the
+  guides. The README names the converters under its benchmark tables.
 - Every wrapper the guides print is run by the test suite against generated modules, as every
   schema in the docs is compiled.
 - **The converter is loaded only under `--from`**, so a compile does not read it.

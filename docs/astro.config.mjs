@@ -60,8 +60,8 @@ const sidebar = [
 			'guides/streaming-state',
 			'guides/benchmarks',
 			{
-				label: 'Coming from',
-				items: ['guides/migrating-from-blink', 'guides/coming-from-remote-events', 'guides/coming-from-zap', 'guides/coming-from-bytenet', 'guides/coming-from-packet', 'guides/coming-from-quicknet', 'guides/coming-from-warp'],
+				label: 'Switching to BlinkBlox',
+				items: ['guides/switching', 'guides/coming-from-remote-events', 'guides/coming-from-zap', 'guides/coming-from-bytenet', 'guides/coming-from-packet', 'guides/coming-from-quicknet', 'guides/coming-from-warp', 'guides/migrating-from-blink'],
 			},
 			'guides/roblox-ts',
 			'guides/ai-assistants',
