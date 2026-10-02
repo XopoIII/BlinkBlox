@@ -59,7 +59,10 @@ const sidebar = [
 			'guides/bandwidth',
 			'guides/streaming-state',
 			'guides/benchmarks',
-			'guides/migrating-from-blink',
+			{
+				label: 'Coming from',
+				items: ['guides/migrating-from-blink', 'guides/coming-from-zap'],
+			},
 			'guides/roblox-ts',
 			'guides/ai-assistants',
 		],
@@ -76,6 +79,9 @@ const sidebar = [
 	'changelog',
 ];
 
+// Every page of the sidebar in order, through its groups and the groups inside them.
+const pages = (entries) => entries.flatMap((entry) => (typeof entry === 'string' ? [entry] : pages(entry.items)));
+
 // The plain-text copies of the site for AI assistants; guides/ai-assistants.mdx describes them.
 const llmsTxt = {
 	details: [
@@ -88,7 +94,7 @@ const llmsTxt = {
 		'writing, and prints every diagnostic with its code, file, line and column as one JSON document.',
 	].join('\n'),
 	// Pages in the sidebar's order; without this they come alphabetically, the changelog second.
-	promote: ['index*', ...sidebar.flatMap((entry) => (typeof entry === 'string' ? [entry] : entry.items))],
+	promote: ['index*', ...pages(sidebar)],
 	// The changelog is the largest page and the benchmark tables the next, and neither is needed to
 	// write a schema. The full file keeps them, last; the small one leaves them out.
 	demote: ['guides/benchmarks', 'changelog'],

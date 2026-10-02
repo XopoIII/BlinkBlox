@@ -1,0 +1,325 @@
+---
+title: Coming from zap
+description: Moving a game from zap to BlinkBlox -- converting the config with --from zap, what the draft asks you to decide, and a bridge that keeps zap's call names while the call sites move.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+zap and BlinkBlox are the same kind of tool: a config compiled ahead of time into a server module and
+a client module that write buffers. The languages are close enough that a zap config converts
+mechanically, and the generated APIs are close enough that most call sites do not change at all.
+
+What does not convert is what zap has no way to say. zap leaves throttling to the game, so its config
+holds no rate limits, and the draft comes back with every event a client fires marked for one.
+
+This page was written against zap 0.6.29.
+
+## The short version
+
+<Steps>
+
+1. Install `blinkblox`. See [Installation](/BlinkBlox/getting-started/installation/).
+2. Convert the config: `blinkblox net.zap --from zap`. It writes `net.blink` beside it and prints
+   what you have to decide.
+3. Work through the `TODO(convert)` marks in the draft: a `Rate` for each event a client fires, an
+   upper bound for each length a client sends, and new output paths.
+4. Compile it: `blinkblox net`. Both tools can run in one game, each on its own remotes, so events
+   can move one at a time.
+5. Change the call sites that differ (below), or wrap the module in the [bridge](#a-bridge-for-the-call-sites)
+   and change them later.
+6. Install the server's handlers. See [Securing the server](/BlinkBlox/guides/securing-the-server/).
+
+</Steps>
+
+## Converting the config
+
+```sh
+blinkblox net.zap --from zap
+```
+
+The draft is written beside the config under the same name, with `.blink` for an extension. A file
+already there is not replaced unless `--yes` is passed. With `--check` nothing is written: the draft
+goes to standard output and the list of what is left to decide to standard error, so
+`blinkblox net.zap --from zap --check > draft.blink` captures the draft alone.
+
+For this config:
+
+```text title="net.zap"
+opt server_output = "src/server/Net.luau"
+opt client_output = "src/shared/Net.luau"
+
+type Item = struct {
+	id: u16,
+	name: string,
+}
+
+-- A player puts an item in a slot.
+event Equip = {
+	from: Client,
+	type: Reliable,
+	call: SingleAsync,
+	data: (slot: u8, item: Item),
+}
+
+event Inventory = {
+	from: Server,
+	type: Reliable,
+	call: ManyAsync,
+	data: Item[],
+}
+
+funct Price = {
+	call: Async,
+	args: u16,
+	rets: u32,
+}
+```
+
+it writes:
+
+```blink title="net.blink"
+-- Converted from zap 0.6.29 definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what zap's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+-- TODO(convert): zap writes its own modules to these paths; choose others.
+option ServerOutput = "src/server/Net.luau"
+option ClientOutput = "src/shared/Net.luau"
+-- zap checks what it sends unless write_checks is false; a schema checks only when asked.
+option WriteValidations = true
+
+-- TODO(convert): a client sends this; bound name (string length)
+struct Item { id: u16, name: string }
+
+-- A player puts an item in a slot.
+event Equip {
+	From: Client,
+	Type: Reliable,
+	Call: SingleAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (slot: u8, item: Item)
+}
+
+event Inventory {
+	From: Server,
+	Type: Reliable,
+	Call: ManyAsync,
+	Data: Item[]
+}
+
+function Price {
+	Yield: Coroutine,
+	-- TODO(convert): Rate: ?, Concurrency: ?
+	Data: u16,
+	Return: u32
+}
+```
+
+and prints:
+
+```text
+Draft written to net.blink.
+Before it is used:
+  - 1 event(s) a client fires with no Rate: Equip
+  - 1 function(s) a client calls with no Rate or Concurrency: Price
+  - 1 length(s) or value(s) a client sends with no bound; each is marked
+  - the output paths are zap's own: change them, or these modules replace zap's
+  - line 25: Price: a funct's call (Async or Sync) has no equivalent and was left out
+  - Set option RequireRates = true once every event a client fires has a Rate.
+  - On the server, set SetRateLimitHandler, SetDecodeErrorHandler, SetPacketDropHandler and SetListenerErrorHandler: they are how the game hears of a refusal.
+  - Check MaxPacketSize, MaxEventsPerPacket and InboundBytesPerSecond against what the game sends.
+```
+
+The draft always compiles. Everything it could not decide is a comment, never a number picked for
+you: a guessed rate limit would compile into a limit nobody chose.
+
+`Inventory` carries an unbounded `Item[]` and is not marked. The server fires it, so its length is
+the server's own; only what a client sends is marked.
+
+## Finishing the draft
+
+Each mark is one decision:
+
+```blink title="net.blink"
+option ServerOutput = "src/server/Network.luau"
+option ClientOutput = "src/shared/Network.luau"
+option WriteValidations = true
+option RequireRates = true
+
+struct Item { id: u16, name: string(1..32) }
+
+event Equip {
+	From: Client,
+	Type: Reliable,
+	Call: SingleAsync,
+	Rate: 5,
+	Burst: 10,
+	Data: (slot: u8, item: Item)
+}
+
+event Inventory {
+	From: Server,
+	Type: Reliable,
+	Call: ManyAsync,
+	Data: Item[..200]
+}
+
+function Price {
+	Yield: Coroutine,
+	Rate: 10,
+	Concurrency: 2,
+	Data: u16,
+	Return: u32
+}
+```
+
+- **`Rate`** is the events a second accepted from one player, and **`Burst`** how many may arrive at
+  once before the rate applies. See [events](/BlinkBlox/language/events/#rate-burst). A function
+  also takes [`Concurrency`](/BlinkBlox/language/functions/#concurrency): how many of one player's
+  calls the server runs at once.
+- **Bounds** go where zap's did, in the same syntax: `string(1..32)`, `Item[..200]`. See
+  [types](/BlinkBlox/language/types/).
+- **`RequireRates`** makes an event a client fires without a `Rate` a compile error, so the next one
+  added cannot be forgotten.
+
+## What converts, and what does not
+
+| zap | BlinkBlox | |
+|---|---|---|
+| `opt server_output`, `client_output`, `types_output` | `option ServerOutput`, `ClientOutput`, `TypesOutput` | The paths are kept, and marked: they are where zap's modules are. |
+| `opt casing` | `option Casing` | `PascalCase`, `camelCase` and `snake_case` become `Pascal`, `Camel` and `Snake`. |
+| `opt write_checks` | `option WriteValidations` | zap's default is on and a schema's is off, so the draft always writes it. |
+| `opt typescript`, `manual_event_loop`, `remote_scope`, `remote_folder` | `option Typescript`, `ManualReplication`, `RemoteScope`, `RemotesFolder` | |
+| `opt yield_type`, `async_lib` | each function's `Yield`, and `option FutureLibrary` or `PromiseLibrary` | The library is written without its `require(...)`. |
+| `opt call_default` | each event's `Call` | An event has to state it. |
+| every other `opt` | left out | Each is named in the list. |
+| `type X = struct { .. }` | `struct X { .. }` | |
+| `type X = enum { .. }`, `enum "tag" { .. }` | `enum X = { .. }`, `enum X = "tag" { .. }` | |
+| `type X = map { [K]: V }` | `map X = { [K]: V }` | |
+| `namespace X = { .. }` | `scope X { .. }` | Names through it are written the same: `X.Item`. |
+| `event X = { from, type, call, data }` | `event X { From, Type, Call, Data }` | `OrderedUnreliable` included. |
+| `funct X = { call, args, rets }` | `function X { Yield, Data, Return }` | `call` has no equivalent. |
+| numbers, `boolean`, `buffer`, `unknown`, ranges, `T[..]`, `T?` | the same | |
+| `string.utf8`, `string.binary` | `string` | Nothing checks that a string is UTF-8. |
+| `Instance.Part`, `Instance(Part)` | `Instance(Part)` | |
+| `Vector3`, `vector`, `vector(i16, i16, i16)` | `vector`, `vector<i16>` | A two-component vector sends Z as well; components of different types become `f32`. |
+| `AlignedCFrame` | `CFrame` | There is no axis-aligned encoding. |
+| `set { T }` | `map { [T]: boolean }` | |
+| `(A \| B)` | `unknown` | A union has no equivalent. `unknown` is not validated; a tagged enum is the checked form. |
+
+Three things change shape instead of name:
+
+- **An array or an optional of a struct cannot be named.** `type Items = Item[]` is written out as
+  `Item[]` wherever `Items` was used, which sends the same thing.
+- **A key written as a string that is not a name** -- `"display name"` -- becomes `display_name`.
+- **Comments** are carried over with the declaration that follows them. Those inside a declaration
+  move above it.
+
+Nothing is dropped silently: every row above that loses something is named in the list the converter
+prints, with the line it came from.
+
+## The call sites
+
+Most of them are already right.
+
+| | zap | BlinkBlox |
+|---|---|---|
+| Fire | `Fire`, `FireAll`, `FireExcept`, `FireList` | the same |
+| Fire to a set of players | `FireSet({ [Player] = true }, ...)` | `FireList({ Player }, ...)` |
+| Listen, one listener | `SetCallback(Listener)` | `On(Listener)` |
+| Listen, many listeners | `On(Listener)` | the same |
+| Poll | `Iter()` yields the values | `Iter()` yields an index first: `for Index, Player, Value in` |
+| Call a function | `Call(...)` | `Invoke(...)` |
+| Answer a function | `SetCallback(Listener)` | `On(Listener)` |
+| Send by hand | `SendEvents()` | `StepReplication()` |
+
+The whole generated API is in the [reference](/BlinkBlox/reference/generated-api/).
+
+### A bridge for the call sites
+
+To move the config first and the call sites later, wrap each module once. The wrapper gives every
+event and function zap's names on top of its own:
+
+```luau bridge title="ZapNames.luau"
+--- A BlinkBlox module under zap's names. Temporary: delete it once the call sites use On, Invoke,
+--- FireList and StepReplication themselves.
+local function IsEndpoint(Value)
+	return Value.Fire ~= nil or Value.On ~= nil or Value.Invoke ~= nil or Value.Iter ~= nil
+end
+
+local function ZapNames(Net)
+	local Zap = {}
+	for Name, Value in Net do
+		if type(Value) ~= "table" then
+			Zap[Name] = Value
+		elseif not IsEndpoint(Value) then
+			-- A scope, or one of the module's own tables.
+			Zap[Name] = ZapNames(Value)
+		else
+			local Endpoint = table.clone(Value)
+			Endpoint.SetCallback = Value.On
+			Endpoint.Call = Value.Invoke
+			if Value.FireList then
+				Endpoint.FireSet = function(Set, ...)
+					local List = {}
+					for Player in Set do
+						table.insert(List, Player)
+					end
+					Value.FireList(List, ...)
+				end
+			end
+			Zap[Name] = Endpoint
+		end
+	end
+
+	Zap.SendEvents = Net.StepReplication
+	return Zap
+end
+
+return ZapNames
+```
+
+```luau
+local Zap = require(ReplicatedStorage.ZapNames)(require(ServerScriptService.Network))
+
+Zap.Equip.SetCallback(function(Player, Slot, Item)
+	-- unchanged
+end)
+```
+
+The wrapper is untyped, so the call sites behind it lose their type checking until they move. The
+generated modules are strictly typed; the wrapper is not meant to stay.
+
+## Moving one event at a time
+
+Nothing forces the whole game across in one release. zap's modules and BlinkBlox's each create their
+own remotes, so both can be required in the same place:
+
+<Steps>
+
+1. Convert the config and keep only the events you are moving in the draft.
+2. Delete those events from the zap config, and compile both.
+3. Point their call sites at the new module.
+4. Repeat until the zap config is empty, then remove zap.
+
+</Steps>
+
+BlinkBlox's own server and client modules have to ship together: a client refuses to run against a
+server compiled from a different schema. See
+[wire compatibility](/BlinkBlox/reference/wire-compatibility/).
+
+## What a running game will notice
+
+- **A client that fires too fast is refused**, and the server is told through
+  `SetRateLimitHandler`. Under zap every event arrived. Choose rates an honest client never reaches.
+- **A packet the server refuses is reported**, with the player who sent it: through
+  `SetPacketDropHandler` when it is refused before it is read, and through `SetDecodeErrorHandler`
+  when an event in it does not decode, in which case the rest of that packet is dropped.
+- **A listener that errors is reported** through `SetListenerErrorHandler`, and the rest of the
+  packet is still delivered.
+
+[Securing the server](/BlinkBlox/guides/securing-the-server/) is the checklist for all of it, and
+[common pitfalls](/BlinkBlox/guides/common-pitfalls/) lists what tends to go wrong.

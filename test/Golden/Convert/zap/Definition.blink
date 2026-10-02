@@ -1,0 +1,53 @@
+-- Converted from zap 0.6.29 definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what zap's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+-- TODO(convert): zap writes its own modules to these paths; choose others.
+option ClientOutput = "../src/shared/zap/Client.luau"
+option ServerOutput = "../src/shared/zap/Server.luau"
+-- zap checks what it sends unless write_checks is false; a schema checks only when asked.
+option WriteValidations = true
+
+struct Entity {
+	id: u8,
+	x: u8,
+	y: u8,
+	z: u8,
+	orientation: u8,
+	animation: u8
+}
+
+event Booleans {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: boolean[0..1000]
+}
+
+event Entities {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: Entity[0..1000]
+}
+
+event BooleansRandom {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: boolean[0..1000]
+}
+
+event EntitiesRandom {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: Entity[0..1000]
+}

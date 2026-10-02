@@ -13,6 +13,7 @@ require("@self/Utility/Relaunch")(debug.info(1, "s"))
 
 local Attributes = require("./Modules/Attributes")
 local Compile = require("@self/Utility/Compile")
+local Convert = require("@self/Utility/Convert")
 local Watch = require("@self/Utility/Watch")
 
 ---- Settings ----
@@ -63,6 +64,10 @@ local ARGUMENTS: { [string]: Argument } = {
 	Profile = {
 		Aliases = { "-p", "--profile" },
 		Description = "Compile under a profile: dev, debug, test or release (the default). Takes a value.",
+	},
+	From = {
+		Aliases = { "--from" },
+		Description = "Read [CONFIG] as another tool's definitions and write a draft schema beside it. Takes a value: zap.",
 	},
 	OutputAst = {
 		Hidden = true,
@@ -155,13 +160,37 @@ if ProfileAt then
 	end
 end
 
+--> `--from` takes a value as well: the tool whose definitions [CONFIG] holds. See Utility/Convert.
+local From: string?
+local FromAt = table.find(RawArguments, "--from")
+if FromAt then
+	From = RawArguments[FromAt + 1]
+	local IsTool, Tools = Convert.IsTool(From)
+	if not IsTool then
+		print(Color(`Expected a tool after "--from": {Tools}`, "red"))
+		process.exit(1)
+	end
+end
+
 local Path: string?
 for Index, Argument in RawArguments do
-	if not IsFlag[Argument] and Index ~= (ProfileAt and ProfileAt + 1) then
+	if not IsFlag[Argument] and Index ~= (ProfileAt and ProfileAt + 1) and Index ~= (FromAt and FromAt + 1) then
 		Path = Argument
 		break
 	end
 end
+
+--> A draft is written once, from definitions that are not a schema: there is nothing to watch, no
+--> outputs to verify, and no diagnostics to report as JSON.
+for _, Other in { "Watch", "Verify", "Json" } do
+	if From and Arguments[Other] then
+		print(Color(`"--from" cannot be combined with "{ARGUMENTS[Other].Aliases[#ARGUMENTS[Other].Aliases]}"`, "red"))
+		process.exit(1)
+	end
+end
+
+--> `--from --check` prints the draft on standard output, and a banner in front of it is not a schema.
+local IsDraftOnOutput = From ~= nil and Arguments.Check
 
 --> Watch mode runs until it is stopped, so it never gets to the end of a JSON document.
 if Arguments.Json and Arguments.Watch then
@@ -182,7 +211,7 @@ end
 
 --> The banner is decoration, and it used to be the FIRST statement in this file -- printed before
 --> the flags that should have governed it were even looked at, so `--quiet` never suppressed it.
-if not Arguments.Silent then
+if not Arguments.Silent and not IsDraftOnOutput then
 	print(`{Color("BlinkBlox", "green")} {Version}`)
 end
 
@@ -208,7 +237,13 @@ if not Path then
 	return nil
 end
 
-if not Arguments.Watch then
+if From then
+	Convert.Convert(From, Path, {
+		Silent = Arguments.Silent,
+		YesToEverything = Arguments.YesToAll,
+		Check = Arguments.Check,
+	})
+elseif not Arguments.Watch then
 	local CompileOptions: Compile.CompileOptions = {
 		Debug = (_G.RELEASE == nil) or Arguments.Statistics,
 		Silent = Arguments.Silent,
