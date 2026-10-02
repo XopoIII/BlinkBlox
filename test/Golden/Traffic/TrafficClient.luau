@@ -916,6 +916,8 @@ local function SendPacket(From: number, To: number, FromInstances: number, ToIns
     local Buffer = buffer.create(To - From)
     buffer.copy(Buffer, 0, SendBuffer, From, To - From)
     Reliable:FireServer(Buffer, table.move(SendInstances, FromInstances + 1, ToInstances, 1, {}))
+    TrafficCounters[1] += To - From
+    TrafficCounters[2] += 1
 end
 
 --> The last frame's packet, filled again when the next is the same size. A remote serialises what it

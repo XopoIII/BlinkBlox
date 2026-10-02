@@ -148,27 +148,61 @@ function Traffic.Packet(Target: Blocks.Block, Unreliable: boolean)
 	end
 end
 
---- Counts the reliable flush in the context's template, after the line that fires it. The template
---- is fixed text, so the count goes in after an anchor, and an anchor that is missing or found twice
---- is an error here rather than a count that silently stops.
-local FLUSHES = {
-	Server = { "            Reliable:FireClient(Player, Buffer, Send.Instances)\n", "            " },
-	Client = { "        Reliable:FireServer(Buffer, SendInstances)\n", "        " },
+--- Counts the reliable flush in the context's template, after each line that fires the remote. The
+--- template is fixed text, so a count goes in after an anchor, and an anchor that is missing or found
+--- twice is an error here rather than a count that silently stops.
+---
+--- Every call the flush can make is listed, as `{ Anchor, Indent, Bytes, Packets }`: a call left out
+--- sends bytes the channel never counts, while the events in them are counted as they are fired, so
+--- an event came to more bytes than its whole channel. The server's broadcast batch was left out so,
+--- and the client's packets when its batch is cut. `FireAllClients` reaches every player in the game,
+--- so it counts the batch once for each; a diverged player's copy of the broadcast batch went out in
+--- their own packet and is in its `Used`.
+local FLUSHES: { [string]: { { string } } } = {
+	Server = {
+		{ "            Reliable:FireClient(Player, Buffer, Send.Instances)\n", "            ", "Used", "1" },
+		{
+			"            Reliable:FireAllClients(Buffer, SharedInstances)\n",
+			"            ",
+			"Shared * #Players:GetPlayers()",
+			"#Players:GetPlayers()",
+		},
+		{
+			"                    Reliable:FireClient(Player, Buffer, SharedInstances)\n",
+			"                    ",
+			"Shared",
+			"1",
+		},
+	},
+	Client = {
+		{ "        Reliable:FireServer(Buffer, SendInstances)\n", "        ", "Used", "1" },
+		{
+			"    Reliable:FireServer(Buffer, table.move(SendInstances, FromInstances + 1, ToInstances, 1, {}))\n",
+			"    ",
+			"To - From",
+			"1",
+		},
+	},
 }
 
 function Traffic.Template(Source: string): string
-	local Flush = FLUSHES[State.Context]
-	if not Enabled() or not Flush then
+	local Flushes = FLUSHES[State.Context]
+	if not Enabled() or not Flushes then
 		return Source
 	end
 
-	local Anchor, Indent = Flush[1], Flush[2]
-	local Start, Finish = string.find(Source, Anchor, 1, true)
-	assert(Start and Finish, "[BlinkBlox]: The reliable flush was not found in the template.")
-	assert(not string.find(Source, Anchor, Finish + 1, true), "[BlinkBlox]: The reliable flush was found twice.")
+	for _, Flush in Flushes do
+		local Anchor, Indent = Flush[1], Flush[2]
+		local Start, Finish = string.find(Source, Anchor, 1, true)
+		assert(Start and Finish, "[BlinkBlox]: A reliable flush was not found in the template.")
+		assert(not string.find(Source, Anchor, Finish + 1, true), "[BlinkBlox]: A reliable flush was found twice.")
 
-	local Count = `{Indent}TrafficCounters[{RELIABLE}] += Used\n{Indent}TrafficCounters[{RELIABLE + 1}] += 1\n`
-	return string.sub(Source, 1, Finish) .. Count .. string.sub(Source, Finish + 1)
+		local Count =
+			`{Indent}TrafficCounters[{RELIABLE}] += {Flush[3]}\n{Indent}TrafficCounters[{RELIABLE + 1}] += {Flush[4]}\n`
+		Source = string.sub(Source, 1, Finish) .. Count .. string.sub(Source, Finish + 1)
+	end
+
+	return Source
 end
 
 --- The counters, their types and the two functions that read and clear them, spliced into the module

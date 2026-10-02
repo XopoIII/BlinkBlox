@@ -7,6 +7,40 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.1.1 — 2026-10-02
+
+The generated modules change only under `option TrafficStats`, and only by the counting lines
+below; without the option a schema compiles to exactly what 1.1.0 produced. The wire does not
+change, so nothing needs recompiling for the other side's sake.
+
+### Fixed
+
+- **`GetTrafficStats().Reliable` left out the server's broadcast batch.** A reliable `FireAll` is
+  written once and sent at the flush, in one `FireAllClients` or to each player who has not taken it
+  in a packet of their own, and neither send was counted: only a player's own batch was. The events
+  in it were counted as they were fired, once per player, so a game that mostly broadcast saw an
+  event's `SentBytes` pass its whole channel's -- 97 `FireAll`s of a 19-byte event to one player
+  read 1843 bytes for the event and about 300 for `Reliable` and `Unreliable` together. The
+  broadcast batch now counts its bytes and one packet for every player it is sent to: all of
+  `Players:GetPlayers()` for a `FireAllClients`, and the players who did not diverge otherwise. A
+  diverged player's copy was already counted in their own packet and is not counted twice.
+- **The client's `Reliable` left out a batch cut into packets.** A frame past `MaxEventsPerPacket`,
+  `MaxPacketSize` or `MaxInstancesPerPacket` goes out as several packets, and the flush counted
+  none of them; each is now a packet with its bytes.
+- The unreliable channel was looked at and is unchanged: every unreliable send, a stream's and a
+  `Per: Player` stream's included, counts its channel as it is sent.
+
+### Upgrading
+
+- A game that reads `Reliable.Sent` or `Reliable.SentBytes` will see them rise to what was sent.
+  Event counts, the received side and every handler are as they were.
+
+### Tests
+
+- `test/TrafficChannels.luau` builds servers with three, two and no players: a frame of broadcasts,
+  a mix of diverged and undiverged players, and a cut client batch, each held to the exact bytes
+  the stub remote was fired with and to the channel never counting less than its events.
+
 ## 1.1.0 — 2026-10-02
 
 A release for games that are somewhere else: converters and guides for coming from zap, ByteNet,
