@@ -1,0 +1,168 @@
+-- Converted from Packet 1.7.0 definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what Packet's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-packet/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+struct Shape1 { Id: u16, Name: string(..255), Tint: Color3 }
+
+event Equip {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (u8, Shape1)
+}
+
+-- TODO(convert): a client sends this; bound the value (array length)
+event Contents {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: Shape1[]
+}
+
+event Clear {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync
+	-- TODO(convert): Rate: ?, Burst: ?
+}
+
+-- TODO(convert): a client sends this; bound the value (string length)
+event Player_Chat {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: string
+}
+
+event Move {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (CFrame, vector<i16>, vector<f24>, vector)
+}
+
+event Look {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (Vector2, f16, f24, f64)
+}
+
+event Counts {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (i8, i16, i24, i32)
+}
+
+event Sizes {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (u24, u32, f32, boolean)
+}
+
+event Packed {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (u8(..15)[2], boolean[8], struct { Boolean: boolean, Number: u8(..127) })
+}
+
+event Layout {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (UDim, UDim2, NumberRange, BrickColor, ColorSequence)
+}
+
+-- TODO(convert): a client sends this; bound #2 (buffer length)
+event Chunk {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (buffer(..255), buffer)
+}
+
+-- TODO(convert): a client sends this; bound #2 (unknown is not validated)
+event Pick {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (Instance, unknown)
+}
+
+-- TODO(convert): Packet wrote Packet.Region3 where this says unknown
+-- TODO(convert): Packet wrote Packet.Rect where this says unknown
+-- TODO(convert): a client sends this; bound #1 (unknown is not validated), #2 (unknown is not validated)
+event Region {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (unknown, unknown)
+}
+
+-- TODO(convert): Packet wrote Packet.EnumItem where this says unknown
+-- TODO(convert): Packet wrote Packet.Static1 where this says unknown
+-- TODO(convert): a client sends this; bound #1 (unknown is not validated), #2 (unknown is not validated)
+event Material {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (unknown, unknown)
+}
+
+-- TODO(convert): Packet wrote a table of types keyed by position where this says unknown
+-- TODO(convert): a client sends this; bound the value (unknown is not validated)
+event Pair {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: unknown
+}
+
+function Price {
+	-- TODO(convert): Packet does not say which side calls this; add From: Server if the server does
+	Yield: Coroutine,
+	-- TODO(convert): Rate: ?, Concurrency: ?
+	Data: u16,
+	Return: (u32, boolean)
+}
+
+function Ping {
+	-- TODO(convert): Packet does not say which side calls this; add From: Server if the server does
+	Yield: Coroutine
+	-- TODO(convert): Rate: ?, Concurrency: ?
+}

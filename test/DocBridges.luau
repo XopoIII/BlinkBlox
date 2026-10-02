@@ -12,6 +12,7 @@ local Isolated = require("./Isolated")
 local Shared = require("./Shared")
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
+local task = require("@lune/task")
 
 local ErrorPrint = Harness.ErrorPrint
 local RunClosure = Assertions.RunClosure
@@ -152,6 +153,72 @@ RunClosure("The ByteNet guide's bridge answers to ByteNet's names and argument o
 	Check("sendTo", Stock[1] == 1 and Stock[2] == 2, `the client heard {table.concat(Stock, ", ")}`)
 	--> An event has the members of its direction only: the schema decided, where ByteNet did not.
 	Check("Direction", Server.Equip.sendTo == nil and Client.Shop.Stock.send == nil, "a send the schema forbids exists")
+end)
+
+--> Packet's packets carry several values by position, and one with a response is a function.
+local SEVERAL_VALUES = [[
+event Equip {
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 100,
+	Data: (u8, string(..16))
+}
+
+event Stock {
+	From: Server,
+	Type: Reliable,
+	Call: ManyAsync,
+	Data: u16
+}
+
+function Price {
+	Yield: Coroutine,
+	Rate: 100,
+	Data: u16,
+	Return: u32
+}
+]]
+
+RunClosure("The Packet guide's bridge answers to Packet's methods, signals and invokes", function()
+	local PacketNames = luau.load(Bridge("coming-from-packet"))()
+	local Pair = Isolated.Build(Isolated.Parse(SEVERAL_VALUES), "BRIDGEPACKET")
+	local Server, Client = PacketNames(Pair.Server, true), PacketNames(Pair.Client, false)
+
+	local Heard: { any } = {}
+	local Connection = Server.Equip.OnServerEvent:Connect(function(Player, Slot, Name)
+		Heard = { Player, Slot, Name }
+	end)
+
+	local Stock: { number } = {}
+	Client.Stock.OnClientEvent:Connect(function(Value)
+		table.insert(Stock, Value)
+	end)
+
+	Server.Price.OnServerInvoke = function(_Player, Id: number)
+		return Id * 2
+	end
+
+	local Price: number?
+	task.spawn(function()
+		Price = Client.Price:Fire(21)
+	end)
+
+	Client.Equip:Fire(3, "sword")
+	Server.Stock:FireClient(Shared.Player, 1)
+	Server.Stock:Fire(2)
+	Exchange(Pair)
+	--> The answer was batched while the server read the call; a second step carries it back.
+	Exchange(Pair)
+
+	Check("Connect", Heard[1] == Shared.Player and Heard[2] == 3 and Heard[3] == "sword", "the server heard nothing")
+	Check("Fire", Stock[1] == 1 and Stock[2] == 2, `the client heard {table.concat(Stock, ", ")}`)
+	Check("Invoke", Price == 42, `the call returned {Price}`)
+
+	Connection:Disconnect()
+	Client.Equip:Fire(4, "bow")
+	Exchange(Pair)
+	Check("Disconnect", Heard[2] == 3, "a disconnected listener was still called")
 end)
 
 return {}

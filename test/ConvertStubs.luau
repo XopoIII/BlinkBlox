@@ -12,6 +12,7 @@ local Assertions = require("./Assertions")
 local ByteNet = require("@compiler/Convert/Stubs/ByteNet")
 local Harness = require("./Harness")
 local Library = require("@compiler/Library")
+local Packet = require("@compiler/Convert/Stubs/Packet")
 local Print = require("@compiler/Convert/Print")
 local Sandbox = require("@compiler/CLI/Utility/Sandbox")
 local fs = require("@lune/fs")
@@ -25,6 +26,8 @@ type Case = { Stub: Sandbox.Stub, Golden: string, Path: string }
 local CASES: { Case } = {
 	{ Stub = ByteNet, Golden = "bytenet/Scenarios", Path = "../benchmark/runtime/rivals/modes/bytenet.luau" },
 	{ Stub = ByteNet, Golden = "bytenet/Packets", Path = "./Sources/Convert/ByteNet/Packets.luau" },
+	{ Stub = Packet, Golden = "packet/Scenarios", Path = "../benchmark/runtime/rivals/modes/packet.luau" },
+	{ Stub = Packet, Golden = "packet/Packets", Path = "./Sources/Convert/Packet/Packets.luau" },
 }
 
 local function Check(Name: string, Condition: boolean, Detail: string)
@@ -115,6 +118,48 @@ RunClosure("The sandbox gives definitions no way to the disk, the network or a p
 	--> `@lune/fs` is answered with a placeholder like any module that is not there.
 	Check("Lune", Unfollowed[1] == "fs", `the require was answered with something: {Unfollowed[1]}`)
 	Check("Draft", #Collect().Body == 0, "something was defined")
+end)
+
+RunClosure("Packet: a packet with a response is a function, and its caller is asked for", function()
+	local Text, Checklist = Print.Render(Sandbox.Record("./Sources/Convert/Packet/Packets.luau", Packet))
+	local List = table.concat(Checklist, "\n")
+
+	Check("Function", Has(Text, "function Price {") and Has(Text, "Return: (u32, boolean)"), Text)
+	Check("Caller", Has(List, "2 function(s) whose caller you must state: Price, Ping"), List)
+	Check("Events", Has(List, "15 event(s) whose direction you must state"), List)
+end)
+
+RunClosure("Packet: a one-byte length is kept as a bound, and a two-byte one is asked about", function()
+	local Text = Print.Render(Sandbox.Record("./Sources/Convert/Packet/Packets.luau", Packet))
+
+	Check("Short", Has(Text, "Name: string(..255)") and Has(Text, "(buffer(..255), buffer)"), Text)
+	Check("Long", Has(Text, "bound #2 (buffer length)"), "the long buffer was not marked")
+end)
+
+RunClosure("Packet: types with no equivalent and a name that is not one are each said", function()
+	local Text, Checklist = Print.Render(Sandbox.Record("./Sources/Convert/Packet/Packets.luau", Packet))
+	local List = table.concat(Checklist, "\n")
+
+	Check("Name", Has(Text, "event Player_Chat {") and Has(List, '"Player Chat" is not a name'), List)
+	for _, Missing in { "Packet.Region3", "Packet.Rect", "Packet.EnumItem", "Packet.Static1" } do
+		Check(Missing, Has(List, Missing) and Has(Text, `Packet wrote {Missing} where this says unknown`), List)
+	end
+	Check("Positional", Has(List, "a table of several types with no names"), List)
+end)
+
+RunClosure("Packet: a type name the stub does not know fails, naming the version", function()
+	local Path = Definitions(
+		"ConvertPacketUnknown",
+		'local Packet = require("@pkg/Packet")\nreturn Packet("A", Packet.NumberU64)\n'
+	)
+	local Success, Failure = pcall(Sandbox.Record, Path, Packet)
+
+	Check("Refusal", not Success, "an unknown type was answered")
+	Check(
+		"Reason",
+		Has(tostring(Failure), "Packet.NumberU64 is not known") and Has(tostring(Failure), "1.7.0"),
+		tostring(Failure)
+	)
 end)
 
 return {}

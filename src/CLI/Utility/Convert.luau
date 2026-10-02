@@ -15,6 +15,7 @@ local stdio = require("@lune/stdio")
 local ByteNet = require("../../Convert/Stubs/ByteNet")
 local Draft = require("../../Convert/Draft")
 local Library = require("../../Library")
+local Packet = require("../../Convert/Stubs/Packet")
 local PathParser = require("../../Modules/Path")
 local Print = require("../../Convert/Print")
 local Sandbox = require("./Sandbox")
@@ -55,6 +56,13 @@ local TOOLS: { [string]: Tool } = {
 		Version = ByteNet.VERSION,
 		Read = function(Path)
 			return Sandbox.Record(Path, ByteNet)
+		end,
+	},
+	packet = {
+		Name = Packet.NAME,
+		Version = Packet.VERSION,
+		Read = function(Path)
+			return Sandbox.Record(Path, Packet)
 		end,
 	},
 }
