@@ -51,6 +51,14 @@ upgrading.
 - **A guide, [Coming from QuickNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-quicknet/)**,
   with a wrapper that answers to `:FireServer`, `:FireClient`, `:FireAllClients`,
   `OnServerEvent:Connect` and `:InvokeServer`.
+- **`--from warp` records Warp 1.1.0-pre7 schemas**, the same way: each `useSchema` becomes an event.
+  Warp decides an event's direction and its reliability where it is fired, so the draft asks for
+  both. An event the definitions name and give no schema -- in `reg_namespaces`, or by connecting to
+  it -- is kept with `unknown` for its data and said to be; a `custom_datatype` and the types with no
+  equivalent are named. Schemas handed over from a table come out in alphabetical order, so a draft
+  is the same on every run.
+- **A guide, [Coming from Warp](https://xopoiii.github.io/BlinkBlox/guides/coming-from-warp/)**, with a
+  wrapper that takes an event's name as `Fire`, `Fires` and `Connect` do.
 - **The converter is loaded only under `--from`**, so a compile does not read it.
 - **A guide, [Coming from zap](https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/)**: the
   conversion, a table of what maps to what, the call sites that differ, and a short wrapper that

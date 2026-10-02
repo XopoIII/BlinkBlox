@@ -1,0 +1,303 @@
+---
+title: Coming from Warp
+description: Moving a game from Warp to BlinkBlox -- recording its schemas with --from warp, stating each event's direction and reliability, and a bridge that keeps Warp's Fire, Fires and Connect by name while the call sites move.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Warp's events are names. A game fires `"Hit"` and connects to `"Hit"`, and gives the name its types
+by calling `useSchema`. BlinkBlox compiles a schema ahead of time into a server module and a client
+module, in which each event is a table of its own. So the schemas become one schema, and the calls
+by name go to the generated modules.
+
+`blinkblox --from warp` does the first half: it runs your definitions against a stand-in for Warp
+that records every `useSchema` instead of sending anything, and writes them out as a schema.
+
+Warp's definitions say the least of the libraries BlinkBlox reads. Which side sends an event,
+whether it is reliable and how often a client may fire it are all decided where the event is fired,
+so the draft asks you for all three.
+
+This page was written against Warp 1.1.0-pre7.
+
+## The short version
+
+<Steps>
+
+1. Install `blinkblox`. See [Installation](/BlinkBlox/getting-started/installation/).
+2. Record the definitions: `blinkblox Remotes.luau --from warp`. It writes `Remotes.blink` beside
+   the file and prints what you have to decide.
+3. Work through the `TODO(convert)` marks: the direction and the reliability of each event, a `Rate`
+   for each one a client fires, an upper bound for each length a client sends, and the two output
+   paths.
+4. Compile it: `blinkblox Remotes`. Both libraries can run in one game, each on its own remotes, so
+   events can move one at a time.
+5. Change the call sites (below), or wrap the modules in the [bridge](#a-bridge-for-the-call-sites)
+   and change them later.
+6. Install the server's handlers. See [Securing the server](/BlinkBlox/guides/securing-the-server/).
+
+</Steps>
+
+## Recording the definitions
+
+```sh
+blinkblox Remotes.luau --from warp
+```
+
+<Aside type="caution" title="The file is run">
+Definitions are code, so the command runs the file, as `require` would. It runs with a stand-in for
+Warp, placeholders for `game`, `script` and the other Roblox globals, and no filesystem, network or
+process library. Point it at your own definitions.
+</Aside>
+
+Point it at the module that calls `useSchema`. A `require` whose path, alias or Instance ends in
+`Warp` gets the stand-in, a module beside the file is run too, and any other `require` gets a
+placeholder and is named in the printed list. `Warp.Server()` and `Warp.Client()` both answer, so it
+does not matter which side the file was written for. The draft is written beside the file with
+`.blink` for an extension, and is not replaced without `--yes`; `--check` prints it instead. The
+[command line page](/BlinkBlox/getting-started/cli/#converting-another-tools-definitions) has the
+details.
+
+For these definitions:
+
+```luau title="Remotes.luau"
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Warp = require(ReplicatedStorage.Warp)
+
+local Server = Warp.Server()
+local Schema = Server.Schema
+
+Server.useSchema("Hit", Schema.struct({
+	target = Schema.instance,
+	damage = Schema.u8,
+	note = Schema.string,
+}))
+Server.useSchema("Health", Schema.u8)
+
+return Server
+```
+
+it writes:
+
+```blink title="Remotes.blink"
+-- Converted from Warp 1.1.0-pre7 definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what Warp's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-warp/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+event Health {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: u8
+}
+
+-- TODO(convert): a client sends this; bound note (string length)
+event Hit {
+	-- TODO(convert): Warp does not say which side sends this; say it here
+	From: Client,
+	-- TODO(convert): Warp does not say whether this is reliable; say it here
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct { damage: u8, note: string, target: Instance }
+}
+```
+
+and prints:
+
+```text
+Draft written to Remotes.blink.
+Before it is used:
+  - 2 event(s) whose direction you must state: Health, Hit
+  - 2 event(s) whose reliability you must state: Health, Hit
+  - 2 event(s) a client fires with no Rate: Health, Hit
+  - 1 length(s) or value(s) a client sends with no bound; each is marked
+  - Add option ServerOutput and option ClientOutput: where the two modules are written.
+  - Set option RequireRates = true once every event a client fires has a Rate.
+  - On the server, set SetRateLimitHandler, SetDecodeErrorHandler, SetPacketDropHandler and SetListenerErrorHandler: they are how the game hears of a refusal.
+  - Check MaxPacketSize, MaxEventsPerPacket and InboundBytesPerSecond against what the game sends.
+```
+
+The draft always compiles, and what it could not know is a comment, never a guess. The events are in
+alphabetical order: definitions usually hand their schemas over from a table, which keeps none.
+
+### Events with no schema
+
+Warp sends an event that has no schema too, packing whatever it is given. Such an event has no types
+to record, and the draft holds it only if the definitions name it -- in `reg_namespaces`, or by
+connecting to it -- as an event whose data is `unknown`. `unknown` is not validated, so give each one
+a type.
+
+An event that is only ever named where it is fired is not in the draft at all. Add it by hand: the
+call sites say what it carries.
+
+## Stating the direction and the reliability
+
+Both are arguments in Warp: `Server.Fire("Health", false, Player, 80)` sends `Health` unreliably to
+one player, and nothing stops the next call from sending it reliably, or a client from firing it. A
+BlinkBlox event has one direction and one reliability, written once.
+
+Until you say otherwise the draft writes `From: Client`, the direction that is checked and rate
+limited, and `Type: Reliable`. State each, and delete the `Rate` mark from what the server sends:
+
+```blink title="Remotes.blink"
+option ServerOutput = "src/server/Network.luau"
+option ClientOutput = "src/shared/Network.luau"
+option RequireRates = true
+
+event Health {
+	From: Server,
+	Type: Unreliable,
+	Call: ManyAsync,
+	Data: u8
+}
+
+event Hit {
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 10,
+	Data: struct { damage: u8, note: string(..64), target: Instance }
+}
+```
+
+An event the game sends both ways, or both reliably and not, becomes two events.
+
+[`Rate` and `Burst`](/BlinkBlox/language/events/#rate-burst) are the events a second accepted from
+one player and how many may arrive at once. Bounds are written on the type: `string(..64)`,
+`u8[..16]`. See [types](/BlinkBlox/language/types/).
+
+## What converts, and what does not
+
+| Warp | BlinkBlox | |
+|---|---|---|
+| `useSchema("Name", T)` | `event Name { Data: T }` | |
+| `u8`, `u16`, `u32`, `i8`, `i16`, `i32` | the same | |
+| `f16`, `f32`, `f64` | the same | |
+| `boolean`, `string`, `buffer`, `instance` | `boolean`, `string`, `buffer`, `Instance` | |
+| `vector3`, `vector3int16` | `vector<f16>`, `vector<i16>` | Warp sends a Vector3's components as `f16`. |
+| `vector2`, `vector2int16` | `Vector2` | |
+| `cframe`, `color3`, `color3f16` | `CFrame`, `Color3` | |
+| `udim`, `udim2`, `numberrange`, `colorsequence`, `brickcolor`, `tweeninfo`, `datetime` | `UDim`, `UDim2`, `NumberRange`, `ColorSequence`, `BrickColor`, `TweenInfo`, `DateTime` | |
+| `Schema.struct({ .. })` | `struct { .. }` | Fields in alphabetical order, as Warp sorts them. |
+| `Schema.array(T)`, `Schema.optional(T)`, `Schema.map(K, V)` | `T[]`, `T?`, `map { [K]: V }` | |
+| `rect`, `ray`, `numbersequence`, `physicalproperties`, `font` | `unknown` | No equivalent; each use is named in the list. |
+| a `custom_datatype` | `unknown` | Its reader and writer are functions, which a schema has no way to hold. |
+
+A struct used by more than one event is declared once, as `Shape1`, `Shape2` and so on: a function
+that builds a struct gives it no name the converter can see, so choose one. A name the stand-in does
+not know stops the command and says so.
+
+A request made with `Invoke` is a [function](/BlinkBlox/language/functions/). Warp answers it from
+the same `Connect` an event uses, so the definitions do not tell the two apart: change such an
+`event` into a `function`, with the listener's return values as its `Return`.
+
+## The call sites
+
+| | Warp | BlinkBlox |
+|---|---|---|
+| Client to server | `Client.Fire("Hit", true, ...)` | `Net.Hit.Fire(...)` |
+| Server to one player | `Server.Fire("Health", false, Player, ...)` | `Net.Health.Fire(Player, ...)` |
+| Server to everyone | `Server.Fires("Health", false, ...)` | `Net.Health.FireAll(...)` |
+| Server to all but some | `Server.FireExcept("Health", false, { Player }, ...)` | `Net.Health.FireExcept(Player, ...)`, or `FireList` |
+| Listen | `Server.Connect("Hit", Listener)` | `Net.Hit.On(Listener)` |
+| Call | `Client.Invoke("Price", Timeout, ...)` | `Net.Price.Invoke(...)` |
+
+The name and the reliability leave the call: the name is the table the call is made on, and the
+reliability is the schema's. The generated modules are typed, so a mistyped name is something the
+type checker points at, not an event that never arrives. There is no `awaitReady` to call.
+
+The whole generated API is in the [reference](/BlinkBlox/reference/generated-api/).
+
+### A bridge for the call sites
+
+To move the definitions first and the call sites later, wrap each module once. The wrapper takes the
+event's name as Warp does:
+
+```luau bridge title="WarpNames.luau"
+--- A BlinkBlox module under Warp's calls by name. Temporary: delete it once the call sites use
+--- Fire, FireAll and On themselves.
+local function WarpNames(Net, IsServer)
+	local Side = {}
+
+	local function Event(Name)
+		local Found = Net[Name]
+		if type(Found) ~= "table" then
+			error(`"{Name}" is not an event of the schema`, 3)
+		end
+		return Found
+	end
+
+	-- The reliability passed here is not used: the schema states it once.
+	if IsServer then
+		function Side.Fire(Name, _Reliable, Player, ...)
+			Event(Name).Fire(Player, ...)
+		end
+
+		function Side.Fires(Name, _Reliable, ...)
+			Event(Name).FireAll(...)
+		end
+	else
+		function Side.Fire(Name, _Reliable, ...)
+			Event(Name).Fire(...)
+		end
+	end
+
+	function Side.Connect(Name, Listener)
+		return { Connected = true, Disconnect = Event(Name).On(Listener) }
+	end
+
+	return Side
+end
+
+return WarpNames
+```
+
+```luau
+local Server = require(ReplicatedStorage.WarpNames)(require(ServerScriptService.Network), true)
+
+Server.Connect("Hit", function(Player, Data)
+	-- unchanged
+end)
+```
+
+Pass `true` on the server and `false` on the client. A call the schema does not allow -- the server
+firing an event declared `From: Client` -- fails where it is made, where under Warp it was sent.
+`FireExcept`, `Invoke`, `Once` and `Wait` are left for the call sites to change.
+
+The wrapper is untyped, so the call sites behind it lose their type checking until they move.
+
+## Moving one event at a time
+
+Warp and BlinkBlox each create their own remotes, so both can run in the same game:
+
+<Steps>
+
+1. Record the definitions and keep only the events you are moving in the draft.
+2. Remove their `useSchema` calls from the Warp definitions.
+3. Point their call sites at the new modules.
+4. Repeat until no event is left, then remove Warp.
+
+</Steps>
+
+BlinkBlox's own server and client modules have to ship together: a client refuses to run against a
+server compiled from a different schema. See
+[wire compatibility](/BlinkBlox/reference/wire-compatibility/).
+
+## What a running game will notice
+
+- **A client that fires too fast is refused, one event at a time**, and the server is told through
+  `SetRateLimitHandler`. Choose rates an honest client never reaches.
+- **A packet the server refuses is reported**, with the player who sent it: through
+  `SetPacketDropHandler` when it is refused before it is read, and through `SetDecodeErrorHandler`
+  when an event in it does not decode.
+- **A listener that errors is reported** through `SetListenerErrorHandler`.
+- **An event has one direction and one reliability.**
+
+[Securing the server](/BlinkBlox/guides/securing-the-server/) is the checklist for all of it, and
+[common pitfalls](/BlinkBlox/guides/common-pitfalls/) lists what tends to go wrong.

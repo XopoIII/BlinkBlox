@@ -20,6 +20,7 @@ local PathParser = require("../../Modules/Path")
 local Print = require("../../Convert/Print")
 local QuickNet = require("../../Convert/Stubs/QuickNet")
 local Sandbox = require("./Sandbox")
+local Warp = require("../../Convert/Stubs/Warp")
 local Zap = require("../../Convert/Zap")
 
 ---- Settings ----
@@ -71,6 +72,13 @@ local TOOLS: { [string]: Tool } = {
 		Version = QuickNet.VERSION,
 		Read = function(Path)
 			return Sandbox.Record(Path, QuickNet)
+		end,
+	},
+	warp = {
+		Name = Warp.NAME,
+		Version = Warp.VERSION,
+		Read = function(Path)
+			return Sandbox.Record(Path, Warp)
 		end,
 	},
 }
