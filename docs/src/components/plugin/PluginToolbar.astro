@@ -1,7 +1,9 @@
 ---
 // The plugin's toolbar in Studio's Plugins tab: one group, "BlinkBlox Suite", with one button,
 // "Editor" (plugin/src/init.server.luau). The button stays highlighted while the editor is open.
-import Icon from './Icon.astro';
+// The button's icon is the project logo, the same image the plugin uploads to Roblox.
+import { Image } from 'astro:assets';
+import logo from '../../assets/logo.png';
 
 interface Props {
 	label: string;
@@ -20,7 +22,7 @@ const { label, caption, active = false } = Astro.props;
 		<div class="bbp-toolbar-ribbon">
 			<div class="bbp-toolbar-group">
 				<div class:list={['bbp-toolbar-button', { 'bbp-toolbar-button-active': active }]}>
-					<Icon name="editor" size={30} />
+					<Image src={logo} alt="" width={30} height={30} />
 					<span>Editor</span>
 				</div>
 				<div class="bbp-toolbar-group-name">BlinkBlox Suite</div>

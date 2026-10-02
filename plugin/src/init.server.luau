@@ -39,7 +39,7 @@ local EXPAND_TWEEN = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirect
 ---- Constants ----
 
 local Toolbar = plugin:CreateToolbar("BlinkBlox Suite")
-local EditorButton = Toolbar:CreateButton("Editor", "Opens the configuration editor", "rbxassetid://118423040995617")
+local EditorButton = Toolbar:CreateButton("Editor", "Opens the configuration editor", "rbxassetid://82123176343108")
 EditorButton.ClickableWhenViewportHidden = true
 
 local Template = script.Widget
