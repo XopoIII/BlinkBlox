@@ -1,0 +1,32 @@
+-- Converted from Packet 1.7.0 definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what Packet's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-packet/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+event Snapshot {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct {
+		crouched: boolean,
+		health: u8,
+		id: u16,
+		moving: boolean,
+		x: f32,
+		y: f32,
+		z: f32
+	}
+}
+
+event Touch {
+	-- TODO(convert): Packet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (Instance, u8)
+}

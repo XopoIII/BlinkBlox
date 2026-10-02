@@ -33,6 +33,15 @@ upgrading.
 - **A guide, [Coming from ByteNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-bytenet/)**,
   with a wrapper that answers to `send`, `sendTo`, `sendToAll` and `listen` and turns the arguments
   around: the player goes first in a schema's calls.
+- **`--from packet` records Packet 1.7.0 definitions**, the same way. Packet's types are read as
+  Packet reads them: a table holding one type is an array and any other a struct. The one-byte
+  length of `String` and `Buffer` is a bound and is kept as `string(..255)`; the `Long` ones are
+  marked when a client sends them. A packet with a `Response` becomes a function, and since Packet
+  lets either side call it, the draft asks which does. `Rect`, `Region3`, `NumberSequence`,
+  `EnumItem`, `Characters` and the `Static` types have no equivalent, and each use is named.
+- **A guide, [Coming from Packet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-packet/)**,
+  with a wrapper that answers to `:Fire`, `:FireClient`, `OnServerEvent:Connect` and
+  `OnServerInvoke`.
 - **The converter is loaded only under `--from`**, so a compile does not read it.
 - **A guide, [Coming from zap](https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/)**: the
   conversion, a table of what maps to what, the call sites that differ, and a short wrapper that

@@ -22,6 +22,7 @@ type State = {
 	MissingLimits: { string },
 	Unbounded: number,
 	Directions: { string },
+	Callers: { string },
 	Reliabilities: { string },
 }
 
@@ -232,6 +233,13 @@ local function FunctionDeclaration(State: State, Declaration: Declaration, Inden
 	local Entries: { string } = {}
 	if Declaration.From == "Server" then
 		table.insert(Entries, "From: Server")
+	elseif Declaration.From == nil then
+		--> Written as the default, a client calling the server: the half that is checked and limited.
+		table.insert(State.Callers, Path)
+		table.insert(
+			Entries,
+			`{TODO} {State.Draft.Tool} does not say which side calls this; add From: Server if the server does`
+		)
 	end
 	table.insert(Entries, `Yield: {Declaration.Yield or "Coroutine"}`)
 
@@ -322,6 +330,9 @@ local function Checklist(State: State): { string }
 	if #State.Directions > 0 then
 		table.insert(Items, Counted(State.Directions, "event(s) whose direction you must state"))
 	end
+	if #State.Callers > 0 then
+		table.insert(Items, Counted(State.Callers, "function(s) whose caller you must state"))
+	end
 	if #State.Reliabilities > 0 then
 		table.insert(Items, Counted(State.Reliabilities, "event(s) whose reliability you must state"))
 	end
@@ -371,6 +382,7 @@ function Print.Render(Source: Draft.Draft): (string, { string })
 		MissingLimits = {},
 		Unbounded = 0,
 		Directions = {},
+		Callers = {},
 		Reliabilities = {},
 	}
 
