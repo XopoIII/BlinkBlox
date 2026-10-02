@@ -12,10 +12,12 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local stdio = require("@lune/stdio")
 
+local ByteNet = require("../../Convert/Stubs/ByteNet")
 local Draft = require("../../Convert/Draft")
 local Library = require("../../Library")
 local PathParser = require("../../Modules/Path")
 local Print = require("../../Convert/Print")
+local Sandbox = require("./Sandbox")
 local Zap = require("../../Convert/Zap")
 
 ---- Settings ----
@@ -31,7 +33,8 @@ type Tool = {
 	--- The tool as its users write it, and the version the converter reads.
 	Name: string,
 	Version: string,
-	Read: (Source: string) -> Draft.Draft,
+	--- Reads the definitions at a path. A config is parsed; a Luau module is run against a stub.
+	Read: (Path: string) -> Draft.Draft,
 }
 
 ---- Constants ----
@@ -40,7 +43,20 @@ local Utility = {}
 
 --- Keyed by what follows `--from`.
 local TOOLS: { [string]: Tool } = {
-	zap = { Name = "zap", Version = Zap.VERSION, Read = Zap.Parse },
+	zap = {
+		Name = "zap",
+		Version = Zap.VERSION,
+		Read = function(Path)
+			return Zap.Parse(fs.readFile(Path))
+		end,
+	},
+	bytenet = {
+		Name = ByteNet.NAME,
+		Version = ByteNet.VERSION,
+		Read = function(Path)
+			return Sandbox.Record(Path, ByteNet)
+		end,
+	},
 }
 
 ---- Private Functions ----
@@ -88,7 +104,7 @@ function Utility.Convert(ToolName: string, Path: string, Options: ConvertOptions
 		Refuse(`No definitions at "{Path}".`)
 	end
 
-	local Read, Result = pcall(Tool.Read, fs.readFile(Path))
+	local Read, Result = pcall(Tool.Read, Path)
 	if not Read then
 		Refuse(`{Path} could not be read as {Tool.Name} {Tool.Version} definitions: {Result}`)
 	end

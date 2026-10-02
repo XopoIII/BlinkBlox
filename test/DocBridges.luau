@@ -107,4 +107,51 @@ RunClosure("The zap guide's bridge answers to zap's names", function()
 	Check("Fire", Server.Shop.Stock.Fire == Pair.Server.Shop.Stock.Fire, "the module's own names are gone")
 end)
 
+--> ByteNet's packets carry one value and name the player last, so the schema's events do too and
+--> the bridge has to turn each call around.
+local ONE_VALUE = [[
+event Equip {
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 100,
+	Data: struct { slot: u8, name: string(..16) }
+}
+
+scope Shop {
+	event Stock {
+		From: Server,
+		Type: Reliable,
+		Call: ManyAsync,
+		Data: u16
+	}
+}
+]]
+
+RunClosure("The ByteNet guide's bridge answers to ByteNet's names and argument order", function()
+	local ByteNetNames = luau.load(Bridge("coming-from-bytenet"))()
+	local Pair = Isolated.Build(Isolated.Parse(ONE_VALUE), "BRIDGEBYTENET")
+	local Server, Client = ByteNetNames(Pair.Server, true), ByteNetNames(Pair.Client, false)
+
+	local Heard: { any } = {}
+	Server.Equip.listen(function(Data, Player)
+		Heard = { Data.slot, Data.name, Player }
+	end)
+
+	local Stock: { number } = {}
+	Client.Shop.Stock.listen(function(Value)
+		table.insert(Stock, Value)
+	end)
+
+	Client.Equip.send({ slot = 3, name = "sword" })
+	Server.Shop.Stock.sendTo(1, Shared.Player)
+	Server.Shop.Stock.sendToList(2, { Shared.Player })
+	Exchange(Pair)
+
+	Check("listen", Heard[1] == 3 and Heard[2] == "sword" and Heard[3] == Shared.Player, "the server heard nothing")
+	Check("sendTo", Stock[1] == 1 and Stock[2] == 2, `the client heard {table.concat(Stock, ", ")}`)
+	--> An event has the members of its direction only: the schema decided, where ByteNet did not.
+	Check("Direction", Server.Equip.sendTo == nil and Client.Shop.Stock.send == nil, "a send the schema forbids exists")
+end)
+
 return {}
