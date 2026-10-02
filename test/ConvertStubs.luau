@@ -14,6 +14,7 @@ local Harness = require("./Harness")
 local Library = require("@compiler/Library")
 local Packet = require("@compiler/Convert/Stubs/Packet")
 local Print = require("@compiler/Convert/Print")
+local QuickNet = require("@compiler/Convert/Stubs/QuickNet")
 local Sandbox = require("@compiler/CLI/Utility/Sandbox")
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
@@ -28,6 +29,8 @@ local CASES: { Case } = {
 	{ Stub = ByteNet, Golden = "bytenet/Packets", Path = "./Sources/Convert/ByteNet/Packets.luau" },
 	{ Stub = Packet, Golden = "packet/Scenarios", Path = "../benchmark/runtime/rivals/modes/packet.luau" },
 	{ Stub = Packet, Golden = "packet/Packets", Path = "./Sources/Convert/Packet/Packets.luau" },
+	{ Stub = QuickNet, Golden = "quicknet/Scenarios", Path = "../benchmark/runtime/rivals/modes/quicknet.luau" },
+	{ Stub = QuickNet, Golden = "quicknet/Events", Path = "./Sources/Convert/QuickNet/Events.luau" },
 }
 
 local function Check(Name: string, Condition: boolean, Detail: string)
@@ -159,6 +162,45 @@ RunClosure("Packet: a type name the stub does not know fails, naming the version
 		"Reason",
 		Has(tostring(Failure), "Packet.NumberU64 is not known") and Has(tostring(Failure), "1.7.0"),
 		tostring(Failure)
+	)
+end)
+
+RunClosure("QuickNet: a rate limit is carried, the default is written, and a lifted one is asked for", function()
+	local Text, Checklist = Print.Render(Sandbox.Record("./Sources/Convert/QuickNet/Events.luau", QuickNet))
+	local List = table.concat(Checklist, "\n")
+
+	--> SetRateLimit(10, 1), then (120, 2) on Move, and no call at all on Contents.
+	Check("Set", Has(Text, "Rate: 10,\n\tData: (u8, Shape1)"), Text)
+	Check("Window", Has(Text, "Type: Unreliable,\n\tCall: ManyAsync,\n\tRate: 60,"), Text)
+	Check("Default", Has(Text, "Rate: 60,\n\tData: Shape1[]"), Text)
+	Check("Lifted", Has(List, "1 event(s) a client fires with no Rate: Flood"), List)
+end)
+
+RunClosure("QuickNet: each kind of table is the type it stands for", function()
+	local Text = Print.Render(Sandbox.Record("./Sources/Convert/QuickNet/Events.luau", QuickNet))
+
+	Check("Static array", Has(Text, "Data: f32[3]"), Text)
+	Check("Uniform dictionary", Has(Text, "Data: map { [string(..255)]: u32 }"), Text)
+	Check("Nested", Has(Text, "Data: struct { at: vector, tags: string(..255)[] }[]"), Text)
+	Check("Literal", Has(Text, "Data: enum { Idle, Chase, Sleep }"), Text)
+	Check("Optional", Has(Text, "Data: (f32?, Shape1?)"), Text)
+end)
+
+RunClosure("QuickNet: what has no equivalent is each said", function()
+	local _, Checklist = Print.Render(Sandbox.Record("./Sources/Convert/QuickNet/Events.luau", QuickNet))
+	local List = table.concat(Checklist, "\n")
+
+	for _, Missing in { "a static array of different types", "a union", "a literal of values", "QuickNet.Data.Rect" } do
+		Check(Missing, Has(List, Missing), List)
+	end
+end)
+
+RunClosure("QuickNet: a function carries its rate and is asked for its concurrency", function()
+	local Text = Print.Render(Sandbox.Record("./Sources/Convert/QuickNet/Events.luau", QuickNet))
+	Check(
+		"Function",
+		Has(Text, "function Price {\n\tYield: Coroutine,\n\tRate: 60,\n\t-- TODO(convert): Concurrency: ?"),
+		Text
 	)
 end)
 

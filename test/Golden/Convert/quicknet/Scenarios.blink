@@ -1,0 +1,62 @@
+-- Converted from QuickNet 0.3.5-beta definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what QuickNet's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-quicknet/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+struct Shape1 {
+	crouched: boolean,
+	health: u8,
+	id: u16,
+	moving: boolean,
+	x: f32,
+	y: f32,
+	z: f32
+}
+
+event Snapshot {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: Shape1
+}
+
+event Input {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Unreliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: struct { jump: boolean, move: u8, sprint: boolean, turn: i16 }
+}
+
+event Touch {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: (Instance, u8)
+}
+
+-- TODO(convert): a client sends this; bound the value (array length)
+event WorldState {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Unreliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: Shape1[]
+}
+
+event SelfState {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Unreliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: Shape1
+}

@@ -66,7 +66,7 @@ local ARGUMENTS: { [string]: Argument } = {
 	},
 	From = {
 		Aliases = { "--from" },
-		Description = "Read [CONFIG] as another tool's definitions and write a draft schema beside it. Takes a value: zap, bytenet or packet.",
+		Description = "Read [CONFIG] as another tool's definitions and write a draft schema beside it. Takes a value: zap, bytenet, packet or quicknet.",
 	},
 	OutputAst = {
 		Hidden = true,

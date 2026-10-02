@@ -18,6 +18,7 @@ local Library = require("../../Library")
 local Packet = require("../../Convert/Stubs/Packet")
 local PathParser = require("../../Modules/Path")
 local Print = require("../../Convert/Print")
+local QuickNet = require("../../Convert/Stubs/QuickNet")
 local Sandbox = require("./Sandbox")
 local Zap = require("../../Convert/Zap")
 
@@ -63,6 +64,13 @@ local TOOLS: { [string]: Tool } = {
 		Version = Packet.VERSION,
 		Read = function(Path)
 			return Sandbox.Record(Path, Packet)
+		end,
+	},
+	quicknet = {
+		Name = QuickNet.NAME,
+		Version = QuickNet.VERSION,
+		Read = function(Path)
+			return Sandbox.Record(Path, QuickNet)
 		end,
 	},
 }

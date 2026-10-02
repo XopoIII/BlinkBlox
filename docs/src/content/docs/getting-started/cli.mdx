@@ -79,7 +79,7 @@ not a flag -- `blinkblox --yes net` and `blinkblox net --yes` are the same comma
 | `--verify` | Compiles in memory as a real build would, writes nothing, and compares every file it would write with the one on disk. Exits with `1` if any is stale or missing. See [verifying committed output](#verifying-committed-output). |
 | `--json` | Prints the result as one JSON document on standard output instead of rendering diagnostics, and prints nothing else. See [JSON output](#json-output). |
 | `-p`, `--profile` | Compiles under a [profile](/BlinkBlox/language/profiles/): `dev`, `debug`, `test` or `release`. Takes a value: `--profile dev`. Without it the build is `release`. |
-| `--from` | Reads `CONFIG` as another tool's definitions and writes a draft schema beside it, compiling nothing. Takes a value, the tool: `zap`, `bytenet` or `packet`. See [converting another tool's definitions](#converting-another-tools-definitions). |
+| `--from` | Reads `CONFIG` as another tool's definitions and writes a draft schema beside it, compiling nothing. Takes a value, the tool: `zap`, `bytenet`, `packet` or `quicknet`. See [converting another tool's definitions](#converting-another-tools-definitions). |
 
 Flags are matched whole, so short flags do not combine: write `-q -y`, not `-qy`. An argument the
 compiler does not recognise as a flag is taken for the schema's path, so a mistyped flag in front of
@@ -352,6 +352,7 @@ fires, a bound for each length a client sends -- each of which is also marked in
 | `zap` | a zap config, as zap 0.6.29 reads it | [Coming from zap](/BlinkBlox/guides/coming-from-zap/) |
 | `bytenet` | a Luau module of ByteNet 0.4.3 definitions, which it runs | [Coming from ByteNet](/BlinkBlox/guides/coming-from-bytenet/) |
 | `packet` | a Luau module of Packet 1.7.0 definitions, which it runs | [Coming from Packet](/BlinkBlox/guides/coming-from-packet/) |
+| `quicknet` | a Luau module of QuickNet v0.3.5-beta definitions, which it runs | [Coming from QuickNet](/BlinkBlox/guides/coming-from-quicknet/) |
 
 - **A draft already there is not replaced** unless `--yes` is passed. There is no prompt: without
   `--yes` the command stops with exit code `1`.

@@ -1,0 +1,343 @@
+---
+title: Coming from QuickNet
+description: Moving a game from QuickNet to BlinkBlox -- recording the events with --from quicknet, rate limits included, stating each one's direction, and a bridge that keeps QuickNet's FireServer, FireClient and signals while the call sites move.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+QuickNet registers each event with a call, `QuickNet:register("Hit", Data.Instance, Data.NumberU8)`,
+and builds its serialiser when the game starts. BlinkBlox compiles a schema ahead of time into a
+server module and a client module. So the definitions become a schema, and the calls go to the
+generated modules.
+
+`blinkblox --from quicknet` does the first half: it runs your definitions against a stand-in for
+QuickNet that records every event instead of making a remote, and writes them out as a schema.
+
+QuickNet already limits how often a client may fire, so its rate limits come across as they are. What
+its definitions do not say is which side sends an event, and the draft asks you for that.
+
+This page was written against QuickNet v0.3.5-beta.
+
+## The short version
+
+<Steps>
+
+1. Install `blinkblox`. See [Installation](/BlinkBlox/getting-started/installation/).
+2. Record the definitions: `blinkblox Events.luau --from quicknet`. It writes `Events.blink` beside
+   the file and prints what you have to decide.
+3. Work through the `TODO(convert)` marks: the direction of each event, an upper bound for each
+   length a client sends, and the two output paths. Delete the `Rate` from the events the server
+   sends.
+4. Compile it: `blinkblox Events`. Both libraries can run in one game, each on its own remotes, so
+   events can move one at a time.
+5. Change the call sites (below), or wrap the modules in the [bridge](#a-bridge-for-the-call-sites)
+   and change them later.
+6. Install the server's handlers. See [Securing the server](/BlinkBlox/guides/securing-the-server/).
+
+</Steps>
+
+## Recording the definitions
+
+```sh
+blinkblox Events.luau --from quicknet
+```
+
+<Aside type="caution" title="The file is run">
+Definitions are code, so the command runs the file, as `require` would. It runs with a stand-in for
+QuickNet, placeholders for `game`, `script` and the other Roblox globals, and no filesystem, network
+or process library. Point it at your own definitions.
+</Aside>
+
+A `require` whose path, alias or Instance ends in `QuickNet` gets the stand-in, a module beside the
+file is run too, and any other `require` gets a placeholder and is named in the printed list. The
+draft is written beside the file with `.blink` for an extension, and is not replaced without `--yes`;
+`--check` prints it instead. The [command line page](/BlinkBlox/getting-started/cli/#converting-another-tools-definitions)
+has the details.
+
+For these definitions:
+
+```luau title="Events.luau"
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local QuickNet = require(ReplicatedStorage.QuickNet)
+local Data = QuickNet.Data
+
+return {
+	Hit = QuickNet:register("Hit", Data.Instance, Data.NumberU8, Data.StringLong):SetRateLimit(10, 1),
+	Health = QuickNet:register("Health", Data.NumberU8):Unreliable(),
+	Price = QuickNet:register("Price", Data.NumberU16):Response(Data.NumberU32),
+}
+```
+
+it writes:
+
+```blink title="Events.blink"
+-- Converted from QuickNet 0.3.5-beta definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what QuickNet's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-quicknet/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+-- TODO(convert): a client sends this; bound #3 (string length)
+event Hit {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 10,
+	Data: (Instance, u8, string)
+}
+
+event Health {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Unreliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: u8
+}
+
+function Price {
+	Yield: Coroutine,
+	Rate: 60,
+	-- TODO(convert): Concurrency: ?
+	Data: u16,
+	Return: u32
+}
+```
+
+and prints:
+
+```text
+Draft written to Events.blink.
+Before it is used:
+  - 2 event(s) whose direction you must state: Hit, Health
+  - 1 function(s) a client calls with no Rate or Concurrency: Price
+  - 1 length(s) or value(s) a client sends with no bound; each is marked
+  - Add option ServerOutput and option ClientOutput: where the two modules are written.
+  - Set option RequireRates = true once every event a client fires has a Rate.
+  - On the server, set SetRateLimitHandler, SetDecodeErrorHandler, SetPacketDropHandler and SetListenerErrorHandler: they are how the game hears of a refusal.
+  - Check MaxPacketSize, MaxEventsPerPacket and InboundBytesPerSecond against what the game sends.
+```
+
+The draft always compiles, and what it could not know is a comment, never a guess. The events come
+out in the order the definitions registered them.
+
+## The rate limits
+
+`SetRateLimit(Max, Time)` allows `Max` events in every `Time` seconds, which is a
+[`Rate`](/BlinkBlox/language/events/#rate-burst) of `Max / Time` a second: `SetRateLimit(10, 1)`
+is `Rate: 10`, and `SetRateLimit(120, 2)` is `Rate: 60`. An event that sets none is held to
+QuickNet's default of sixty a second, so the draft writes `Rate: 60`: the limit the game already
+runs under.
+
+An event whose limit was lifted with `math.huge` has no number to carry, and is marked for one like
+an event from any other library.
+
+A function also takes [`Concurrency`](/BlinkBlox/language/functions/#concurrency), how many of one
+player's calls the server runs at once. QuickNet has no such limit, so each function is marked for it.
+
+## Stating the direction
+
+A QuickNet event goes either way: the client calls `FireServer`, the server `FireClient`. A BlinkBlox
+event has one direction, because the two are not alike -- what a client sends is checked, bounded and
+rate limited, and what the server sends is not.
+
+Until you say otherwise the draft writes `From: Client`, the direction that gets the checks. State
+each one. A `Rate` on an event the server sends does nothing and the compiler warns about it, so
+delete it there:
+
+```blink title="Events.blink"
+option ServerOutput = "src/server/Network.luau"
+option ClientOutput = "src/shared/Network.luau"
+option RequireRates = true
+
+event Hit {
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 10,
+	Data: (Target: Instance, Damage: u8, Note: string(..64))
+}
+
+event Health {
+	From: Server,
+	Type: Unreliable,
+	Call: ManyAsync,
+	Data: u8
+}
+
+function Price {
+	Yield: Coroutine,
+	Rate: 60,
+	Concurrency: 1,
+	Data: u16,
+	Return: u32
+}
+```
+
+An event the game sends both ways becomes two events, one for each direction. A function is called
+by the client, as `InvokeServer` is.
+
+## What converts, and what does not
+
+| QuickNet | BlinkBlox | |
+|---|---|---|
+| `QuickNet:register("Name", A, B)` | `event Name { Data: (A, B) }` | |
+| `:Unreliable()` | `Type: Unreliable` | |
+| `:SetRateLimit(Max, Time)` | `Rate: Max / Time` | Sixty a second when not set. |
+| `:Response(C)` | `function Name { Data, Return: C }` | `SetResponseTimeout` is not carried: see [`InvocationTimeout`](/BlinkBlox/language/options/). |
+| `NumberU8` .. `NumberU32`, `NumberI8` .. `NumberI32` | `u8` .. `u32`, `i8` .. `i32` | |
+| `NumberU4` | `u8(..15)` | |
+| `NumberF16`, `NumberF32`, `NumberF64` | `f16`, `f32`, `f64` | |
+| `String` | `string(..255)` | Its one-byte length is a bound, and is kept. |
+| `StringLong`, `Buffer` | `string`, `buffer` | Marked when a client sends them. |
+| `Boolean`, `Instance`, `Player`, `Any` | `boolean`, `Instance`, `Instance(Player)`, `unknown` | `unknown` is not validated. |
+| `Vector3I16`, `Vector3F16`, the other `Vector3`s | `vector<i16>`, `vector<f16>`, `vector` | |
+| the `Vector2`s, the `CFrame`s | `Vector2`, `CFrame` | [A CFrame's encoding](/BlinkBlox/language/types/) is chosen in the schema. |
+| `DateTime32`, `DateTime64` | `DateTime`, `DateTimeMillis` | |
+| `Color3`, `BrickColor`, `TweenInfo`, `ColorSequence`, `NumberRange`, `UDim`, `UDim2` | the same | |
+| `Data.optional(T)` | `T?` | |
+| `Data.literal("Idle", "Chase")` | `enum { Idle, Chase }` | When every value is a name. |
+| `{ T }`, a uniform array | `T[]` | |
+| `{ T, T, T }`, a static array of one type | `T[3]` | |
+| `{ [K] = V }`, a uniform dictionary | `map { [K]: V }` | |
+| `{ name = T, .. }`, a static dictionary | `struct { name: T, .. }` | Fields in alphabetical order. |
+| a static array of different types, `union`, `unionMany`, a literal of other values | `unknown` | No equivalent; each is named in the list. |
+| `Nil`, `EnumItem`, `NumberSequence`, `Region3`, `PhysicalProperties`, `Rect` | `unknown` | The same. A single enum is [`Enum(Material)`](/BlinkBlox/language/types/). |
+
+A table used by more than one event is declared once, as `Shape1`, `Shape2` and so on: it has no
+name the converter can see, so choose one. A name the stand-in does not know stops the command and
+says so.
+
+## The call sites
+
+| | QuickNet | BlinkBlox |
+|---|---|---|
+| Client to server | `Hit:FireServer(...)` | `Net.Hit.Fire(...)` |
+| Server to one player | `Health:FireClient(Player, ...)` | `Net.Health.Fire(Player, ...)` |
+| Server to a list | `Health:FireClients(Players, ...)` | `Net.Health.FireList(Players, ...)` |
+| Server to everyone | `Health:FireAllClients(...)` | `Net.Health.FireAll(...)` |
+| Server to all but one | `Health:FireAllExcept(Player, ...)` | `Net.Health.FireExcept(Player, ...)` |
+| Listen | `Hit.OnServerEvent:Connect(Listener)` | `Net.Hit.On(Listener)` |
+| Call | `Price:InvokeServer(...)` | `Net.Price.Invoke(...)` |
+| Answer | `Price.OnServerInvoke = Listener` | `Net.Price.On(Listener)` |
+
+Calls use a dot, not a colon, and `On` returns a function that disconnects the listener where
+`Connect` returns a connection. Whether a listener may yield is not chosen where it connects, as with
+`Connect` and `ConnectAsync`, but once in the schema, by the event's
+[`Call`](/BlinkBlox/language/events/#call): the draft writes `ManyAsync`, which may.
+
+The whole generated API is in the [reference](/BlinkBlox/reference/generated-api/).
+
+### A bridge for the call sites
+
+To move the definitions first and the call sites later, wrap each module once:
+
+```luau bridge title="QuickNetNames.luau"
+--- A BlinkBlox module under QuickNet's names. Temporary: delete it once the call sites use Fire,
+--- FireAll, On and Invoke themselves.
+local function Signal(On)
+	local function Connect(_, Listener)
+		return { Disconnect = On(Listener) }
+	end
+
+	return { Connect = Connect, ConnectAsync = Connect }
+end
+
+local function QuickNetNames(Net)
+	local Events = {}
+	for Name, Value in Net do
+		if type(Value) ~= "table" or not (Value.Fire or Value.On or Value.Invoke) then
+			continue
+		end
+
+		local Event = {}
+		if Value.Invoke then
+			function Event:InvokeServer(...)
+				return Value.Invoke(...)
+			end
+		elseif Value.FireAll then
+			function Event:FireClient(Player, ...)
+				Value.Fire(Player, ...)
+			end
+			function Event:FireClients(Players, ...)
+				Value.FireList(Players, ...)
+			end
+			function Event:FireAllClients(...)
+				Value.FireAll(...)
+			end
+			function Event:FireAllExcept(Player, ...)
+				Value.FireExcept(Player, ...)
+			end
+		elseif Value.Fire then
+			function Event:FireServer(...)
+				Value.Fire(...)
+			end
+		end
+
+		if Value.On then
+			-- An event's listeners connect to the signal; a function's one listener is assigned.
+			Event.OnServerEvent = Signal(Value.On)
+			Event.OnClientEvent = Event.OnServerEvent
+			setmetatable(Event, {
+				__newindex = function(_, Key, Listener)
+					if Key == "OnServerInvoke" or Key == "OnServerInvokeAsync" then
+						Value.On(Listener)
+					end
+				end,
+			})
+		end
+
+		Events[Name] = Event
+	end
+
+	return Events
+end
+
+return QuickNetNames
+```
+
+```luau
+local Events = require(ReplicatedStorage.QuickNetNames)(require(ServerScriptService.Network))
+
+Events.Hit.OnServerEvent:Connect(function(Player, Target, Damage, Note)
+	-- unchanged
+end)
+```
+
+An event has only the members of its direction, so a call the schema no longer allows is a missing
+method here, where under QuickNet it was sent.
+
+The wrapper is untyped, so the call sites behind it lose their type checking until they move.
+
+## Moving one event at a time
+
+QuickNet and BlinkBlox each create their own remotes, so both can run in the same game:
+
+<Steps>
+
+1. Record the definitions and keep only the events you are moving in the draft.
+2. Delete those events from the QuickNet definitions.
+3. Point their call sites at the new modules.
+4. Repeat until no event is left, then remove QuickNet.
+
+</Steps>
+
+BlinkBlox's own server and client modules have to ship together: a client refuses to run against a
+server compiled from a different schema. See
+[wire compatibility](/BlinkBlox/reference/wire-compatibility/).
+
+## What a running game will notice
+
+- **A refusal reaches the game.** A client over its rate is reported through `SetRateLimitHandler`,
+  with the player and the count, so the game can act on it.
+- **A packet the server refuses is reported**, with the player who sent it: through
+  `SetPacketDropHandler` when it is refused before it is read, and through `SetDecodeErrorHandler`
+  when an event in it does not decode.
+- **A length is checked before it is read.** Bound what a client sends: an unbounded string or array
+  is as long as the client says, up to the schema's own limit.
+- **An event has one direction.** Sending it the other way is no longer possible.
+
+[Securing the server](/BlinkBlox/guides/securing-the-server/) is the checklist for all of it, and
+[common pitfalls](/BlinkBlox/guides/common-pitfalls/) lists what tends to go wrong.
