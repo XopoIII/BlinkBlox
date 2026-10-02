@@ -1,0 +1,235 @@
+-- Converted from QuickNet 0.3.5-beta definitions by BlinkBlox. A draft: read it before you use it.
+-- Each TODO(convert) marks what QuickNet's definitions have no way to say. The guide explains them:
+-- https://xopoiii.github.io/BlinkBlox/guides/coming-from-quicknet/
+--
+-- Once every event a client fires has a Rate, turn this on, so that none is added without one:
+-- option RequireRates = true
+
+struct Shape1 { id: u16, name: string(..255), owner: Instance(Player) }
+
+event Equip {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 10,
+	Data: (u8, Shape1)
+}
+
+-- TODO(convert): a client sends this; bound the value (array length)
+event Contents {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: Shape1[]
+}
+
+event Clear {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60
+}
+
+event Move {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Unreliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: (CFrame, vector<i16>, vector<f16>)
+}
+
+event Flood {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	-- TODO(convert): Rate: ?, Burst: ?
+	Data: u8
+}
+
+event Numbers {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: (u8(..15), u32, i8, i16, i32)
+}
+
+event Floats {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: (f16, f32, f64, boolean)
+}
+
+event Vectors {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: (vector, vector, vector, Vector2)
+}
+
+event Looks {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: (Color3, BrickColor, TweenInfo, ColorSequence)
+}
+
+event Layout {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: (UDim, UDim2, NumberRange)
+}
+
+event Times {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: (DateTime, DateTimeMillis)
+}
+
+-- TODO(convert): a client sends this; bound #1 (buffer length), #2 (string length), #4 (unknown is not validated)
+event Blob {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: (buffer, string, Instance, unknown)
+}
+
+event Triple {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: f32[3]
+}
+
+-- TODO(convert): QuickNet wrote a static array of different types where this says unknown
+-- TODO(convert): a client sends this; bound the value (unknown is not validated)
+event Mixed {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: unknown
+}
+
+-- TODO(convert): a client sends this; bound the value (a map cannot be bounded: prefer a bounded array)
+event Scores {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: map { [string(..255)]: u32 }
+}
+
+-- TODO(convert): a client sends this; bound the value (array length), [].tags (array length)
+event Nested {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: struct { at: vector, tags: string(..255)[] }[]
+}
+
+-- TODO(convert): a client sends this; bound the value (array length), [] (unknown is not validated)
+event Loose {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: unknown[]
+}
+
+event Maybe {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: (f32?, Shape1?)
+}
+
+event State {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: enum { Idle, Chase, Sleep }
+}
+
+-- TODO(convert): QuickNet wrote a literal of values that are not all names where this says unknown
+-- TODO(convert): a client sends this; bound the value (unknown is not validated)
+event Odd {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: unknown
+}
+
+-- TODO(convert): QuickNet wrote a union where this says unknown
+-- TODO(convert): a client sends this; bound the value (unknown is not validated)
+event Either {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: unknown
+}
+
+-- TODO(convert): QuickNet wrote QuickNet.Data.Region3 where this says unknown
+-- TODO(convert): QuickNet wrote QuickNet.Data.Rect where this says unknown
+-- TODO(convert): QuickNet wrote QuickNet.Data.EnumItem where this says unknown
+-- TODO(convert): QuickNet wrote QuickNet.Data.NumberSequence where this says unknown
+-- TODO(convert): a client sends this; bound #1 (unknown is not validated), #2 (unknown is not validated), #3 (unknown is not validated), #4 (unknown is not validated)
+event Region {
+	-- TODO(convert): QuickNet does not say which side sends this; say it here
+	From: Client,
+	Type: Reliable,
+	Call: ManyAsync,
+	Rate: 60,
+	Data: (unknown, unknown, unknown, unknown)
+}
+
+function Price {
+	Yield: Coroutine,
+	Rate: 60,
+	-- TODO(convert): Concurrency: ?
+	Data: u16,
+	Return: (u32, boolean)
+}
+
+function Ping {
+	Yield: Coroutine,
+	Rate: 60
+	-- TODO(convert): Concurrency: ?
+}

@@ -243,9 +243,12 @@ local function FunctionDeclaration(State: State, Declaration: Declaration, Inden
 	end
 	table.insert(Entries, `Yield: {Declaration.Yield or "Coroutine"}`)
 
+	if Declaration.Rate then
+		table.insert(Entries, `Rate: {Declaration.Rate}`)
+	end
 	if Declaration.From ~= "Server" then
 		table.insert(State.MissingLimits, Path)
-		table.insert(Entries, `{TODO} Rate: ?, Concurrency: ?`)
+		table.insert(Entries, if Declaration.Rate then `{TODO} Concurrency: ?` else `{TODO} Rate: ?, Concurrency: ?`)
 	end
 
 	if Declaration.Data then

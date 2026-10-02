@@ -42,6 +42,15 @@ upgrading.
 - **A guide, [Coming from Packet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-packet/)**,
   with a wrapper that answers to `:Fire`, `:FireClient`, `OnServerEvent:Connect` and
   `OnServerInvoke`.
+- **`--from quicknet` records QuickNet v0.3.5-beta definitions**, the same way, and carries what the
+  others cannot: QuickNet limits how often a client may fire, so `SetRateLimit(Max, Time)` becomes
+  `Rate: Max / Time` and an event that sets none gets QuickNet's own default, `Rate: 60`. One lifted
+  with `math.huge` is marked for a rate like any other library's. A uniform array is `T[]`, a static
+  array of one type `T[3]`, a uniform dictionary a map, a static one a struct, a literal of names an
+  enum; a union, a static array of different types and the types with no equivalent are each named.
+- **A guide, [Coming from QuickNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-quicknet/)**,
+  with a wrapper that answers to `:FireServer`, `:FireClient`, `:FireAllClients`,
+  `OnServerEvent:Connect` and `:InvokeServer`.
 - **The converter is loaded only under `--from`**, so a compile does not read it.
 - **A guide, [Coming from zap](https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/)**: the
   conversion, a table of what maps to what, the call sites that differ, and a short wrapper that

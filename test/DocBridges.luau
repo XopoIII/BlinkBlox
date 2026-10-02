@@ -221,4 +221,45 @@ RunClosure("The Packet guide's bridge answers to Packet's methods, signals and i
 	Check("Disconnect", Heard[2] == 3, "a disconnected listener was still called")
 end)
 
+RunClosure("The QuickNet guide's bridge answers to QuickNet's methods, signals and invokes", function()
+	local QuickNetNames = luau.load(Bridge("coming-from-quicknet"))()
+	local Pair = Isolated.Build(Isolated.Parse(SEVERAL_VALUES), "BRIDGEQUICKNET")
+	local Server, Client = QuickNetNames(Pair.Server), QuickNetNames(Pair.Client)
+
+	local Heard: { any } = {}
+	local Connection = Server.Equip.OnServerEvent:ConnectAsync(function(Player, Slot, Name)
+		Heard = { Player, Slot, Name }
+	end)
+
+	local Stock: { number } = {}
+	Client.Stock.OnClientEvent:Connect(function(Value)
+		table.insert(Stock, Value)
+	end)
+
+	Server.Price.OnServerInvokeAsync = function(_Player, Id: number)
+		return Id * 2
+	end
+
+	local Price: number?
+	task.spawn(function()
+		Price = Client.Price:InvokeServer(21)
+	end)
+
+	Client.Equip:FireServer(3, "sword")
+	Server.Stock:FireClient(Shared.Player, 1)
+	Server.Stock:FireClients({ Shared.Player }, 2)
+	Server.Stock:FireAllClients(3)
+	Exchange(Pair)
+	Exchange(Pair)
+
+	Check("Connect", Heard[1] == Shared.Player and Heard[2] == 3 and Heard[3] == "sword", "the server heard nothing")
+	Check("Fire", table.concat(Stock, ",") == "1,2,3", `the client heard {table.concat(Stock, ",")}`)
+	Check("Invoke", Price == 42, `the call returned {Price}`)
+
+	Connection:Disconnect()
+	Client.Equip:FireServer(4, "bow")
+	Exchange(Pair)
+	Check("Disconnect", Heard[2] == 3, "a disconnected listener was still called")
+end)
+
 return {}
