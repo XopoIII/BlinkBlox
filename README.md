@@ -139,8 +139,41 @@ than one comparison after another.
 
 The methodology, the bandwidth, the random payloads, streams and the full percentiles are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
-[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What 1.0.0 changed is in
-[What's new in 1.1](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
+[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What each release changed is in
+[What's new](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
+
+## Switching from one of them
+
+A game on any library in those tables does not start from an empty schema. The compiler reads the
+definitions the game already has and writes a draft schema from them:
+
+```sh
+blinkblox net.zap --from zap                 # a zap config
+blinkblox Packets.luau --from bytenet        # ByteNet's defineNamespace and definePacket
+blinkblox Packets.luau --from packet         # Packet("Name", ...)
+blinkblox Events.luau --from quicknet        # QuickNet:register, rate limits included
+blinkblox Remotes.luau --from warp           # Warp's useSchema
+```
+
+The draft compiles, and it does not guess: what the other library has no way to say -- how often a
+client may fire an event, how long an array may be, which side sends a packet -- is a
+`TODO(convert)` comment where the answer goes, and is listed when the command finishes. A type with
+no equivalent is named, never dropped.
+
+Each library has a guide, with the call sites side by side and a short wrapper that keeps the old
+call names working, so a game can move one event at a time while both libraries run:
+
+| From | Converter | Guide |
+|---|---|---|
+| Plain remotes | none: there are no definitions to read | [Coming from RemoteEvents](https://xopoiii.github.io/BlinkBlox/guides/coming-from-remote-events/) |
+| zap 0.6.29 | `--from zap` | [Coming from zap](https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/) |
+| ByteNet 0.4.3 | `--from bytenet` | [Coming from ByteNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-bytenet/) |
+| Packet 1.7.0 | `--from packet` | [Coming from Packet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-packet/) |
+| QuickNet 0.3.5 | `--from quicknet` | [Coming from QuickNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-quicknet/) |
+| Warp 1.1.0-pre7 | `--from warp` | [Coming from Warp](https://xopoiii.github.io/BlinkBlox/guides/coming-from-warp/) |
+| Blink 0.18 | none needed: the schema carries over | [Migrating from Blink](https://xopoiii.github.io/BlinkBlox/guides/migrating-from-blink/) |
+
+[Switching to BlinkBlox](https://xopoiii.github.io/BlinkBlox/guides/switching/) is the overview.
 
 ## Where it comes from
 
@@ -148,16 +181,6 @@ BlinkBlox is a maintained fork of [Blink](https://github.com/1Axen/blink). Upstr
 of the compiler and began a rewrite. It left reported defects open, including an unbounded parse of
 a hostile client buffer. This fork fixes them and continues from `v0.18.8`. See
 [Migrating from Blink](https://xopoiii.github.io/BlinkBlox/guides/migrating-from-blink/).
-
-A game on another library has a guide of its own:
-[plain remotes](https://xopoiii.github.io/BlinkBlox/guides/coming-from-remote-events/),
-[zap](https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/),
-[ByteNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-bytenet/),
-[Packet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-packet/),
-[QuickNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-quicknet/) and
-[Warp](https://xopoiii.github.io/BlinkBlox/guides/coming-from-warp/). For the five libraries,
-`blinkblox <definitions> --from <library>` writes a draft schema from the definitions the game
-already has.
 
 ## Install
 

@@ -1,0 +1,82 @@
+---
+title: Switching to BlinkBlox
+description: How to move a game to BlinkBlox from plain remotes, Blink, zap, ByteNet, Packet, QuickNet or Warp -- the converters that write a draft schema from the definitions you have, what they leave for you to decide, and the guide for each library.
+---
+
+import { LinkCard, CardGrid, Steps } from '@astrojs/starlight/components';
+
+A game that already has networking does not start from an empty schema. For five libraries the
+compiler reads the definitions the game has and writes a draft schema from them, and for every
+library there is a guide with the call sites side by side and a short wrapper that keeps the old
+call names working while they move.
+
+## The converters
+
+```sh
+blinkblox <definitions> --from <library>
+```
+
+| From | Command | Reads | What the draft carries over |
+|---|---|---|---|
+| [zap](/BlinkBlox/guides/coming-from-zap/) | `--from zap` | the `.zap` config | options, types, events, functions, namespaces, comments |
+| [ByteNet](/BlinkBlox/guides/coming-from-bytenet/) | `--from bytenet` | the Luau module that defines the packets | namespaces, packets, their types and reliability |
+| [Packet](/BlinkBlox/guides/coming-from-packet/) | `--from packet` | the Luau module that defines the packets | packets, their types, responses as functions, one-byte length bounds |
+| [QuickNet](/BlinkBlox/guides/coming-from-quicknet/) | `--from quicknet` | the Luau module that registers the events | events, their types, reliability, responses, and the rate limits |
+| [Warp](/BlinkBlox/guides/coming-from-warp/) | `--from warp` | the Luau module that calls `useSchema` | each schema as an event |
+| [Blink](/BlinkBlox/guides/migrating-from-blink/) | none needed | | a Blink schema is a BlinkBlox schema |
+| [Plain remotes](/BlinkBlox/guides/coming-from-remote-events/) | none | | there are no definitions to read; the guide shows how to write them |
+
+A zap config is read as text. The other four define their events by running Luau, so the command
+runs the definitions file against a stand-in for the library that records what is defined and sends
+nothing. The file gets placeholders for `game`, `script` and the other Roblox globals, and no
+filesystem, network or process library. The details are under
+[Command line](/BlinkBlox/getting-started/cli/#converting-another-tools-definitions).
+
+## What a draft is
+
+The command writes a `.blink` file beside the definitions and prints what is left to decide. Three
+things hold for every draft:
+
+- **It compiles.** The compiler compiles it before handing it over.
+- **It does not guess.** What the other library has no way to say is a `TODO(convert)` comment where
+  the answer goes, never a number picked for you.
+- **Nothing is dropped silently.** A type with no equivalent becomes `unknown`, and each one is named
+  in the printed list.
+
+What a draft asks for depends on what the library's definitions hold:
+
+| | zap | ByteNet | Packet | QuickNet | Warp |
+|---|---|---|---|---|---|
+| Which side sends an event | stated | asked | asked | asked | asked |
+| Whether it is reliable | stated | stated | always reliable | stated | asked |
+| How often a client may fire it | asked | asked | asked | carried over | asked |
+| An upper bound on each length a client sends | asked where zap had none | asked | asked, except one-byte lengths | asked, except one-byte lengths | asked |
+
+Only what a client sends is marked for a rate and a bound. An unbounded array in an event the server
+fires is the server's own business.
+
+## Moving a game
+
+<Steps>
+
+1. Convert the definitions, or write the schema by hand from plain remotes.
+2. Settle the marks in the draft and compile it.
+3. Wrap the generated modules in the guide's wrapper, so the existing call sites keep working.
+4. Move the call sites to the generated API, an event at a time. BlinkBlox uses remotes of its own,
+   so it runs beside the library it is replacing.
+5. Delete the wrapper and the old library, and install the server's handlers. See
+   [Securing the server](/BlinkBlox/guides/securing-the-server/).
+
+</Steps>
+
+## The guides
+
+<CardGrid>
+	<LinkCard title="Plain remotes" href="/BlinkBlox/guides/coming-from-remote-events/" description="RemoteEvent and RemoteFunction: writing the schema, and what the checks in a listener become." />
+	<LinkCard title="zap" href="/BlinkBlox/guides/coming-from-zap/" description="The closest language. A config converts almost line for line." />
+	<LinkCard title="ByteNet" href="/BlinkBlox/guides/coming-from-bytenet/" description="Namespaces and packets, and the player moving to the front of every call." />
+	<LinkCard title="Packet" href="/BlinkBlox/guides/coming-from-packet/" description="Packets, responses as functions, and signals." />
+	<LinkCard title="QuickNet" href="/BlinkBlox/guides/coming-from-quicknet/" description="Events with their rate limits carried over." />
+	<LinkCard title="Warp" href="/BlinkBlox/guides/coming-from-warp/" description="Events by name, with direction and reliability stated once." />
+	<LinkCard title="Blink" href="/BlinkBlox/guides/migrating-from-blink/" description="The schema carries over; the wire and the server's behaviour change." />
+</CardGrid>
