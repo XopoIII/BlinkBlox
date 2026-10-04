@@ -314,6 +314,12 @@ rate cannot tell them apart, and on the Entities benches QuickNet ran at 1.3 tim
 
 ## Reading the numbers
 
+These tables compare tools that do the same job. None of them is a reason to prefer a tool over
+buffer code written by hand: a reader written for one event can be as fast as anything generated for
+it, and no bench here includes one.
+[Compared with hand-written buffers](/BlinkBlox/guides/hand-written-buffers/) covers that choice,
+which is about what the reader checks rather than how fast it runs.
+
 <Aside type="caution" title="60 FPS is Studio's cap">
 Studio does not render faster than 60 frames a second. A tool at 60 FPS is limited by the cap, not by
 its own cost, so on the boolean benches the frame rate shows only that BlinkBlox kept up. The fire

@@ -16,9 +16,9 @@
 </div>
 
 You describe your events and functions, and what they carry, in a `.blink` schema. The compiler
-generates a server module and a client module in plain Luau. They pack every call into one buffer
-per frame, check everything a client sends before your code sees it, and keep working when a client
-is hostile.
+generates a server module and a client module in plain Luau: functions and `buffer` calls, with no
+metatables and no runtime library beside them. They pack every call into one buffer per frame, check
+everything a client sends before your code sees it, and keep working when a client is hostile.
 
 ```blink
 event Damage {
@@ -83,31 +83,18 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 
 ## Performance
 
-Each tool fires 1000 events a frame from client to server. Blink is the original project BlinkBlox
-forked from, at its last release, 0.18.9. The runs were made on 2026-09-28 on an Intel Core
-i7-13700K: in Studio on BlinkBlox 0.41.2, on LuneBlox on 0.42.0.
+Speed is not the reason to choose BlinkBlox. A reader written by hand for one event can be as fast as
+anything generated for it, and
+[Compared with hand-written buffers](https://xopoiii.github.io/BlinkBlox/guides/hand-written-buffers/)
+says when that is the better choice. The numbers are here to compare tools that do the same job, and
+to hold each release to the one before it: nothing may get slower.
 
-In Studio, the numbers are the median frame rate and the milliseconds a frame's thousand fires took.
-Warp's Fire only queues its value and encodes it later in the frame, where the bench cannot time it,
-so only its frame rate is shown.
-
-| Tool | 1000 booleans | 1000 booleans, each different | 100 entities | 100 entities, each different |
-|---|---|---|---|---|
-| Roblox remotes | 15 FPS, 26.0 ms | 15 FPS, 29.1 ms | 15 FPS, 72.7 ms | 15 FPS, 74.5 ms |
-| **BlinkBlox** | **60 FPS**\*, 1.9 ms | **60 FPS**\*, 4.8 ms | **60 FPS**\*, 2.0 ms | **60 FPS**\*, 2.4 ms |
-| Blink | **60 FPS**\*, 4.5 ms | **60 FPS**\*, 9.9 ms | 44 FPS, 2.8 ms | 45 FPS, 3.2 ms |
-| zap | **60 FPS**\*, 12.2 ms | 46 FPS, 18.1 ms | 45 FPS, 7.4 ms | 44 FPS, 7.8 ms |
-| ByteNet | 30 FPS, 17.5 ms | 23 FPS, 21.4 ms | 35 FPS, 15.8 ms | 34 FPS, 16.6 ms |
-| Packet | 35 FPS, 27.3 ms | 28 FPS, 31.8 ms | 27 FPS, 19.2 ms | 27 FPS, 19.9 ms |
-| QuickNet | **60 FPS**\*, 1.9 ms | **60 FPS**\*, 7.1 ms | 58 FPS, 6.2 ms | 57 FPS, 6.7 ms |
-| Warp | **60 FPS**\* | 55 FPS | 33 FPS | 32 FPS |
-
-\* Studio caps the frame rate at 60.
-
-On [LuneBlox](https://github.com/XopoIII/LuneBlox), without Roblox -- the Luau version and flags
-Roblox runs -- on an Intel Core i7-13700K with BlinkBlox 0.42.0, each figure the median of three
-runs, every tool in a process of its own. "Send" is a frame's thousand fires and the flush into a
-packet, interpreted, as most players' clients run it; "decode" is the server decoding them, natively
+Each tool fires 1000 events a frame from client to server, on
+[LuneBlox](https://github.com/XopoIII/LuneBlox) -- the Luau version and flags Roblox runs, without
+Roblox -- on an Intel Core i7-13700K with BlinkBlox 0.42.0, on 2026-09-28. Each figure is the median
+of three runs, every tool in a process of its own. Blink is the original project BlinkBlox forked
+from, at its last release, 0.18.9. "Send" is a frame's thousand fires and the flush into a packet,
+interpreted, as most players' clients run it; "decode" is the server decoding them, natively
 compiled, as a Roblox server runs it; bytes are one event before compression.
 
 | Tool | 1000 booleans: send / decode | 100 entities: send / decode | Bytes, booleans / entities |
@@ -120,60 +107,14 @@ compiled, as a Roblox server runs it; bytes are one event before compression.
 | QuickNet | 16.8 / 7.5 ms | 21.7 / 11.4 ms | **128** / 603 |
 | Warp | 38.5 / 11.5 ms | 65.7 / 26.9 ms | **128** / **602** |
 
-A game also sends the other way. Send then decode, natively, medians of five runs; the broadcast
-reaches fifty players, and the inputs go from one client to the server:
+The gap depends on the payload: against zap the server decodes 1.7 times faster on booleans and 5.9
+times on entities, and QuickNet is close behind on booleans.
 
-| Tool | 100 structs a frame to everyone, `FireAll` | 8 unreliable inputs a frame |
-|---|---|---|
-| **BlinkBlox** | **0.020 / 0.012 ms, 1 remote call** | 0.002 / 0.003 ms, 8 calls; **0.002 / 0.001 ms, 1 call** with [`BatchUnreliable`](https://xopoiii.github.io/BlinkBlox/language/options/#batchunreliable) |
-| Blink | 0.711 / 0.026 ms, 50 calls | 0.002 / 0.003 ms, 8 calls |
-| zap | 0.734 / 0.025 ms, 50 calls | 0.003 / 0.002 ms, 8 calls |
-| ByteNet | 0.044 / 0.109 ms, 1 call | 0.003 / 0.008 ms, 1 call |
-| Packet | 0.084 / 0.170 ms, 1 call | no unreliable channel |
-| QuickNet | 0.306 / 0.034 ms, 50 calls | 0.002 / 0.003 ms, 1 call |
-| Warp | 2.350 / 0.113 ms, 50 calls | 0.004 / 0.009 ms, 1 call |
-
-A client receiving 100 events a frame spread over 128 declarations decodes them in 0.008 ms
-natively and 0.020 ms interpreted: the event an index names is found by halving the range rather
-than one comparison after another.
-
-The methodology, the bandwidth, the random payloads, streams and the full percentiles are in
+The frame rates in Studio, a server sending to fifty players, unreliable inputs, a schema of 128
+events, the bandwidth and the methodology are in
 [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) and
-[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What each release changed is in
-[What's new](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
-
-## Switching from one of them
-
-A game on any library in those tables does not start from an empty schema. The compiler reads the
-definitions the game already has and writes a draft schema from them:
-
-```sh
-blinkblox net.zap --from zap                 # a zap config
-blinkblox Packets.luau --from bytenet        # ByteNet's defineNamespace and definePacket
-blinkblox Packets.luau --from packet         # Packet("Name", ...)
-blinkblox Events.luau --from quicknet        # QuickNet:register, rate limits included
-blinkblox Remotes.luau --from warp           # Warp's useSchema
-```
-
-The draft compiles, and it does not guess: what the other library has no way to say -- how often a
-client may fire an event, how long an array may be, which side sends a packet -- is a
-`TODO(convert)` comment where the answer goes, and is listed when the command finishes. A type with
-no equivalent is named, never dropped.
-
-Each library has a guide, with the call sites side by side and a short wrapper that keeps the old
-call names working, so a game can move one event at a time while both libraries run:
-
-| From | Converter | Guide |
-|---|---|---|
-| Plain remotes | none: there are no definitions to read | [Coming from RemoteEvents](https://xopoiii.github.io/BlinkBlox/guides/coming-from-remote-events/) |
-| zap 0.6.29 | `--from zap` | [Coming from zap](https://xopoiii.github.io/BlinkBlox/guides/coming-from-zap/) |
-| ByteNet 0.4.3 | `--from bytenet` | [Coming from ByteNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-bytenet/) |
-| Packet 1.7.0 | `--from packet` | [Coming from Packet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-packet/) |
-| QuickNet 0.3.5 | `--from quicknet` | [Coming from QuickNet](https://xopoiii.github.io/BlinkBlox/guides/coming-from-quicknet/) |
-| Warp 1.1.0-pre7 | `--from warp` | [Coming from Warp](https://xopoiii.github.io/BlinkBlox/guides/coming-from-warp/) |
-| Blink 0.18 | none needed: the schema carries over | [Migrating from Blink](https://xopoiii.github.io/BlinkBlox/guides/migrating-from-blink/) |
-
-[Switching to BlinkBlox](https://xopoiii.github.io/BlinkBlox/guides/switching/) is the overview.
+[`benchmark/Benchmarks.md`](benchmark/Benchmarks.md). What 1.0.0 changed is in
+[What's new in 1.0](https://xopoiii.github.io/BlinkBlox/guides/whats-new/).
 
 ## Where it comes from
 

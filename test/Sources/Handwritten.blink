@@ -1,0 +1,14 @@
+-- The event the "Compared with hand-written buffers" guide reads by hand and then shows the compiler's
+-- reader for. test/DocGenerated.luau checks that every excerpt the guide quotes is still in this
+-- schema's golden, so the page cannot go on showing code the compiler no longer writes.
+option RemoteScope = "Handwritten"
+option ClientOutput = "../../Network/HandwrittenClient.luau"
+option ServerOutput = "../../Network/HandwrittenServer.luau"
+
+event Damage {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Rate: 10,
+	Data: struct { Target: Instance(Humanoid), Amount: u8(1..100), Note: string(0..32) }
+}

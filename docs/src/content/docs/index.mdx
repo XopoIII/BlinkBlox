@@ -127,32 +127,18 @@ local Items = Net.GetInventory.Invoke(1)
 	</Card>
 </CardGrid>
 
-## Measured
-
-A thousand events a frame from client to server, run in Studio on an Intel Core i7-13700K on 0.41.2.
-Blink is upstream's last release, 0.18.9. The numbers are median frame rates, with the milliseconds a
-frame's thousand fires took in brackets. Warp's Fire only queues its value and encodes it later in
-the frame, where the bench cannot time it, so only its frame rate is shown.
-
-| Tool | 1000 booleans | 1000 booleans, each different | 100 entities | 100 entities, each different |
-|---|---|---|---|---|
-| Roblox remotes | 15 FPS (26.0 ms) | 15 FPS (29.1 ms) | 15 FPS (72.7 ms) | 15 FPS (74.5 ms) |
-| **BlinkBlox** | **60 FPS**\* (1.9 ms) | **60 FPS**\* (4.8 ms) | **60 FPS**\* (2.0 ms) | **60 FPS**\* (2.4 ms) |
-| Blink | **60 FPS**\* (4.5 ms) | **60 FPS**\* (9.9 ms) | 44 FPS (2.8 ms) | 45 FPS (3.2 ms) |
-| zap | **60 FPS**\* (12.2 ms) | 46 FPS (18.1 ms) | 45 FPS (7.4 ms) | 44 FPS (7.8 ms) |
-| ByteNet | 30 FPS (17.5 ms) | 23 FPS (21.4 ms) | 35 FPS (15.8 ms) | 34 FPS (16.6 ms) |
-| Packet | 35 FPS (27.3 ms) | 28 FPS (31.8 ms) | 27 FPS (19.2 ms) | 27 FPS (19.9 ms) |
-| QuickNet | **60 FPS**\* (1.9 ms) | **60 FPS**\* (7.1 ms) | 58 FPS (6.2 ms) | 57 FPS (6.7 ms) |
-| Warp | **60 FPS**\* | 55 FPS | 33 FPS | 32 FPS |
-
-\* Studio caps the frame rate at 60. [How these were measured](/BlinkBlox/guides/benchmarks/).
-
 ## Where it fits
 
 BlinkBlox is a maintained fork of [Blink](https://github.com/1Axen/blink). Upstream froze this line
 of the compiler in 2026 and began a rewrite, and it declared an unbounded parse of a hostile client
 buffer out of scope. This fork fixes that and continues from there, without giving up the
 TypeScript output, the Studio plugin or the documentation.
+
+Buffer code written by hand is the other neighbour, and for a server's own sends or a remote or two
+it is the simpler choice. What it leaves to you is the receiving side: every length, range and class
+a hostile client can get wrong, in every remote.
+[Compared with hand-written buffers](/BlinkBlox/guides/hand-written-buffers/) shows both readers for
+one event.
 
 [Zap](https://github.com/red-blox/zap) is a neighbouring compiler that focuses on bandwidth. It
 leaves rate limiting to the game, and its decode loop has no `pcall`: one malformed event throws out
@@ -172,6 +158,30 @@ time, outside Studio only, and reads lengths the client sends straight into `tab
 | A decode failure is caught and reported to the game | Yes | No | No | Caught, not reported | No |
 | Shared bitfield for booleans and optionals | Yes | No | Yes | Boolean arrays only | Optionals, boolean arrays |
 | TypeScript output | Yes | Yes | Yes | No | No |
+
+## Measured
+
+Speed is not the reason to choose BlinkBlox: a reader written by hand for one event can be as fast
+as anything generated for it. The numbers compare tools that do the same job, and hold each release to
+the one before it.
+
+A thousand events a frame from client to server, run in Studio on an Intel Core i7-13700K on 0.41.2.
+Blink is upstream's last release, 0.18.9. The numbers are median frame rates, with the milliseconds a
+frame's thousand fires took in brackets. Warp's Fire only queues its value and encodes it later in
+the frame, where the bench cannot time it, so only its frame rate is shown.
+
+| Tool | 1000 booleans | 1000 booleans, each different | 100 entities | 100 entities, each different |
+|---|---|---|---|---|
+| Roblox remotes | 15 FPS (26.0 ms) | 15 FPS (29.1 ms) | 15 FPS (72.7 ms) | 15 FPS (74.5 ms) |
+| **BlinkBlox** | **60 FPS**\* (1.9 ms) | **60 FPS**\* (4.8 ms) | **60 FPS**\* (2.0 ms) | **60 FPS**\* (2.4 ms) |
+| Blink | **60 FPS**\* (4.5 ms) | **60 FPS**\* (9.9 ms) | 44 FPS (2.8 ms) | 45 FPS (3.2 ms) |
+| zap | **60 FPS**\* (12.2 ms) | 46 FPS (18.1 ms) | 45 FPS (7.4 ms) | 44 FPS (7.8 ms) |
+| ByteNet | 30 FPS (17.5 ms) | 23 FPS (21.4 ms) | 35 FPS (15.8 ms) | 34 FPS (16.6 ms) |
+| Packet | 35 FPS (27.3 ms) | 28 FPS (31.8 ms) | 27 FPS (19.2 ms) | 27 FPS (19.9 ms) |
+| QuickNet | **60 FPS**\* (1.9 ms) | **60 FPS**\* (7.1 ms) | 58 FPS (6.2 ms) | 57 FPS (6.7 ms) |
+| Warp | **60 FPS**\* | 55 FPS | 33 FPS | 32 FPS |
+
+\* Studio caps the frame rate at 60. [How these were measured](/BlinkBlox/guides/benchmarks/).
 
 <CardGrid>
 	<LinkCard title="Install BlinkBlox" href="/BlinkBlox/getting-started/installation/" description="Rokit, pesde, release binaries or the Studio plugin." />

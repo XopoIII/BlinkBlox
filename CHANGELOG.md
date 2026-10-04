@@ -7,6 +7,34 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.1.3 — 2026-10-04
+
+The generated modules change by one cast, where a struct received from the other side has an
+`Instance(Class)` field. The wire does not change, so nothing needs recompiling.
+
+### Fixed
+
+- **A received struct's `Instance(Class)` field failed the new type solver.** Its class check was
+  emitted as `Value.Target:IsA("Humanoid")` on a field of an `any`, which `LuauSolverV2` reports as
+  a call on an error type; a game checking its generated server under the new solver saw one error
+  for each such field. The check is now written `(Value.Target :: Instance):IsA("Humanoid")`. It
+  runs the same code. No golden under the new-solver gate had such a field: the one schema that
+  did, `Test.blink`, is past the size that solver finishes.
+
+### Added
+
+- **[Compared with hand-written buffers](https://xopoiii.github.io/BlinkBlox/guides/hand-written-buffers/)**,
+  a guide: when writing a buffer reader by hand is the better choice, what one has to get right once
+  a hostile client is the sender, and the reader the compiler writes for the same event. The code it
+  quotes is checked against a golden by `test/DocGenerated.luau`, which also refuses a generated
+  module that uses a metatable.
+
+### Changed
+
+- The README's Performance section is one table instead of four and says what the numbers are for;
+  the docs' front page puts "Where it fits" above "Measured". The other tables are in
+  [Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/), unchanged.
+
 ## 1.1.2 — 2026-10-04
 
 The compiler is unchanged: a schema compiles to exactly what 1.1.1 produced, and the wire does not

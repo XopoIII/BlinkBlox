@@ -67,6 +67,7 @@ require("./BufferIntegrity")
 require("./Lifecycle")
 require("./DocExamples")
 require("./DocBridges")
+require("./DocGenerated")
 
 --> LAST, and deliberately so: the CLI specs delete ../Network to prove the compiler recreates a
 --> missing output directory, and then recompile only Test.blink. Everything generated from the other
