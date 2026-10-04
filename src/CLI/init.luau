@@ -146,7 +146,7 @@ end
 -->
 --> `--profile` is the one flag that takes a value, and that value is skipped here so that
 --> `blink --profile dev input.blink` does not read a file named "dev".
---> `--` too: `lune run init -- ...` hands it through as an argument, and it named no file either.
+--> `--` too: `luneblox run init -- ...` hands it through as an argument, and it named no file either.
 IsFlag["--"] = true
 
 local Profile: string?

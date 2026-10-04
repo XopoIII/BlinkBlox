@@ -1,10 +1,10 @@
 --!strict
 --- Builds the benchmark place. Run from this directory:
 ---
----     lune run build              compile the definitions and build Benchmark.rbxl
----     lune run build --download   fetch the tools and packages first
----     lune run build --run        then run the place and write Benchmarks.md
----     lune run build --local      compile with this checkout's compiler instead of the release
+---     luneblox run build              compile the definitions and build Benchmark.rbxl
+---     luneblox run build --download   fetch the tools and packages first
+---     luneblox run build --run        then run the place and write Benchmarks.md
+---     luneblox run build --local      compile with this checkout's compiler instead of the release
 ---
 --- Replaces build.bat, which only ran on Windows. It takes flags rather than asking: a prompt throws
 --- when no terminal is attached, which is every script and CI runner.
@@ -64,7 +64,7 @@ Step(`./tools/zap{EXECUTABLE}`, { "./definitions/Scenarios.zap" })
 --> Upstream Blink compiles its own definitions with its own compiler, run from source on Lune.
 for _, Name in { "Definition", "Scenarios" } do
 	local Definition = `{process.cwd}definitions/{Name}.upstream.blink`
-	print(`> lune run init {Definition} -- --yes (in ./tools/upstream/src/CLI)`)
+	print(`> {runtime.command} run init {Definition} -- --yes (in ./tools/upstream/src/CLI)`)
 	local Result = process.exec(runtime.command, { "run", "init", Definition, "--", "--yes" }, {
 		cwd = "./tools/upstream/src/CLI",
 		stdio = "inherit",
@@ -75,7 +75,7 @@ for _, Name in { "Definition", "Scenarios" } do
 end
 if Local then
 	local Definition = `{process.cwd}definitions/Definition.blink`
-	print(`> lune run init {Definition} -- --yes (in ../src/CLI)`)
+	print(`> {runtime.command} run init {Definition} -- --yes (in ../src/CLI)`)
 	local Result = process.exec(runtime.command, { "run", "init", Definition, "--", "--yes" }, {
 		cwd = "../src/CLI",
 		stdio = "inherit",

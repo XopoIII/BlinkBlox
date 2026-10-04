@@ -5,7 +5,7 @@
 --- BlinkBlox loads through Environment.luau, as it always has. The others load through World.luau,
 --- upstream Blink among them, compiled by its own compiler from definitions/Definition.upstream.blink
 --- -- from the same files Studio runs: `src/shared/modes/<tool>.luau` declares each tool's events, and
---- requires the generated modules or the downloaded packages. `lune run build --download` fetches
+--- requires the generated modules or the downloaded packages. `luneblox run build --download` fetches
 --- those; a tool whose files are missing is skipped, and says so.
 local fs = require("@lune/fs")
 
@@ -54,7 +54,7 @@ function Tools.Missing(Name: string): string?
 	local Paths: { string } = REQUIRES[Name] or {}
 	for _, Path in Paths do
 		if not fs.isFile(Path) then
-			return `{Path} is missing; run \`lune run build --download\` first`
+			return `{Path} is missing; run \`luneblox run build --download\` first`
 		end
 	end
 	return nil

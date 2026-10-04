@@ -1,6 +1,6 @@
 --!strict
 --> Sets the version used by the build. Run as:
--->     lune run bump 0.19.0
+-->     luneblox run bump 0.19.0
 -->
 --> The version lives in two places that must agree: build/.darklua.json, which darklua injects as
 --> `_G.VERSION` when bundling both the CLI and the Studio plugin, and pesde.toml, which carries it as
@@ -38,7 +38,7 @@ if not new_version then
 
 	if not Asked then
 		stdio.ewrite("bump: no version given, and no terminal to ask on.\n")
-		stdio.ewrite("Usage: lune run bump <version>   (for example: lune run bump 0.19.0)\n")
+		stdio.ewrite("Usage: luneblox run bump <version>   (for example: luneblox run bump 0.19.0)\n")
 		process.exit(2)
 	end
 
