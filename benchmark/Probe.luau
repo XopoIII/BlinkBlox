@@ -1,7 +1,7 @@
 --!strict
 --- Measures how large a buffer an UnreliableRemoteEvent carries, in Studio. Run from this directory:
 ---
----     lune run Probe
+---     luneblox run Probe
 ---
 --- Builds probe/ into Probe.rbxl and opens it through run-in-roblox; press F5 when Studio asks, as for
 --- the benchmark. Prints, for each direction and each number of Instances sent beside the buffer, the

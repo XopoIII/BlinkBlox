@@ -31,7 +31,7 @@ local COMPILE_TEST_FILE = "../../test/Sources/Test"
 ---
 --- Every other spec here proves the generated modules still BEHAVE. None of them notice when the
 --- emitted text changes shape -- a moved guard, a renamed local, a dropped comment -- which is
---- exactly what a generator change does. Regenerate them with `lune run Test --yes --update-goldens`
+--- exactly what a generator change does. Regenerate them with `luneblox run Test --yes --update-goldens`
 --- and read the diff before committing it.
 local GOLDEN_DIRECTORY = "./Golden"
 
@@ -181,7 +181,7 @@ local function CaptureGoldens(File: string)
 		if not fs.isFile(GoldenPath) then
 			ErrorPrint(
 				`No golden for {Stem}/{Basename}. Run `
-					.. `"lune run Test --yes --update-goldens" and commit the result.`
+					.. `"luneblox run Test --yes --update-goldens" and commit the result.`
 			)
 		end
 
