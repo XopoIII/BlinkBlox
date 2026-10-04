@@ -54,6 +54,7 @@ const sidebar = [
 		items: [
 			'guides/whats-new',
 			'guides/securing-the-server',
+			'guides/hand-written-buffers',
 			'guides/common-pitfalls',
 			'guides/places-without-a-server',
 			'guides/bandwidth',

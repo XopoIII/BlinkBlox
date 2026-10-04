@@ -1,0 +1,128 @@
+---
+title: Compared with hand-written buffers
+description: When writing your own buffer code is the better choice, what a hand-written reader has to get right once the sender is a hostile client, and the code the compiler writes for the same event.
+---
+
+Writing to a `buffer` by hand is not hard, and code you write yourself for one event can be as fast
+as anything BlinkBlox generates for it. Speed is not the reason to use a compiler.
+
+The reason is the receiving side. A writer has one input, yours. A reader on the server has whatever
+a client chose to send.
+
+## Where writing it by hand is fine
+
+- **The sender is the server.** A client reading the server's packets has nothing to defend against.
+- **You have one or two remotes** and no wish to add a build step for them.
+- **The payload is one fixed shape**, a few numbers at known offsets, with nothing variable in it.
+
+In those cases a compiler saves you little. Use what you have.
+
+## What a reader has to get right
+
+Take one event: a client reports a hit with a target, an amount from 1 to 100 and a short note.
+
+```blink
+event Damage {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Rate: 10,
+	Data: struct { Target: Instance(Humanoid), Amount: u8(1..100), Note: string(0..32) }
+}
+```
+
+The reader most people write first:
+
+```luau
+Remote.OnServerEvent:Connect(function(Player, Packet: buffer, Target: Humanoid)
+	local Amount = buffer.readu8(Packet, 0)
+	local Length = buffer.readu8(Packet, 1)
+	local Note = buffer.readstring(Packet, 2, Length)
+
+	Combat.Apply(Player, Target, Amount, Note)
+end)
+```
+
+It works for every packet your own client sends. An exploiter does not run your client:
+
+| What arrives | What this reader does |
+|---|---|
+| `Amount` of 0 or 255 | Passes it on. Nothing compares it with 1 and 100. |
+| A `Part`, a string or nothing where `Target` should be | Passes it on. A type annotation is not checked when the code runs. |
+| The same call 500 times a second | Runs `Combat.Apply` 500 times a second. |
+| A string, or a buffer one byte long, as `Packet` | Throws, and prints an error with a stack trace each time it is sent. |
+
+Each of those is a few lines to fix. The ones below are easier to miss, and none of them shows up
+until the payload grows past this example:
+
+- **A count read before the allocation it sizes.** `table.create(buffer.readu16(Packet, 0))` gives
+  a client 65535 slots for two bytes. The count has to be compared with its bound, and with the
+  bytes left in the packet, before anything is allocated.
+- **A float's range.** `if X < -1 or X > 1 then return end` lets NaN through, because NaN compares
+  false both ways. The check has to be written `not (X >= -1)`.
+- **Several events in one buffer.** A remote call costs about 11 bytes beside its payload, so
+  packing a frame's events into one buffer is most of what buffer networking saves. Once you do, a
+  throw halfway through the buffer loses every event after it, and those may belong to an honest
+  player's inputs. The loop needs a `pcall` and a decision about what was already delivered.
+- **Telling the game.** Refusing a packet silently means nobody learns who is sending them. Reporting
+  every one means a client can call your handler, or fill your output, hundreds of times a second.
+- **Two copies of every offset.** The writer on the client and the reader on the server each spell
+  out the layout. Change one field and forget the other side, and the server decodes one value as
+  another without an error.
+
+None of this is beyond anyone who can write the first reader. It is the same dozen lines again in
+every remote, and one forgotten check is enough.
+
+## What the compiler writes instead
+
+This is the reader BlinkBlox generates for `Damage`, copied from its output. The two fixed-size
+fields share a block that is read once, as `BLOCK_START`:
+
+```luau golden="Handwritten/HandwrittenServer.luau"
+do
+	-- Value.Amount: Amount
+	local Checked = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+	if not (Checked >= 1) then error(`Expected "Value.Amount" to be larger than or equal to 1, got {Checked} instead.`) end
+	if not (Checked <= 100) then error(`Expected "Value.Amount" to be smaller than or equal to 100, got {Checked} instead.`) end
+	Value.Amount = Checked
+end
+do
+	-- Value.Note: Note
+	local Length = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+	if Length > 32 then error(`Expected length of "Value.Note" to be smaller than or equal to 32, got {Length} instead.`) end
+	if Length > buffer.len(RecieveBuffer) - RecieveCursor then error(`Expected "Value.Note" to fit in the {buffer.len(RecieveBuffer) - RecieveCursor} bytes left in the packet, got a length of {Length} instead.`) end
+	Value.Note = buffer.readstring(RecieveBuffer, Read(Length), Length)
+end
+```
+
+The target is checked for being an Instance and for its class:
+
+```luau golden="Handwritten/HandwrittenServer.luau"
+elseif not (Value.Target :: Instance):IsA("Humanoid") then
+	error(`Expected an Instance of type "Humanoid", got "{Value.Target.ClassName}" instead.`)
+end
+```
+
+And the listener is reached only past the event's rate limit:
+
+```luau golden="Handwritten/HandwrittenServer.luau"
+local Value: { Target: Humanoid, Amount: number, Note: string } = SerdesFunctions.ReadEVENT_Damage()
+if RateAccept(Player, 1, 10, 10, "Damage") == true then
+```
+
+That is all there is to it: locals, functions and `buffer` calls, the code you would write by hand
+with the checks already in it. A generated module has no classes and no metatables, and needs no
+runtime library beside it. Its API is tables of functions, called with a dot --
+`Net.Damage.Fire(...)`, never `Net.Damage:Fire(...)`.
+
+The `error` calls above never leave the module. The whole packet is decoded inside one `pcall`,
+an event at a time: the events before the bad one are delivered, the rest of the packet is dropped,
+and your handler is told which player sent it, at most once a second. The full order of checks is in
+[Securing the server](/BlinkBlox/guides/securing-the-server/#what-the-server-does-without-being-asked).
+
+## What stays yours
+
+BlinkBlox makes sure a value is well-formed. Whether it is legitimate is still the game's to decide:
+an `Amount` of 100 is in range whether or not the player's weapon can deal it, and `Target` is a
+Humanoid whether or not it is in reach. See
+[What BlinkBlox does not protect you from](/BlinkBlox/guides/securing-the-server/#what-blinkblox-does-not-protect-you-from).

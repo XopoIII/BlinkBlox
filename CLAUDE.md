@@ -303,6 +303,9 @@ the config.
   generated modules must load as Luau. A fence opts out with `fragment` (not a whole schema) or
   inverts with `error` (must be refused). That test exists because the old docs carried examples the
   parser had never accepted.
+- **A ```` ```luau ```` block marked `golden="<path>"` quotes generated code**, and
+  `test/DocGenerated.luau` fails when it is no longer in that golden; the same test refuses a golden
+  that uses a metatable, since the docs say a generated module has none.
 - Internal links are absolute and carry the base, `/BlinkBlox/...`; `starlight-links-validator`
   fails the build on a dead link or anchor.
 - The Studio plugin is shown with HTML mockups in `docs/src/components/plugin/`, not screenshots:

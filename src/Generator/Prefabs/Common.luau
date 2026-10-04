@@ -177,7 +177,13 @@ local function InstanceAsserts(Block: Block, Sending: boolean, TargetVariable: s
 		)
 		Block:Line("\tMissingInstance = true")
 		if Class ~= "Instance" then
-			Block:Line(`elseif not {TargetVariable}:IsA("{Class}") then`)
+			--> A field is cast for the new type solver: read out of the `any` a struct is decoded
+			--> into and narrowed by the `typeof` above, it is a type the solver cannot call a
+			--> method on. A local is left alone, since `IsA` is what narrows it to its class.
+			local Subject = if string.find(TargetVariable, "[%.%[]")
+				then `({TargetVariable} :: Instance)`
+				else TargetVariable
+			Block:Line(`elseif not {Subject}:IsA("{Class}") then`)
 			Block:Line(
 				`\terror(\`Expected an Instance of type "{Class}", got "\{{TargetVariable}.ClassName}" instead.\`)`
 			)
