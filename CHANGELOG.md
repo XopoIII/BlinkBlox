@@ -7,6 +7,26 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.1.2 — 2026-10-04
+
+The compiler is unchanged: a schema compiles to exactly what 1.1.1 produced, and the wire does not
+change, so nothing needs recompiling. What moves is what the release is built with and runs on.
+
+### Changed
+
+- **The release executables carry LuneBlox 0.10.13** (from 0.10.12): mlua 0.12.2 and the fast flags
+  of the Roblox client 0.741, on the same Luau 0.740. Timed on an Apple M1 with this release's
+  compiler on both runtimes, the generated modules' medians agree within 1% on Booleans, Entities
+  and their random-payload variants, native and interpreted; the short `Tiny` bench, timed six
+  times a mode at 2000 frames on each, reads 0.199-0.200 ms a frame to fire and 0.278-0.282 ms to
+  decode interpreted on both.
+- The rest of the toolchain is at its latest release: rojo 7.7.1, selene 0.32.0, lefthook 2.1.16,
+  and Starlight 0.42.5 for the docs.
+- Usage text that still said `lune run` says `luneblox run`: `bump`'s usage line, the benchmark's
+  "run `luneblox run build --download` first", and the golden test's hint to re-record the
+  snapshots. Upstream Lune was never a dependency of the toolchain; the pesde package still targets
+  the `lune` environment and runs on any Lune.
+
 ## 1.1.1 — 2026-10-02
 
 The generated modules change only under `option TrafficStats`, and only by the counting lines
