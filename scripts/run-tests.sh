@@ -5,9 +5,9 @@
 # modules against mocked Roblox globals (test/Shared.luau, Client.luau, Server.luau). That makes it
 # the only gate that checks the compiler's OUTPUT rather than its source.
 #
-# `--yes` skips the "Compile files?" prompt. It is not merely convenient: `stdio.prompt` throws
-# "IO error: not a terminal" when stdin is not a TTY, so without it the suite aborts before running
-# a single spec whenever it is driven by a hook, a pipe or CI.
+# `--yes` skips the "Compile files?" prompt. `stdio.prompt` throws "IO error: not a terminal" when
+# stdin is not a TTY, which once aborted the suite before a single spec ran whenever a hook, a pipe
+# or CI drove it. The runner now catches that and compiles, so the flag only says so out loud.
 set -e
 
 export PATH="$HOME/.rokit/bin:$PATH"

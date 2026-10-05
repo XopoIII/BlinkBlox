@@ -54,7 +54,7 @@ end
 --- Compiling is the DEFAULT and a prompt is only ever a convenience. `stdio.prompt` throws
 --- "IO error: not a terminal" when stdin is not a TTY — CI, a pipe, an editor task — and that throw
 --- used to abort the whole runner before a single spec ran, which reads exactly like a broken test
---- suite. It is the same defect the compiler CLI has, and it is why the suite could never be gated
+--- suite. It is the same defect the compiler CLI had, and it is why the suite could never be gated
 --- in CI. Pass `--no-compile` to run against the already generated modules.
 local function HasArgument(Name: string): boolean
 	for _, Argument in process.args do

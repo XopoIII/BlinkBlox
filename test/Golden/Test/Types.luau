@@ -469,7 +469,7 @@ local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, S
         ReleaseInvocation(State, Identifier)
 
         if coroutine.status(Thread) == "suspended" then
-            warn(`[BlinkBlox]: {Name} and has been failed after {Seconds} seconds.`)
+            warn(`[BlinkBlox]: {Name} within {Seconds} seconds, so the call failed.`)
             task.spawn(Thread, false)
         end
 

@@ -7,6 +7,29 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.1.4 — 2026-10-05
+
+The generated modules change by the text of one warning. The wire does not change, so nothing needs
+recompiling; a game that matches that warning's text in its output must match the new one.
+
+### Fixed
+
+- **The warning for a call that timed out read badly.** An `Invoke` nobody answered warned
+  `"F" was never answered and has been failed after N seconds.` It now says
+  `"F" was never answered within N seconds, so the call failed.`, and on the server still names the
+  player: `"F" was never answered by X within N seconds, so the call failed.` When it is raised and
+  what the caller gets are unchanged.
+- **A run from source reported two versions.** The CLI printed `BlinkBlox DEBUG` where
+  `Library.VERSION` and the header of every module it generated said `0.0.0`. All three now read
+  one module, `src/Modules/Version.luau`, and say `0.0.0`. A release build is unaffected: it
+  carries its version as before.
+
+### Changed
+
+- The docs site's `http-cache-semantics` is updated to 4.3.0, past
+  [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp). It is a dependency of
+  the site's build, not of the compiler or of anything a game runs.
+
 ## 1.1.3 — 2026-10-04
 
 The generated modules change by one cast, where a struct received from the other side has an

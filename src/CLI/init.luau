@@ -13,6 +13,7 @@ require("@self/Utility/Relaunch")(debug.info(1, "s"))
 
 local Attributes = require("./Modules/Attributes")
 local Compile = require("@self/Utility/Compile")
+local Version = require("./Modules/Version")
 local Watch = require("@self/Utility/Watch")
 
 ---- Settings ----
@@ -115,11 +116,6 @@ local function PrintHelpMessage()
 end
 
 ---- Main ----
-
---> `DEBUG` outside a release bundle is deliberate, not a placeholder: darklua replaces `_G.VERSION`
---> with a literal when it bundles, so reading it through `_G` is what lets an unbundled run tell you
---> it is unbundled.
-local Version = _G.VERSION or "DEBUG"
 
 local RawArguments = process.args
 
