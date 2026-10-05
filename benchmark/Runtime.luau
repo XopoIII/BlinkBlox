@@ -32,6 +32,7 @@ local Generator = require("../src/Generator")
 local Names = require("./Names")
 local Parser = require("../src/Parser")
 local Tools = require("./runtime/Tools")
+local Version = require("../src/Modules/Version")
 
 local EVENTS_PER_FRAME = 1000
 local WARMUP_FRAMES = 10
@@ -242,7 +243,7 @@ for _, Name in Tools.ORDER do
 end
 
 runtime.notice("These timings")
-local Label = if SourcesDirectory then `modules from {SourcesDirectory}` else _G.VERSION or "(unbundled)"
+local Label = if SourcesDirectory then `modules from {SourcesDirectory}` else Version.Current
 print(
 	`BlinkBlox {Label}{if Traffic then " with TrafficStats" else ""}, {Frames} frames of {EVENTS_PER_FRAME} events, times in ms per frame, on {runtime.description}`
 )

@@ -33,7 +33,7 @@ export type Output = {
 local Library = {}
 
 --- The version of BlinkBlox that generates, as the modules' headers name it.
-Library.VERSION = Version
+Library.VERSION = Version.Current
 
 --- Compiles `Schema`. A schema that does not compile raises its diagnostic, rendered as the CLI
 --- prints it; warnings are returned rather than printed.
