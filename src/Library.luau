@@ -10,6 +10,7 @@ local Generator = require("./Generator")
 local OutputSize = require("./Modules/OutputSize")
 local Parser = require("./Parser")
 local Source = require("./Modules/Source")
+local Version = require("./Modules/Version")
 
 export type Options = {
 	--- The `@profile` to compile under: "dev", "debug", "test" or "release" (the default).
@@ -32,7 +33,7 @@ export type Output = {
 local Library = {}
 
 --- The version of BlinkBlox that generates, as the modules' headers name it.
-Library.VERSION = (_G.VERSION or "0.0.0") :: string
+Library.VERSION = Version
 
 --- Compiles `Schema`. A schema that does not compile raises its diagnostic, rendered as the CLI
 --- prints it; warnings are returned rather than printed.

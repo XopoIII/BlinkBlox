@@ -39,7 +39,8 @@ deprecated = "warn"
 # `_G` IS THE BUILD-CONSTANT CHANNEL HERE, not sloppiness. `build/.darklua.json` declares two
 # `inject_global_value` rules, so darklua replaces `_G.VERSION` and `_G.RELEASE` with literals when
 # it bundles a release; the source reads them through `_G` precisely so an unbundled run (running
-# from source, or the Studio plugin) falls back to `"DEBUG"` and debug-mode output instead.
+# from source, or the Studio plugin) falls back to `"0.0.0"` (`src/Modules/Version.luau`) and
+# debug-mode output instead.
 # `_G.WATCH_THREAD` marks the CLI's watch thread, and `_G._BLINK` is part of the generated runtime's
 # own scope-collision protocol. None of these can be restructured away without changing the build.
 global_usage = "allow"

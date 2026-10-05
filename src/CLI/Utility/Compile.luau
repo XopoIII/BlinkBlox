@@ -82,7 +82,7 @@ local function CreateDirectoryIfNotFound(Path: string, Options: CompileOptions)
 	--> `stdio.prompt` does not degrade when stdin is not a TTY -- it throws
 	--> "IO error: not a terminal", and under some runners it simply blocks with nothing printed. So
 	--> a build driven by a script, a git hook or CI used to hang or fail here for no visible reason,
-	--> which is why every automated caller has to remember `--yes`.
+	--> and every automated caller had to remember `--yes`. The throw is caught now, so none has to.
 	--> Asking is only meaningful when someone is there to answer: with no terminal, creating the
 	--> directory is the answer the user already gave by naming that output path in the schema.
 	local Result = Options.YesToEverything

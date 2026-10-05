@@ -268,7 +268,9 @@ Consequences worth remembering:
   Excluded from lint; never "fix" an undefined variable there.
 - **`_G` is the build-constant channel.** `build/.darklua.json` declares `inject_global_value` for
   `_G.VERSION` and `_G.RELEASE`, so darklua replaces them with literals when bundling a release.
-  Reading them through `_G` is what lets an unbundled run fall back to debug behaviour.
+  Reading them through `_G` is what lets an unbundled run fall back to debug behaviour. The version
+  is read in one module, `src/Modules/Version.luau`, which says `0.0.0` when unbundled; the CLI, the
+  library and the generated headers all take it from there.
 - **`Token.Value` is typed `string`, but `true`/`false` arrive as real booleans.** `Parser.Options`
   depends on that when storing a boolean option. The widening is confined to `TokenTransformer` and
   one cast in `Lexer.GetNextToken`.
