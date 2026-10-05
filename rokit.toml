@@ -16,3 +16,7 @@ luau-lsp = "JohnnyMorganz/luau-lsp@1.70.1"  # editor LSP, and `luau-lsp analyze`
 lefthook = "evilmartians/lefthook@2.1.16"   # git hooks
 darklua = "seaofvoices/darklua@0.19.0"      # bundler for release builds and the Studio plugin
 run-in-roblox = "rojo-rbx/run-in-roblox@0.3.0"
+# The two publishers, run by hand at a release (see "Releasing" in CLAUDE.md). Pinned because a release
+# is the one time they run, and an unpinned tool is then whichever version the machine happens to have.
+pesde = "pesde-pkg/pesde@0.7.4+registry.0.2.3"  # publishes the CLI as the pesde package xopoiii/blinkblox
+wally = "UpliftGames/wally@0.3.2"               # publishes the library from release/wally

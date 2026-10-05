@@ -28,6 +28,7 @@ local Generator = require("../src/Generator")
 local Names = require("./Names")
 local Parser = require("../src/Parser")
 local Tools = require("./runtime/Tools")
+local Version = require("../src/Modules/Version")
 local World = require("./runtime/World")
 
 local WARMUP_FRAMES = 10
@@ -185,7 +186,7 @@ end
 
 runtime.notice("These timings")
 print(
-	`BlinkBlox {_G.VERSION or "(unbundled)"}, {Frames} frames, times in ms per frame, {Apis.CROWD} players where a crowd, on {runtime.description}`
+	`BlinkBlox {Version.Current}, {Frames} frames, times in ms per frame, {Apis.CROWD} players where a crowd, on {runtime.description}`
 )
 
 for _, Scenario in Apis.SCENARIOS do

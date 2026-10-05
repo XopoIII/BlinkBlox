@@ -2,6 +2,15 @@ local fs = require("@lune/fs")
 local runtime = require("../.lune/libs/runtime")
 local stdio = require("@lune/stdio")
 
+--> This run stands in for a release bundle, and says so itself: darklua would have replaced both
+--> globals with literals, so they are set here the way it sets them -- before anything under src/ is
+--> required. `src/Modules/Version.luau` reads `_G.VERSION` once, as it loads, and stays the only
+--> reader; set any later, the label would reach nothing. `PERFORMANCE` is this benchmark's own
+--> label for the modules it generates and no release's version, and `_G.RELEASE` is what makes the
+--> generator time release output rather than debug output.
+_G.RELEASE = true
+_G.VERSION = "PERFORMANCE"
+
 local Attributes = require("../src/Modules/Attributes")
 local Error = require("../src/Modules/Error")
 local Generator = require("../src/Generator")
@@ -78,9 +87,6 @@ local function BenchmarkClosure(Title: string, Closure: () -> ())
 	print(`95th Percentile: {Format(Percentile(Times, 0.95))}`)
 	print(`99th Percentile: {Format(Percentile(Times, 0.99))}`)
 end
-
-_G.RELEASE = true
-_G.VERSION = "PERFORMANCE"
 
 runtime.notice("These timings")
 

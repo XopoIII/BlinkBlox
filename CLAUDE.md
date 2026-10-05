@@ -221,6 +221,23 @@ it. This is not cosmetic: Luau defaults to `nonstrict`, so a file without a dire
 rather than merely unannotated — the lexer, the generator, `Settings` and the diagnostics renderer
 all ran that way while the type gate reported the tree as clean.
 
+## Releasing
+
+As 1.1.4 was released. `pesde` and `wally` are pinned in `rokit.toml` like every other tool here.
+
+1. On the release branch: `luneblox run bump X.Y.Z`, add the `CHANGELOG.md` section, and open the
+   pull request. The goldens are compiled from source and say `0.0.0`, so a bump does not touch them.
+2. Merge the pull request with a merge commit, not a squash or a rebase.
+3. `gh release create vX.Y.Z --target main --title "X.Y.Z" --notes-file <file>`, where the file holds
+   that version's `CHANGELOG.md` section without its heading. This creates the tag, and publishing
+   the release starts `release.yml`, which builds and uploads five CLI archives and
+   `blinkblox-plugin.rbxm`; wait for all six.
+4. Check out the tagged commit and run `luneblox run build`, which writes
+   `release/blinkblox_pesde.luau` and `release/wally/`.
+5. `pesde publish --yes` from the repository root, then `wally publish --project-path release/wally`.
+   Both need a login on the machine (`pesde auth login`, `wally login`), and neither registry lets
+   a version be published twice.
+
 ## Architecture
 
 ```
@@ -257,6 +274,8 @@ Consequences worth remembering:
 
 - `selene.toml` sets `std = "luau+roblox"` at the root; `plugin/selene.toml` sets `std = "roblox"`.
 - `scripts/type-check.sh` analyses the compiler and the plugin as two separate contours.
+- In a git worktree under `.claude/worktrees/` luau-lsp also loads the main checkout's `.luaurc`, from
+  above it; this one overrides every key that one sets, and luau-lsp 1.70.1 has no option to stop the walk.
 - The compiler's range type is `Settings.NumberRange` (a plain `{ Min, Max }` table), deliberately
   **not** Roblox's `NumberRange` userdata, which does not exist on Lune. Settings, AST, Parser and
   Prefabs all refer to the one definition, and `Settings.NumberRange.new` is its one constructor.
@@ -268,9 +287,10 @@ Consequences worth remembering:
   Excluded from lint; never "fix" an undefined variable there.
 - **`_G` is the build-constant channel.** `build/.darklua.json` declares `inject_global_value` for
   `_G.VERSION` and `_G.RELEASE`, so darklua replaces them with literals when bundling a release.
-  Reading them through `_G` is what lets an unbundled run fall back to debug behaviour. The version
-  is read in one module, `src/Modules/Version.luau`, which says `0.0.0` when unbundled; the CLI, the
-  library and the generated headers all take it from there.
+  Reading them through `_G` is what lets an unbundled run fall back to debug behaviour.
+  `_G.VERSION` is read in one module, `src/Modules/Version.luau`: `Current` is the version, `0.0.0`
+  when unbundled, and `Bundled` says whether one was injected. The CLI, the library, the generated
+  headers, the TypeScript emitter's testing header and the benchmarks' labels all ask it.
 - **`Token.Value` is typed `string`, but `true`/`false` arrive as real booleans.** `Parser.Options`
   depends on that when storing a boolean option. The widening is confined to `TokenTransformer` and
   one cast in `Lexer.GetNextToken`.

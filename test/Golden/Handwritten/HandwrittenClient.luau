@@ -469,7 +469,7 @@ end
 --> be the callee, since a client that never replies is ordinary: it left, it crashed, it was
 --> exploited. `Expired` runs after the caller has been failed; the server uses it to let go of a
 --> player who is gone.
-local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Name: string, Expired: (() -> ())?)
+local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Unanswered: string, Expired: (() -> ())?)
     local Thread = State.Threads[Identifier]
     if not Thread then
         return
@@ -481,7 +481,7 @@ local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, S
         ReleaseInvocation(State, Identifier)
 
         if coroutine.status(Thread) == "suspended" then
-            warn(`[BlinkBlox]: {Name} within {Seconds} seconds, so the call failed.`)
+            warn(`[BlinkBlox]: {Unanswered} within {Seconds} seconds, so the call failed.`)
             task.spawn(Thread, false)
         end
 

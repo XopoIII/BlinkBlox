@@ -7,6 +7,24 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.1.5 — 2026-10-05
+
+A housekeeping release. A generated module differs from 1.1.4's by the name of one parameter and
+the version in its header: it runs the same code and prints the same warning, the wire does not
+change, and nothing needs recompiling.
+
+### Changed
+
+- **`TimeoutInvocation`'s parameter is named for what it holds.** The function in every generated
+  module that warns when a call is never answered took the opening of its warning, `"F" was never
+  answered`, in a parameter called `Name`. It is `Unanswered` now. The warning's text is 1.1.4's.
+- **`_G.VERSION` is read in exactly one module.** `src/Modules/Version.luau` now answers two
+  questions, which version this is and whether it is a bundled build, and the TypeScript emitter
+  asks it instead of testing the global itself. The benchmarks label a run from source `0.0.0`, as
+  the CLI does, where they printed `(unbundled)`; no published figure is re-measured or changed.
+- `pesde` and `wally`, which publish a release, are pinned in `rokit.toml` beside the other tools,
+  and the release procedure is written down in `CLAUDE.md`.
+
 ## 1.1.4 — 2026-10-05
 
 The generated modules change by the text of one warning. The wire does not change, so nothing needs

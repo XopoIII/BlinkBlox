@@ -26,6 +26,7 @@ local Attributes = require("../src/Modules/Attributes")
 local Crowd = require("./runtime/Crowd")
 local Generator = require("../src/Generator")
 local Parser = require("../src/Parser")
+local Version = require("../src/Modules/Version")
 
 local WARMUP_FRAMES = 10
 local CROWD = 50
@@ -329,7 +330,7 @@ local ServerSource, ClientSource = Generate()
 
 runtime.notice("These timings")
 print(
-	`BlinkBlox {_G.VERSION or "(unbundled)"}, {Frames} frames, times in ms per frame, {CROWD} players where a crowd, on {runtime.description}`
+	`BlinkBlox {Version.Current}, {Frames} frames, times in ms per frame, {CROWD} players where a crowd, on {runtime.description}`
 )
 print("")
 print("|Scenario|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|")
