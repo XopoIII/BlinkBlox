@@ -1,5 +1,6 @@
 --!strict
 
+local Grammar = require("./Grammar")
 local stdio = require("@lune/stdio")
 
 local function Style(text: any, style: stdio.Style): string
@@ -9,30 +10,6 @@ end
 local function Color(text: any, color: stdio.Color): string
 	return `{stdio.color(color)}{text}{stdio.color("reset")}`
 end
-
-local KEYWORDS = {
-	["and"] = true,
-	["break"] = true,
-	["do"] = true,
-	["else"] = true,
-	["elseif"] = true,
-	["end"] = true,
-	["false"] = true,
-	["for"] = true,
-	["function"] = true,
-	["if"] = true,
-	["in"] = true,
-	["local"] = true,
-	["nil"] = true,
-	["not"] = true,
-	["or"] = true,
-	["repeat"] = true,
-	["return"] = true,
-	["then"] = true,
-	["true"] = true,
-	["until"] = true,
-	["while"] = true,
-}
 
 local function ShouldntWrap(value: any): boolean
 	if type(value) ~= "string" then
@@ -51,7 +28,7 @@ local function ShouldntWrap(value: any): boolean
 		return false
 	end
 
-	if KEYWORDS[value] then
+	if Grammar.LUAU_KEYWORDS[value] then
 		return false
 	end
 
@@ -83,28 +60,20 @@ local function FormatTable(Value: any, FilterFunction: (Value: any) -> boolean, 
 
 	local Tabs = string.rep(INDENT, CurrentDepth)
 	local Newline = ("\n" .. INDENT .. Tabs)
-	local Text = Style(`\{ ({Address})`, "dim") .. Newline
-
 	Cache[Value] = true
 
-	local First = true
+	local Parts = {}
 	for Key, Entry in Value do
 		if FilterFunction(Key) == false then
 			continue
 		end
 
 		local KeyText = ShouldntWrap(Key) and Key or `["{Format(Key, FilterFunction, CurrentDepth + 1)}"]`
-
-		if not First then
-			Text ..= Style(",", "dim") .. Newline
-		end
-
-		First = false
-		Text ..= `{KeyText} = {Format(Entry, FilterFunction, CurrentDepth + 1)}`
+		table.insert(Parts, `{KeyText} = {Format(Entry, FilterFunction, CurrentDepth + 1)}`)
 	end
 
-	Text ..= "\n" .. Tabs .. Style("}", "dim")
-	return Text
+	local Text = table.concat(Parts, Style(",", "dim") .. Newline)
+	return Style(`\{ ({Address})`, "dim") .. Newline .. Text .. "\n" .. Tabs .. Style("}", "dim")
 end
 
 function Format(Value: any, Filter: ((Value: any) -> boolean)?, Depth: number?): string
