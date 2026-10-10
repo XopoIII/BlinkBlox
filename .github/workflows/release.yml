@@ -21,7 +21,25 @@ env:
   GH_TOKEN: ${{github.token}}
 
 jobs:
+  # A release must never ship artifacts the test suite would have failed: this
+  # workflow triggers on the release event, so without its own gate a tag cut
+  # from a red tree still uploads binaries.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup rokit
+        uses: CompeyDev/setup-rokit@v0.2.1
+
+      - name: Tests
+        run: luneblox run Test --yes
+        working-directory: test
+
   build:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

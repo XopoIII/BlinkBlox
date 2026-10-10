@@ -57,6 +57,12 @@ jobs:
         run: luneblox run Test --yes
         working-directory: test
 
+      # The release workflow was the only place the bundle was built, so a broken
+      # darklua config surfaced at release time, after the tag existed. Building it
+      # here puts that before review.
+      - name: Release bundle
+        run: luneblox run build
+
   # The docs site was deployed only from main, so a broken page, a dead link or an example that no
   # longer matches the compiler surfaced after the merge. Building it here puts that before review.
   # The link validator fails the build on a dead internal link or anchor.
