@@ -1,8 +1,14 @@
 # GitHub Actions here are pinned by hand and kept in step by check-versions.sh;
 # the docs site's npm dependencies were the one set with nobody watching them.
+# One grouped pull request a week, not one per package: the docs job in
+# checks.yaml builds the site and validates its links, and passes or fails for the lot.
 version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/docs"
     schedule:
       interval: "weekly"
+    groups:
+      docs:
+        patterns:
+          - "*"
