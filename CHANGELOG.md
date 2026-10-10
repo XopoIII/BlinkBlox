@@ -7,6 +7,17 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.1.7 — 2026-10-10
+
+A housekeeping release. A generated module differs from 1.1.6's by the version in its header: it
+runs the same code, the wire does not change, and nothing needs recompiling.
+
+### Changed
+
+- **The CLI archives are built on LuneBlox 0.10.16**, up from 0.10.15. That release moves twenty
+  of the runtime's crates to their newest compatible versions and changes nothing a script sees;
+  the suite and the goldens pass on it unchanged.
+
 ## 1.1.6 — 2026-10-10
 
 A housekeeping release. A generated module differs from 1.1.5's by the version in its header: it
