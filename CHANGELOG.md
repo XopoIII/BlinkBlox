@@ -7,6 +7,32 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.1.6 — 2026-10-10
+
+A housekeeping release. A generated module differs from 1.1.5's by the version in its header: it
+runs the same code, the wire does not change, and nothing needs recompiling.
+
+### Changed
+
+- **The release bundle is built on every pull request.** `luneblox run build` ran only in the
+  release workflow, so a broken darklua config surfaced after the tag existed. The checks build it
+  now, which adds about twenty seconds.
+- **A release runs the suite before it uploads.** `release.yml` has a `verify` job that the build
+  waits for, so a tag cut from a tree that fails its tests uploads no binaries.
+- **Luau's reserved words are listed once.** The value formatter the tests print with kept its own
+  copy of `Grammar.LUAU_KEYWORDS`; it reads that table now, and joins a table's lines with
+  `table.concat`. What it prints is unchanged.
+- The docs site's npm dependencies are watched by Dependabot, one grouped pull request a week.
+- **Every pin is the latest release again.** The CLI archives are built on LuneBlox 0.10.15, up
+  from 0.10.13; lefthook is 2.2.1, `actions/setup-node` 7.1.0, and the docs site is on Astro 7.3.8,
+  Starlight 0.42.6 and starlight-links-validator 0.27.0.
+
+### Fixed
+
+- **The docs site built with a `postcss-selector-parser` that has a known flaw.** A selector could
+  be made to cost quadratic time to parse (fixed in 7.1.6). `docs/package.json` overrides it to
+  7.1.6; the built site is byte-identical. It was never in the compiler or in generated code.
+
 ## 1.1.5 — 2026-10-05
 
 A housekeeping release. A generated module differs from 1.1.4's by the name of one parameter and
