@@ -11,7 +11,6 @@ local function Color(text: any, color: stdio.Color): string
 	return `{stdio.color(color)}{text}{stdio.color("reset")}`
 end
 
-
 local function ShouldntWrap(value: any): boolean
 	if type(value) ~= "string" then
 		return false
