@@ -137,6 +137,14 @@ event Purchase {
 }
 ```
 
+A client that paces itself to these numbers -- a cooldown of `1 / Rate` seconds, a queue of `Burst`
+-- reads them from [`option ExportRates`](/BlinkBlox/language/options/#exportrates) rather than
+keeping a copy:
+
+```lua
+task.wait(1 / Net.Rates.Purchase.Rate)
+```
+
 Each player's bucket starts full. Refused events are dropped before they reach your listener, and
 reported at most once per player per event per second. To do something else about them -- log to
 your analytics, flag the account -- pass a handler to `SetRateLimitHandler`. It is called on the same

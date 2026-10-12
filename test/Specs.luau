@@ -8,6 +8,7 @@
 require("./Ranges")
 require("./Numbers")
 require("./NumberLimits")
+require("./Rates")
 require("./Buffers")
 require("./Listeners")
 require("./SizeAnalysis")

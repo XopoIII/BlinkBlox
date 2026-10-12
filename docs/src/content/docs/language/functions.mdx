@@ -120,6 +120,9 @@ event: rate limiting applies to inbound traffic, and the server is the party bei
 A refused invocation is answered with a failure rather than dropped, so the caller raises promptly
 instead of waiting out the timeout.
 
+[`option ExportRates`](/BlinkBlox/language/options/#exportrates) hands both sides these numbers, and
+a function's [`Concurrency`](#concurrency) with them.
+
 ### `Concurrency`
 How many of one player's calls to this function the server runs at once. `Rate` limits how many calls
 *start* each second; it says nothing about how many are still *running*. A listener that waits -- a

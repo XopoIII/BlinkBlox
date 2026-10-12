@@ -32,6 +32,9 @@ local MODULE_TYPES = {
 	BLINK_STREAM = true,
 }
 
+--- The members an `Export<Member>` option adds, each a table the game reads.
+local EXPORTS = { "Limits", "Rates" }
+
 --- The token naming a top-level declaration, wherever its kind keeps it.
 local function Identifier(Declaration: Declaration): Token?
 	local Value = Declaration.Value
@@ -63,7 +66,7 @@ local function Judge(
 	Declaration: Declaration,
 	Members: { [string]: string },
 	Added: { [string]: string },
-	LimitsMember: string?
+	Exported: { [string]: string }
 )
 	local Name = Declaration.Name
 	local Kind = Declaration.Type
@@ -72,13 +75,14 @@ local function Judge(
 	--> Only what becomes a key of the module: a type that is not exported is a Luau type, which
 	--> lives in a namespace of its own.
 	local Keyed = Kind == "Event" or Kind == "Function" or Kind == "Scope" or Declaration.Value.Export == true
-	if Name == LimitsMember then
+	local Export = Exported[Name]
+	if Export then
 		Refuse(
 			Source,
 			File,
 			Declaration,
-			`"{Name}" is the module's Limits`,
-			"`option ExportLimits` adds a Limits member to the module, and this would replace it. Rename it."
+			`"{Name}" is the module's {Export}`,
+			`\`option Export{Export}\` adds a {Export} member to the module, and this would replace it. Rename it.`
 		)
 	elseif Added[Name] and Keyed then
 		Refuse(
@@ -128,14 +132,18 @@ local function Check(Source: string, File: string?, Declarations: { Declaration 
 		Added[Casing.Connected] = "Connected"
 	end
 
-	--> `Limits` is a member only under `option ExportLimits`, so the parser's own check never refuses
-	--> its Pascal spelling, and every kind is refused here.
-	local LimitsMember = if Options.ExportLimits
-		then (if Options.Casing and Options.Casing ~= "Pascal" then "limits" else "Limits")
-		else nil
+	--> `Limits` is a member only under `option ExportLimits` and `Rates` only under `option ExportRates`,
+	--> so the parser's own check never refuses their Pascal spelling, and every kind is refused here.
+	local Lowered = Options.Casing ~= nil and Options.Casing ~= "Pascal"
+	local Exported: { [string]: string } = {}
+	for _, Member in EXPORTS do
+		if Options[`Export{Member}`] then
+			Exported[if Lowered then string.lower(Member) else Member] = Member
+		end
+	end
 
 	for _, Declaration in Declarations do
-		Judge(Source, File, Declaration, Members, Added, LimitsMember)
+		Judge(Source, File, Declaration, Members, Added, Exported)
 	end
 end
 

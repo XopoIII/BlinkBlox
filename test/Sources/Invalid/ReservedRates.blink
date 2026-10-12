@@ -1,0 +1,10 @@
+-- expect E3005
+-- `option ExportRates` makes Rates a member of the module.
+option ExportRates = true
+
+event Rates {
+	From: Server,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: u8
+}
