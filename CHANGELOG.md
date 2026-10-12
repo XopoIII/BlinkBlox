@@ -7,6 +7,48 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.2.0 — 2026-10-12
+
+One new option. The wire and the schema signature do not change, and a schema that does not set the
+option compiles to the module 1.1.8 gave it but for the version in its header: nothing needs
+recompiling.
+
+### Added
+
+- **`option ExportRates`** adds a frozen `Rates` table to the server, client and types modules, and
+  a `readonly` declaration to the TypeScript output: the rate limits the server enforces, keyed by
+  the schema's own names -- `Rates.Report.Burst` is 4. A client that paces what it sends, or holds
+  back as many as a burst, reads the numbers instead of repeating them. `ExportLimits` could not
+  carry them: an event's entry in `Limits` is its data's bounds, a range itself where the data is
+  one value.
+  - An entry holds `Rate`, `Burst`, and a function's `Concurrency` where it declares one. They are
+    the enforced numbers, not only the written ones: `Rate` falls back to `DefaultRate`, and
+    `Burst` to the rate rounded up.
+  - Only an inbound declaration that something limits has an entry. What the server sends, a
+    stream's send rate and an inbound event with no rate are left out, and a scope nests its own.
+  - The structural words follow `Casing`. With the option on, `Rates` is a reserved top-level name
+    (`E3005`); off, nothing is emitted and the name is free.
+
+### Changed
+
+- The server's rate guard and the exported table take a declaration's rate and burst from one
+  function, so the table cannot state a limit the module does not enforce. The guard's emitted
+  code is what it was.
+
+### Measured
+
+`benchmark/definitions/Definition.blink`, compiled with `option ManualReplication = true` by 1.1.8's
+source and by this release's, gives the same `Server.luau` and `Client.luau` byte for byte, so the
+generated modules run as they did. The compiler itself, `luneblox run Performance`, three rounds of
+each release in turn, the fastest median in milliseconds, 1.1.8 then 1.2.0: lexing 2.30 and 2.32,
+parsing 8.44 and 7.85, generating the server 30.29 and 30.69, the client 29.05 and 28.47. The rounds
+of one release differ by more than the releases do.
+
+### Upgrading
+
+Nothing to do. To read the limits, add `option ExportRates = true` and rename a top-level
+declaration called `Rates`, if the schema has one.
+
 ## 1.1.8 — 2026-10-12
 
 A housekeeping release. A generated module differs from 1.1.7's by the version in its header: it

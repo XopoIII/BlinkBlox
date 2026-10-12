@@ -18,6 +18,7 @@ local Limits = require("@self/Limits")
 local Outbound = require("@self/Outbound")
 local Packets = require("@self/Packets")
 local Prefabs = require("@self/Prefabs")
+local Rates = require("@self/Rates")
 local Returns = require("@self/Returns")
 local Serde = require("@self/Serde")
 --> `option TrafficStats`; every call below emits nothing when it is off.
@@ -117,6 +118,11 @@ local function Members(): Builder.Builder
 		local Member = Limits.Words(State.Options.Casing :: Settings.Case?)("Limits")
 		State.Return.Push(`{Member} = {Limits.LOCAL},`, 1, 1)
 		State.Noop.Push(`{Member} = {Limits.LOCAL},`, 0, 2)
+	end
+	if State.Options.ExportRates then
+		local Member = Rates.Words(State.Options.Casing :: Settings.Case?)("Rates")
+		State.Return.Push(`{Member} = {Rates.LOCAL},`, 1, 1)
+		State.Noop.Push(`{Member} = {Rates.LOCAL},`, 0, 2)
 	end
 
 	if not State.Options.ManualReplication then
@@ -229,6 +235,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 		State.LuauTypes.DumpLines(),
 		State.UserTypes.DumpLines(),
 		Limits.Body(AbstractSyntaxTree),
+		Rates.Body(AbstractSyntaxTree),
 		Preamble,
 		State.Noop.DumpLines(),
 		string.split(Outbound.Flush(Traffic.Template(Source[2])), "\r"),
@@ -272,6 +279,9 @@ function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 	if State.Options.ExportLimits then
 		State.Return.Push(`{Limits.Words(State.Options.Casing :: Settings.Case?)("Limits")} = {Limits.LOCAL},`, 1, 1)
 	end
+	if State.Options.ExportRates then
+		State.Return.Push(`{Rates.Words(State.Options.Casing :: Settings.Case?)("Rates")} = {Rates.LOCAL},`, 1, 1)
+	end
 
 	--> Parse declarations
 	Generators.AbstractSyntaxTree(AbstractSyntaxTree.Value.Declarations)
@@ -289,6 +299,7 @@ function Generator.GenerateShared(AbstractSyntaxTree: Parser.Body): string
 		State.UserTypes.DumpLines(),
 		string.split(Source[2], "\r"),
 		Limits.Body(AbstractSyntaxTree),
+		Rates.Body(AbstractSyntaxTree),
 		{ "\n" },
 		{ `\nreturn \{\n` },
 		State.Return.DumpLines(),

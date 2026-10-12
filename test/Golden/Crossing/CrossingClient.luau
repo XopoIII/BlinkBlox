@@ -705,6 +705,14 @@ local BLINK_LIMITS = table.freeze({
 		step = 0.01,
 	}),
 })
+
+--> The schema's rate limits, as the server enforces them (option ExportRates).
+local BLINK_RATES = table.freeze({
+	Ready = table.freeze({
+		rate = 10,
+		burst = 10,
+	}),
+})
 local CONNECT_TIMEOUT = 2.5
 local ConnectedReliable: Instance? = nil
 local ConnectedUnreliable: Instance? = nil
@@ -754,6 +762,7 @@ if not RunService:IsRunning() or not ConnectRemotes() then
 		get_traffic_stats = GetTrafficStats,
 		reset_traffic_stats = ResetTrafficStats,
 		limits = BLINK_LIMITS,
+		rates = BLINK_RATES,
 	Crawls = {
 		on = NOOP_RETURNING
 	},
@@ -1121,6 +1130,7 @@ Returns.connected = true
 Returns.get_traffic_stats = GetTrafficStats
 Returns.reset_traffic_stats = ResetTrafficStats
 Returns.limits = BLINK_LIMITS
+Returns.rates = BLINK_RATES
 Returns.Crawls = {
 	on = function(Listener: (Value: { { Id: number, Speed: number, Heat: number } }?, ServerTime: number) -> ()): () -> ()
 		if Events.Unreliable[0] ~= nil then

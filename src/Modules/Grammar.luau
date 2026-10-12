@@ -84,6 +84,7 @@ Grammar.OPTIONS = {
 	AutoStart = "Boolean",
 	TrafficStats = "Boolean",
 	ExportLimits = "Boolean",
+	ExportRates = "Boolean",
 } :: { [string]: Lexer.Types }
 
 --> Defaults the option checks and the generator both need. Here because this module is data only,
@@ -420,6 +421,10 @@ export type Options = {
 	--> Adds a frozen `Limits` table of the schema's bounds to every generated module. See
 	--> Generator/Limits.
 	ExportLimits: boolean?,
+
+	--> Adds a frozen `Rates` table of the rate limits the server enforces to every generated module.
+	--> See Generator/Rates.
+	ExportRates: boolean?,
 }
 
 return Grammar

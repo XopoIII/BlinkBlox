@@ -700,6 +700,14 @@ local BLINK_LIMITS = table.freeze({
 		step = 0.01,
 	}),
 })
+
+--> The schema's rate limits, as the server enforces them (option ExportRates).
+local BLINK_RATES = table.freeze({
+	Ready = table.freeze({
+		rate = 10,
+		burst = 10,
+	}),
+})
 if not RunService:IsRunning() then
 	local NOOP = function() end
 	local NOOP_RETURNING = function() return NOOP end
@@ -714,6 +722,7 @@ if not RunService:IsRunning() then
 		get_traffic_stats = GetTrafficStats,
 		reset_traffic_stats = ResetTrafficStats,
 		limits = BLINK_LIMITS,
+		rates = BLINK_RATES,
 	Crawls = {
 		set = NOOP,
 		clear = NOOP,
@@ -2227,6 +2236,7 @@ Returns.start = Start
 Returns.get_traffic_stats = GetTrafficStats
 Returns.reset_traffic_stats = ResetTrafficStats
 Returns.limits = BLINK_LIMITS
+Returns.rates = BLINK_RATES
 Returns.Crawls = {
 	set = function(Value: { { Id: number, Speed: number, Heat: number } }): () StreamSet(STREAM_0, Value) end,
 	clear = function(): () StreamClear(STREAM_0) end,

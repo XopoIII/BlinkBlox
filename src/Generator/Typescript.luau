@@ -6,6 +6,7 @@ local Settings = require("../Settings")
 local Lifecycle = require("./Lifecycle")
 local Limits = require("./Limits")
 local Prefabs = require("./Prefabs")
+local Rates = require("./Rates")
 local Traffic = require("./Traffic")
 local Util = require("./Util")
 
@@ -333,6 +334,12 @@ return function(FileContext: Context, AbstractSyntaxTree: AbstractSyntaxTree): s
 		local Word = Limits.Words(Options.Casing :: Settings.Case?)
 		local Limit = Limits.Declarations(AbstractSyntaxTree.Value.Declarations, Word)
 		StringBuilder.Push(`export declare const {Word("Limits")}: {Limits.Typescript(Limit, Word)}`)
+	end
+
+	if Options.ExportRates then
+		local Word = Rates.Words(Options.Casing :: Settings.Case?)
+		local Rate = Rates.Declarations(AbstractSyntaxTree.Value.Declarations, Options)
+		StringBuilder.Push(`export declare const {Word("Rates")}: {Rates.Typescript(Rate, Word)}`)
 	end
 
 	if not Version.Bundled then

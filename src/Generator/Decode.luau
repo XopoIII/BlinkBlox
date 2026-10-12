@@ -6,6 +6,7 @@
 --- once it has been read -- whether its rate limit lets it through, and whether an ordered packet is
 --- newer than the last one seen.
 local Blocks = require("./Blocks")
+local Rates = require("./Rates")
 local State = require("./State")
 
 local Decode = {}
@@ -20,14 +21,11 @@ function Decode.RateGuardExpression(Value: { Rate: number?, Burst: number? }, Na
 		return nil
 	end
 
-	local Rate = Value.Rate or State.Options.DefaultRate
-	if not Rate then
+	--> The same two numbers `option ExportRates` hands the game; see Rates.Effective.
+	local Rate, Burst = Rates.Effective(Value, State.Options)
+	if not Rate or not Burst then
 		return nil
 	end
-
-	--> A burst of one would refuse the very first event of a frame whenever the previous frame used
-	--> its budget, so the floor is one whole token.
-	local Burst = Value.Burst or math.max(math.ceil(Rate), 1)
 
 	table.insert(State.RateSlots, { Rate = Rate, Burst = Burst })
 	local Slot = ((#State.RateSlots - 1) * 4) + 1
