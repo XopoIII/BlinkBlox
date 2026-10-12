@@ -193,7 +193,16 @@ RunClosure("QuickNet: what has no equivalent is each said", function()
 	local _, Checklist = Print.Render(Sandbox.Record("./Sources/Convert/QuickNet/Events.luau", QuickNet))
 	local List = table.concat(Checklist, "\n")
 
-	for _, Missing in { "a static array of different types", "a union", "a literal of values", "QuickNet.Data.Rect" } do
+	for _, Missing in
+		{
+			"a static array of different types",
+			"a union",
+			"a literal of values",
+			"QuickNet.Data.Rect",
+			"QuickNet.Data.Font",
+			"a custom serializer",
+		}
+	do
 		Check(Missing, Has(List, Missing), List)
 	end
 end)

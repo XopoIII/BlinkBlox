@@ -7,6 +7,24 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+Nothing here changes a generated module: the wire is the same and nothing needs recompiling.
+
+### Changed
+
+- **`--from quicknet` records QuickNet v0.4.0-beta definitions** (commit `edba9a2`, the head of main
+  the day it was released; its tag points at v0.3.5's source). `Data.Font` and `Data.Ray` have no
+  equivalent and become `unknown`, as `Rect` does, and so does `Data.custom`: the game's own encoder
+  and decoder are functions a schema cannot hold. Each is named in the checklist.
+- **`--from warp` records Warp 1.1.0-pre8 schemas.** Its new `vector3f32` and `vector2f32` become
+  `vector` and `Vector2`; they stopped the conversion as names the converter did not know.
+- **The benchmarks fetch QuickNet v0.4.0-beta and Warp 1.1.0-pre8.** QuickNet 0.4.0 drops a packet
+  over 50,000 bytes and the events past the hundredth in one, for every event, so `download.luau`
+  lifts both as it lifts Packet's and Warp's limits.
+- **Tests and benchmarks run on LuneBlox 0.10.17**, up from 0.10.16. Its Luau, fast flags and mlua
+  are 0.10.16's; the suite and the goldens pass on it unchanged.
+
 ## 1.1.7 — 2026-10-10
 
 A housekeeping release. A generated module differs from 1.1.6's by the version in its header: it

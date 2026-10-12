@@ -3,7 +3,7 @@
 ---
 --- Warp's events are names, and an event gets its types when the game calls
 --- `Server.useSchema("Hit", Schema.struct({ .. }))`. Handed this instead, the same code runs and
---- each schema lands in a Draft. Written against Warp 1.1.0-pre7: `src/Util/Buffer/init.luau` and
+--- each schema lands in a Draft. Written against Warp 1.1.0-pre8: `src/Util/Buffer/init.luau` and
 --- `docs/api/1.1`. The names below are that library's public names, and none of its code is here.
 ---
 --- Warp says the least of the libraries read here. An event has no direction, and whether it is
@@ -19,7 +19,7 @@ type Declaration = Draft.Declaration
 local Warp = {}
 
 --- The version of Warp whose definitions this records.
-Warp.VERSION = "1.1.0-pre7"
+Warp.VERSION = "1.1.0-pre8"
 Warp.NAME = "Warp"
 
 --- `Schema`'s types that a schema has, under its own names.
@@ -36,10 +36,12 @@ local TYPES: { [string]: Type } = {
 	boolean = Draft.Primitive("boolean"),
 	string = Draft.Primitive("string"),
 	buffer = Draft.Primitive("buffer"),
-	--> Warp sends a Vector3's components as f16.
+	--> Warp sends a Vector3's components as f16, and as f32 under the name that says so.
 	vector3 = Draft.Primitive("vector<f16>"),
+	vector3f32 = Draft.Primitive("vector"),
 	vector3int16 = Draft.Primitive("vector<i16>"),
 	vector2 = Draft.Primitive("Vector2"),
+	vector2f32 = Draft.Primitive("Vector2"),
 	vector2int16 = Draft.Primitive("Vector2"),
 	cframe = Draft.Primitive("CFrame"),
 	color3 = Draft.Primitive("Color3"),
