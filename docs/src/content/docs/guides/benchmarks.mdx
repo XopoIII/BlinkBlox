@@ -361,9 +361,14 @@ Packet's EntitiesRandom came to 486 bytes an event, less than the 600 bytes of r
   Warp's server refuses a packet over 8000 bytes, and `download.luau` raises that check to
   `math.huge` as it does Packet's. Neither is on Wally at the version compared, so both are fetched
   from their GitHub source: QuickNet at commit `f7cfdf5` (0.3.5), Warp at its `1.1.0-pre7` tag.
+  `download.luau` now fetches QuickNet v0.4.0-beta and Warp 1.1.0-pre8, and lifts QuickNet 0.4.0's new
+  packet and per-packet event limits the same way. On one machine, QuickNet 0.4.0 fires and decodes
+  `Entities` 12-24% faster than 0.3.5 did, and Warp pre8 times as pre7 did
+  ([`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md)).
 - **Warp sends each reliable packet as its XOR against the last.** Two identical frames XOR to
   zeros, which zstd removes, so on the repeated payloads Warp's compressed bytes are the lowest of
-  any tool. The `Random` benches draw from 1001 payloads, one more than a frame fires, so that no
+  any tool. Since 1.1.0-pre8 it frames unreliable packets too, adds 2 bytes to each, and sends a
+  whole packet once a second. The `Random` benches draw from 1001 payloads, one more than a frame fires, so that no
   frame repeats the one before it and Warp's compression has as little to find as everyone else's.
 - **The events go from client to server.** That direction is the one BlinkBlox validates.
   Every event is checked before a listener sees it.

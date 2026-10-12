@@ -56,6 +56,16 @@ It also sends each reliable packet as its XOR against the one before it, which i
 repeated payloads is the lowest or tied here, where each frame is compressed on its own: two identical frames XOR to
 zeros. In Studio it is the reverse (see Results below).
 
+The tables measure QuickNet v0.3.5-beta and Warp 1.1.0-pre7. `download.luau` now fetches QuickNet v0.4.0-beta
+(`edba9a2`) and Warp 1.1.0-pre8, and lifts QuickNet 0.4.0's new limits, a 50,000-byte packet and a hundred events in
+one, as it lifts Packet's. One run of each pair on 2026-10-12, side by side on a 4-vCPU Linux container with
+LuneBlox 0.10.17 and no core pinned, so a few percent is noise: QuickNet 0.4.0 fires Entities in 13.7 ms native and
+31.1 interpreted, from 18.0 and 40.1, and decodes it in 28.2 and 51.4, from 32.1 and 61.0, with Booleans unchanged;
+BlinkBlox fired the same Entities in 4.7 and decoded them in 12.9 there. Warp 1.1.0-pre8 times as pre7 did. It frames
+unreliable packets as well now, each with a 2-byte header -- `SelfState` costs it 1,050 bytes a frame to 50 players,
+from 950 -- and sends a whole packet once a second, so its `zstd` column on the repeated payloads rises with how many
+frames a second it runs: Entities came to 0.07 bytes an event native and 0.20 interpreted, from 0.03.
+
 The mock players and Instances are userdata, as they are in a game. Before 0.40.0 they were tables, and native code
 sends a function whose parameter is annotated `Player` or `Instance` back to the interpreter when a table arrives, so
 some native figures in earlier tables were interpreted ones.
