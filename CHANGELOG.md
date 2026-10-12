@@ -7,9 +7,10 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
-## Unreleased
+## 1.1.8 — 2026-10-12
 
-Nothing here changes a generated module: the wire is the same and nothing needs recompiling.
+A housekeeping release. A generated module differs from 1.1.7's by the version in its header: it
+runs the same code, the wire does not change, and nothing needs recompiling.
 
 ### Changed
 
@@ -26,8 +27,9 @@ Nothing here changes a generated module: the wire is the same and nothing needs 
   in 28.2 and 51.4, from 32.1 and 61.0; BlinkBlox's are 4.7 and 12.9 there. Warp pre8 times as pre7
   did, and now frames its unreliable packets too: 2 bytes more each, 1,050 bytes a frame for
   `SelfState` to 50 players, from 950. The published tables are still 0.3.5's and pre7's.
-- **Tests and benchmarks run on LuneBlox 0.10.17**, up from 0.10.16. Its Luau, fast flags and mlua
-  are 0.10.16's; the suite and the goldens pass on it unchanged.
+- **The CLI archives are built on LuneBlox 0.10.17**, up from 0.10.16, and the tests and benchmarks
+  run on it. Its Luau, fast flags and mlua are 0.10.16's; the suite and the goldens pass on it
+  unchanged.
 
 ## 1.1.7 — 2026-10-10
 
