@@ -1,5 +1,5 @@
 --!nocheck
---- QuickNet v0.3.5-beta definitions as a game writes them, for test/ConvertStubs.luau: every kind
+--- QuickNet v0.4.0-beta definitions as a game writes them, for test/ConvertStubs.luau: every kind
 --- of table the library takes, rate limits set and lifted, an unreliable event, functions, and the
 --- types with no equivalent. Read by the converter, never run as a module.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -49,6 +49,8 @@ local Events = {
 	Odd = QuickNet:register("Odd", Data.literal("Upgrade", 123, true)),
 	Either = QuickNet:register("Either", Data.union(Data.NumberU8, Data.String)),
 	Region = QuickNet:register("Region", Data.Region3, Data.Rect, Data.EnumItem, Data.NumberSequence),
+	Label = QuickNet:register("Label", Data.Font, Data.Ray),
+	Packed = QuickNet:register("Packed", Data.custom(function() end, function() end)),
 
 	Price = QuickNet:register("Price", Data.NumberU16):Response(Data.NumberU32, Data.Boolean):SetResponseTimeout(5),
 	Ping = QuickNet:register("Ping"):Response(),

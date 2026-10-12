@@ -16,7 +16,7 @@ QuickNet that records every event instead of making a remote, and writes them ou
 QuickNet already limits how often a client may fire, so its rate limits come across as they are. What
 its definitions do not say is which side sends an event, and the draft asks you for that.
 
-This page was written against QuickNet v0.3.5-beta.
+This page was written against QuickNet v0.4.0-beta.
 
 ## The short version
 
@@ -71,7 +71,7 @@ return {
 it writes:
 
 ```blink title="Events.blink"
--- Converted from QuickNet 0.3.5-beta definitions by BlinkBlox. A draft: read it before you use it.
+-- Converted from QuickNet 0.4.0-beta definitions by BlinkBlox. A draft: read it before you use it.
 -- Each TODO(convert) marks what QuickNet's definitions have no way to say. The guide explains them:
 -- https://xopoiii.github.io/BlinkBlox/guides/coming-from-quicknet/
 --
@@ -203,8 +203,8 @@ by the client, as `InvokeServer` is.
 | `{ T, T, T }`, a static array of one type | `T[3]` | |
 | `{ [K] = V }`, a uniform dictionary | `map { [K]: V }` | |
 | `{ name = T, .. }`, a static dictionary | `struct { name: T, .. }` | Fields in alphabetical order. |
-| a static array of different types, `union`, `unionMany`, a literal of other values | `unknown` | No equivalent; each is named in the list. |
-| `Nil`, `EnumItem`, `NumberSequence`, `Region3`, `PhysicalProperties`, `Rect` | `unknown` | The same. A single enum is [`Enum(Material)`](/BlinkBlox/language/types/). |
+| a static array of different types, `union`, `unionMany`, a literal of other values, `custom` | `unknown` | No equivalent; each is named in the list. |
+| `Nil`, `EnumItem`, `NumberSequence`, `Region3`, `PhysicalProperties`, `Rect`, `Ray`, `Font` | `unknown` | The same. A single enum is [`Enum(Material)`](/BlinkBlox/language/types/). |
 
 A table used by more than one event is declared once, as `Shape1`, `Shape2` and so on: it has no
 name the converter can see, so choose one. A name the stand-in does not know stops the command and

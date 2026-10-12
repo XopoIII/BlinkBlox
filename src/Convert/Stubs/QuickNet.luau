@@ -4,8 +4,7 @@
 --- A game calls `QuickNet:register("Hit", Data.Instance, Data.NumberU8)` and chains what the event
 --- is onto the result: `:Unreliable()`, `:SetRateLimit(20, 1)`, `:Response(Data.Boolean)`. Handed
 --- this instead, the same code runs and each event lands in a Draft. Written against QuickNet
---- v0.3.5-beta (commit f7cfdf5): `src/QuickNet.luau`, `src/QuickNet/DataTypes.luau` and
---- `docs/types.md`. The names below are that library's public names, and none of its code is here.
+--- v0.4.0-beta (commit edba9a2): `src/init.luau`, `src/DataTypes.luau` and `docs/types.md`. The names below are that library's public names, and none of its code is here.
 ---
 --- QuickNet is the one library here that limits how often a client may fire, sixty times a second
 --- unless an event says otherwise, so its drafts carry a `Rate` where the others ask for one.
@@ -19,7 +18,7 @@ type Declaration = Draft.Declaration
 local QuickNet = {}
 
 --- The version of QuickNet whose definitions this records.
-QuickNet.VERSION = "0.3.5-beta"
+QuickNet.VERSION = "0.4.0-beta"
 QuickNet.NAME = "QuickNet"
 
 --- `Config.DefaultRateLimit`: what an event is held to when it sets none.
@@ -74,7 +73,7 @@ local TYPES: { [string]: Type } = {
 }
 
 --- Types with no equivalent.
-local MISSING = { "Nil", "EnumItem", "NumberSequence", "Region3", "PhysicalProperties", "Rect" }
+local MISSING = { "Nil", "EnumItem", "NumberSequence", "Region3", "PhysicalProperties", "Rect", "Ray", "Font" }
 
 --- An event's methods, which do nothing: a definitions file that also fires or listens still loads.
 local SENDS = { "FireClient", "FireClients", "FireAllClients", "FireAllExcept", "FireServer", "SetResponseTimeout" }
@@ -179,6 +178,10 @@ function QuickNet.new(): ({ [string]: any }, () -> Draft.Draft)
 	end
 	Data.unionMany = Data.union
 	Data.literal = Literal
+	--- `Data.custom`: the game's own functions write and read it, which a schema has no way to hold.
+	function Data.custom()
+		return Shapes.Token(Draft.Unmapped("a custom serializer"))
+	end
 
 	--- The values an event carries: none, one, or several in order.
 	local function Values(Subject: string, ...: any): Type?

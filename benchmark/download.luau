@@ -69,28 +69,25 @@ local Packages: { [string]: Package } = {
 		end,
 	},
 
-	--> QuickNet publishes a Studio model with each release and nothing on a registry. Its v0.3.5-beta
-	--> tag points at a commit whose source still says v0.3.4; the release is the commit below, made
-	--> the day it was published and the head of main since.
+	--> QuickNet publishes a Studio model with each release and nothing on a registry. Its v0.4.0-beta
+	--> tag points at a commit whose source is still v0.3.5's, as v0.3.5-beta's pointed at v0.3.4's; the
+	--> release is the commit below, the head of main the day it was published.
 	quicknet = {
-		Version = "v0.3.5-beta (f7cfdf5)",
-		Archive = "https://github.com/breadboardengineer1234/QuickNet/archive/f7cfdf5ce014d939525116f667233e5effbcce57.zip",
-		--> The repository keeps the module as `QuickNet.luau` beside a `QuickNet` folder of its children,
-		--> which the model joins into one. A folder with an `init.luau` is the same thing on disk.
+		Version = "v0.4.0-beta (edba9a2)",
+		Archive = "https://github.com/breadboardengineer1234/QuickNet/archive/edba9a24847d3c6a6f9545994a7255dcdc5c2ae2.zip",
+		--> Since 0.4.0 a server drops a packet over 50,000 bytes and the events in one past the hundredth,
+		--> by default and for every event. Raised as Packet's limit is, for the same reason. Its rate
+		--> limit is set per event, by the modes, as its own benchmark does.
 		Patch = function(Directory: string)
-			for _, Entry in fs.readDir(`{Directory}/QuickNet`) do
-				fs.move(`{Directory}/QuickNet/{Entry}`, `{Directory}/{Entry}`)
-			end
-			fs.removeDir(`{Directory}/QuickNet`)
-			fs.move(`{Directory}/QuickNet.luau`, `{Directory}/init.luau`)
-			--> Its rate limit and packet cap are set per event, by the modes, as its own benchmark does.
+			Replace(`{Directory}/Config.luau`, "MaxPacketSize = 50000,", "MaxPacketSize = math.huge,")
+			Replace(`{Directory}/Config.luau`, "MaxCallsPerFrame = 100,", "MaxCallsPerFrame = math.huge,")
 		end,
 	},
 
 	--> Warp's releases after 1.0 are on neither Wally nor pesde; this is the source of its latest.
 	warp = {
-		Version = "1.1.0-pre7",
-		Archive = "https://github.com/imezx/Warp/archive/refs/tags/1.1.0-pre7.zip",
+		Version = "1.1.0-pre8",
+		Archive = "https://github.com/imezx/Warp/archive/refs/tags/1.1.0-pre8.zip",
 		--> Warp's server charges each packet at least 800 bytes and drops a player's past 8000 until it
 		--> next sends them something, outside Studio. Raised as Packet's is, for the same reason.
 		Patch = function(Directory: string)

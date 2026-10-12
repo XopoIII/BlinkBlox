@@ -1,5 +1,5 @@
 --!nocheck
---- Warp 1.1.0-pre7 definitions as a game writes them, for test/ConvertStubs.luau: schemas given
+--- Warp 1.1.0-pre8 definitions as a game writes them, for test/ConvertStubs.luau: schemas given
 --- from a table, every type the library has, a custom datatype, names registered with no schema,
 --- and a listener connected in the same file. Read by the converter, never run as a module.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -26,8 +26,10 @@ local SCHEMAS = {
 	Move = Schema.struct({
 		at = Schema.cframe,
 		velocity = Schema.vector3,
+		exact = Schema.vector3f32,
 		cell = Schema.vector3int16,
 		aim = Schema.vector2,
+		cursor = Schema.vector2f32,
 		grid = Schema.vector2int16,
 	}),
 	Numbers = Schema.struct({

@@ -17,7 +17,7 @@ Warp's definitions say the least of the libraries BlinkBlox reads. Which side se
 whether it is reliable and how often a client may fire it are all decided where the event is fired,
 so the draft asks you for all three.
 
-This page was written against Warp 1.1.0-pre7.
+This page was written against Warp 1.1.0-pre8.
 
 ## The short version
 
@@ -79,7 +79,7 @@ return Server
 it writes:
 
 ```blink title="Remotes.blink"
--- Converted from Warp 1.1.0-pre7 definitions by BlinkBlox. A draft: read it before you use it.
+-- Converted from Warp 1.1.0-pre8 definitions by BlinkBlox. A draft: read it before you use it.
 -- Each TODO(convert) marks what Warp's definitions have no way to say. The guide explains them:
 -- https://xopoiii.github.io/BlinkBlox/guides/coming-from-warp/
 --
@@ -180,8 +180,8 @@ one player and how many may arrive at once. Bounds are written on the type: `str
 | `u8`, `u16`, `u32`, `i8`, `i16`, `i32` | the same | |
 | `f16`, `f32`, `f64` | the same | |
 | `boolean`, `string`, `buffer`, `instance` | `boolean`, `string`, `buffer`, `Instance` | |
-| `vector3`, `vector3int16` | `vector<f16>`, `vector<i16>` | Warp sends a Vector3's components as `f16`. |
-| `vector2`, `vector2int16` | `Vector2` | |
+| `vector3`, `vector3f32`, `vector3int16` | `vector<f16>`, `vector`, `vector<i16>` | Warp sends a `vector3`'s components as `f16`. |
+| `vector2`, `vector2f32`, `vector2int16` | `Vector2` | |
 | `cframe`, `color3`, `color3f16` | `CFrame`, `Color3` | |
 | `udim`, `udim2`, `numberrange`, `colorsequence`, `brickcolor`, `tweeninfo`, `datetime` | `UDim`, `UDim2`, `NumberRange`, `ColorSequence`, `BrickColor`, `TweenInfo`, `DateTime` | |
 | `Schema.struct({ .. })` | `struct { .. }` | Fields in alphabetical order, as Warp sorts them. |

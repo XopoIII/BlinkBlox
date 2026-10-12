@@ -68,7 +68,9 @@ easy to break without noticing.
   each naming it, so a receiver that missed one drops what follows until the next. A delta saves bits
   only when entropy-coded (DELUGE, arXiv 2609.19750), and an entropy coder in interpreted Luau costs
   more than it saves. netweave (2026, Roblox) built per-player deltas and found them reliable-only
-  and open to resync amplification (5 to 601 bytes a frame). `Per: Player` streams are not deltas:
+  and open to resync amplification (5 to 601 bytes a frame). Warp 1.1.0-pre8 shipped XOR deltas
+  with a keyframe a second, both remotes on one sequence byte: an unreliable packet lost or reordered
+  silently drops the reliable ones after it until the next keyframe. `Per: Player` streams are not deltas:
   each holds one current state that the next send replaces.
 - **Measured and dropped:** constant offsets in array loops (slower natively), branchless boolean
   packing (no faster), packing array elements' bits into one run (dynamic bit addressing in every
