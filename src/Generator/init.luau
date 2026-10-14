@@ -29,6 +29,7 @@ local Util = require("@self/Util")
 
 local EVENTS_TYPE = Fragments.EVENTS_TYPE
 local DIRECTIVES = Fragments.DIRECTIVES
+local SERVER_DIRECTIVES = Fragments.SERVER_DIRECTIVES
 local VERSION_HEADER = Fragments.VERSION_HEADER
 local SYNC_VALIDATION_BODY = Fragments.SYNC_VALIDATION_BODY
 
@@ -215,7 +216,7 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	State.Noop.Push(`end`, 0, 0)
 
 	local MergedOutput = Table.Merge(
-		DIRECTIVES,
+		(if State.Context == "Server" then SERVER_DIRECTIVES else DIRECTIVES),
 		VERSION_HEADER,
 		ScopeValidation(),
 		string.split(Source[1], "\r"),

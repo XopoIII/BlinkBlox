@@ -33,6 +33,11 @@ local Net = require(ReplicatedStorage.Network.Client)
 | Client | a client only; errors elsewhere | Waits for the two remotes, checks their classes, then checks the [schema signature](/BlinkBlox/reference/wire-compatibility/) and errors on a mismatch. May yield -- for ever, unless [`ClientConnectTimeout`](/BlinkBlox/language/options/#clientconnecttimeout) bounds the wait. |
 | Types | anywhere | Nothing: it holds types and exported `Read`/`Write` pairs. |
 
+Only the server module opens with `--!native`. Every Roblox server compiles native code, while a
+client device that cannot logs `Native code generation is not supported on this device` for each
+module that asks it to, so the client and types modules run interpreted, as most players' clients
+run code anyway. All three keep `--!strict` and `--!optimize 2`.
+
 Requiring a second server or client module with the same [`RemoteScope`](/BlinkBlox/language/options/#remotescope)
 in the same Luau environment errors: `An instance of BlinkBlox is already running with the remote scope "BLINK"`.
 

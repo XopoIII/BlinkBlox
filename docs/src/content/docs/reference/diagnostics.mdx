@@ -147,7 +147,10 @@ server prints about a client's traffic are limited to one a second per player an
 The first five messages below are about packets the server refused whole or cut short. When the game
 has installed a [packet-drop handler](/BlinkBlox/reference/generated-api/#module-members), they are
 not printed: the handler is called instead, with the reason (`Malformed`, `Oversized`, `Instances`,
-`Events`, `Budget`), the count and the detail.
+`Events`, `Budget`), the count and the detail. The two after them, a `Rate` or a
+`Concurrency` refusal, are not printed while a rate-limit handler is installed, and neither is the
+budget message when that handler takes it in place of a packet-drop handler: the handler owns the
+report.
 
 | Message | Side | Meaning |
 |---|---|---|
