@@ -7,6 +7,37 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.2.1 — 2026-10-14
+
+Two fixes to the generated modules, both seen in a production game's error reports. The wire and
+the schema signature do not change, so a module built by 1.2.1 talks to one built by 1.2.0; recompile
+to get the fixes.
+
+### Fixed
+
+- **A rate-limit handler owns the report, as a packet-drop handler already did.** A packet refusal
+  printed its warning only while no `SetPacketDropHandler` handler was installed, but a rate refusal
+  printed `Rate limited event "E" from X, N refused.` whatever the game had installed, so a game
+  that reported refusals through `SetRateLimitHandler` saw each one twice. Now, with a rate-limit
+  handler installed, the handler is called and nothing is printed; with none, the warning is printed
+  as before, word for word. The same holds for the other two reports that reach that handler: a
+  function's calls past its `Concurrency` (`"F" from X already has N calls running, N refused.`) and,
+  while no packet-drop handler takes it, the inbound budget (`Dropped packets from X over the inbound
+  budget of N bytes a second, N refused.`). The schedule and the counts do not change.
+- **Only the server module opens with `--!native`.** The client and types modules asked to be
+  compiled natively too, and a client device that cannot logs `Native code generation of script ...
+  failed: Native code generation is not supported on this device.` for each module that asks. Every
+  Roblox server supports native code, and most players' clients run code interpreted anyway, so the
+  client and types modules now go without it. `--!strict`, `--!optimize 2` and the lint directives
+  stay on all three.
+
+### Upgrading
+
+- A game that installs `SetRateLimitHandler` no longer sees the rate, `Concurrency` and inbound
+  budget warnings in the output. If it relied on them, print from the handler.
+- A client module no longer runs natively where a device could have compiled it, Studio among them,
+  so a client's timings in Studio come closer to a player's.
+
 ## 1.2.0 — 2026-10-12
 
 One new option. The wire and the schema signature do not change, and a schema that does not set the
