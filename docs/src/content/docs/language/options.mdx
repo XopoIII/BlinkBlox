@@ -419,8 +419,8 @@ are fastest in different places:
   code about a third slower.
 
 `"Auto"` emits both, and the module measures which is faster as it loads -- both read the same 1024
-elements eight times, which takes tens of microseconds, once -- then uses that one. A server, a
-client and Studio, which compiles LocalScripts natively, each get the faster one. `"Bits"` or
+elements eight times, which takes tens of microseconds, once -- then uses that one. The server, which
+is compiled natively, and the client, which is not, each get the faster one. `"Bits"` or
 `"Rows"` fixes the choice and emits only that reader. The wire is the same whichever is chosen, so
 the two sides may differ. A schema without a `boolean[]` emits neither.
 
@@ -675,8 +675,8 @@ events a frame will reach the default budget; raise `InboundBytesPerSecond` for 
 Refusals are reported at most once per player per second. With a
 [packet-drop handler](/BlinkBlox/reference/generated-api/#module-members) installed they go to it,
 with the reason `Budget` and the refused packet's length. Without one they are reported the way
-refused events are: a warning, and a call to
-[`SetRateLimitHandler`](/BlinkBlox/language/events/#rate-burst)'s handler with `Event` set to `nil`.
+refused events are: to [`SetRateLimitHandler`](/BlinkBlox/language/events/#rate-burst)'s handler
+with `Event` set to `nil`, or, with no handler either, as a warning.
 
 ## Outbound budget
 

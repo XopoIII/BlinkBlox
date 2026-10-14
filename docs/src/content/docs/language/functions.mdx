@@ -144,8 +144,8 @@ function SaveLoadout {
 With `Concurrency: 1`, a second `SaveLoadout` from a player whose first is still saving is refused.
 It is answered with a failure straight away, like a call refused by `Rate`, and reported through the
 same [rate-limit handler](/BlinkBlox/language/events/#rate-burst), with the function's name, at most
-once a second per player and function, apart from its `Rate` refusals. The server also warns, on the
-same schedule: `"SaveLoadout" from Player1 already has 1 calls running, 3 refused.` The place is given
+once a second per player and function, apart from its `Rate` refusals. With no handler installed
+the server warns instead, on the same schedule: `"SaveLoadout" from Player1 already has 1 calls running, 3 refused.` The place is given
 back when the call is answered -- whether the listener returned, threw, or returned the wrong type,
 or the queue for a listener that has not connected yet was full -- and a call waiting in that queue
 counts as running.

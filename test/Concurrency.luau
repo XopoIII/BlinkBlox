@@ -86,8 +86,43 @@ RunClosure("A function runs at most its Concurrency of one player's calls at onc
 	local Reported = Reports[1]
 	if #Reports ~= 1 or not Reported or Reported.Event ~= "ConcurrentCall" or Reported.Refused ~= 1 then
 		ErrorPrint(`Failed "Concurrency": expected one report for ConcurrentCall, got {#Reports}.`)
-	elseif #Warned ~= 1 or not string.find(Warned[1], "already has 2 calls running", 1, true) then
-		ErrorPrint(`Failed "Concurrency": expected one warning about the running calls, got {#Warned}.`)
+	elseif #Warned ~= 0 then
+		ErrorPrint(`Failed "Concurrency": the handler took the report and {#Warned} warning(s) were printed beside it.`)
+	end
+end)
+
+RunClosure("Without a rate-limit handler, calls past the Concurrency are warned about", function()
+	Shared.AdvanceClock(10)
+	Shared.DrainWarnings()
+
+	local Open = false
+	Server.ConcurrentCall.On(function(_Player, Value)
+		while not Open do
+			task.wait()
+		end
+
+		return Value
+	end)
+
+	local Outcome = Invoke(3)
+	task.wait(0.3)
+	Open = true
+	task.wait(0.3)
+
+	--> The count carries the refusal the spec above held back past its report, so it is 2.
+	local Warned = 0
+	for _, Warning in Shared.DrainWarnings() do
+		if string.find(Warning, "already has 2 calls running, 2 refused.", 1, true) then
+			Warned += 1
+		end
+	end
+
+	if Outcome.Refused ~= 1 or Outcome.Succeeded ~= 2 then
+		ErrorPrint(
+			`Failed "Concurrency warning": {Outcome.Refused} of three calls were refused and {Outcome.Succeeded} answered; expected 1 and 2.`
+		)
+	elseif Warned ~= 1 then
+		ErrorPrint(`Failed "Concurrency warning": {Warned} warning(s) about the running calls, expected 1.`)
 	end
 end)
 

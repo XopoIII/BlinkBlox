@@ -872,7 +872,9 @@ end
 --> Installs the callback told about refused events: at most once per player per event per second,
 --> with `Refused` the number of refusals that report stands for. `Event` is nil when what was refused
 --> was whole packets over the inbound budget rather than one event, which is reported here only while
---> no packet-drop handler is installed. Nothing is kicked automatically:
+--> no packet-drop handler is installed. With a handler installed it owns the report and nothing is
+--> warned, for a rate refusal, a function's calls past its `Concurrency` or the inbound budget alike;
+--> with none, each still prints its warning. Nothing is kicked automatically:
 --> a false positive under server lag would eject a legitimate player, and whether that is the right
 --> response is a decision only the game can make.
 local function SetRateLimitHandler(Handler: ((Player: Player, Event: string?, Refused: number) -> ())?)
@@ -1013,12 +1015,14 @@ local function InboundAccept(Player: Player, Length: number, Floor: number, Rate
         return false
     end
 
-    --> Without a packet-drop handler, as before it existed: a warning, and the rate-limit handler
-    --> with `Event` nil. Kept so a game written against 0.27 to 0.36 hears what it always heard.
-    warn(`[BlinkBlox]: Dropped packets from {Player.Name} over the inbound budget of {Rate} bytes a second, {Refused} refused.`)
+    --> Without a packet-drop handler, as before it existed: the rate-limit handler with `Event` nil,
+    --> kept so a game written against 0.27 to 0.36 hears what it always heard, and the warning only
+    --> when there is no handler either.
     local Handler = RateHandler
     if Handler then
         Spawn(Handler, Player, nil, Refused)
+    else
+        warn(`[BlinkBlox]: Dropped packets from {Player.Name} over the inbound budget of {Rate} bytes a second, {Refused} refused.`)
     end
 
     return false
@@ -1059,7 +1063,6 @@ local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: num
 
         Bucket[Slot + 2] = Now
         Bucket[Slot + 3] = 0
-        warn(`[BlinkBlox]: Rate limited event "{Name}" from {Player.Name}, {Refused} refused.`)
 
         local Handler = RateHandler
         if Handler then
@@ -1067,6 +1070,8 @@ local function RateAccept(Player: Player, Slot: number, Rate: number, Burst: num
             --> packet, so a throwing handler would abort the rest of the packet; and a handler that
             --> yields -- an analytics write, a datastore call -- would stall decoding.
             Spawn(Handler, Player, Name, Refused)
+        else
+            warn(`[BlinkBlox]: Rate limited event "{Name}" from {Player.Name}, {Refused} refused.`)
         end
 
         return false
@@ -1114,12 +1119,13 @@ local function ConcurrencyAccept(Player: Player, Index: number, Limit: number, N
     end
 
     Pending[Index] = 0
-    warn(`[BlinkBlox]: "{Name}" from {Player.Name} already has {Limit} calls running, {Refused} refused.`)
 
     local Handler = RateHandler
     if Handler then
         --> Spawned for RateAccept's reason: this runs inside the decode loop's pcall.
         Spawn(Handler, Player, Name, Refused)
+    else
+        warn(`[BlinkBlox]: "{Name}" from {Player.Name} already has {Limit} calls running, {Refused} refused.`)
     end
 
     return false

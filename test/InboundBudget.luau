@@ -103,7 +103,9 @@ RunClosure("The inbound budget admits a burst, refuses the rest, and refills", f
 	Settle()
 
 	local Burst = Received
-	local BurstWarnings = BudgetWarnings()
+	--> Drained so the next second starts clean. Not asserted: the rate-limit handler owns this
+	--> module's report, and the second server module on these remotes still warns for its own.
+	BudgetWarnings()
 	local BurstReports = #Reports
 
 	--> A second refills a second of budget, and the refusals held back since the report are counted
@@ -122,10 +124,10 @@ RunClosure("The inbound budget admits a burst, refuses the rest, and refills", f
 		ErrorPrint(`Failed "Inbound burst": {Burst} small packets were decoded, expected {SMALL_PER_BURST}.`)
 	end
 
-	if BurstWarnings == 0 or BurstReports ~= 1 or Reports[1].Event ~= nil or Reports[1].Refused ~= 1 then
+	if BurstReports ~= 1 or Reports[1].Event ~= nil or Reports[1].Refused ~= 1 then
 		ErrorPrint(
-			`Failed "Inbound burst": {BurstWarnings} warning(s) and {BurstReports} report(s) for 88 refusals, `
-				.. `expected a warning and one report, naming no event and counting 1.`
+			`Failed "Inbound burst": {BurstReports} report(s) for 88 refusals, `
+				.. `expected one report, naming no event and counting 1.`
 		)
 	end
 

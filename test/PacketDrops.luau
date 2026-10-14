@@ -216,7 +216,7 @@ RunClosure("Packets over the inbound budget reach the packet-drop handler, not t
 end)
 
 RunClosure(
-	"Without a packet-drop handler, refusals warn as before and Budget reaches the rate-limit handler",
+	"Without a packet-drop handler, refusals warn as before and Budget reaches the rate-limit handler instead of a warning",
 	function()
 		Reset()
 
@@ -256,8 +256,26 @@ RunClosure(
 			ErrorPrint(`Failed "Legacy budget": {#Legacy} rate-limit report(s), expected one with no event counting 1.`)
 		end
 
-		if Warned("over the inbound budget") ~= 1 then
-			ErrorPrint(`Failed "Legacy budget": the budget warning was not printed once.`)
+		--> The rate-limit handler took the report, so it owns it: nothing is printed beside it.
+		local Handled = Warned("over the inbound budget")
+		if Handled ~= 0 then
+			ErrorPrint(
+				`Failed "Legacy budget": the rate-limit handler took the report and {Handled} warning(s) were printed.`
+			)
+		end
+
+		--> With neither handler, the budget's warning is printed once, word for word.
+		Reset()
+		for _ = 1, BURST // PACKET + 1 do
+			Pair.Feed(true, Full, {})
+		end
+		Settle()
+
+		local Bare = Warned(`Dropped packets from {Name} over the inbound budget of {BURST} bytes a second, 1 refused.`)
+		if Bare ~= 1 then
+			ErrorPrint(
+				`Failed "Legacy budget": with no handler the budget warning was printed {Bare} time(s), expected 1.`
+			)
 		end
 	end
 )
