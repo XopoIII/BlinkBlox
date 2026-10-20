@@ -86,7 +86,7 @@ EmitWriter = function(Write: Blocks.Block, Variable: string, Fixed: number?, Wri
 	local Validate = State.Options.WriteValidations
 	local function Refuse(Indent: string, Index: string)
 		Write:Line(
-			`{Indent}if typeof(PACKED_ITEM) ~= "boolean" then error(\`Expected {Variable}[\{{Index}}] to be of type boolean, got \{type(PACKED_ITEM)} instead.\`) end`
+			`{Indent}if type(PACKED_ITEM) ~= "boolean" then error(\`Expected {Variable}[\{{Index}}] to be of type boolean, got \{type(PACKED_ITEM)} instead.\`) end`
 		)
 	end
 
@@ -112,7 +112,7 @@ EmitWriter = function(Write: Blocks.Block, Variable: string, Fixed: number?, Wri
 		--> One test for the byte on the hot path; which element failed is worked out only once one has.
 		local Tests = {}
 		for _, Item in Items do
-			table.insert(Tests, `typeof({Item}) ~= "boolean"`)
+			table.insert(Tests, `type({Item}) ~= "boolean"`)
 		end
 		Write:Line(`\t\tif {table.concat(Tests, " or ")} then`)
 		Write:Line("\t\t\tfor PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do")

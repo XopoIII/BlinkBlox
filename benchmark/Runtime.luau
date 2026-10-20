@@ -6,6 +6,7 @@
 ---     luneblox run Runtime -- --frames 50    fewer frames, for a quick look
 ---     luneblox run Runtime -- --tools blink,zap  only these tools
 ---     luneblox run Runtime -- --traffic      BlinkBlox built with option TrafficStats, to price it
+---     luneblox run Runtime -- --validations  BlinkBlox built with option WriteValidations, to price it
 ---
 --- Studio's own benchmark (run.luau, generate.luau) reports frame rate and bandwidth, and neither
 --- isolates a tool's own work: Studio caps the frame rate at 60, and Roblox compresses each packet
@@ -44,6 +45,7 @@ local Frames = 200
 local Filter: string? = nil
 local Only: { string }? = nil
 local Traffic = false
+local Validations = false
 local SourcesDirectory: string? = nil
 --> Set in a child: the one bench, mode and tool it times; see the loop at the end.
 local Cell: { Bench: string, Native: boolean, Name: string }? = nil
@@ -61,6 +63,8 @@ do
 			Index += 1
 		elseif Argument == "--traffic" then
 			Traffic = true
+		elseif Argument == "--validations" then
+			Validations = true
 		elseif Argument == "--cell" then
 			Cell = {
 				Bench = assert(process.args[Index + 1], "--cell takes a bench, a mode and a tool"),
@@ -90,6 +94,7 @@ local function Generate(): (string, string)
 	local Tree = Parser.new("./definitions/", "Definition.blink", nil, Attributes.new(nil)):Parse(Source)
 	Tree.Value.Options.ManualReplication = true
 	Tree.Value.Options.TrafficStats = Traffic
+	Tree.Value.Options.WriteValidations = Validations
 
 	return Generator.Generate("Server", Tree), Generator.Generate("Client", Tree)
 end
@@ -244,8 +249,9 @@ end
 
 runtime.notice("These timings")
 local Label = if SourcesDirectory then `modules from {SourcesDirectory}` else Version.Current
+local Built = `{if Traffic then " with TrafficStats" else ""}{if Validations then " with WriteValidations" else ""}`
 print(
-	`BlinkBlox {Label}{if Traffic then " with TrafficStats" else ""}, {Frames} frames of {EVENTS_PER_FRAME} events, times in ms per frame, on {runtime.description}`
+	`BlinkBlox {Label}{Built}, {Frames} frames of {EVENTS_PER_FRAME} events, times in ms per frame, on {runtime.description}`
 )
 
 for _, Bench in BENCHES do
@@ -280,6 +286,9 @@ for _, Bench in BENCHES do
 			end
 			if Traffic then
 				table.insert(Arguments, "--traffic")
+			end
+			if Validations then
+				table.insert(Arguments, "--validations")
 			end
 			local Child = process.exec(runtime.command, Arguments)
 			local Line = string.match(Child.stdout, "(|[^\n]*|)%s*$")
