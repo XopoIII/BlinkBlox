@@ -83,7 +83,64 @@ end
 
 ]]
 
+--> A count of 2 to 20 keypoints, then each as a f32 time, value and envelope. Roblox's constructor
+--> throws as it does for a ColorSequence, and on a negative envelope, so all of that is checked here
+--> first. It lets a NaN value or envelope through, and a hostile packet's NaN would reach whatever
+--> the game feeds the sequence to; both are refused too.
+local NumberSequences = [[
+local function ReadNumberSequence(): NumberSequence
+    local Count = buffer.readu8(RecieveBuffer, Read(1))
+    if not (Count >= 2 and Count <= 20) then
+        error(`Expected a NumberSequence of 2 to 20 keypoints, got {Count} instead.`)
+    end
+    if Count * 12 > buffer.len(RecieveBuffer) - RecieveCursor then
+        error(`Expected a NumberSequence of {Count} keypoints to fit in the packet.`)
+    end
+
+    local Offset = Read(Count * 12)
+    local Keypoints = table.create(Count) :: { NumberSequenceKeypoint }
+    local Previous = 0
+    for Index = 1, Count do
+        local At = Offset + (Index - 1) * 12
+        local Time = buffer.readf32(RecieveBuffer, At)
+        if not (Time >= Previous and Time <= 1) or (Index == 1 and Time ~= 0) or (Index == Count and Time ~= 1) then
+            error(`Expected NumberSequence keypoint times to run from 0 to 1 in order, got {Time} at {Index}.`)
+        end
+        Previous = Time
+        local Value = buffer.readf32(RecieveBuffer, At + 4)
+        if Value ~= Value then
+            error(`Expected a NumberSequence keypoint value to be a number, got {Value} at {Index}.`)
+        end
+        local Envelope = buffer.readf32(RecieveBuffer, At + 8)
+        if not (Envelope >= 0) then
+            error(`Expected a NumberSequence keypoint envelope of at least 0, got {Envelope} at {Index}.`)
+        end
+        Keypoints[Index] = NumberSequenceKeypoint.new(Time, Value, Envelope)
+    end
+    return NumberSequence.new(Keypoints)
+end
+
+local function WriteNumberSequence(Value: NumberSequence)
+    local Keypoints = Value.Keypoints
+    local Count = #Keypoints
+    if not (Count >= 2 and Count <= 20) then
+        error(`Expected a NumberSequence of 2 to 20 keypoints, got {Count} instead.`)
+    end
+
+    local Offset = Allocate(1 + Count * 12)
+    buffer.writeu8(SendBuffer, Offset, Count)
+    for Index, Keypoint in Keypoints do
+        local At = Offset + 1 + (Index - 1) * 12
+        buffer.writef32(SendBuffer, At, Keypoint.Time)
+        buffer.writef32(SendBuffer, At + 4, Keypoint.Value)
+        buffer.writef32(SendBuffer, At + 8, Keypoint.Envelope)
+    end
+end
+
+]]
+
 return {
 	EnumItems = EnumItems,
 	ColorSequences = ColorSequences,
+	NumberSequences = NumberSequences,
 }

@@ -196,7 +196,7 @@ by the client, as `InvokeServer` is.
 | `Vector3I16`, `Vector3F16`, the other `Vector3`s | `vector<i16>`, `vector<f16>`, `vector` | |
 | the `Vector2`s, the `CFrame`s | `Vector2`, `CFrame` | [A CFrame's encoding](/BlinkBlox/language/types/) is chosen in the schema. |
 | `DateTime32`, `DateTime64` | `DateTime`, `DateTimeMillis` | |
-| `Color3`, `BrickColor`, `TweenInfo`, `ColorSequence`, `NumberRange`, `UDim`, `UDim2` | the same | |
+| `Color3`, `BrickColor`, `TweenInfo`, `ColorSequence`, `NumberSequence`, `NumberRange`, `UDim`, `UDim2`, `PhysicalProperties`, `Rect`, `Region3`, `Ray` | the same | |
 | `Data.optional(T)` | `T?` | |
 | `Data.literal("Idle", "Chase")` | `enum { Idle, Chase }` | When every value is a name. |
 | `{ T }`, a uniform array | `T[]` | |
@@ -204,7 +204,7 @@ by the client, as `InvokeServer` is.
 | `{ [K] = V }`, a uniform dictionary | `map { [K]: V }` | |
 | `{ name = T, .. }`, a static dictionary | `struct { name: T, .. }` | Fields in alphabetical order. |
 | a static array of different types, `union`, `unionMany`, a literal of other values, `custom` | `unknown` | No equivalent; each is named in the list. |
-| `Nil`, `EnumItem`, `NumberSequence`, `Region3`, `PhysicalProperties`, `Rect`, `Ray`, `Font` | `unknown` | The same. A single enum is [`Enum(Material)`](/BlinkBlox/language/types/). |
+| `Nil`, `EnumItem`, `Font` | `unknown` | The same. A single enum is [`Enum(Material)`](/BlinkBlox/language/types/). |
 
 A table used by more than one event is declared once, as `Shape1`, `Shape2` and so on: it has no
 name the converter can see, so choose one. A name the stand-in does not know stops the command and

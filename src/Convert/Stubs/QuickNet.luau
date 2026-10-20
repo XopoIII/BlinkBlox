@@ -66,6 +66,11 @@ local TYPES: { [string]: Type } = {
 	DateTime64 = Draft.Primitive("DateTimeMillis"),
 	TweenInfo = Draft.Primitive("TweenInfo"),
 	ColorSequence = Draft.Primitive("ColorSequence"),
+	NumberSequence = Draft.Primitive("NumberSequence"),
+	PhysicalProperties = Draft.Primitive("PhysicalProperties"),
+	Rect = Draft.Primitive("Rect"),
+	Region3 = Draft.Primitive("Region3"),
+	Ray = Draft.Primitive("Ray"),
 	NumberRange = Draft.Primitive("NumberRange"),
 	UDim = Draft.Primitive("UDim"),
 	UDim2 = Draft.Primitive("UDim2"),
@@ -73,7 +78,7 @@ local TYPES: { [string]: Type } = {
 }
 
 --- Types with no equivalent.
-local MISSING = { "Nil", "EnumItem", "NumberSequence", "Region3", "PhysicalProperties", "Rect", "Ray", "Font" }
+local MISSING = { "Nil", "EnumItem", "Font" }
 
 --- An event's methods, which do nothing: a definitions file that also fires or listens still loads.
 local SENDS = { "FireClient", "FireClients", "FireAllClients", "FireAllExcept", "FireServer", "SetResponseTimeout" }

@@ -1,9 +1,30 @@
 ---
-title: What's new in 1.1
-description: What 1.1.0 added -- converters and guides for games coming from zap, ByteNet, Packet, QuickNet, Warp and plain remotes; what 1.0.0 changed -- a missing Instance costs one event rather than the packet, Actors and other silent mistakes named, Vector2, UDim2, ColorSequence, TweenInfo and Roblox enums, types that survive the new solver -- and what 0.42 brought before it, with how to upgrade.
+title: What's new in 1.3
+description: What 1.3.0 added -- PhysicalProperties, NumberSequence, Rect, Region3 and Ray, each refusing on arrival what its constructor would throw on or let through as NaN; what 1.1.0 added -- converters and guides for games coming from zap, ByteNet, Packet, QuickNet, Warp and plain remotes; what 1.0.0 changed -- a missing Instance costs one event rather than the packet, Actors and other silent mistakes named, Vector2, UDim2, ColorSequence, TweenInfo and Roblox enums, types that survive the new solver -- and what 0.42 brought before it, with how to upgrade.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+
+## 1.3.0
+
+Five more Roblox types, and calls that cost less when they are answered. The wire does not change:
+a module built by 1.2.1 still talks to one built by 1.3.0.
+
+- **`PhysicalProperties`, `NumberSequence`, `Rect`, `Region3` and `Ray`.** See
+  [Other Roblox Types](/BlinkBlox/language/types/#other-roblox-types). `PhysicalProperties.new`
+  clamps every field into its range but lets a NaN through, so a client could hand the server a NaN
+  density; a field out of range or NaN is refused on arrival. A `NumberSequence` is checked as a
+  `ColorSequence` is, and a NaN value or envelope is refused too.
+- **`--from quicknet`, `packet` and `warp` convert them**, where the draft said `unknown` before.
+- **An answered call no longer pays for the message of one that was not.** Every call armed its
+  timeout through a closure, and every call the server made of a client also built the warning it
+  would print, reading the player's name. The message is built only when the timer runs out.
+
+<Aside type="caution" title="Five names are taken">
+A schema that declares a type, event, function or scope named `PhysicalProperties`,
+`NumberSequence`, `Rect`, `Region3` or `Ray` no longer compiles (`E2002`): rename it. A top-level
+type named `NumberSequenceKeypoint` is refused beside a `NumberSequence` (`E3005`).
+</Aside>
 
 ## 1.1.0
 

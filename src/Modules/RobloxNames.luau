@@ -36,6 +36,7 @@ local ROBLOX_TYPES_OF: { [string]: { string } } = {
 	Enum = { "Enum", "EnumItem" },
 	TweenInfo = { "Enum", "EnumItem" },
 	ColorSequence = { "ColorSequenceKeypoint" },
+	NumberSequence = { "NumberSequenceKeypoint" },
 }
 
 --- Every Roblox type name the module uses, its own and those the schema's datatypes bring.

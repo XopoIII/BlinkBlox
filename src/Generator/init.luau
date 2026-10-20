@@ -161,6 +161,7 @@ local function Helpers(): { string }
 		(if Prefabs.Required.PackedCalibration then Fragments.PACKED_CALIBRATION else {}),
 		(if Prefabs.Required.EnumItems then { Datatypes.EnumItems } else {}),
 		(if Prefabs.Required.ColorSequences then { Datatypes.ColorSequences } else {}),
+		(if Prefabs.Required.NumberSequences then { Datatypes.NumberSequences } else {}),
 		(if Prefabs.Missing.Count > 0 then Fragments.MISSING_INSTANCE else {})
 	)
 end

@@ -183,10 +183,11 @@ one player and how many may arrive at once. Bounds are written on the type: `str
 | `vector3`, `vector3f32`, `vector3int16` | `vector<f16>`, `vector`, `vector<i16>` | Warp sends a `vector3`'s components as `f16`. |
 | `vector2`, `vector2f32`, `vector2int16` | `Vector2` | |
 | `cframe`, `color3`, `color3f16` | `CFrame`, `Color3` | |
-| `udim`, `udim2`, `numberrange`, `colorsequence`, `brickcolor`, `tweeninfo`, `datetime` | `UDim`, `UDim2`, `NumberRange`, `ColorSequence`, `BrickColor`, `TweenInfo`, `DateTime` | |
+| `udim`, `udim2`, `numberrange`, `colorsequence`, `numbersequence`, `brickcolor`, `tweeninfo`, `datetime` | `UDim`, `UDim2`, `NumberRange`, `ColorSequence`, `NumberSequence`, `BrickColor`, `TweenInfo`, `DateTime` | |
+| `rect`, `ray`, `physicalproperties` | `Rect`, `Ray`, `PhysicalProperties` | |
 | `Schema.struct({ .. })` | `struct { .. }` | Fields in alphabetical order, as Warp sorts them. |
 | `Schema.array(T)`, `Schema.optional(T)`, `Schema.map(K, V)` | `T[]`, `T?`, `map { [K]: V }` | |
-| `rect`, `ray`, `numbersequence`, `physicalproperties`, `font` | `unknown` | No equivalent; each use is named in the list. |
+| `font` | `unknown` | No equivalent; each use is named in the list. |
 | a `custom_datatype` | `unknown` | Its reader and writer are functions, which a schema has no way to hold. |
 
 A struct used by more than one event is declared once, as `Shape1`, `Shape2` and so on: a function

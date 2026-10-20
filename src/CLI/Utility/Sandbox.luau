@@ -57,6 +57,12 @@ local GLOBALS = {
 	"UDim2",
 	"NumberRange",
 	"TweenInfo",
+	"NumberSequence",
+	"NumberSequenceKeypoint",
+	"PhysicalProperties",
+	"Rect",
+	"Region3",
+	"Ray",
 }
 
 ---- Private Functions ----

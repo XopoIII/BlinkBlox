@@ -42,9 +42,11 @@ unreliable event that cannot fit in
 | `BrickColor` | 2 |
 | `DateTime`, `DateTimeMillis` | 8 |
 | `Vector2`, `UDim`, `NumberRange` | 8 |
-| `UDim2` | 16 |
+| `UDim2`, `Rect` | 16 |
 | `ColorSequence` | 1 + 7 per keypoint: 15 to 141 |
+| `NumberSequence` | 1 + 12 per keypoint: 25 to 241 |
 | `TweenInfo` | 15 |
+| `PhysicalProperties`, `Region3`, `Ray` | 24 |
 | `Enum(Name)` | 2 |
 | `Instance`, `unknown` | 0, and one slot in the instance list |
 
@@ -846,7 +848,12 @@ in one CFrame (`E3023`).
 | `UDim2` | 16 | Two `UDim`s, X then Y. |
 | `NumberRange` | 8 | `Min` and `Max` as `f32`. A received range with `Max` below `Min`, or NaN, is refused. |
 | `ColorSequence` | 15 to 141 | A byte for the count of keypoints, 2 to 20, then each keypoint's `Time` as an `f32` and its colour as a `Color3`. A received sequence that does not run from 0 to 1 in order is refused. |
+| `NumberSequence` | 25 to 241 | A byte for the count of keypoints, 2 to 20, then each keypoint's `Time`, `Value` and `Envelope` as `f32`. A received sequence that does not run from 0 to 1 in order, or with a NaN value or an envelope below 0, is refused. |
 | `TweenInfo` | 15 | `Time`, `RepeatCount` (`i32`) and `DelayTime`; `EasingStyle` and `EasingDirection` by their `Value`, a byte each; `Reverses` as a byte. |
+| `PhysicalProperties` | 24 | `Density`, `Friction`, `Elasticity`, `FrictionWeight`, `ElasticityWeight` and `AcousticAbsorption` as `f32`, which is how Roblox stores them, so nothing is lost. A received field outside its range -- `Density` 0 to 100, `Friction` 0 to 2, `Elasticity` 0 to 1, the weights 0 to 100, `AcousticAbsorption` 0 to 1 -- or NaN is refused. See [below](#physicalproperties). |
+| `Rect` | 16 | `Min` and `Max`, each `X` and `Y` as `f32`. |
+| `Region3` | 24 | Its two corners, each as three `f32`. See [below](#region3). |
+| `Ray` | 24 | `Origin` and `Direction`, each as three `f32`. |
 | `Enum(Name)` | 2 | An item of the Roblox enum `Name`, as its `Value` in a `u16`. See [Roblox enums](#roblox-enums). |
 
 ```blink
@@ -866,6 +873,37 @@ struct Panel {
     Open: TweenInfo
 }
 ```
+
+```blink
+struct Placement {
+    Material: PhysicalProperties?,
+    Trail: NumberSequence,
+    Clip: Rect,
+    Zone: Region3,
+    Aim: Ray
+}
+```
+
+### PhysicalProperties
+
+`PhysicalProperties.new` keeps each field in its range by clamping it, and lets a NaN through
+unchanged. A NaN density or friction that a client sends would reach the part the server applies it
+to, so every field outside its range is refused on arrival, NaN included. A value an honest sender
+read off a part is always inside. `Density`'s floor is 0 here rather than the constructor's 0.0001,
+because 0.0001 as an `f32` is a little less than 0.0001, and the constructor raises anything below
+it anyway.
+
+A part's `CustomPhysicalProperties` is `nil` until it is set, so send it as `PhysicalProperties?`.
+All six fields go, because one built from a material cannot be told from one built from numbers:
+`PhysicalProperties.new(Enum.Material.Plastic)` has an `AcousticAbsorption` of 0.3, and
+`PhysicalProperties.new(0.7, 0.3, 0.5)` one of 1.
+
+### Region3
+
+A `Region3` has no constructor but `Region3.new(Min, Max)`, which works out the centre and size from
+the corners and rounds both to `f32`. So a region arrives exactly when its corners are whole
+numbers, and otherwise may differ from the one sent in the last bit of its centre or size: less than
+a millionth of its largest component. Sending the centre and size instead differs as often.
 
 ### Roblox enums
 

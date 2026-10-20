@@ -57,6 +57,13 @@ local function MockRequire(Path: string, Environment)
 	Environment.NumberRange = roblox.NumberRange
 	Environment.ColorSequence = roblox.ColorSequence
 	Environment.ColorSequenceKeypoint = roblox.ColorSequenceKeypoint
+	Environment.NumberSequence = roblox.NumberSequence
+	Environment.NumberSequenceKeypoint = roblox.NumberSequenceKeypoint
+	--> And those of Prefabs/Spatial, all of which Lune has.
+	Environment.PhysicalProperties = roblox.PhysicalProperties
+	Environment.Rect = roblox.Rect
+	Environment.Region3 = roblox.Region3
+	Environment.Ray = roblox.Ray
 	Environment.Enum = roblox.Enum
 	Environment.TweenInfo = Environment.TweenInfo or TweenInfo
 

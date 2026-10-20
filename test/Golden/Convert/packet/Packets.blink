@@ -118,16 +118,13 @@ event Pick {
 	Data: (Instance, unknown)
 }
 
--- TODO(convert): Packet wrote Packet.Region3 where this says unknown
--- TODO(convert): Packet wrote Packet.Rect where this says unknown
--- TODO(convert): a client sends this; bound #1 (unknown is not validated), #2 (unknown is not validated)
 event Region {
 	-- TODO(convert): Packet does not say which side sends this; say it here
 	From: Client,
 	Type: Reliable,
 	Call: ManyAsync,
 	-- TODO(convert): Rate: ?, Burst: ?
-	Data: (unknown, unknown)
+	Data: (Region3, Rect)
 }
 
 -- TODO(convert): Packet wrote Packet.EnumItem where this says unknown

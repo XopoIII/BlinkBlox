@@ -147,9 +147,10 @@ RunClosure("Packet: types with no equivalent and a name that is not one are each
 	local List = table.concat(Checklist, "\n")
 
 	Check("Name", Has(Text, "event Player_Chat {") and Has(List, '"Player Chat" is not a name'), List)
-	for _, Missing in { "Packet.Region3", "Packet.Rect", "Packet.EnumItem", "Packet.Static1" } do
+	for _, Missing in { "Packet.EnumItem", "Packet.Static1" } do
 		Check(Missing, Has(List, Missing) and Has(Text, `Packet wrote {Missing} where this says unknown`), List)
 	end
+	Check("Region", Has(Text, "Data: (Region3, Rect)") and not Has(List, "Packet.Rect"), Text)
 	Check("Positional", Has(List, "a table of several types with no names"), List)
 end)
 
@@ -198,7 +199,6 @@ RunClosure("QuickNet: what has no equivalent is each said", function()
 			"a static array of different types",
 			"a union",
 			"a literal of values",
-			"QuickNet.Data.Rect",
 			"QuickNet.Data.Font",
 			"a custom serializer",
 		}
@@ -240,9 +240,10 @@ RunClosure("Warp: a custom datatype and the types with no equivalent are each sa
 	local _, Checklist = Print.Render(Sandbox.Record("./Sources/Convert/Warp/Remotes.luau", Warp))
 	local List = table.concat(Checklist, "\n")
 
-	for _, Missing in { "the custom datatype u64", "Schema.rect", "Schema.ray", "Schema.font" } do
+	for _, Missing in { "the custom datatype u64", "Schema.font" } do
 		Check(Missing, Has(List, Missing), List)
 	end
+	Check("Region", not Has(List, "Schema.rect") and not Has(List, "Schema.ray"), List)
 end)
 
 RunClosure("Warp: schemas handed over from a table come out in the same order every time", function()

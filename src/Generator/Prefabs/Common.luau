@@ -63,13 +63,14 @@ local Types: { [string]: TypePrefab } = {}
 --- Runtime helpers the emitted code has called during the current generate, so the generator splices
 --- in only those. Cleared by `Generator.Reset`; `Rotation` is `Fragments.ROTATION_HELPERS`,
 --- `PackedRows` is `Fragments.PACKED_ROWS` and `PackedCalibration` is `Fragments.PACKED_CALIBRATION`;
---- `EnumItems` and `ColorSequences` are in Templates/Datatypes.
+--- `EnumItems`, `ColorSequences` and `NumberSequences` are in Templates/Datatypes.
 local Required: {
 	Rotation: boolean?,
 	PackedRows: boolean?,
 	PackedCalibration: boolean?,
 	EnumItems: boolean?,
 	ColorSequences: boolean?,
+	NumberSequences: boolean?,
 } =
 	{}
 

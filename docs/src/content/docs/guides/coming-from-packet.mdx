@@ -183,11 +183,11 @@ only matters when fresh can now be [`Unreliable`](/BlinkBlox/language/events/).
 | `Vector3S16`, `Vector3F24`, `Vector3F32` | `vector<i16>`, `vector<f24>`, `vector` | |
 | `Vector2S16`, `Vector2F24`, `Vector2F32` | `Vector2` | |
 | `CFrameF24U8`, `CFrameF32U8`, `CFrameF32U16` | `CFrame` | [Its encodings](/BlinkBlox/language/types/) are chosen in the schema. |
-| `Color3`, `BrickColor`, `UDim`, `UDim2`, `NumberRange`, `ColorSequence` | the same | |
+| `Color3`, `BrickColor`, `UDim`, `UDim2`, `NumberRange`, `ColorSequence`, `NumberSequence`, `Rect`, `Region3` | the same | |
 | `NumberU4`, `Boolean1`, `BooleanNumber` | `u8(..15)[2]`, `boolean[8]`, a struct | The tables Packet reads them into. |
 | `{ T }` | `T[]` | |
 | `{ Key = T, .. }` | `struct { Key: T, .. }` | Fields in alphabetical order, as Packet sorts them. |
-| `Nil`, `Rect`, `Region3`, `NumberSequence`, `EnumItem`, `Characters`, `Static1` .. `Static3` | `unknown` | No equivalent; each is named in the list. A single enum is [`Enum(Material)`](/BlinkBlox/language/types/). |
+| `Nil`, `EnumItem`, `Characters`, `Static1` .. `Static3` | `unknown` | No equivalent; each is named in the list. A single enum is [`Enum(Material)`](/BlinkBlox/language/types/). |
 | a table of several types with no names | `unknown` | A struct needs names. |
 
 A struct used by more than one packet is declared once, as `Shape1`, `Shape2` and so on: a table

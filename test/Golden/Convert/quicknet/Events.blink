@@ -206,30 +206,26 @@ event Either {
 	Data: unknown
 }
 
--- TODO(convert): QuickNet wrote QuickNet.Data.Region3 where this says unknown
--- TODO(convert): QuickNet wrote QuickNet.Data.Rect where this says unknown
 -- TODO(convert): QuickNet wrote QuickNet.Data.EnumItem where this says unknown
--- TODO(convert): QuickNet wrote QuickNet.Data.NumberSequence where this says unknown
--- TODO(convert): a client sends this; bound #1 (unknown is not validated), #2 (unknown is not validated), #3 (unknown is not validated), #4 (unknown is not validated)
+-- TODO(convert): a client sends this; bound #3 (unknown is not validated)
 event Region {
 	-- TODO(convert): QuickNet does not say which side sends this; say it here
 	From: Client,
 	Type: Reliable,
 	Call: ManyAsync,
 	Rate: 60,
-	Data: (unknown, unknown, unknown, unknown)
+	Data: (Region3, Rect, unknown, NumberSequence)
 }
 
 -- TODO(convert): QuickNet wrote QuickNet.Data.Font where this says unknown
--- TODO(convert): QuickNet wrote QuickNet.Data.Ray where this says unknown
--- TODO(convert): a client sends this; bound #1 (unknown is not validated), #2 (unknown is not validated)
+-- TODO(convert): a client sends this; bound #1 (unknown is not validated)
 event Label {
 	-- TODO(convert): QuickNet does not say which side sends this; say it here
 	From: Client,
 	Type: Reliable,
 	Call: ManyAsync,
 	Rate: 60,
-	Data: (unknown, unknown)
+	Data: (unknown, Ray)
 }
 
 -- TODO(convert): QuickNet wrote a custom serializer where this says unknown
