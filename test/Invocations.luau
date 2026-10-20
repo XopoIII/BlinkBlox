@@ -60,9 +60,11 @@ do
 		return {}
 	end
 
+	--> Word for word: the message is built only when the timer runs out, from the name alone.
+	local Expected = `"NeverAnswered" was never answered within {TIMEOUT} seconds, so the call failed.`
 	local Warned = false
 	for _, Warning in Shared.DrainWarnings() do
-		if string.find(Warning, "never answered", 1, true) then
+		if string.find(Warning, Expected, 1, true) then
 			Warned = true
 			break
 		end
@@ -137,6 +139,49 @@ do
 
 	if Result ~= 42 then
 		ErrorPrint(`Failed "{Name}": the server got {tostring(Result)} back, expected 42.`)
+		return {}
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end
+
+do
+	--> The server's half of the timeout names the player who never answered. That name is read off
+	--> the Instance only once the timer runs out, so it is checked word for word here.
+	local Name = "A function the server invokes that the client never answers fails, naming the player"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	Shared.DrainWarnings()
+	Client.AskClient.On(function(_Value: number): number
+		coroutine.yield()
+		return 0
+	end)
+
+	local Ok, Result = Await(function()
+		return Server.AskClient.Invoke(Shared.Player, 1)
+	end, TIMEOUT + 2)
+
+	Client.AskClient.On(function(Value: number): number
+		return Value * 2
+	end)
+
+	if Ok ~= false then
+		ErrorPrint(`Failed "{Name}": expected the call to fail, got {tostring(Result)}.`)
+		return {}
+	end
+
+	local Expected =
+		`"AskClient" was never answered by {Shared.Player.Name} within {TIMEOUT} seconds, so the call failed.`
+	local Warned = false
+	for _, Warning in Shared.DrainWarnings() do
+		if string.find(Warning, Expected, 1, true) then
+			Warned = true
+			break
+		end
+	end
+
+	if not Warned then
+		ErrorPrint(`Failed "{Name}": no warning read '{Expected}'.`)
 		return {}
 	end
 

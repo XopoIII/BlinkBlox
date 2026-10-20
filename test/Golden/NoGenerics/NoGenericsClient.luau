@@ -468,26 +468,30 @@ end
 --> be the callee, since a client that never replies is ordinary: it left, it crashed, it was
 --> exploited. `Expired` runs after the caller has been failed; the server uses it to let go of a
 --> player who is gone.
-local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Unanswered: string, Expired: (() -> ())?)
-    local Thread = State.Threads[Identifier]
-    if not Thread then
-        return
+-->
+--> Nearly every call is answered, so the timer is armed with its arguments and no closure, and the
+--> message -- the player's name read off the Instance -- is built only when it runs out.
+local function ExpireInvocation(State: BLINK_INVOCATIONS, Identifier: number, Thread: thread, Seconds: number, Name: string, Player: Player?, Expired: ((Player, BLINK_INVOCATIONS) -> ())?)
+    --> Cleared first, so the release below does not try to cancel the timer that is running it.
+    State.Timers[Identifier] = nil
+    ReleaseInvocation(State, Identifier)
+
+    if coroutine.status(Thread) == "suspended" then
+        local Unanswered = if Player then `"{Name}" was never answered by {Player.Name}` else `"{Name}" was never answered`
+        warn(`[BlinkBlox]: {Unanswered} within {Seconds} seconds, so the call failed.`)
+        task.spawn(Thread, false)
     end
 
-    State.Timers[Identifier] = task.delay(Seconds, function()
-        --> Cleared first, so the release below does not try to cancel the timer that is running it.
-        State.Timers[Identifier] = nil
-        ReleaseInvocation(State, Identifier)
+    if Player and Expired then
+        Expired(Player, State)
+    end
+end
 
-        if coroutine.status(Thread) == "suspended" then
-            warn(`[BlinkBlox]: {Unanswered} within {Seconds} seconds, so the call failed.`)
-            task.spawn(Thread, false)
-        end
-
-        if Expired then
-            Expired()
-        end
-    end)
+local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Name: string, Player: Player?, Expired: ((Player, BLINK_INVOCATIONS) -> ())?)
+    local Thread = State.Threads[Identifier]
+    if Thread then
+        State.Timers[Identifier] = task.delay(Seconds, ExpireInvocation, State, Identifier, Thread, Seconds, Name, Player, Expired)
+    end
 end
 
 local Invocations = CreateInvocations()
@@ -4921,7 +4925,7 @@ Returns.EmptyFunction = {
 		end
 		Close(Cursor, Instances)
 		ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
-		TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"EmptyFunction" was never answered')
+		TimeoutInvocation(Invocations, InvocationIdentifier, 10, "EmptyFunction")
 		local Success, ReturnValue: nil = coroutine.yield()
 		if Success ~= true then
 			error("There was an exception while processing \"EmptyFunction\".")
@@ -5476,7 +5480,7 @@ Returns.RemoteFunction = {
 		end
 		Close(Cursor, Instances)
 		ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
-		TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"RemoteFunction" was never answered')
+		TimeoutInvocation(Invocations, InvocationIdentifier, 10, "RemoteFunction")
 		local Success, ReturnValue: number = coroutine.yield()
 		if Success ~= true then
 			error("There was an exception while processing \"RemoteFunction\".")
@@ -5528,7 +5532,7 @@ Returns.TupleFunction = {
 		end
 		Close(Cursor, Instances)
 		ParkInvocation(Invocations, InvocationIdentifier, coroutine.running())
-		TimeoutInvocation(Invocations, InvocationIdentifier, 10, '"TupleFunction" was never answered')
+		TimeoutInvocation(Invocations, InvocationIdentifier, 10, "TupleFunction")
 		local Success, ReturnValue1: Instance?, ReturnValue2: Instance, ReturnValue3: number?, ReturnValue4: ("A" | "B" | "C" | "D"), ReturnValue5: number = coroutine.yield()
 		if Success ~= true then
 			error("There was an exception while processing \"TupleFunction\".")

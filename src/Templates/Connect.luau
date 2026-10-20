@@ -6,8 +6,9 @@ local ConnectedUnreliable: Instance? = nil
 
 --> Waits for both remotes, CONNECT_TIMEOUT seconds in all, and says whether they came.
 -->
---> Without the option this is a WaitForChild with no timeout, and a place where no server module is
---> ever required -- a showroom build, a test place -- blocked every script requiring this one forever.
+--> Without the option the client waits for good and warns once after five seconds (`Await`), and a
+--> place where no server module is ever required -- a showroom build, a test place -- blocks every
+--> script requiring this one forever.
 --> When they do not come, the module returns the same stubs edit mode gets, with Connected false:
 --> Fire does nothing, Invoke fails at once, and no listener is ever called.
 -->
