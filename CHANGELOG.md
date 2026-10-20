@@ -7,6 +7,79 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.3.0 — 2026-10-20
+
+Five more Roblox types, and calls and checks that cost less. The wire and the encoding of every
+existing type do not change, so a module built by 1.2.1 still talks to one built by 1.3.0; the new
+types are part of the schema signature like any other, so only a schema that uses one is affected.
+
+### Added
+
+- **`PhysicalProperties`, 24 bytes.** All six fields as `f32`, which is how Roblox stores them, so
+  nothing is lost; one built from a material cannot be told from one built from numbers --
+  `new(Enum.Material.Plastic)` has an `AcousticAbsorption` of 0.3, `new(0.7, 0.3, 0.5)` one of 1 --
+  so none is left out. Measured in Studio, `PhysicalProperties.new` clamps every field into its
+  range and lets a NaN through, so a client could hand the server a NaN density for a part. A field
+  outside its range -- `Density` 0 to 100, `Friction` 0 to 2, `Elasticity` 0 to 1, the weights 0 to
+  100, `AcousticAbsorption` 0 to 1 -- or NaN is refused on arrival, naming the field. A part's
+  `CustomPhysicalProperties` is `nil` until set, so it goes as `PhysicalProperties?`.
+- **`NumberSequence`, 25 to 241 bytes.** A count, then each keypoint's time, value and envelope as
+  `f32`. Checked as a `ColorSequence` is -- 2 to 20 keypoints, the count before anything is read for
+  it, times from 0 to 1 in order -- and a NaN value or an envelope below 0 is refused too: Roblox's
+  constructor throws on the envelope and lets the NaN through.
+- **`Rect`, 16 bytes; `Region3` and `Ray`, 24.** A `Region3` goes as its two corners, which is all
+  `Region3.new` takes. The constructor rounds the centre and size it works out to `f32`, so a region
+  arrives exactly when its corners are whole numbers and otherwise within one `f32` step of its
+  largest component; sending the centre and size instead differs as often.
+- `--from quicknet`, `--from packet` and `--from warp` convert the five where the draft said
+  `unknown`. Only `Font`, `EnumItem` and `Nil` (and Packet's `Characters` and `Static` types) are
+  left without an equivalent.
+- `benchmark/Runtime.luau -- --validations` times BlinkBlox built with `WriteValidations`.
+
+### Changed
+
+- **An answered call no longer pays for the message of one that was not.** Every call armed its
+  timeout through two closures, and every call the server made of a client also built the warning it
+  would print, reading `Player.Name` off the Instance. The message is built only once the timer runs
+  out, and arming it makes one closure. Its words do not change.
+- **`WriteValidations` checks a number, string, boolean or buffer with `type()`.** `typeof` also
+  asks a userdata for its own name, which a value of those types never is. The Roblox types keep
+  `typeof`. The messages do not change.
+
+### Measured
+
+On LuneBlox 0.10.17 on an Apple M1.
+
+- **The timer.** Arming and cancelling one, the three shapes alternated in one process, five runs of
+  five rounds, the fastest: 1.2.1's took 1747 ns interpreted and 1646 natively, 1.3.0's 1261 and
+  1377. It was faster in every round of every run. Handing the arguments to `task.delay` instead of a
+  closure was tried first and dropped: cheaper interpreted, but dearer natively, which is how a
+  server runs it -- 1670 ns against 1633.
+- **`type()` under `WriteValidations`.** `benchmark/Runtime.luau -- --validations`, the two checks
+  alternated in one harness: a thousand fires a frame took 3% less interpreted (BooleansRandom
+  29.64 to 28.74 ms, Entities 20.70 to 20.16, Booleans 27.86 to 26.68), the medians of three rounds,
+  and the same natively -- BooleansRandom 6.10 ms with `typeof` and 6.11 with `type` over eight
+  rounds, inside the 1% the rounds of one build differ by.
+- **The generated modules.** `benchmark/definitions/Definition.blink`, compiled with
+  `option ManualReplication = true` by 1.2.1's source and by this release's, differs only in the
+  invocation timer, which the benchmark never arms: every line a fire, a flush or a decode runs is the
+  same. `Runtime` over both releases' modules was taken, but with Studio running beside it at 60% of
+  a core, and it moved one release's identical code by up to 40% from run to run, so its figures are
+  not given here.
+- **The compiler.** `luneblox run Performance`, six runs of each release in ABBA order, the median
+  of each run's median in milliseconds, 1.2.1 then 1.3.0: lexing 1.44 and 1.40, parsing 4.78 and
+  4.78, generating the server 18.42 and 18.30, the client 17.84 and 17.70.
+
+### Upgrading
+
+- **Recompile to get the new types and the lighter timer.** A module built by 1.2.1 and one built by
+  1.3.0 still talk to each other.
+- `PhysicalProperties`, `NumberSequence`, `Rect`, `Region3` and `Ray` are types now, so a declaration
+  of one of those names must be renamed (`E2002`), and a top-level type named
+  `NumberSequenceKeypoint` is refused beside a `NumberSequence` (`E3005`). So are declarations named
+  `ExpireInvocation` and `ReleaseGonePlayer`, the runtime's two new functions. Handlers, their
+  arguments and their `Reason`s do not change.
+
 ## 1.2.1 — 2026-10-14
 
 Two fixes to the generated modules, both seen in a production game's error reports. The wire and
