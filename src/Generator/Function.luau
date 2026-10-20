@@ -50,7 +50,7 @@ local function Calling(Call: Call)
 	local TakeCaller = `TakeInvocation({Owner}, InvocationIdentifier, {Index})`
 	local ArmTimeout = if ServerCalls
 		then `TimeoutPlayerInvocation(Player, InvocationIdentifier, {Timeout}, "{Name}")`
-		else `TimeoutInvocation(Invocations, InvocationIdentifier, {Timeout}, '"{Name}" was never answered')`
+		else `TimeoutInvocation(Invocations, InvocationIdentifier, {Timeout}, "{Name}")`
 
 	--> Return recieve body. The flag after the id says whether a payload follows at all: a failure
 	--> reply stops there. The payload is only read when it is there, and a read that fails leaves

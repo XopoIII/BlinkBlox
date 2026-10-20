@@ -3,7 +3,8 @@
 --!optimize 2
 
 --- The Roblox datatypes added for interface and effects work: Vector2, UDim, UDim2, NumberRange,
---- ColorSequence, TweenInfo, and a Roblox enum's items as `Enum(Name)`. Sizes are in Settings.
+--- ColorSequence, NumberSequence, TweenInfo, and a Roblox enum's items as `Enum(Name)`. Sizes are in
+--- Settings.
 local Common = require("./Common")
 
 type Block = Common.Block
@@ -119,6 +120,25 @@ do
 	Primitives.ColorSequence = {
 		Type = "ColorSequence",
 		Generate = GeneratePrimitivePrefab("ColorSequence", Types.ColorSequence),
+	}
+end
+
+--> NumberSequence: variable length, so read and written by the runtime helpers in Templates/Datatypes.
+do
+	Types.NumberSequence = {
+		Read = function(Variable: string, Block: Block)
+			Required.NumberSequences = true
+			Block:Line(`{Block:Declare(Variable)} = ReadNumberSequence()`)
+		end,
+		Write = function(Value: string, Block: Block)
+			Required.NumberSequences = true
+			Block:Line(`WriteNumberSequence({Value})`)
+		end,
+	}
+
+	Primitives.NumberSequence = {
+		Type = "NumberSequence",
+		Generate = GeneratePrimitivePrefab("NumberSequence", Types.NumberSequence),
 	}
 end
 

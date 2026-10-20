@@ -55,18 +55,22 @@ local HALF_FLOAT = 2
 local FLOAT = 4
 local DOUBLE = 8
 
+--- The Luau types a value can have without being userdata, which `type` names as `typeof` does.
+local LUAU_TYPES = { number = true, string = true, boolean = true, buffer = true }
+
 local Types: { [string]: TypePrefab } = {}
 
 --- Runtime helpers the emitted code has called during the current generate, so the generator splices
 --- in only those. Cleared by `Generator.Reset`; `Rotation` is `Fragments.ROTATION_HELPERS`,
 --- `PackedRows` is `Fragments.PACKED_ROWS` and `PackedCalibration` is `Fragments.PACKED_CALIBRATION`;
---- `EnumItems` and `ColorSequences` are in Templates/Datatypes.
+--- `EnumItems`, `ColorSequences` and `NumberSequences` are in Templates/Datatypes.
 local Required: {
 	Rotation: boolean?,
 	PackedRows: boolean?,
 	PackedCalibration: boolean?,
 	EnumItems: boolean?,
 	ColorSequences: boolean?,
+	NumberSequences: boolean?,
 } =
 	{}
 
@@ -249,7 +253,9 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 				--> A table where a value belongs is most often the event itself, handed over by a call made
 				--> with `:`, and a Player -- userdata -- is what a server send's value becomes when its
 				--> arguments are shifted that way. The hint costs nothing until the check has failed.
-				Block:Compare(`typeof({TargetVariable})`, `"{Type}"`, "Not")
+				--> `type` where the value cannot be userdata: it does not look for a userdata's own name.
+				local Check = if LUAU_TYPES[Type] then "type" else "typeof"
+				Block:Compare(`{Check}({TargetVariable})`, `"{Type}"`, "Not")
 					:Line(
 						`error(\`Expected {TargetVariable} to be of type {Type}, got \{type({TargetVariable})} instead.\{if type({TargetVariable}) == "table" or type({TargetVariable}) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}\`)`
 					)

@@ -17,7 +17,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "Datatypes_BLINK"
-local SCHEMA_SIGNATURE = "4aa46a1b99c833b1"
+local SCHEMA_SIGNATURE = "83462a5b2b7f2915"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local REMOTES_FOLDER = "Network"
 local SendSize = 64
@@ -468,27 +468,31 @@ end
 --> failure reply precisely so the caller does not hang -- and stopped being so once a client could
 --> be the callee, since a client that never replies is ordinary: it left, it crashed, it was
 --> exploited. `Expired` runs after the caller has been failed; the server uses it to let go of a
---> player who is gone.
-local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Unanswered: string, Expired: (() -> ())?)
-    local Thread = State.Threads[Identifier]
-    if not Thread then
-        return
+--> player who is gone. The message, which reads the player's name off the Instance, is built only
+--> once the timer runs out; arming it makes one closure, cheaper natively than seven arguments.
+local function ExpireInvocation(State: BLINK_INVOCATIONS, Identifier: number, Thread: thread, Seconds: number, Name: string, Player: Player?, Expired: ((Player, BLINK_INVOCATIONS) -> ())?)
+    --> Cleared first, so the release below does not try to cancel the timer that is running it.
+    State.Timers[Identifier] = nil
+    ReleaseInvocation(State, Identifier)
+
+    if coroutine.status(Thread) == "suspended" then
+        local Unanswered = if Player then `"{Name}" was never answered by {Player.Name}` else `"{Name}" was never answered`
+        warn(`[BlinkBlox]: {Unanswered} within {Seconds} seconds, so the call failed.`)
+        task.spawn(Thread, false)
     end
 
-    State.Timers[Identifier] = task.delay(Seconds, function()
-        --> Cleared first, so the release below does not try to cancel the timer that is running it.
-        State.Timers[Identifier] = nil
-        ReleaseInvocation(State, Identifier)
+    if Player and Expired then
+        Expired(Player, State)
+    end
+end
 
-        if coroutine.status(Thread) == "suspended" then
-            warn(`[BlinkBlox]: {Unanswered} within {Seconds} seconds, so the call failed.`)
-            task.spawn(Thread, false)
-        end
-
-        if Expired then
-            Expired()
-        end
-    end)
+local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Name: string, Player: Player?, Expired: ((Player, BLINK_INVOCATIONS) -> ())?)
+    local Thread = State.Threads[Identifier]
+    if Thread then
+        State.Timers[Identifier] = task.delay(Seconds, function()
+            ExpireInvocation(State, Identifier, Thread, Seconds, Name, Player, Expired)
+        end)
+    end
 end
 
 local Invocations = CreateInvocations()
@@ -581,6 +585,55 @@ local function WriteColorSequence(Value: ColorSequence)
     end
 end
 
+local function ReadNumberSequence(): NumberSequence
+    local Count = buffer.readu8(RecieveBuffer, Read(1))
+    if not (Count >= 2 and Count <= 20) then
+        error(`Expected a NumberSequence of 2 to 20 keypoints, got {Count} instead.`)
+    end
+    if Count * 12 > buffer.len(RecieveBuffer) - RecieveCursor then
+        error(`Expected a NumberSequence of {Count} keypoints to fit in the packet.`)
+    end
+
+    local Offset = Read(Count * 12)
+    local Keypoints = table.create(Count) :: { NumberSequenceKeypoint }
+    local Previous = 0
+    for Index = 1, Count do
+        local At = Offset + (Index - 1) * 12
+        local Time = buffer.readf32(RecieveBuffer, At)
+        if not (Time >= Previous and Time <= 1) or (Index == 1 and Time ~= 0) or (Index == Count and Time ~= 1) then
+            error(`Expected NumberSequence keypoint times to run from 0 to 1 in order, got {Time} at {Index}.`)
+        end
+        Previous = Time
+        local Value = buffer.readf32(RecieveBuffer, At + 4)
+        if Value ~= Value then
+            error(`Expected a NumberSequence keypoint value to be a number, got {Value} at {Index}.`)
+        end
+        local Envelope = buffer.readf32(RecieveBuffer, At + 8)
+        if not (Envelope >= 0) then
+            error(`Expected a NumberSequence keypoint envelope of at least 0, got {Envelope} at {Index}.`)
+        end
+        Keypoints[Index] = NumberSequenceKeypoint.new(Time, Value, Envelope)
+    end
+    return NumberSequence.new(Keypoints)
+end
+
+local function WriteNumberSequence(Value: NumberSequence)
+    local Keypoints = Value.Keypoints
+    local Count = #Keypoints
+    if not (Count >= 2 and Count <= 20) then
+        error(`Expected a NumberSequence of 2 to 20 keypoints, got {Count} instead.`)
+    end
+
+    local Offset = Allocate(1 + Count * 12)
+    buffer.writeu8(SendBuffer, Offset, Count)
+    for Index, Keypoint in Keypoints do
+        local At = Offset + 1 + (Index - 1) * 12
+        buffer.writef32(SendBuffer, At, Keypoint.Time)
+        buffer.writef32(SendBuffer, At + 4, Keypoint.Value)
+        buffer.writef32(SendBuffer, At + 8, Keypoint.Envelope)
+    end
+end
+
 
 --> Roblox drops an unreliable payload past this size and tells nobody. The compiler
 --> refuses schemas that can never fit; this catches the ones that merely overflow at
@@ -607,6 +660,7 @@ EventNames.Reliable[0] = "Styled"
 Queue.Unreliable[0] = table.create(256)
 EventNames.Unreliable[0] = "Fonts"
 export type Panel = { Size: UDim2, Padding: UDim, Anchor: Vector2, Spread: NumberRange, Fade: ColorSequence, Open: TweenInfo, Surface: Enum.Material, Key: Enum.KeyCode? }
+export type World = { Custom: PhysicalProperties?, Size: NumberSequence, Clip: Rect, Zone: Region3, Aim: Ray }
 function SerdesFunctions.ReadEVENT_Styled(): ({ Size: UDim2, Padding: UDim, Anchor: Vector2, Spread: NumberRange, Fade: ColorSequence, Open: TweenInfo, Surface: Enum.Material, Key: Enum.KeyCode? })
 	-- Read BLOCK: 58 bytes
 	local BLOCK_START = Read(58)
@@ -713,6 +767,78 @@ function SerdesFunctions.ReadEVENT_Fonts(): ({ Enum.Font })
 	end
 	-- END ARRAY
 	return Value
+end
+
+function SerdesFunctions.WriteEVENT_Placed(Value: { Custom: PhysicalProperties?, Size: NumberSequence, Clip: Rect, Zone: Region3, Aim: Ray }): ()
+	-- Allocate BLOCK: 66 bytes
+	local BLOCK_START = Allocate(66)
+	local BITFIELD_1_0
+	-- EVENT_Placed (2)
+	buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+	-- Value: Placed
+	-- Value.Custom: Custom
+	BITFIELD_1_0 = 0
+	if Value.Custom ~= nil then BITFIELD_1_0 += 0x01 end
+	if Value.Custom ~= nil then
+		-- Allocate BLOCK: 24 bytes
+		local BLOCK_START = Allocate(24)
+		-- Value.Custom: Custom
+		if typeof(Value.Custom) ~= "PhysicalProperties" then
+			error(`Expected Value.Custom to be of type PhysicalProperties, got {type(Value.Custom)} instead.{if type(Value.Custom) == "table" or type(Value.Custom) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+		end
+		local Physical = Value.Custom
+		buffer.writef32(SendBuffer, BLOCK_START + 0, Physical.Density)
+		buffer.writef32(SendBuffer, BLOCK_START + 4, Physical.Friction)
+		buffer.writef32(SendBuffer, BLOCK_START + 8, Physical.Elasticity)
+		buffer.writef32(SendBuffer, BLOCK_START + 12, Physical.FrictionWeight)
+		buffer.writef32(SendBuffer, BLOCK_START + 16, Physical.ElasticityWeight)
+		buffer.writef32(SendBuffer, BLOCK_START + 20, Physical.AcousticAbsorption)
+	end
+	-- Value.Size: Size
+	if typeof(Value.Size) ~= "NumberSequence" then
+		error(`Expected Value.Size to be of type NumberSequence, got {type(Value.Size)} instead.{if type(Value.Size) == "table" or type(Value.Size) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+	end
+	WriteNumberSequence(Value.Size)
+	do
+		-- Value.Clip: Clip
+		if typeof(Value.Clip) ~= "Rect" then
+			error(`Expected Value.Clip to be of type Rect, got {type(Value.Clip)} instead.{if type(Value.Clip) == "table" or type(Value.Clip) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+		end
+		local Bounds = Value.Clip
+		buffer.writef32(SendBuffer, BLOCK_START + 2, Bounds.Min.X)
+		buffer.writef32(SendBuffer, BLOCK_START + 6, Bounds.Min.Y)
+		buffer.writef32(SendBuffer, BLOCK_START + 10, Bounds.Max.X)
+		buffer.writef32(SendBuffer, BLOCK_START + 14, Bounds.Max.Y)
+	end
+	do
+		-- Value.Zone: Zone
+		if typeof(Value.Zone) ~= "Region3" then
+			error(`Expected Value.Zone to be of type Region3, got {type(Value.Zone)} instead.{if type(Value.Zone) == "table" or type(Value.Zone) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+		end
+		local Region = Value.Zone
+		local RegionCenter = Region.CFrame.Position
+		local RegionHalf = Region.Size / 2
+		buffer.writef32(SendBuffer, BLOCK_START + 18, RegionCenter.X - RegionHalf.X)
+		buffer.writef32(SendBuffer, BLOCK_START + 22, RegionCenter.Y - RegionHalf.Y)
+		buffer.writef32(SendBuffer, BLOCK_START + 26, RegionCenter.Z - RegionHalf.Z)
+		buffer.writef32(SendBuffer, BLOCK_START + 30, RegionCenter.X + RegionHalf.X)
+		buffer.writef32(SendBuffer, BLOCK_START + 34, RegionCenter.Y + RegionHalf.Y)
+		buffer.writef32(SendBuffer, BLOCK_START + 38, RegionCenter.Z + RegionHalf.Z)
+	end
+	do
+		-- Value.Aim: Aim
+		if typeof(Value.Aim) ~= "Ray" then
+			error(`Expected Value.Aim to be of type Ray, got {type(Value.Aim)} instead.{if type(Value.Aim) == "table" or type(Value.Aim) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+		end
+		local Line = Value.Aim
+		buffer.writef32(SendBuffer, BLOCK_START + 42, Line.Origin.X)
+		buffer.writef32(SendBuffer, BLOCK_START + 46, Line.Origin.Y)
+		buffer.writef32(SendBuffer, BLOCK_START + 50, Line.Origin.Z)
+		buffer.writef32(SendBuffer, BLOCK_START + 54, Line.Direction.X)
+		buffer.writef32(SendBuffer, BLOCK_START + 58, Line.Direction.Y)
+		buffer.writef32(SendBuffer, BLOCK_START + 62, Line.Direction.Z)
+	end
+	buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
 end
 
 if not RunService:IsRunning() then
@@ -905,6 +1031,165 @@ if not RunService:IsRunning() then
 	},
 	Fonts = {
 		On = NOOP_RETURNING
+	},
+	World = {
+		Read = function(Buffer: buffer): (World)
+			local PreviousCursor = RecieveCursor
+			local PreviousBuffer = RecieveBuffer
+			local PreviousInstanceCursor = RecieveInstanceCursor
+			RecieveCursor = 0
+			RecieveBuffer = Buffer
+			local Success, Result = pcall(function (): (World)
+				-- Read BLOCK: 65 bytes
+				local BLOCK_START = Read(65)
+				local BITFIELD_1_0
+				local RecieveBuffer = RecieveBuffer
+				-- Value: World
+				local Value = {Size = false, Clip = false, Zone = false, Aim = false} :: any
+				-- Value.Custom: Custom
+				BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				if bit32.btest(BITFIELD_1_0, 0x01) then
+					-- Read BLOCK: 24 bytes
+					local BLOCK_START = Read(24)
+					-- Value.Custom: Custom
+					local PhysicalDensity = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+					local PhysicalFriction = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+					local PhysicalElasticity = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+					local PhysicalFrictionWeight = buffer.readf32(RecieveBuffer, BLOCK_START + 12)
+					local PhysicalElasticityWeight = buffer.readf32(RecieveBuffer, BLOCK_START + 16)
+					local PhysicalAcousticAbsorption = buffer.readf32(RecieveBuffer, BLOCK_START + 20)
+					if not (PhysicalDensity >= 0 and PhysicalDensity <= 100) then error(`Expected PhysicalProperties Density from 0 to 100, got {PhysicalDensity} instead.`) end
+					if not (PhysicalFriction >= 0 and PhysicalFriction <= 2) then error(`Expected PhysicalProperties Friction from 0 to 2, got {PhysicalFriction} instead.`) end
+					if not (PhysicalElasticity >= 0 and PhysicalElasticity <= 1) then error(`Expected PhysicalProperties Elasticity from 0 to 1, got {PhysicalElasticity} instead.`) end
+					if not (PhysicalFrictionWeight >= 0 and PhysicalFrictionWeight <= 100) then error(`Expected PhysicalProperties FrictionWeight from 0 to 100, got {PhysicalFrictionWeight} instead.`) end
+					if not (PhysicalElasticityWeight >= 0 and PhysicalElasticityWeight <= 100) then error(`Expected PhysicalProperties ElasticityWeight from 0 to 100, got {PhysicalElasticityWeight} instead.`) end
+					if not (PhysicalAcousticAbsorption >= 0 and PhysicalAcousticAbsorption <= 1) then error(`Expected PhysicalProperties AcousticAbsorption from 0 to 1, got {PhysicalAcousticAbsorption} instead.`) end
+					Value.Custom = PhysicalProperties.new(PhysicalDensity, PhysicalFriction, PhysicalElasticity, PhysicalFrictionWeight, PhysicalElasticityWeight, PhysicalAcousticAbsorption)
+				end
+				-- Value.Size: Size
+				Value.Size = ReadNumberSequence()
+				do
+					-- Value.Clip: Clip
+					local RectMinX = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+					local RectMinY = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+					local RectMaxX = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+					local RectMaxY = buffer.readf32(RecieveBuffer, BLOCK_START + 13)
+					Value.Clip = Rect.new(RectMinX, RectMinY, RectMaxX, RectMaxY)
+				end
+				do
+					-- Value.Zone: Zone
+					local RegionMinX = buffer.readf32(RecieveBuffer, BLOCK_START + 17)
+					local RegionMinY = buffer.readf32(RecieveBuffer, BLOCK_START + 21)
+					local RegionMinZ = buffer.readf32(RecieveBuffer, BLOCK_START + 25)
+					local RegionMaxX = buffer.readf32(RecieveBuffer, BLOCK_START + 29)
+					local RegionMaxY = buffer.readf32(RecieveBuffer, BLOCK_START + 33)
+					local RegionMaxZ = buffer.readf32(RecieveBuffer, BLOCK_START + 37)
+					Value.Zone = Region3.new(Vector3.new(RegionMinX, RegionMinY, RegionMinZ), Vector3.new(RegionMaxX, RegionMaxY, RegionMaxZ))
+				end
+				do
+					-- Value.Aim: Aim
+					local RayOriginX = buffer.readf32(RecieveBuffer, BLOCK_START + 41)
+					local RayOriginY = buffer.readf32(RecieveBuffer, BLOCK_START + 45)
+					local RayOriginZ = buffer.readf32(RecieveBuffer, BLOCK_START + 49)
+					local RayDirectionX = buffer.readf32(RecieveBuffer, BLOCK_START + 53)
+					local RayDirectionY = buffer.readf32(RecieveBuffer, BLOCK_START + 57)
+					local RayDirectionZ = buffer.readf32(RecieveBuffer, BLOCK_START + 61)
+					Value.Aim = Ray.new(Vector3.new(RayOriginX, RayOriginY, RayOriginZ), Vector3.new(RayDirectionX, RayDirectionY, RayDirectionZ))
+				end
+				return Value
+			end)
+			RecieveCursor = PreviousCursor
+			RecieveBuffer = PreviousBuffer
+			RecieveInstanceCursor = PreviousInstanceCursor
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result :: World
+		end,
+		Write = function(Value: World): (buffer)
+			local Previous = Save()
+			Load()
+			local Success, Result = pcall(function (): (buffer)
+				-- Allocate BLOCK: 65 bytes
+				local BLOCK_START = Allocate(65)
+				local BITFIELD_1_0
+				-- Value: World
+				-- Value.Custom: Custom
+				BITFIELD_1_0 = 0
+				if Value.Custom ~= nil then BITFIELD_1_0 += 0x01 end
+				if Value.Custom ~= nil then
+					-- Allocate BLOCK: 24 bytes
+					local BLOCK_START = Allocate(24)
+					-- Value.Custom: Custom
+					if typeof(Value.Custom) ~= "PhysicalProperties" then
+						error(`Expected Value.Custom to be of type PhysicalProperties, got {type(Value.Custom)} instead.{if type(Value.Custom) == "table" or type(Value.Custom) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Physical = Value.Custom
+					buffer.writef32(SendBuffer, BLOCK_START + 0, Physical.Density)
+					buffer.writef32(SendBuffer, BLOCK_START + 4, Physical.Friction)
+					buffer.writef32(SendBuffer, BLOCK_START + 8, Physical.Elasticity)
+					buffer.writef32(SendBuffer, BLOCK_START + 12, Physical.FrictionWeight)
+					buffer.writef32(SendBuffer, BLOCK_START + 16, Physical.ElasticityWeight)
+					buffer.writef32(SendBuffer, BLOCK_START + 20, Physical.AcousticAbsorption)
+				end
+				-- Value.Size: Size
+				if typeof(Value.Size) ~= "NumberSequence" then
+					error(`Expected Value.Size to be of type NumberSequence, got {type(Value.Size)} instead.{if type(Value.Size) == "table" or type(Value.Size) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				WriteNumberSequence(Value.Size)
+				do
+					-- Value.Clip: Clip
+					if typeof(Value.Clip) ~= "Rect" then
+						error(`Expected Value.Clip to be of type Rect, got {type(Value.Clip)} instead.{if type(Value.Clip) == "table" or type(Value.Clip) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Bounds = Value.Clip
+					buffer.writef32(SendBuffer, BLOCK_START + 1, Bounds.Min.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 5, Bounds.Min.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 9, Bounds.Max.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 13, Bounds.Max.Y)
+				end
+				do
+					-- Value.Zone: Zone
+					if typeof(Value.Zone) ~= "Region3" then
+						error(`Expected Value.Zone to be of type Region3, got {type(Value.Zone)} instead.{if type(Value.Zone) == "table" or type(Value.Zone) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Region = Value.Zone
+					local RegionCenter = Region.CFrame.Position
+					local RegionHalf = Region.Size / 2
+					buffer.writef32(SendBuffer, BLOCK_START + 17, RegionCenter.X - RegionHalf.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 21, RegionCenter.Y - RegionHalf.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 25, RegionCenter.Z - RegionHalf.Z)
+					buffer.writef32(SendBuffer, BLOCK_START + 29, RegionCenter.X + RegionHalf.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 33, RegionCenter.Y + RegionHalf.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 37, RegionCenter.Z + RegionHalf.Z)
+				end
+				do
+					-- Value.Aim: Aim
+					if typeof(Value.Aim) ~= "Ray" then
+						error(`Expected Value.Aim to be of type Ray, got {type(Value.Aim)} instead.{if type(Value.Aim) == "table" or type(Value.Aim) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Line = Value.Aim
+					buffer.writef32(SendBuffer, BLOCK_START + 41, Line.Origin.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 45, Line.Origin.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 49, Line.Origin.Z)
+					buffer.writef32(SendBuffer, BLOCK_START + 53, Line.Direction.X)
+					buffer.writef32(SendBuffer, BLOCK_START + 57, Line.Direction.Y)
+					buffer.writef32(SendBuffer, BLOCK_START + 61, Line.Direction.Z)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+				local Result = buffer.create(SendCursor)
+				buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+				return Result
+			end)
+			Load(Previous)
+			if Success ~= true then
+				error(Result, 0)
+			end
+			return Result
+		end
+	},
+	Placed = {
+		Fire = NOOP
 	},
 	})
 	return (Returns :: any) :: BLINK_EVENTS_SYMBOL
@@ -1443,6 +1728,169 @@ Returns.Fonts = {
 				Events.Unreliable[0] = nil
 			end
 		end
+	end
+}
+Returns.World = {
+	Read = function(Buffer: buffer): (World)
+		local PreviousCursor = RecieveCursor
+		local PreviousBuffer = RecieveBuffer
+		local PreviousInstanceCursor = RecieveInstanceCursor
+		RecieveCursor = 0
+		RecieveBuffer = Buffer
+		local Success, Result = pcall(function (): (World)
+			-- Read BLOCK: 65 bytes
+			local BLOCK_START = Read(65)
+			local BITFIELD_1_0
+			local RecieveBuffer = RecieveBuffer
+			-- Value: World
+			local Value = {Size = false, Clip = false, Zone = false, Aim = false} :: any
+			-- Value.Custom: Custom
+			BITFIELD_1_0 = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			if bit32.btest(BITFIELD_1_0, 0x01) then
+				-- Read BLOCK: 24 bytes
+				local BLOCK_START = Read(24)
+				-- Value.Custom: Custom
+				local PhysicalDensity = buffer.readf32(RecieveBuffer, BLOCK_START + 0)
+				local PhysicalFriction = buffer.readf32(RecieveBuffer, BLOCK_START + 4)
+				local PhysicalElasticity = buffer.readf32(RecieveBuffer, BLOCK_START + 8)
+				local PhysicalFrictionWeight = buffer.readf32(RecieveBuffer, BLOCK_START + 12)
+				local PhysicalElasticityWeight = buffer.readf32(RecieveBuffer, BLOCK_START + 16)
+				local PhysicalAcousticAbsorption = buffer.readf32(RecieveBuffer, BLOCK_START + 20)
+				if not (PhysicalDensity >= 0 and PhysicalDensity <= 100) then error(`Expected PhysicalProperties Density from 0 to 100, got {PhysicalDensity} instead.`) end
+				if not (PhysicalFriction >= 0 and PhysicalFriction <= 2) then error(`Expected PhysicalProperties Friction from 0 to 2, got {PhysicalFriction} instead.`) end
+				if not (PhysicalElasticity >= 0 and PhysicalElasticity <= 1) then error(`Expected PhysicalProperties Elasticity from 0 to 1, got {PhysicalElasticity} instead.`) end
+				if not (PhysicalFrictionWeight >= 0 and PhysicalFrictionWeight <= 100) then error(`Expected PhysicalProperties FrictionWeight from 0 to 100, got {PhysicalFrictionWeight} instead.`) end
+				if not (PhysicalElasticityWeight >= 0 and PhysicalElasticityWeight <= 100) then error(`Expected PhysicalProperties ElasticityWeight from 0 to 100, got {PhysicalElasticityWeight} instead.`) end
+				if not (PhysicalAcousticAbsorption >= 0 and PhysicalAcousticAbsorption <= 1) then error(`Expected PhysicalProperties AcousticAbsorption from 0 to 1, got {PhysicalAcousticAbsorption} instead.`) end
+				Value.Custom = PhysicalProperties.new(PhysicalDensity, PhysicalFriction, PhysicalElasticity, PhysicalFrictionWeight, PhysicalElasticityWeight, PhysicalAcousticAbsorption)
+			end
+			-- Value.Size: Size
+			Value.Size = ReadNumberSequence()
+			do
+				-- Value.Clip: Clip
+				local RectMinX = buffer.readf32(RecieveBuffer, BLOCK_START + 1)
+				local RectMinY = buffer.readf32(RecieveBuffer, BLOCK_START + 5)
+				local RectMaxX = buffer.readf32(RecieveBuffer, BLOCK_START + 9)
+				local RectMaxY = buffer.readf32(RecieveBuffer, BLOCK_START + 13)
+				Value.Clip = Rect.new(RectMinX, RectMinY, RectMaxX, RectMaxY)
+			end
+			do
+				-- Value.Zone: Zone
+				local RegionMinX = buffer.readf32(RecieveBuffer, BLOCK_START + 17)
+				local RegionMinY = buffer.readf32(RecieveBuffer, BLOCK_START + 21)
+				local RegionMinZ = buffer.readf32(RecieveBuffer, BLOCK_START + 25)
+				local RegionMaxX = buffer.readf32(RecieveBuffer, BLOCK_START + 29)
+				local RegionMaxY = buffer.readf32(RecieveBuffer, BLOCK_START + 33)
+				local RegionMaxZ = buffer.readf32(RecieveBuffer, BLOCK_START + 37)
+				Value.Zone = Region3.new(Vector3.new(RegionMinX, RegionMinY, RegionMinZ), Vector3.new(RegionMaxX, RegionMaxY, RegionMaxZ))
+			end
+			do
+				-- Value.Aim: Aim
+				local RayOriginX = buffer.readf32(RecieveBuffer, BLOCK_START + 41)
+				local RayOriginY = buffer.readf32(RecieveBuffer, BLOCK_START + 45)
+				local RayOriginZ = buffer.readf32(RecieveBuffer, BLOCK_START + 49)
+				local RayDirectionX = buffer.readf32(RecieveBuffer, BLOCK_START + 53)
+				local RayDirectionY = buffer.readf32(RecieveBuffer, BLOCK_START + 57)
+				local RayDirectionZ = buffer.readf32(RecieveBuffer, BLOCK_START + 61)
+				Value.Aim = Ray.new(Vector3.new(RayOriginX, RayOriginY, RayOriginZ), Vector3.new(RayDirectionX, RayDirectionY, RayDirectionZ))
+			end
+			return Value
+		end)
+		RecieveCursor = PreviousCursor
+		RecieveBuffer = PreviousBuffer
+		RecieveInstanceCursor = PreviousInstanceCursor
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result :: World
+	end,
+	Write = function(Value: World): (buffer)
+		local Previous = Save()
+		Load()
+		local Success, Result = pcall(function (): (buffer)
+			-- Allocate BLOCK: 65 bytes
+			local BLOCK_START = Allocate(65)
+			local BITFIELD_1_0
+			-- Value: World
+			-- Value.Custom: Custom
+			BITFIELD_1_0 = 0
+			if Value.Custom ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value.Custom ~= nil then
+				-- Allocate BLOCK: 24 bytes
+				local BLOCK_START = Allocate(24)
+				-- Value.Custom: Custom
+				if typeof(Value.Custom) ~= "PhysicalProperties" then
+					error(`Expected Value.Custom to be of type PhysicalProperties, got {type(Value.Custom)} instead.{if type(Value.Custom) == "table" or type(Value.Custom) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Physical = Value.Custom
+				buffer.writef32(SendBuffer, BLOCK_START + 0, Physical.Density)
+				buffer.writef32(SendBuffer, BLOCK_START + 4, Physical.Friction)
+				buffer.writef32(SendBuffer, BLOCK_START + 8, Physical.Elasticity)
+				buffer.writef32(SendBuffer, BLOCK_START + 12, Physical.FrictionWeight)
+				buffer.writef32(SendBuffer, BLOCK_START + 16, Physical.ElasticityWeight)
+				buffer.writef32(SendBuffer, BLOCK_START + 20, Physical.AcousticAbsorption)
+			end
+			-- Value.Size: Size
+			if typeof(Value.Size) ~= "NumberSequence" then
+				error(`Expected Value.Size to be of type NumberSequence, got {type(Value.Size)} instead.{if type(Value.Size) == "table" or type(Value.Size) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			WriteNumberSequence(Value.Size)
+			do
+				-- Value.Clip: Clip
+				if typeof(Value.Clip) ~= "Rect" then
+					error(`Expected Value.Clip to be of type Rect, got {type(Value.Clip)} instead.{if type(Value.Clip) == "table" or type(Value.Clip) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Bounds = Value.Clip
+				buffer.writef32(SendBuffer, BLOCK_START + 1, Bounds.Min.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 5, Bounds.Min.Y)
+				buffer.writef32(SendBuffer, BLOCK_START + 9, Bounds.Max.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 13, Bounds.Max.Y)
+			end
+			do
+				-- Value.Zone: Zone
+				if typeof(Value.Zone) ~= "Region3" then
+					error(`Expected Value.Zone to be of type Region3, got {type(Value.Zone)} instead.{if type(Value.Zone) == "table" or type(Value.Zone) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Region = Value.Zone
+				local RegionCenter = Region.CFrame.Position
+				local RegionHalf = Region.Size / 2
+				buffer.writef32(SendBuffer, BLOCK_START + 17, RegionCenter.X - RegionHalf.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 21, RegionCenter.Y - RegionHalf.Y)
+				buffer.writef32(SendBuffer, BLOCK_START + 25, RegionCenter.Z - RegionHalf.Z)
+				buffer.writef32(SendBuffer, BLOCK_START + 29, RegionCenter.X + RegionHalf.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 33, RegionCenter.Y + RegionHalf.Y)
+				buffer.writef32(SendBuffer, BLOCK_START + 37, RegionCenter.Z + RegionHalf.Z)
+			end
+			do
+				-- Value.Aim: Aim
+				if typeof(Value.Aim) ~= "Ray" then
+					error(`Expected Value.Aim to be of type Ray, got {type(Value.Aim)} instead.{if type(Value.Aim) == "table" or type(Value.Aim) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Line = Value.Aim
+				buffer.writef32(SendBuffer, BLOCK_START + 41, Line.Origin.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 45, Line.Origin.Y)
+				buffer.writef32(SendBuffer, BLOCK_START + 49, Line.Origin.Z)
+				buffer.writef32(SendBuffer, BLOCK_START + 53, Line.Direction.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 57, Line.Direction.Y)
+				buffer.writef32(SendBuffer, BLOCK_START + 61, Line.Direction.Z)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_1_0)
+			local Result = buffer.create(SendCursor)
+			buffer.copy(Result, 0, SendBuffer, 0, SendCursor)
+			return Result
+		end)
+		Load(Previous)
+		if Success ~= true then
+			error(Result, 0)
+		end
+		return Result
+	end
+}
+Returns.Placed = {
+	Fire = function(Value: { Custom: PhysicalProperties?, Size: NumberSequence, Clip: Rect, Zone: Region3, Aim: Ray }): ()
+		Begin()
+		SerdesFunctions.WriteEVENT_Placed(Value)
+		Commit()
 	end
 }
 table.freeze(Returns)

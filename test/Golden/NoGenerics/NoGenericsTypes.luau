@@ -455,27 +455,31 @@ end
 --> failure reply precisely so the caller does not hang -- and stopped being so once a client could
 --> be the callee, since a client that never replies is ordinary: it left, it crashed, it was
 --> exploited. `Expired` runs after the caller has been failed; the server uses it to let go of a
---> player who is gone.
-local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Unanswered: string, Expired: (() -> ())?)
-    local Thread = State.Threads[Identifier]
-    if not Thread then
-        return
+--> player who is gone. The message, which reads the player's name off the Instance, is built only
+--> once the timer runs out; arming it makes one closure, cheaper natively than seven arguments.
+local function ExpireInvocation(State: BLINK_INVOCATIONS, Identifier: number, Thread: thread, Seconds: number, Name: string, Player: Player?, Expired: ((Player, BLINK_INVOCATIONS) -> ())?)
+    --> Cleared first, so the release below does not try to cancel the timer that is running it.
+    State.Timers[Identifier] = nil
+    ReleaseInvocation(State, Identifier)
+
+    if coroutine.status(Thread) == "suspended" then
+        local Unanswered = if Player then `"{Name}" was never answered by {Player.Name}` else `"{Name}" was never answered`
+        warn(`[BlinkBlox]: {Unanswered} within {Seconds} seconds, so the call failed.`)
+        task.spawn(Thread, false)
     end
 
-    State.Timers[Identifier] = task.delay(Seconds, function()
-        --> Cleared first, so the release below does not try to cancel the timer that is running it.
-        State.Timers[Identifier] = nil
-        ReleaseInvocation(State, Identifier)
+    if Player and Expired then
+        Expired(Player, State)
+    end
+end
 
-        if coroutine.status(Thread) == "suspended" then
-            warn(`[BlinkBlox]: {Unanswered} within {Seconds} seconds, so the call failed.`)
-            task.spawn(Thread, false)
-        end
-
-        if Expired then
-            Expired()
-        end
-    end)
+local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Name: string, Player: Player?, Expired: ((Player, BLINK_INVOCATIONS) -> ())?)
+    local Thread = State.Threads[Identifier]
+    if Thread then
+        State.Timers[Identifier] = task.delay(Seconds, function()
+            ExpireInvocation(State, Identifier, Thread, Seconds, Name, Player, Expired)
+        end)
+    end
 end
 
 local Invocations = CreateInvocations()
@@ -639,7 +643,7 @@ return {
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
 				-- Value: ExactRange
-				if typeof(Value) ~= "number" then
+				if type(Value) ~= "number" then
 					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if Value ~= 0 then error(`Expected "Value" to be equal to 0, got {Value} instead.`) end
@@ -687,7 +691,7 @@ return {
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
 				-- Value: DecimalRange
-				if typeof(Value) ~= "number" then
+				if type(Value) ~= "number" then
 					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -5.5) then error(`Expected "Value" to be larger than or equal to -5.5, got {Value} instead.`) end
@@ -736,7 +740,7 @@ return {
 				-- Allocate BLOCK: 1 bytes
 				local BLOCK_START = Allocate(1)
 				-- Value: NegativeRange
-				if typeof(Value) ~= "number" then
+				if type(Value) ~= "number" then
 					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -5) then error(`Expected "Value" to be larger than or equal to -5, got {Value} instead.`) end
@@ -784,7 +788,7 @@ return {
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
 				-- Value: UnboundUpper
-				if typeof(Value) ~= "number" then
+				if type(Value) ~= "number" then
 					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value >= -0) then error(`Expected "Value" to be larger than or equal to -0, got {Value} instead.`) end
@@ -831,7 +835,7 @@ return {
 				-- Allocate BLOCK: 4 bytes
 				local BLOCK_START = Allocate(4)
 				-- Value: UnboundLower
-				if typeof(Value) ~= "number" then
+				if type(Value) ~= "number" then
 					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				if not (Value <= -0) then error(`Expected "Value" to be smaller than or equal to -0, got {Value} instead.`) end
@@ -905,7 +909,7 @@ return {
 				for Key_1, Element_1 in Value do
 					Elements_1 += 1
 					-- Key_1: MapNested
-					if typeof(Key_1) ~= "string" then
+					if type(Key_1) ~= "string" then
 						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Key_1
@@ -919,7 +923,7 @@ return {
 					for Key_2, Element_2 in Element_1 do
 						Elements_2 += 1
 						-- Key_2: MapSimple
-						if typeof(Key_2) ~= "string" then
+						if type(Key_2) ~= "string" then
 							error(`Expected Key_2 to be of type string, got {type(Key_2)} instead.{if type(Key_2) == "table" or type(Key_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Key_2
@@ -928,7 +932,7 @@ return {
 						Allocate(Length)
 						buffer.writestring(SendBuffer, SendOffset, Key_2, Length)
 						-- Element_2: MapSimple
-						if typeof(Element_2) ~= "number" then
+						if type(Element_2) ~= "number" then
 							error(`Expected Element_2 to be of type number, got {type(Element_2)} instead.{if type(Element_2) == "table" or type(Element_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local OFFSET_0 = Allocate(1)
@@ -1048,17 +1052,17 @@ return {
 				local BITFIELD_1_0
 				-- Value: Standalone
 				-- Value.One: One
-				if typeof(Value.One) ~= "number" then
+				if type(Value.One) ~= "number" then
 					error(`Expected Value.One to be of type number, got {type(Value.One)} instead.{if type(Value.One) == "table" or type(Value.One) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.One)
 				-- Value.Two: Two
-				if typeof(Value.Two) ~= "number" then
+				if type(Value.Two) ~= "number" then
 					error(`Expected Value.Two to be of type number, got {type(Value.Two)} instead.{if type(Value.Two) == "table" or type(Value.Two) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Two)
 				-- Value.Three: Three
-				if typeof(Value.Three) ~= "number" then
+				if type(Value.Three) ~= "number" then
 					error(`Expected Value.Three to be of type number, got {type(Value.Three)} instead.{if type(Value.Three) == "table" or type(Value.Three) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 				end
 				buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Three)
@@ -1070,7 +1074,7 @@ return {
 					-- Value.Event: Join
 					do
 						-- Value.Event.Name: Name
-						if typeof(Value.Event.Name) ~= "string" then
+						if type(Value.Event.Name) ~= "string" then
 							error(`Expected Value.Event.Name to be of type string, got {type(Value.Event.Name)} instead.{if type(Value.Event.Name) == "table" or type(Value.Event.Name) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Value.Event.Name
@@ -1080,7 +1084,7 @@ return {
 						buffer.writestring(SendBuffer, SendOffset, Value.Event.Name, Length)
 					end
 					-- Value.Event.UserId: UserId
-					if typeof(Value.Event.UserId) ~= "number" then
+					if type(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
@@ -1090,13 +1094,13 @@ return {
 					BITFIELD_1_0 += 1
 					-- Value.Event: Chat
 					-- Value.Event.UserId: UserId
-					if typeof(Value.Event.UserId) ~= "number" then
+					if type(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
 					do
 						-- Value.Event.Message: Message
-						if typeof(Value.Event.Message) ~= "string" then
+						if type(Value.Event.Message) ~= "string" then
 							error(`Expected Value.Event.Message to be of type string, got {type(Value.Event.Message)} instead.{if type(Value.Event.Message) == "table" or type(Value.Event.Message) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 						end
 						local Length = #Value.Event.Message
@@ -1111,7 +1115,7 @@ return {
 					BITFIELD_1_0 += 2
 					-- Value.Event: Leave
 					-- Value.Event.UserId: UserId
-					if typeof(Value.Event.UserId) ~= "number" then
+					if type(Value.Event.UserId) ~= "number" then
 						error(`Expected Value.Event.UserId to be of type number, got {type(Value.Event.UserId)} instead.{if type(Value.Event.UserId) == "table" or type(Value.Event.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					buffer.writef64(SendBuffer, BLOCK_START + 0, Value.Event.UserId)
@@ -1121,7 +1125,7 @@ return {
 				-- Value.Nested: Nested
 				do
 					-- Value.Nested.Four: Four
-					if typeof(Value.Nested.Four) ~= "string" then
+					if type(Value.Nested.Four) ~= "string" then
 						error(`Expected Value.Nested.Four to be of type string, got {type(Value.Nested.Four)} instead.{if type(Value.Nested.Four) == "table" or type(Value.Nested.Four) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Value.Nested.Four
@@ -1132,7 +1136,7 @@ return {
 				end
 				do
 					-- Value.Nested.Five: Five
-					if typeof(Value.Nested.Five) ~= "string" then
+					if type(Value.Nested.Five) ~= "string" then
 						error(`Expected Value.Nested.Five to be of type string, got {type(Value.Nested.Five)} instead.{if type(Value.Nested.Five) == "table" or type(Value.Nested.Five) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
 					end
 					local Length = #Value.Nested.Five

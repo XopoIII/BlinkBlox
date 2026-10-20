@@ -60,8 +60,10 @@ Net.Damage.Fire({ Target = Humanoid, Amount = 25 })
 - **Mismatched builds refuse each other.** A client and a server built from different schemas stop
   at startup instead of decoding one event as another.
 - **The Roblox types games send.** `Vector2`, `UDim`, `UDim2`, `NumberRange`, `ColorSequence`,
-  `TweenInfo`, and a Roblox enum's items as `Enum(Material)` -- sent by `Value`, never by list
-  position, which can differ between client and server during an engine rollout.
+  `NumberSequence`, `TweenInfo`, `PhysicalProperties`, `Rect`, `Region3`, `Ray`, and a Roblox
+  enum's items as `Enum(Material)` -- sent by `Value`, never by list position, which can differ
+  between client and server during an engine rollout. What a constructor would throw on, or let a
+  NaN through, is refused on arrival.
 - **Small on the wire.** Booleans, optional flags, enum values and tags share a bitfield, and
   `boolean[]` packs eight to a byte. A length is sent relative to its range, a short one in a single
   varint byte, `CFrame<quat>` fits a rotation in 7 bytes, and

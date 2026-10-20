@@ -353,6 +353,47 @@ local Primitives: { [string]: Primitive } = {
 		AllowedComponents = 0,
 		Bytes = 15,
 	},
+	--> A u8 count of 2 to 20 keypoints, each a f32 time, value and envelope.
+	NumberSequence = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 25,
+		MaxBytes = 241,
+	},
+	--> Density, Friction, Elasticity, FrictionWeight, ElasticityWeight and AcousticAbsorption as f32.
+	PhysicalProperties = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 24,
+	},
+	--> Min and Max, two f32 each.
+	Rect = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 16,
+	},
+	--> The two corners, three f32 each.
+	Region3 = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 24,
+	},
+	--> Origin and Direction, three f32 each.
+	Ray = {
+		Component = false,
+		AllowsRange = false,
+		AllowsOptional = true,
+		AllowedComponents = 0,
+		Bytes = 24,
+	},
 	--> `Enum(Material)`: the item's Value as u16, the enum named by the class after it.
 	Enum = {
 		Component = false,

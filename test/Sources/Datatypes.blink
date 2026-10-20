@@ -1,6 +1,6 @@
--- The Roblox datatypes of Prefabs/Datatypes in events and exports, and the remotes in a folder on a
--- client that waits for them unbounded. The goldens are type-checked under both solvers;
--- test/Datatypes.luau and test/Lifecycle.luau run them.
+-- The Roblox datatypes of Prefabs/Datatypes and Prefabs/Spatial in events and exports, and the
+-- remotes in a folder on a client that waits for them unbounded. The goldens are type-checked under
+-- both solvers; test/Datatypes.luau and test/Lifecycle.luau run them.
 option RemoteScope = "Datatypes"
 option RemotesFolder = "Network"
 option WriteValidations = true
@@ -38,4 +38,20 @@ event Fonts {
     Type: Unreliable,
     Call: SingleSync,
     Data: Enum(Font)[..8]
+}
+
+export struct World {
+    Custom: PhysicalProperties?,
+    Size: NumberSequence,
+    Clip: Rect,
+    Zone: Region3,
+    Aim: Ray,
+}
+
+event Placed {
+    From: Client,
+    Type: Reliable,
+    Call: SingleSync,
+    Rate: 30,
+    Data: World
 }

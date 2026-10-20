@@ -15,6 +15,7 @@ local Lengths = require("@self/Lengths")
 local _ = require("@self/Numbers")
 local _ = require("@self/Roblox")
 local _ = require("@self/Datatypes")
+local _ = require("@self/Spatial")
 
 return {
 	Types = Common.Types,

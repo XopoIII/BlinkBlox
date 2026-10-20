@@ -142,10 +142,6 @@ event Ping {
 	Data: unknown
 }
 
--- TODO(convert): Warp wrote Schema.ray where this says unknown
--- TODO(convert): Warp wrote Schema.rect where this says unknown
--- TODO(convert): Warp wrote Schema.numbersequence where this says unknown
--- TODO(convert): a client sends this; bound aim (unknown is not validated), area (unknown is not validated), curve (unknown is not validated)
 event Region {
 	-- TODO(convert): Warp does not say which side sends this; say it here
 	From: Client,
@@ -153,7 +149,7 @@ event Region {
 	Type: Reliable,
 	Call: ManyAsync,
 	-- TODO(convert): Rate: ?, Burst: ?
-	Data: struct { aim: unknown, area: unknown, curve: unknown }
+	Data: struct { aim: Ray, area: Rect, curve: NumberSequence }
 }
 
 -- TODO(convert): a client sends this; bound the value (a map cannot be bounded: prefer a bounded array), [key] (string length)
@@ -169,8 +165,7 @@ event Scores {
 
 -- TODO(convert): Warp wrote the custom datatype u64 where this says unknown
 -- TODO(convert): Warp wrote Schema.font where this says unknown
--- TODO(convert): Warp wrote Schema.physicalproperties where this says unknown
--- TODO(convert): a client sends this; bound big (unknown is not validated), face (unknown is not validated), material (unknown is not validated)
+-- TODO(convert): a client sends this; bound big (unknown is not validated), face (unknown is not validated)
 event Surface {
 	-- TODO(convert): Warp does not say which side sends this; say it here
 	From: Client,
@@ -178,5 +173,5 @@ event Surface {
 	Type: Reliable,
 	Call: ManyAsync,
 	-- TODO(convert): Rate: ?, Burst: ?
-	Data: struct { big: unknown, face: unknown, material: unknown }
+	Data: struct { big: unknown, face: unknown, material: PhysicalProperties }
 }

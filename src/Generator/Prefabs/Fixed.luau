@@ -105,7 +105,7 @@ function Fixed.Write(
 	local Integer = Value.Primitive.Integer == true
 
 	if WriteValidations then
-		Block:Compare(`typeof({Target})`, `"number"`, "Not")
+		Block:Compare(`type({Target})`, `"number"`, "Not")
 			:Line(`error(\`Expected {Target} to be of type number, got \{type({Target})} instead.\`)`)
 			:End()
 	end

@@ -121,17 +121,17 @@ end
 --> PlayerRemoving handler, or a caller retrying the failure it was just handed -- recreates a set
 --> PlayerRemoving has already cleared, and nothing else would ever remove it. The timer is the one
 --> thing certain to run afterwards, so it is what lets go.
+local function ReleaseGonePlayer(Player: Player, State: BLINK_INVOCATIONS)
+    if not Player:IsDescendantOf(Players) and PlayerInvocations[Player] == State then
+        PlayerInvocations[Player] = nil
+    end
+end
+
 local function TimeoutPlayerInvocation(Player: Player, Identifier: number, Seconds: number, Name: string)
     local State = PlayerInvocations[Player]
-    if not State then
-        return
+    if State then
+        TimeoutInvocation(State, Identifier, Seconds, Name, Player, ReleaseGonePlayer)
     end
-
-    TimeoutInvocation(State, Identifier, Seconds, `"{Name}" was never answered by {Player.Name}`, function()
-        if not Player:IsDescendantOf(Players) and PlayerInvocations[Player] == State then
-            PlayerInvocations[Player] = nil
-        end
-    end)
 end
 
 Players.PlayerRemoving:Connect(function(Player)

@@ -11,6 +11,8 @@
 local Harness = require("./Harness")
 local Highlight = require("@compiler/../plugin/src/Editor/Highlight")
 local Lexer = require("@compiler/Lexer")
+local Settings = require("@compiler/Settings")
+local fs = require("@lune/fs")
 
 local OkPrint = Harness.OkPrint
 local ErrorPrint = Harness.ErrorPrint
@@ -99,6 +101,32 @@ if Render("") ~= "" then
 	ErrorPrint(`Failed "An empty document renders empty", got "{Render("")}"`)
 else
 	OkPrint(`Test "An empty document renders empty" passed!`)
+end
+
+--> The docs and editors highlight with docs/syntax/blink.tmLanguage.json, whose list of types is
+--> written out by hand. Every type the compiler knows has to be in it, or a new one reads as a name.
+do
+	local Name = "The syntax grammar names every type the compiler knows"
+	local Grammar = fs.readFile("../docs/syntax/blink.tmLanguage.json")
+	local List = string.match(Grammar, "\\b%(%?:(u8|[^)]+)%)") or ""
+	local Listed: { [string]: boolean } = {}
+	for _, Type in string.split(List, "|") do
+		Listed[Type] = true
+	end
+
+	local Missing = {}
+	for Type in Settings.Primtives do
+		if not Listed[Type] then
+			table.insert(Missing, Type)
+		end
+	end
+	table.sort(Missing)
+
+	if #Missing > 0 then
+		ErrorPrint(`Failed "{Name}": the grammar does not list {table.concat(Missing, ", ")}.`)
+	else
+		OkPrint(`Test "{Name}" passed!`)
+	end
 end
 
 return {}

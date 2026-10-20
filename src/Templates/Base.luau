@@ -447,27 +447,31 @@ end
 --> failure reply precisely so the caller does not hang -- and stopped being so once a client could
 --> be the callee, since a client that never replies is ordinary: it left, it crashed, it was
 --> exploited. `Expired` runs after the caller has been failed; the server uses it to let go of a
---> player who is gone.
-local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Unanswered: string, Expired: (() -> ())?)
-    local Thread = State.Threads[Identifier]
-    if not Thread then
-        return
+--> player who is gone. The message, which reads the player's name off the Instance, is built only
+--> once the timer runs out; arming it makes one closure, cheaper natively than seven arguments.
+local function ExpireInvocation(State: BLINK_INVOCATIONS, Identifier: number, Thread: thread, Seconds: number, Name: string, Player: Player?, Expired: ((Player, BLINK_INVOCATIONS) -> ())?)
+    --> Cleared first, so the release below does not try to cancel the timer that is running it.
+    State.Timers[Identifier] = nil
+    ReleaseInvocation(State, Identifier)
+
+    if coroutine.status(Thread) == "suspended" then
+        local Unanswered = if Player then `"{Name}" was never answered by {Player.Name}` else `"{Name}" was never answered`
+        warn(`[BlinkBlox]: {Unanswered} within {Seconds} seconds, so the call failed.`)
+        task.spawn(Thread, false)
     end
 
-    State.Timers[Identifier] = task.delay(Seconds, function()
-        --> Cleared first, so the release below does not try to cancel the timer that is running it.
-        State.Timers[Identifier] = nil
-        ReleaseInvocation(State, Identifier)
+    if Player and Expired then
+        Expired(Player, State)
+    end
+end
 
-        if coroutine.status(Thread) == "suspended" then
-            warn(`[BlinkBlox]: {Unanswered} within {Seconds} seconds, so the call failed.`)
-            task.spawn(Thread, false)
-        end
-
-        if Expired then
-            Expired()
-        end
-    end)
+local function TimeoutInvocation(State: BLINK_INVOCATIONS, Identifier: number, Seconds: number, Name: string, Player: Player?, Expired: ((Player, BLINK_INVOCATIONS) -> ())?)
+    local Thread = State.Threads[Identifier]
+    if Thread then
+        State.Timers[Identifier] = task.delay(Seconds, function()
+            ExpireInvocation(State, Identifier, Thread, Seconds, Name, Player, Expired)
+        end)
+    end
 end
 
 local Invocations = CreateInvocations()

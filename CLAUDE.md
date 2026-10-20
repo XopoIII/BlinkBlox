@@ -49,6 +49,8 @@ Two other projects occupy the neighbouring ground, and neither covers this one:
   QuickNet rate-limits each event per player and bounds packets, but reports a decode failure only to
   the output and allocates whatever length a client names. Warp has no per-event limit and no
   protected decode.
+- **Jolt** is a runtime-typed library too. Its 4.4.1 removed the per-packet `pcall` and decodes a
+  truncated payload to default values, silently, rather than refusing it.
 
 None of them reports every refusal to the game and bounds every allocation before it happens. That is the gap this fork fills: **the
 generated server module should be safe to point at the open internet** — without giving up the

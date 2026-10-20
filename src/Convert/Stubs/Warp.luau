@@ -51,6 +51,10 @@ local TYPES: { [string]: Type } = {
 	udim2 = Draft.Primitive("UDim2"),
 	numberrange = Draft.Primitive("NumberRange"),
 	colorsequence = Draft.Primitive("ColorSequence"),
+	numbersequence = Draft.Primitive("NumberSequence"),
+	physicalproperties = Draft.Primitive("PhysicalProperties"),
+	rect = Draft.Primitive("Rect"),
+	ray = Draft.Primitive("Ray"),
 	brickcolor = Draft.Primitive("BrickColor"),
 	tweeninfo = Draft.Primitive("TweenInfo"),
 	datetime = Draft.Primitive("DateTime"),
@@ -60,7 +64,7 @@ local TYPES: { [string]: Type } = {
 local NO_SCHEMA = "no schema at all"
 
 --- Types with no equivalent.
-local MISSING = { "rect", "ray", "numbersequence", "physicalproperties", "font" }
+local MISSING = { "font" }
 
 --- A side's methods that send, listen or wait, none of which does anything here: a definitions
 --- file that also connects its listeners still loads.
