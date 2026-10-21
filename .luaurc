@@ -5,7 +5,7 @@
   },
   "lintErrors": true,
   "aliases": {
-    "lune": "~/.luneblox/.typedefs/0.10.17/",
+    "lune": "~/.luneblox/.typedefs/0.10.18/",
     "compiler": "./src"
   }
 }

@@ -7,6 +7,27 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.3.1 — 2026-10-21
+
+A housekeeping release. A generated module differs from 1.3.0's by the version in its header: it
+runs the same code, the wire does not change, and nothing needs recompiling.
+
+### Changed
+
+- **The CLI archives are built on LuneBlox 0.10.18**, up from 0.10.17. It runs the same Luau with
+  the same fast flags, so no timing moves; what it adds is to the standard library -- Roblox's
+  `Random`, buffers in JSON as `JSONEncode` writes them, `utf8.graphemes` -- and errors that name
+  their cause, among them `stdio.prompt`'s when no terminal is attached. The suite and the goldens
+  pass on it unchanged.
+- **Every pin is the latest release again.** StyLua is 2.6.0, which leaves the tree as it was, and
+  lefthook 2.2.2; the docs site is on Astro 7.4.1.
+
+### Fixed
+
+- **The docs site's dev server ran a Vite with known flaws.** Vite 8.3.0 to 8.3.2 carried a
+  `launch-editor` that could misread an editor's arguments into a command, chiefly on Windows;
+  Astro 7.4.1 brings Vite 8.3.4. It was never in the compiler or in generated code.
+
 ## 1.3.0 — 2026-10-20
 
 Five more Roblox types, and calls and checks that cost less. The wire and the encoding of every
