@@ -307,9 +307,10 @@ Consequences worth remembering:
 
 ### The prompt trap
 
-`stdio.prompt` does not degrade when stdin is not a TTY — it throws `IO error: not a terminal`, and
-under some runners simply blocks with nothing printed. Any prompt reached from a script, a git hook
-or CI must therefore be guarded.
+`stdio.prompt` does not degrade when stdin is not a TTY — on upstream Lune, which runs the bundled
+compiler for pesde users, it throws `IO error: not a terminal`, and under some runners simply blocks
+with nothing printed. LuneBlox 0.10.18 throws too, but says why: `stdio.prompt needs a terminal, and
+stderr is not one`. Any prompt reached from a script, a git hook or CI must therefore be guarded.
 
 Both callers are fixed: the CLI creates a missing output directory instead of asking when no
 terminal is attached, and the test runner compiles by default. `--yes` still forces it explicitly,
