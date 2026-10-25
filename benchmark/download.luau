@@ -94,6 +94,14 @@ local Packages: { [string]: Package } = {
 			Replace(`{Directory}/Server/init.luau`, "if bytes > 8e3 then", "if bytes > math.huge then")
 		end,
 	},
+
+	--> Satset is on Wally under its old owner's name; the GitHub tag is the same source. Its limits --
+	--> a token bucket a remote call, a cap on batches a frame -- are options of `Satset.start`, which
+	--> the modes lift, so the package is used as released.
+	satset = {
+		Version = "v0.5.0",
+		Archive = "https://github.com/bookek/satset/archive/refs/tags/v0.5.0.zip",
+	},
 }
 
 --> Tools run from source rather than a release binary. Upstream Blink, which BlinkBlox forked from,

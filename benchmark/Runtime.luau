@@ -15,7 +15,7 @@
 --- its listener -- each on its own, and counts the bytes each event cost: as the encoder wrote them,
 --- and after zstd, which is what Roblox compresses a remote's packets with.
 ---
---- It runs every tool Studio compares -- BlinkBlox, Blink, zap, ByteNet, Packet, QuickNet, Warp -- on the same pools, so
+--- It runs every tool Studio compares -- BlinkBlox, Blink, zap, ByteNet, Packet, QuickNet, Warp, Satset -- on the same pools, so
 --- the tools can be compared where Studio cannot: interpreted, as most Roblox clients run code, and
 --- decoding, which Studio does not time. See runtime/Tools.luau for how each is loaded.
 ---
@@ -38,8 +38,9 @@ local Version = require("../src/Modules/Version")
 local EVENTS_PER_FRAME = 1000
 local WARMUP_FRAMES = 10
 local BENCHES = { "Booleans", "Entities", "BooleansRandom", "EntitiesRandom", "Tiny" }
---> Benches only this file runs. The rest are Studio's, shared with it.
-local LOCAL_BENCHES = { Tiny = true }
+--> Benches only this file runs, and the tools whose modes declare them. The rest are Studio's, shared
+--> with it. Satset declares Tiny because it frames a run of one event apart from the rest.
+local LOCAL_BENCHES: { [string]: { [string]: boolean } } = { Tiny = { blink = true, satset = true } }
 
 local Frames = 200
 local Filter: string? = nil
@@ -129,11 +130,17 @@ type Result = {
 	Compressed: number,
 }
 
---> Roblox compresses what a remote sends with zstd. Its level is not documented; this is Lune's.
+--> Roblox compresses what a remote sends with zstd at a level it does not document. Lune's own
+--> default is the highest, which finds three-byte repeats Roblox does not: it took BlinkBlox's index
+--> and length back from every random boolean array, 125.82 bytes an event where Studio measured
+--> 128.26. Every level from 1 to 9 gives 128.01 here and matches Studio on all four benches, so this
+--> is zstd's own default, 3.
+local ZSTD_LEVEL = 3
+
 local function Compressed(Packets: { Tools.Sent }): number
 	local Total = 0
 	for _, Packet in Packets do
-		Total += #serde.compress("zstd", buffer.tostring(Packet.Buffer))
+		Total += #serde.compress("zstd", buffer.tostring(Packet.Buffer), ZSTD_LEVEL)
 	end
 	return Total
 end
@@ -253,6 +260,7 @@ local Built = `{if Traffic then " with TrafficStats" else ""}{if Validations the
 print(
 	`BlinkBlox {Label}{Built}, {Frames} frames of {EVENTS_PER_FRAME} events, times in ms per frame, on {runtime.description}`
 )
+print(Tools.LIFTED)
 
 for _, Bench in BENCHES do
 	if Filter and not string.find(Bench, Filter, 1, true) then
@@ -271,8 +279,7 @@ for _, Bench in BENCHES do
 	--> took 3.6 in sixth place and 7.4 in first. Every row now starts from the same process.
 	for _, Native in { true, false } do
 		for _, Name in Selected do
-			if LOCAL_BENCHES[Bench] and Name ~= "blink" then
-				--> Only BlinkBlox's definition declares the benches Studio does not run.
+			if LOCAL_BENCHES[Bench] and not LOCAL_BENCHES[Bench][Name] then
 				continue
 			end
 

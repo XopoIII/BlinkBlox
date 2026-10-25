@@ -51,6 +51,11 @@ Two other projects occupy the neighbouring ground, and neither covers this one:
   protected decode.
 - **Jolt** is a runtime-typed library too. Its 4.4.1 removed the per-packet `pcall` and decodes a
   truncated payload to default values, silently, rather than refusing it.
+- **Satset** (bookek/satset) is runtime-schema too, benchmarked beside BlinkBlox from its 0.5.0.
+  Its token bucket charges a token a remote call, not an event, so one call carries up to 8191
+  events; a refusal, a failed decode and an array cut to the bytes left are all silent, and a
+  truncated `string8` decodes as `""`. Its run framing -- one header for consecutive events of one
+  id, no index each -- is the one thing it does that BlinkBlox does not (`benchmark/Benchmarks.md`).
 
 None of them reports every refusal to the game and bounds every allocation before it happens. That is the gap this fork fills: **the
 generated server module should be safe to point at the open internet** — without giving up the
@@ -76,7 +81,10 @@ easy to break without noticing.
   each holds one current state that the next send replaces.
 - **Measured and dropped:** constant offsets in array loops (slower natively), branchless boolean
   packing (no faster), packing array elements' bits into one run (dynamic bit addressing in every
-  decode), a struct-of-arrays wire layout (no fewer builtin calls, one more pass).
+  decode), a struct-of-arrays wire layout (no fewer builtin calls, one more pass), Satset's run
+  framing -- one header over four or more consecutive events of one index, no index each: it saves
+  up to a byte an event even compressed, but every write must compare its index with the last and
+  keep the run's state, 32-68% on an event's write interpreted (2026-10-25).
 - **`@profile` defaults to `release`**, so forgetting the flag leaves a debug remote out rather than
   shipping it. An excluded declaration is still parsed and registered, and a compiled one naming it
   is refused (`src/Modules/Attributes.luau`).
@@ -93,6 +101,10 @@ easy to break without noticing.
 - A remote call costs about 11 bytes beside its payload (Studio: 240 calls of 40 B/s went out as
   13.2 KB/s, 60 of 160 as 11.2). No loss, warning or ping rise from 60 to 480 calls a second on
   either remote, so Roblox enforces no call cap to stay under. Hence `option ClientFlushRate`, 60.
+- Roblox sends a frame's remote calls together, whenever in the frame each was fired: an unreliable
+  event gathered for the Heartbeat flush arrived when one sent at once did, 16 ms after a late fire
+  and 33 after an early one in Studio (`benchmark/Latency.luau`). So batching costs no time, and a
+  `task.defer` flush has nothing to save.
 - The inbound budget charges a packet at least 128 bytes, and its burst is a whole second: after a
   hitch Roblox delivers the backlog at once, and a refused reliable packet takes its events along.
 - Luau allows 200 locals a function. Each struct field is scoped (`src/Generator/Scope.luau`), or a
@@ -184,6 +196,7 @@ schema on remotes nothing else shares. Each of these fails when the bug it is ab
 | Time the generated modules | `luneblox run Runtime` (from `benchmark`) |
 | Time the compiler | `luneblox run Performance` (from `benchmark`) |
 | Measure the unreliable payload limit in Studio | `luneblox run Probe` (from `benchmark`) |
+| Measure when a batched or unbatched event arrives, in Studio | `luneblox run Latency` (from `benchmark`) |
 | Docs, locally | `cd docs && npm install && npm run dev` |
 | Build the docs (dead links fail it) | `cd docs && npm run build` |
 

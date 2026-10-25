@@ -1,7 +1,8 @@
 --> Definition.blink's benches as Warp events with schemas, each behind `Fire` and `On` as BlinkBlox's
 --> are. Warp names an event by string on every call, and its client learns the ids from the server:
---> the server registers every schema as it loads, and a client's event is built on first use, once
---> the ids have arrived.
+--> the server registers every schema as it loads, and a client registers its own on first use, once
+--> the ids have arrived. That wait yields, so it happens in `Fire` and `On` and not in an `__index`:
+--> Studio's client reached the events before the ids came, and a metamethod cannot yield.
 local Warp = require("../../../packages/warp")
 
 local IsServer = game:GetService("RunService"):IsServer()
@@ -32,26 +33,31 @@ if IsServer then
 	end
 end
 
-return setmetatable({}, {
-	__index = function(Self, Name: string)
-		local Definition = SCHEMAS[Name]
-		if not Definition then
-			return nil
-		end
-		if not IsServer then
-			Side.awaitReady()
-			Side.useSchema(Name, Definition)
-		end
+local Ready = IsServer
+local function AwaitReady()
+	Side.awaitReady()
+	for Name, Definition in SCHEMAS do
+		Side.useSchema(Name, Definition)
+	end
+	Ready = true
+end
 
-		local Event = {
-			Fire = function(Value)
-				Side.Fire(Name, true, Value)
-			end,
-			On = function(Callback)
-				Side.Connect(Name, Callback)
-			end,
-		}
-		rawset(Self, Name, Event)
-		return Event
-	end,
-})
+local Events = {}
+for Name in SCHEMAS do
+	Events[Name] = {
+		Fire = function(Value)
+			if not Ready then
+				AwaitReady()
+			end
+			Side.Fire(Name, true, Value)
+		end,
+		On = function(Callback)
+			if not Ready then
+				AwaitReady()
+			end
+			Side.Connect(Name, Callback)
+		end,
+	}
+end
+
+return Events

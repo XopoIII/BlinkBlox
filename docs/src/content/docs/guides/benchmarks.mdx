@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: What BlinkBlox's generated code costs to fire, flush and decode against Blink, zap, ByteNet, Packet, QuickNet and Warp, measured on LuneBlox -- a thousand events a frame, and a server sending to fifty players, unreliable events and Instances -- and its frame rate, fire time and bandwidth against them and plain remotes in Studio.
+description: What BlinkBlox's generated code costs to fire, flush and decode against Blink, zap, ByteNet, Packet, QuickNet, Warp and Satset, measured on LuneBlox -- a thousand events a frame, and a server sending to fifty players, unreliable events and Instances -- and its frame rate, fire time and bandwidth against them and plain remotes in Studio.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -11,12 +11,20 @@ There are two benchmarks, and they answer different questions.
   [LuneBlox](https://github.com/XopoIII/LuneBlox) -- Lune on the Luau version Roblox runs, with
   Roblox's fast flags -- without Roblox. It is reproducible on any machine and
   separates the three things the code does: firing events, flushing them into a packet, and the
-  server decoding that packet. It runs BlinkBlox, Blink, zap, ByteNet, Packet, QuickNet and Warp.
+  server decoding that packet. It runs BlinkBlox, Blink, zap, ByteNet, Packet, QuickNet, Warp and Satset.
 - **The Studio benchmark** puts the same tools and plain remotes inside Roblox Studio, and reports
   frame rate, the time the fires took, and bandwidth.
 
 Blink is the original project BlinkBlox forked from, measured at its last release, 0.18.9, with the
 same schema compiled by its own compiler.
+
+<Aside type="note" title="No tool runs with a limit that refuses traffic">
+The benchmarks fire far faster than an honest client, so every tool's caps are lifted: BlinkBlox's
+inbound limits, Packet's 8000-byte cap, QuickNet's rate limit and packet caps, Warp's 8000-byte cap
+and Satset's token bucket. The checks behind them still run and are timed; only the refusals are
+gone, and each run confirms every event it fired was heard. [Reading the numbers](#reading-the-numbers)
+says how each is lifted.
+</Aside>
 
 ## The generated code, on LuneBlox
 
@@ -157,6 +165,38 @@ decode -- which zap's do not. On Instances BlinkBlox decodes faster than Blink a
 which does not check that what arrives is an Instance at all. Every scenario interpreted, and each
 column on its own, is in
 [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
+
+### Satset, side by side
+
+Satset v0.5.0 joined the harness after the tables above were run, so it is compared with BlinkBlox
+from one run of each benchmark on an Apple M1 MacBook Air, no core pinned: the ratios hold, the
+absolute figures are a different machine's. Milliseconds a frame, send (fire and flush) / decode,
+then bytes an event before and after zstd.
+
+| Bench | BlinkBlox, native | Satset, native | BlinkBlox, interpreted | Satset, interpreted | Bytes, zstd: BlinkBlox | Satset |
+|---|---|---|---|---|---|---|
+| Booleans | **3.03** / **2.86** | 10.62 / 7.94 | **15.90** / **9.23** | 40.59 / 38.00 | 128, **0.02** | **127.01**, 0.03 |
+| Entities | **2.46** / **4.55** | 39.14 / 43.04 | **12.42** / **12.22** | 46.83 / 64.40 | **602**, **0.70** | 602.01, 0.71 |
+| BooleansRandom | **6.01** / **2.82** | 14.42 / 7.93 | **17.73** / **9.20** | 37.32 / 47.38 | 128, 128.01 | **127.01**, **127.02** |
+| EntitiesRandom | **3.05** / **4.53** | 39.53 / 42.83 | **12.61** / **12.47** | 47.38 / 64.76 | **602**, **602.02** | 602.01, 602.03 |
+| Tiny | **0.049** / **0.058** | 0.477 / 0.531 | **0.124** / **0.175** | 0.794 / 0.693 | 2, **0.02** | **1.01**, 0.03 |
+
+| Scenario, native | BlinkBlox | Satset |
+|---|---|---|
+| **Broadcast** | **0.022**, **0.031**, **1 call**, **85,000 B** | 0.090, 0.084, **1 call**, 85,250 B |
+| **UnreliableInput** | **0.005**, **0.004**, 8 calls, **40 B** | 0.006, 0.006, **1 call**, 52 B |
+| ... with `BatchUnreliable` | **0.005**, **0.001**, **1 call**, **40 B** | |
+| **WorldState** | **0.002**, **0.003**, **1 call**, **12,900 B** | 0.044, 0.009, 50 calls, 14,050 B |
+| **SelfState** | **0.014**, **0.001**, 50 calls, **850 B** | 0.067, **0.001**, 50 calls, 1,100 B |
+
+Satset is a runtime library: each field is written and read through a function the schema holds, and
+each frame's batch is scanned a second time at the flush to merge runs, which is where its flush time
+goes. That merge is the one place it is smaller: a run of events with one id goes under a single 3- or
+5-byte header with no index each, where BlinkBlox writes a byte of index for every event. On random
+payloads compression keeps that byte: `BooleansRandom` cost Satset 127.02 bytes an event compressed
+to BlinkBlox's 128.01, and 127.15 to 128.26 in Studio. A reliable `FireAll` is one
+broadcast for both; an unreliable one Satset copies into each player's batch, 50 calls to BlinkBlox's
+one. It has no Instance type, so it sits out `Instances`.
 
 ### A schema with many events
 
@@ -365,6 +405,9 @@ Packet's EntitiesRandom came to 486 bytes an event, less than the 600 bytes of r
   packet and per-packet event limits the same way. On one machine, QuickNet 0.4.0 fires and decodes
   `Entities` 12-24% faster than 0.3.5 did, and Warp pre8 times as pre7 did
   ([`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md)).
+- **Satset's token bucket is lifted in its modes.** Its server charges a token a remote call, 1000 at
+  most and 500 a second, and drops the call once they run out; the modes pass `math.huge` for both
+  to `Satset.start`. Its batching is left as it ships. It is fetched from its GitHub tag, `v0.5.0`.
 - **Warp sends each reliable packet as its XOR against the last.** Two identical frames XOR to
   zeros, which zstd removes, so on the repeated payloads Warp's compressed bytes are the lowest of
   any tool. Since 1.1.0-pre8 it frames unreliable packets too, adds 2 bytes to each, and sends a
@@ -429,7 +472,7 @@ processor, and the process `Runtime` starts for each row inherits the core.
   `BatchUnreliable`; `Rivals` takes `--tools` as `Runtime` does.
 - `luneblox run Performance` times the compiler itself: lexing, parsing and generating the test schema.
 - `luneblox run build --download --run` fetches zap, BlinkBlox, ByteNet and Packet for the machine it
-  runs on, QuickNet and Warp from their GitHub source, and the source of Blink, the original project, builds the Studio place, runs it with `run-in-roblox`, and
+  runs on, QuickNet, Warp and Satset from their GitHub source, and the source of Blink, the original project, builds the Studio place, runs it with `run-in-roblox`, and
   writes `Benchmarks.md`. Press F5 when Studio's Output asks. Without `--download` it reuses the tools it has; without `--run` it
   only builds the place. `--local` compiles the schema with the checkout's own compiler rather than
   the latest release, which is how the numbers above were taken.

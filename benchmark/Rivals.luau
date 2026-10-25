@@ -35,7 +35,7 @@ local WARMUP_FRAMES = 10
 --> What each Heartbeat tells the tools a frame took; see the same constant in runtime/Tools.luau.
 local FRAME = 1 / 30
 
-local ORDER = { "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp" }
+local ORDER = { "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp", "satset" }
 local REQUIRES: { [string]: { string } } = {
 	upstream = { "runtime/rivals/upstream/Server.luau" },
 	zap = { "runtime/rivals/zap/Server.luau" },
@@ -43,6 +43,7 @@ local REQUIRES: { [string]: { string } } = {
 	packet = { "packages/packet/init.luau" },
 	quicknet = { "packages/quicknet/init.luau" },
 	warp = { "packages/warp/init.luau" },
+	satset = { "packages/satset/init.luau" },
 }
 
 local Frames = 200
@@ -188,6 +189,7 @@ runtime.notice("These timings")
 print(
 	`BlinkBlox {Version.Current}, {Frames} frames, times in ms per frame, {Apis.CROWD} players where a crowd, on {runtime.description}`
 )
+print(Tools.LIFTED)
 
 for _, Scenario in Apis.SCENARIOS do
 	if Filter and not string.find(Scenario.Name, Filter, 1, true) then

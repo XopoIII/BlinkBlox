@@ -33,14 +33,21 @@ local REQUIRES: { [string]: { string } } = {
 	packet = { "packages/packet/init.luau" },
 	quicknet = { "packages/quicknet/init.luau" },
 	warp = { "packages/warp/init.luau" },
+	satset = { "packages/satset/init.luau" },
 }
 
-Tools.ORDER = { "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp" }
+Tools.ORDER = { "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp", "satset" }
+
+--> What every table's reader should know first: no tool ran with a limit that refuses traffic. The
+--> bench fires far faster than an honest client, so each tool's caps are raised where it downloads
+--> (download.luau), in its mode, or in BlinkBlox's definitions.
+Tools.LIFTED = "Limits lifted on every tool: BlinkBlox's inbound limits, Packet's 8000-byte cap, QuickNet's rate "
+	.. "limit and packet caps, Warp's 8000-byte cap, Satset's token bucket. Nothing was refused."
 
 --> The packages a World mounts, those downloaded.
 function Tools.Mounts(): { string }
 	local Mounts = {}
-	for _, Name in { "bytenet", "packet", "quicknet", "warp" } do
+	for _, Name in { "bytenet", "packet", "quicknet", "warp", "satset" } do
 		local Path = `packages/{Name}`
 		if fs.isDir(Path) then
 			table.insert(Mounts, Path)
@@ -110,8 +117,8 @@ function Tools.Load(Name: string, Native: boolean, Bench: string, Sources: { Ser
 
 	local Fire: (Value: any) -> ()
 	local Listen: (Callback: (Value: any) -> ()) -> ()
-	--> QuickNet's and Warp's modes wrap each event in BlinkBlox's shape.
-	if Name == "upstream" or Name == "quicknet" or Name == "warp" then
+	--> QuickNet's, Warp's and Satset's modes wrap each event in BlinkBlox's shape.
+	if Name == "upstream" or Name == "quicknet" or Name == "warp" or Name == "satset" then
 		Fire = ClientEvent.Fire
 		Listen = function(Callback)
 			ServerEvent.On(function(_Player, Value)

@@ -42,7 +42,22 @@ type Benchmark = {
 	--> Milliseconds of CPU each frame's thousand fires took. Unlike the frame rate this is not capped
 	--> by Studio's 60 FPS, so it still tells two tools apart when both reach the cap.
 	FireTime: { number },
+	--> Each round's bytes an event, of which BytesPerEvent is the median: their spread is the noise.
+	BytesRounds: { number },
 }
+
+--> One run of one tool on one bench, before Combine folds the rounds together.
+type Round = {
+	Sent: number,
+	BytesPerEvent: number,
+	Drain: number,
+	Framerates: { number },
+	FireTimes: { number },
+}
+
+--> Runs of each tool on each bench. Three take three times as long as one, and a run's bandwidth
+--> moved by about a byte an event from one to the next.
+local ROUNDS = 3
 
 type Results = {
 	[string]: {
@@ -84,7 +99,7 @@ local function IdleRate(): number
 	return Total / Elapsed
 end
 
-local function RunBenchmark(Tool: string, Bench: string): Benchmark
+local function RunBenchmark(Tool: string, Bench: string): Round
 	local Total = 0
 	local Frames = 0
 	local Framerates = {}
@@ -152,7 +167,39 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 	local Drain = os.clock() - Finished
 	Meter:Disconnect()
 
-	--> Generate results
+	return {
+		Sent = Sent,
+		BytesPerEvent = math.max(Kilobytes - Idle * Metered, 0) * 1000 / Sent,
+		Drain = Drain,
+		Framerates = Framerates,
+		FireTimes = FireTimes,
+	}
+end
+
+local function Median(Values: { number }): number
+	local Sorted = table.clone(Values)
+	table.sort(Sorted)
+	local Middle = #Sorted // 2
+	if #Sorted % 2 == 0 then
+		return (Sorted[Middle] + Sorted[Middle + 1]) / 2
+	end
+	return Sorted[Middle + 1]
+end
+
+--> One tool's rounds of one bench as one result. Bandwidth moved by about a byte an event between
+--> runs, enough to swap two tools' places, so each round's bytes and drain are kept and the median
+--> published; frame rates and fire times are pooled over every round before their percentiles.
+local function Combine(Rounds: { Round }): Benchmark
+	local Framerates, FireTimes, Bytes, Drains = {}, {}, {}, {}
+	local Sent = 0
+	for _, Round in Rounds do
+		Sent += Round.Sent
+		table.move(Round.Framerates, 1, #Round.Framerates, #Framerates + 1, Framerates)
+		table.move(Round.FireTimes, 1, #Round.FireTimes, #FireTimes + 1, FireTimes)
+		table.insert(Bytes, Round.BytesPerEvent)
+		table.insert(Drains, Round.Drain)
+	end
+
 	table.sort(FireTimes)
 	table.sort(Framerates, function(a, b)
 		return a > b
@@ -160,7 +207,6 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 
 	local FrameratePercentiles = {}
 	local FireTimePercentiles = {}
-
 	for _, Percentage in { 50, 0, 80, 90, 95, 100 } do
 		table.insert(FrameratePercentiles, Percentile(Framerates, Percentage))
 		table.insert(FireTimePercentiles, Percentile(FireTimes, Percentage))
@@ -169,8 +215,9 @@ local function RunBenchmark(Tool: string, Bench: string): Benchmark
 	return {
 		Sent = Sent,
 		Recieve = 0, --> Filled in by `CountDelivered` once the server has had time to hear it all.
-		BytesPerEvent = math.max(Kilobytes - Idle * Metered, 0) * 1000 / Sent,
-		Drain = Drain,
+		BytesPerEvent = Median(Bytes),
+		BytesRounds = Bytes,
+		Drain = Median(Drains),
 		Framerate = FrameratePercentiles,
 		FireTime = FireTimePercentiles,
 	}
@@ -193,12 +240,29 @@ local function RunBenchmarks()
 		warn(`Running {Bench} benchmark`)
 		Results[Bench] = {}
 
+		--> Each round runs the tools in an order turned by one from the last, so no tool is always the
+		--> one that follows a heavy run or opens the bench.
+		local Tools = {}
 		for Tool in Modes do
-			print(`> Running with {Tool}`)
-			Results[Bench][Tool] = RunBenchmark(Tool, Bench)
+			table.insert(Tools, Tool)
+		end
+		table.sort(Tools)
 
-			--> Give ROBLOX some time to rest in-between tools
-			WaitForPacketsToProcess()
+		local Rounds: { [string]: { Round } } = {}
+		for Round = 1, ROUNDS do
+			for Offset = 0, #Tools - 1 do
+				local Tool = Tools[(Offset + Round - 1) % #Tools + 1]
+				print(`> Running with {Tool}, round {Round} of {ROUNDS}`)
+				Rounds[Tool] = Rounds[Tool] or {}
+				table.insert(Rounds[Tool], RunBenchmark(Tool, Bench))
+
+				--> Give ROBLOX some time to rest in-between tools
+				WaitForPacketsToProcess()
+			end
+		end
+
+		for _, Tool in Tools do
+			Results[Bench][Tool] = Combine(Rounds[Tool])
 			CountDelivered(Tool, Bench, Results[Bench][Tool])
 		end
 

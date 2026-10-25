@@ -1,4 +1,12 @@
 # Benchmarks
+
+**No tool ran with a limit that refuses traffic.** The bench fires far faster than an honest client,
+so every cap is lifted: BlinkBlox's inbound limits (in its definition files), Packet's 8000-byte cap,
+QuickNet's rate limit and packet caps, Warp's 8000-byte cap (all three in `download.luau`), and
+Satset's token bucket (in its modes). The checks behind those limits still run and are timed; only
+the refusals are gone. `Runtime` and `Rivals` stop if any event fired goes unheard, the Studio tables
+report a tool's loss, and both scripts print this line above their tables.
+
 ## Methodology
 Each tool fires an event 1000 times a frame for 10 seconds. Each bench is a pool of payloads, fired in turn:
 `Booleans` and `Entities` send the same payload every time, and `BooleansRandom` and `EntitiesRandom` send a thousand
@@ -31,7 +39,11 @@ most players' clients run code, and decoding on the server, which Studio does no
 generated modules, ByteNet, Packet, QuickNet and Warp from the same files Studio runs (after
 `luneblox run build --download`) with just enough of Roblox mocked around them, and times a frame's thousand fires,
 the flush into packets, and the server decoding those packets and calling its listener. `Bytes/event` is the
-encoder's output; `zstd` is that output compressed as Roblox would.
+encoder's output; `zstd` is that output compressed as Roblox would, at zstd's default level, 3. Every level
+from 1 to 9 gives the same and matches the Studio tables; Lune's own default, the highest, found three-byte repeats
+Roblox does not and took BlinkBlox's index and length back from every random boolean array -- 125.81 bytes an event
+where Studio measured 128.26. The tables measured before 2026-10-25 used it, so their `zstd` column for the
+`Random` benches reads up to two bytes an event low for every tool that frames each event.
 
 The runs below were made on 2026-09-29 on an Intel Core i7-13700K with 64 GB of memory, Windows 11, LuneBlox 0.10.9
 (Luau 0.740), with this repository's compiler (0.42.0). Every run was the only one on the machine, pinned to one
@@ -65,6 +77,58 @@ BlinkBlox fired the same Entities in 4.7 and decoded them in 12.9 there. Warp 1.
 unreliable packets as well now, each with a 2-byte header -- `SelfState` costs it 1,050 bytes a frame to 50 players,
 from 950 -- and sends a whole packet once a second, so its `zstd` column on the repeated payloads rises with how many
 frames a second it runs: Entities came to 0.07 bytes an event native and 0.20 interpreted, from 0.03.
+
+### Satset
+
+Satset v0.5.0 joined after the tables below were run. One run of `Runtime` and `Rivals` (and `Rivals -- --batch`)
+on 2026-10-25, on an Apple M1 MacBook Air with LuneBlox 0.10.18, no core pinned, load average about 2.5, BlinkBlox
+1.3.1 from this repository. Its token bucket is lifted in its modes, `Satset.start` taking `math.huge` for both its
+size and its refill; its batching is as it ships. It runs `Tiny` too: the bench exists for framing, and framing is
+where Satset differs.
+
+|Bench|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|---|
+|Booleans|BlinkBlox|native|3.023|3.158|0.005|2.864|3.597|128.00|0.02|
+||Satset|native|10.341|10.661|0.281|7.943|9.194|127.01|0.03|
+||BlinkBlox|interpreted|15.891|16.347|0.005|9.225|9.955|128.00|0.02|
+||Satset|interpreted|38.853|39.905|1.733|37.999|39.877|127.01|0.03|
+|Entities|BlinkBlox|native|2.452|2.509|0.012|4.546|11.764|602.00|0.70|
+||Satset|native|38.431|39.247|0.705|43.040|51.294|602.01|0.71|
+||BlinkBlox|interpreted|12.411|12.715|0.013|12.215|20.032|602.00|0.70|
+||Satset|interpreted|42.257|43.345|4.571|64.395|73.178|602.01|0.71|
+|BooleansRandom|BlinkBlox|native|6.006|6.061|0.006|2.819|4.032|128.00|128.01|
+||Satset|native|13.984|14.459|0.431|7.931|10.272|127.01|127.02|
+||BlinkBlox|interpreted|17.725|17.851|0.006|9.203|10.570|128.00|128.01|
+||Satset|interpreted|33.678|34.473|3.637|47.384|49.622|127.01|127.02|
+|EntitiesRandom|BlinkBlox|native|3.036|3.175|0.014|4.533|19.990|602.00|602.02|
+||Satset|native|38.771|39.881|0.763|42.825|58.638|602.01|602.03|
+||BlinkBlox|interpreted|12.590|12.995|0.015|12.471|27.731|602.00|602.02|
+||Satset|interpreted|42.723|44.725|4.658|64.760|80.766|602.01|602.03|
+|Tiny|BlinkBlox|native|0.049|0.053|0.000|0.058|0.070|2.00|0.02|
+||Satset|native|0.364|0.390|0.113|0.531|0.569|1.01|0.03|
+||BlinkBlox|interpreted|0.124|0.137|0.000|0.175|0.186|2.00|0.02|
+||Satset|interpreted|0.507|0.526|0.287|0.693|0.718|1.01|0.03|
+
+|Scenario|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|---|
+|Broadcast|BlinkBlox|native|0.021|0.001|0.031|1.0|85000.0|
+||Satset|native|0.081|0.009|0.084|1.0|85250.0|
+|UnreliableInput|BlinkBlox|native|0.005|0.000|0.004|8.0|40.0|
+||BlinkBlox `--batch`|native|0.004|0.001|0.001|1.0|40.0|
+||Satset|native|0.005|0.001|0.006|1.0|52.0|
+|WorldState|BlinkBlox|native|0.002|0.000|0.003|1.0|12900.0|
+||Satset|native|0.018|0.026|0.009|50.0|14050.0|
+|SelfState|BlinkBlox|native|0.014|0.000|0.001|50.0|850.0|
+||Satset|native|0.042|0.025|0.001|50.0|1100.0|
+
+Satset encodes each field through a function its schema holds, so it is slower to fire and decode everywhere, and
+its flush scans the frame's batch a second time to merge runs: consecutive events of one id go under one 3-byte
+header (5 past 255 events), with no index or length each. That is the one place it is smaller, by the byte of
+index BlinkBlox writes before every event: 1.01 bytes a `Tiny` to 2.00. Compression keeps that byte on random
+payloads: `BooleansRandom` cost Satset 127.02 bytes an event compressed to BlinkBlox's 128.01, and 127.15 to 128.26
+in Studio (Results below). It batches unreliable events by default, one call for `UnreliableInput`
+where BlinkBlox makes eight unless built with `BatchUnreliable`; an unreliable `FireAll` it copies to each player,
+50 calls for `WorldState`. It has no Instance type and sits out `Instances`.
 
 The mock players and Instances are userdata, as they are in a game. Before 0.40.0 they were tables, and native code
 sends a function whose parameter is annotated `Player` or `Instance` back to the interpreter when a table arrives, so
@@ -389,155 +453,184 @@ server, 85 on the client. Luau 0.740 leaves only that function interpreted, and 
 
 ## Results
 
-The Studio run below was made with BlinkBlox 0.41.2's modules; 0.42.0 changed how they decode and
-flush, which the tables above time. Warp's `Fire ms` is left out: its Fire only queues the value, and
+The Studio run below was made on 2026-10-25 on an Apple M1 MacBook Air with BlinkBlox 1.3.1's
+modules, three rounds of every tool on every bench, no core pinned, with nothing else running but the
+desktop. Since 1.2.1 only the
+server module asks to be compiled natively, so BlinkBlox's client is interpreted in Studio, as
+Packet's is, while Blink's and zap's modules, QuickNet's functions (each marked `@native`) and the
+busiest files of ByteNet, Warp and Satset are native: its `Fire ms` here is an interpreted figure
+against native ones, and each fire table names how every tool's client is compiled. Interpreted
+against interpreted, as most players' clients
+run, `luneblox run Runtime` has it the fastest to fire both `Booleans` benches and tied with Blink on
+both `Entities` ones (Warp aside, which encodes at its flush).
+`Bytes/event` moves by about a byte an event from run to run, as BlinkBlox and QuickNet traded places
+on `EntitiesRandom` between one run and the next, so each is the median of the three rounds, with the
+lowest and highest round beside it: only a gap wider than that spread is a difference. A round can go
+wrong outright -- one of BlinkBlox's `Entities` rounds read 0.00, its idle traffic overestimated --
+and the median leaves it out. Satset's and Warp's `Entities` cost almost nothing because each sends
+a reliable packet as its XOR against the last, and every frame of that bench is the same.
+
+Warp's `Fire ms` is left out: its Fire only queues the value, and
 it encodes the queue later in the frame on a signal of its own that the bench cannot time, so the
 figure read 0.1 ms while its frame rate fell to 32. `luneblox run Runtime` times its fire and flush
 together.
 
 `P[NUMBER]` = [NUMBER] Percentile  
 *The tables below were automatically generated by this [script](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/generate.luau).*
-## Last Updated 2026-09-28 10:28:37 UTC
+## Last Updated 2026-10-25 06:01:51 UTC
 ## Tool Versions
-BlinkBlox: v0.41.2, compiled from this repository  
+BlinkBlox: v1.3.1, compiled from this repository  
 Blink: v0.18.9  
 zap: v0.6.29  
 ByteNet: v0.4.3  
 Packet: 1.7.0  
-QuickNet: v0.3.5-beta (f7cfdf5)  
-Warp: 1.1.0-pre7  
+QuickNet: v0.4.0-beta (edba9a2)  
+Warp: 1.1.0-pre8  
+Satset: v0.5.0  
 ## Computer Specs
-Processor: `13th Gen Intel(R) Core(TM) i7-13700K`  
-Memory: `64GB`  
+Processor: `Apple M1`  
+Memory: `16GB`  
 ## [Booleans](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches/Booleans.luau)
 |Tool (FPS)|Median|P0|P80|P90|P95|P100|Loss (%)|
 |---|---|---|---|---|---|---|---|
-|Roblox remotes|15.00|16.00|15.00|15.00|15.00|15.00|0%|
-|BlinkBlox|60.00|60.00|60.00|60.00|60.00|60.00|0%|
-|Blink|60.00|60.00|60.00|60.00|60.00|60.00|0%|
-|zap|60.00|60.00|60.00|60.00|60.00|60.00|0%|
-|ByteNet|30.00|32.00|29.00|29.00|29.00|29.00|0%|
-|Packet|35.00|36.00|34.00|34.00|34.00|34.00|0%|
+|Roblox remotes|25.00|26.00|24.00|24.00|24.00|24.00|0%|
+|BlinkBlox|60.00|61.00|60.00|60.00|60.00|59.00|0%|
+|Blink|60.00|61.00|60.00|60.00|60.00|59.00|0%|
+|zap|55.00|56.00|55.00|54.00|54.00|54.00|0%|
+|ByteNet|26.00|28.00|26.00|26.00|26.00|25.00|0%|
+|Packet|23.00|23.00|22.00|22.00|22.00|22.00|0%|
 |QuickNet|60.00|61.00|60.00|60.00|60.00|59.00|0%|
-|Warp|60.00|60.00|60.00|60.00|60.00|60.00|0%|
+|Warp|60.00|61.00|60.00|60.00|59.00|57.00|0%|
+|Satset|60.00|61.00|60.00|60.00|60.00|59.00|0%|
 
 |Tool (Fire ms)|Median|P0|P80|P90|P95|P100|Loss (%)|
 |---|---|---|---|---|---|---|---|
-|Roblox remotes|26.00|24.51|26.56|26.82|27.10|27.32|0%|
-|BlinkBlox|1.92|1.84|2.03|2.14|2.31|2.80|0%|
-|Blink|4.52|3.91|4.75|4.84|4.97|5.64|0%|
-|zap|12.15|11.33|12.61|13.04|13.75|15.51|0%|
-|ByteNet|17.45|16.55|18.01|18.35|18.65|19.44|0%|
-|Packet|27.31|25.92|27.79|28.00|28.14|31.41|0%|
-|QuickNet|1.89|1.77|2.06|2.21|2.28|2.53|0%|
+|Roblox remotes|18.15|17.55|18.43|18.72|20.59|45.56|0%|
+|BlinkBlox (interpreted)|8.79|7.82|8.94|9.02|9.06|19.10|0%|
+|Blink (native)|5.57|4.51|5.73|6.16|6.38|11.59|0%|
+|zap (native)|16.97|16.43|17.20|17.31|17.41|38.20|0%|
+|ByteNet (partly native)|26.26|25.79|26.52|26.74|27.08|55.42|0%|
+|Packet (interpreted)|42.89|42.50|43.06|43.39|43.88|75.52|0%|
+|QuickNet (native)|4.57|3.94|4.65|4.72|4.81|8.60|0%|
 |Warp|-|-|-|-|-|-|0%|
+|Satset (partly native)|11.13|10.48|11.38|11.48|11.54|29.92|0%|
 
-|Tool|Bytes/event|Drain (s)|Loss (%)|
-|---|---|---|---|
-|Roblox remotes|7101.43|6.0|0%|
-|BlinkBlox|0.04|2.2|0%|
-|Blink|0.13|3.3|0%|
-|zap|0.13|3.3|0%|
-|ByteNet|0.13|2.9|0%|
-|Packet|0.13|3.4|0%|
-|QuickNet|0.04|2.3|0%|
-|Warp|0.15|1.9|0%|
+|Tool|Bytes/event|Rounds|Drain (s)|Loss (%)|
+|---|---|---|---|---|
+|Roblox remotes|4161.96|4118.45-4168.18|5.7|0%|
+|BlinkBlox|0.04|0.04-0.04|2.4|0%|
+|Blink|0.13|0.13-0.13|3.3|0%|
+|zap|0.13|0.13-0.13|3.3|0%|
+|ByteNet|0.13|0.13-0.13|3.2|0%|
+|Packet|0.13|0.13-0.13|3.2|0%|
+|QuickNet|0.04|0.04-0.04|2.3|0%|
+|Warp|0.04|0.04-0.04|2.6|0%|
+|Satset|0.04|0.04-0.15|2.0|0%|
 ## [Entities](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches/Entities.luau)
 |Tool (FPS)|Median|P0|P80|P90|P95|P100|Loss (%)|
 |---|---|---|---|---|---|---|---|
 |Roblox remotes|15.00|16.00|15.00|15.00|15.00|15.00|0%|
-|BlinkBlox|60.00|60.00|60.00|60.00|60.00|60.00|0%|
-|Blink|44.00|45.00|43.00|43.00|43.00|43.00|0%|
-|zap|45.00|47.00|45.00|45.00|45.00|45.00|0%|
-|ByteNet|35.00|36.00|34.00|34.00|34.00|34.00|0%|
-|Packet|27.00|29.00|27.00|27.00|27.00|26.00|0%|
-|QuickNet|58.00|59.00|57.00|57.00|57.00|57.00|0%|
-|Warp|33.00|35.00|32.00|32.00|32.00|32.00|0%|
+|BlinkBlox|60.00|60.00|60.00|60.00|60.00|52.00|0%|
+|Blink|21.00|21.00|20.00|20.00|20.00|20.00|0%|
+|zap|34.00|35.00|33.00|33.00|33.00|33.00|0%|
+|ByteNet|27.00|27.00|26.00|26.00|26.00|26.00|0%|
+|Packet|23.00|24.00|22.00|22.00|22.00|22.00|0%|
+|QuickNet|46.00|47.00|46.00|46.00|46.00|45.00|0%|
+|Warp|23.00|24.00|23.00|23.00|23.00|23.00|0%|
+|Satset|28.00|29.00|28.00|28.00|28.00|28.00|0%|
 
 |Tool (Fire ms)|Median|P0|P80|P90|P95|P100|Loss (%)|
 |---|---|---|---|---|---|---|---|
-|Roblox remotes|72.70|69.50|74.25|75.29|75.72|78.97|0%|
-|BlinkBlox|1.98|1.89|2.01|2.04|2.07|4.63|0%|
-|Blink|2.81|2.33|3.08|3.35|4.87|5.84|0%|
-|zap|7.35|6.82|7.67|7.92|9.36|11.45|0%|
-|ByteNet|15.79|14.82|16.18|16.45|16.64|17.77|0%|
-|Packet|19.24|18.05|19.70|19.92|20.12|20.71|0%|
-|QuickNet|6.21|5.98|6.36|6.46|6.55|10.60|0%|
+|Roblox remotes|68.98|67.22|70.08|71.27|72.55|108.44|0%|
+|BlinkBlox (interpreted)|7.28|6.63|7.55|7.74|7.87|18.08|0%|
+|Blink (native)|2.21|1.85|2.30|2.35|3.47|4.25|0%|
+|zap (native)|13.10|12.58|13.41|13.50|13.57|52.96|0%|
+|ByteNet (partly native)|23.94|23.57|24.23|24.42|24.68|51.29|0%|
+|Packet (interpreted)|31.40|31.02|31.59|31.77|32.17|61.72|0%|
+|QuickNet (native)|8.78|8.62|8.92|9.14|9.24|22.26|0%|
 |Warp|-|-|-|-|-|-|0%|
+|Satset (partly native)|33.78|33.36|33.88|33.98|34.28|36.99|0%|
 
-|Tool|Bytes/event|Drain (s)|Loss (%)|
-|---|---|---|---|
-|Roblox remotes|33620.49|7.2|0%|
-|BlinkBlox|0.69|4.5|0%|
-|Blink|0.70|4.9|0%|
-|zap|0.69|4.8|0%|
-|ByteNet|0.69|5.0|0%|
-|Packet|0.69|4.4|0%|
-|QuickNet|0.69|4.8|0%|
-|Warp|1.33|2.4|0%|
+|Tool|Bytes/event|Rounds|Drain (s)|Loss (%)|
+|---|---|---|---|---|
+|Roblox remotes|30715.06|30542.87-30901.65|7.0|0%|
+|BlinkBlox|0.69|0.00-0.69|5.0|0%|
+|Blink|0.69|0.69-0.70|5.5|0%|
+|zap|0.69|0.69-0.69|4.6|0%|
+|ByteNet|0.69|0.69-0.69|4.8|0%|
+|Packet|0.69|0.69-0.69|4.7|0%|
+|QuickNet|0.69|0.69-0.69|4.5|0%|
+|Warp|0.08|0.08-0.08|2.5|0%|
+|Satset|0.05|0.05-0.06|2.7|0%|
 ## [BooleansRandom](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches/BooleansRandom.luau)
 |Tool (FPS)|Median|P0|P80|P90|P95|P100|Loss (%)|
 |---|---|---|---|---|---|---|---|
-|Roblox remotes|15.00|16.00|15.00|15.00|15.00|15.00|0%|
-|BlinkBlox|60.00|60.00|60.00|60.00|60.00|60.00|0%|
-|Blink|60.00|60.00|60.00|60.00|60.00|60.00|0%|
-|zap|46.00|47.00|45.00|45.00|45.00|44.00|0%|
-|ByteNet|23.00|26.00|23.00|23.00|23.00|23.00|0%|
-|Packet|28.00|30.00|28.00|27.00|27.00|27.00|0%|
-|QuickNet|60.00|60.00|60.00|60.00|60.00|60.00|0%|
-|Warp|55.00|56.00|54.00|54.00|54.00|53.00|0%|
+|Roblox remotes|20.00|23.00|19.00|19.00|19.00|19.00|0%|
+|BlinkBlox|60.00|61.00|60.00|60.00|59.00|59.00|0%|
+|Blink|53.00|59.00|52.00|51.00|51.00|50.00|0%|
+|zap|32.00|37.00|31.00|31.00|31.00|30.00|0%|
+|ByteNet|18.00|21.00|17.00|17.00|17.00|16.00|0%|
+|Packet|16.00|18.00|15.00|15.00|15.00|15.00|0%|
+|QuickNet|60.00|61.00|60.00|60.00|60.00|60.00|0%|
+|Warp|48.00|55.00|47.00|47.00|46.00|45.00|0%|
+|Satset|53.00|55.00|52.00|52.00|52.00|51.00|0%|
 
 |Tool (Fire ms)|Median|P0|P80|P90|P95|P100|Loss (%)|
 |---|---|---|---|---|---|---|---|
-|Roblox remotes|29.05|27.16|29.62|29.82|30.21|43.26|0%|
-|BlinkBlox|4.81|4.60|5.04|5.21|5.29|5.55|0%|
-|Blink|9.89|9.19|10.19|10.30|10.43|11.64|0%|
-|zap|18.08|16.70|19.14|19.61|20.05|37.71|0%|
-|ByteNet|21.40|20.32|22.00|22.29|22.65|23.05|0%|
-|Packet|31.79|29.84|32.42|32.69|32.89|33.49|0%|
-|QuickNet|7.12|6.91|7.33|7.47|7.60|7.99|0%|
+|Roblox remotes|20.96|17.17|21.73|22.49|23.50|40.24|0%|
+|BlinkBlox (interpreted)|13.41|12.43|14.39|14.72|14.85|17.31|0%|
+|Blink (native)|14.70|11.65|15.48|15.86|16.19|25.13|0%|
+|zap (native)|26.99|22.81|27.75|28.32|28.92|67.98|0%|
+|ByteNet (partly native)|33.23|28.09|34.36|35.21|35.83|62.34|0%|
+|Packet (interpreted)|59.70|49.31|61.21|62.12|62.90|65.99|0%|
+|QuickNet (native)|10.74|9.95|11.07|11.38|11.69|22.27|0%|
 |Warp|-|-|-|-|-|-|0%|
+|Satset (partly native)|17.21|15.15|17.79|18.14|18.40|19.57|0%|
 
-|Tool|Bytes/event|Drain (s)|Loss (%)|
-|---|---|---|---|
-|Roblox remotes|7324.32|5.7|0%|
-|BlinkBlox|128.41|9.4|0%|
-|Blink|193.89|9.8|0%|
-|zap|193.83|9.4|0%|
-|ByteNet|193.33|9.2|0%|
-|Packet|194.16|10.0|0%|
-|QuickNet|128.13|9.4|0%|
-|Warp|128.60|9.1|0%|
+|Tool|Bytes/event|Rounds|Drain (s)|Loss (%)|
+|---|---|---|---|---|
+|Roblox remotes|3832.55|3801.44-3837.46|5.7|0%|
+|BlinkBlox|128.26|127.82-128.28|9.4|0%|
+|Blink|193.98|193.83-194.27|9.5|0%|
+|zap|193.40|193.32-193.94|9.6|0%|
+|ByteNet|193.98|192.79-194.28|9.6|0%|
+|Packet|193.42|191.79-193.45|9.2|0%|
+|QuickNet|128.41|128.33-128.62|9.4|0%|
+|Warp|128.00|127.54-128.00|9.4|0%|
+|Satset|127.15|127.15-127.23|9.4|0%|
 ## [EntitiesRandom](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/src/shared/benches/EntitiesRandom.luau)
 |Tool (FPS)|Median|P0|P80|P90|P95|P100|Loss (%)|
 |---|---|---|---|---|---|---|---|
 |Roblox remotes|15.00|16.00|15.00|15.00|15.00|15.00|0%|
-|BlinkBlox|60.00|61.00|60.00|60.00|60.00|60.00|0%|
-|Blink|45.00|45.00|44.00|44.00|44.00|44.00|0%|
-|zap|44.00|46.00|43.00|43.00|43.00|43.00|0%|
-|ByteNet|34.00|37.00|33.00|33.00|33.00|33.00|0%|
-|Packet|27.00|29.00|26.00|26.00|26.00|26.00|0%|
-|QuickNet|57.00|58.00|57.00|56.00|56.00|54.00|0%|
-|Warp|32.00|34.00|32.00|32.00|32.00|32.00|0%|
+|BlinkBlox|60.00|61.00|60.00|59.00|59.00|59.00|0%|
+|Blink|33.00|34.00|23.00|21.00|21.00|20.00|0%|
+|zap|34.00|35.00|33.00|31.00|31.00|30.00|0%|
+|ByteNet|26.00|28.00|24.00|23.00|23.00|22.00|0%|
+|Packet|22.00|24.00|21.00|20.00|20.00|20.00|0%|
+|QuickNet|46.00|46.00|45.00|45.00|45.00|45.00|0%|
+|Warp|22.00|24.00|21.00|20.00|20.00|20.00|0%|
+|Satset|27.00|29.00|26.00|26.00|25.00|24.00|0%|
 
 |Tool (Fire ms)|Median|P0|P80|P90|P95|P100|Loss (%)|
 |---|---|---|---|---|---|---|---|
-|Roblox remotes|74.49|71.88|75.82|77.06|77.22|99.97|0%|
-|BlinkBlox|2.38|2.24|2.52|2.70|2.87|5.84|0%|
-|Blink|3.16|2.61|3.63|3.95|4.39|5.62|0%|
-|zap|7.77|6.94|8.15|8.40|9.49|16.04|0%|
-|ByteNet|16.55|15.43|17.15|17.54|17.79|18.52|0%|
-|Packet|19.93|18.60|20.47|20.78|21.10|22.20|0%|
-|QuickNet|6.74|6.31|7.01|7.23|7.35|7.75|0%|
+|Roblox remotes|69.19|67.73|70.51|71.79|73.03|106.94|0%|
+|BlinkBlox (interpreted)|7.43|6.79|7.67|7.81|7.92|17.61|0%|
+|Blink (native)|2.87|2.49|3.05|3.21|4.26|5.06|0%|
+|zap (native)|13.25|12.73|13.77|14.52|14.91|30.44|0%|
+|ByteNet (partly native)|24.41|23.86|27.30|28.07|28.57|47.62|0%|
+|Packet (interpreted)|31.93|31.50|34.69|35.51|35.94|61.53|0%|
+|QuickNet (native)|9.11|8.93|9.20|9.28|9.35|21.98|0%|
 |Warp|-|-|-|-|-|-|0%|
+|Satset (partly native)|34.21|33.86|36.28|37.31|37.85|40.11|0%|
 
-|Tool|Bytes/event|Drain (s)|Loss (%)|
-|---|---|---|---|
-|Roblox remotes|37321.42|7.0|0%|
-|BlinkBlox|603.69|11.1|0%|
-|Blink|604.10|10.9|0%|
-|zap|603.37|10.5|0%|
-|ByteNet|605.19|11.0|0%|
-|Packet|602.89|10.7|0%|
-|QuickNet|604.16|10.5|0%|
-|Warp|603.44|10.5|0%|
+|Tool|Bytes/event|Rounds|Drain (s)|Loss (%)|
+|---|---|---|---|---|
+|Roblox remotes|27996.13|27922.93-28050.38|7.1|0%|
+|BlinkBlox|602.93|602.60-603.38|10.9|0%|
+|Blink|600.46|599.88-600.97|10.9|0%|
+|zap|603.97|603.40-605.06|10.8|0%|
+|ByteNet|603.19|601.20-605.22|10.6|0%|
+|Packet|603.76|603.13-603.81|10.4|0%|
+|QuickNet|603.45|603.41-603.46|10.9|0%|
+|Warp|601.87|597.77-602.59|10.4|0%|
+|Satset|601.61|600.42-603.16|11.0|0%|

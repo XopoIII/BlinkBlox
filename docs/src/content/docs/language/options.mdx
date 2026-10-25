@@ -331,7 +331,11 @@ always gathered player by player. A client's packet is also cut at the server's
 
 A frame's worth of small events then costs one remote call and one packet header instead of one each,
 and a client stays further inside the server's inbound budget, which charges every packet at least 128
-bytes. The price is time: an event waits for the flush, up to a frame, as a reliable one always has.
+bytes. An event waits for the flush, but it arrives no later for it: Roblox sends a frame's remote
+calls together at one point in the frame, whenever each was fired, and in Studio an unreliable event
+batched for the flush arrived when one sent at once did -- 16 ms after a fire late in the frame and
+33 after one early in it, either way
+([`benchmark/Latency.luau`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Latency.luau)).
 It pays where a recipient gets several unreliable events a frame -- a client's input, a server's
 effects. Where each player gets one, there is nothing to gather: the call count stays the same, and
 the batch's bookkeeping costs an interpreted side a little more than sending at once did.

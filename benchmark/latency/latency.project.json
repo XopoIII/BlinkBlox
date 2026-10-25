@@ -1,0 +1,24 @@
+{
+  "name": "latency",
+  "emitLegacyScripts": true,
+  "tree": {
+    "$className": "DataModel",
+    "Players": {
+      "$properties": {
+        "CharacterAutoLoads": false
+      }
+    },
+    "ServerScriptService": {
+      "Latency": {
+        "$path": "Server.server.luau"
+      }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Latency": {
+          "$path": "Client.client.luau"
+        }
+      }
+    }
+  }
+}

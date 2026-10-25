@@ -20,7 +20,8 @@ next frame rather than growing one again from 64 bytes.
 **Unreliable traffic is not, by default.** Each unreliable `Fire` is sent at once, as a packet of its
 own. [`BatchUnreliable`](/BlinkBlox/language/options/#batchunreliable) gathers a frame's unreliable
 events into as few packets as the unreliable limit allows, sent at the flush -- one remote call and one
-packet header for a frame of small events, at the price of waiting up to a frame. Streams are always
+packet header for a frame of small events, arriving no later than events sent at once, since Roblox
+sends a frame's remote calls together. Streams are always
 gathered this way, since they are sent at the flush anyway. A reliable `FireAll` goes to every player
 in one `FireAllClients` at the flush, whatever the option.
 

@@ -247,6 +247,12 @@ local PACKET: { [string]: Api } = {
 	},
 }
 
+--> Satset has no Instance type, so it sits out the scenario that sends one.
+local function WithoutInstances(Tool: { [string]: Api }): { [string]: Api }
+	Tool.Instances = nil
+	return Tool
+end
+
 Apis.APIS = {
 	blink = BlinkStyle(),
 	upstream = BlinkStyle(),
@@ -256,6 +262,7 @@ Apis.APIS = {
 	--> Their modes wrap each event in BlinkBlox's API.
 	quicknet = BlinkStyle(),
 	warp = BlinkStyle(),
+	satset = WithoutInstances(BlinkStyle()),
 }
 
 Apis.SCENARIOS = {

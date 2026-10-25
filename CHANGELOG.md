@@ -7,6 +7,52 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.3.2 — 2026-10-25
+
+A benchmarks release. A generated module differs from 1.3.1's by the version in its header: it runs
+the same code, the wire does not change, and nothing needs recompiling. Satset joins the comparison,
+and of what it does differently its run framing was measured and dropped: up to a byte an event
+saved, at 32-68% on an event's write.
+
+### Changed
+
+- **The benchmarks run Satset v0.5.0** (bookek/satset) beside the other tools, in `Runtime`,
+  `Rivals` and Studio. Its token bucket is lifted in its modes as the other tools' limits are, and
+  every table now opens with what was lifted. It has no Instance type, so `Rivals` leaves it out of
+  `Instances`, and it runs `Tiny`, which until now was BlinkBlox's alone, since its framing is the
+  one thing it does differently. On an Apple M1, side by side, it is slower everywhere -- `Entities`
+  fires in 38.4 ms native against BlinkBlox's 2.5 and decodes in 43.0 against 4.5 -- and smaller
+  before compression on runs of one event: it writes a run of one id under one 3- or 5-byte header,
+  no index each, so `Tiny` costs it 1.01 bytes an event to BlinkBlox's 2.00 and `Booleans` 127.01 to
+  128.00. Compression keeps that byte on random payloads: random booleans cost Satset 127.15
+  bytes an event in Studio to BlinkBlox's 128.26.
+- **`Runtime`'s `zstd` column compresses at level 3**, as Roblox's own compression measures. It used
+  Lune's default, the highest level, which found three-byte repeats Roblox does not and took a
+  framed event's index and length back: BlinkBlox's random booleans read 125.81 bytes an event where
+  Studio measured 128.26. Every level from 1 to 9 matches Studio; the column now reads 128.01.
+- **`BatchUnreliable` costs no time, measured.** Its page said an event waits up to a frame for the
+  flush. `luneblox run Latency` (new, in `benchmark`) fires unreliable events in Studio early and
+  late in the frame and sends them at once, at a Heartbeat flush or at a `task.defer`: each arrived
+  at the same time whichever way, 16 ms after a late fire and 33 after an early one, since Roblox
+  sends a frame's remote calls together. A deferred flush was the candidate for batching without a
+  wait, and there is no wait to remove, so the flush stays where it is.
+- **Studio's benchmark runs each tool three times** on each bench, in an order turned by one each
+  round, and publishes the median of the rounds' bytes and drain beside the lowest and highest
+  round, with frame rates and fire times pooled over all three. Bandwidth moved by about a byte an
+  event from one run to the next, enough to swap two tools' places. The fire table says whether each
+  tool's client code runs natively in Studio. `generate` keeps the raw results in
+  `tools/studio.json`, and `luneblox run generate -- --from tools/studio.json` writes the tables
+  again without Studio.
+- **Studio's tables are rerun**, on an Apple M1 with 1.3.1's modules, Satset among them. Since 1.2.1
+  BlinkBlox's client is interpreted there while most other tools' are native, which its `Fire ms`
+  now reflects; `Benchmarks.md` says so above the tables.
+
+### Fixed
+
+- **Studio's benchmark stopped at Warp.** Its mode registered a client's schemas in an `__index`
+  that waits for the server's ids, and a metamethod cannot yield; on a client that reached the
+  events first, the whole run ended there. The wait is in `Fire` and `On` now.
+
 ## 1.3.1 — 2026-10-21
 
 A housekeeping release. A generated module differs from 1.3.0's by the version in its header: it
