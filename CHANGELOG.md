@@ -7,6 +7,23 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.3.4 — 2026-10-25
+
+A housekeeping release. A generated module differs from 1.3.3's by the version in its header: it
+runs the same code, the wire does not change, and nothing needs recompiling.
+
+### Changed
+
+- **The CLI archives are built on LuneBlox 0.11.1**, up from 0.11.0, with the same Luau and fast
+  flags; the suite passes unchanged and BlinkBlox's `Runtime` rows are 0.11.0's. 0.11.1 fixes
+  `luneblox setup`, which put `Enum` and `warn` in `.luaurc`'s `globals` in every project: it now
+  does so only where `.vscode/settings.json` turns the Roblox types off, and this project's does not.
+- **`type-check.sh` fails if `luneblox setup` changes `.luaurc`**, and shows what it changed, where
+  1.3.3 put the file back without a word. The one change setup should still make is the alias after
+  a LuneBlox bump that did not move it, and a name added to `globals` would hide the Roblox types
+  again; either is now a red gate rather than a silent one. Under 0.11.0's setup it fails, naming
+  the two globals.
+
 ## 1.3.3 — 2026-10-25
 
 A housekeeping release. A generated module differs from 1.3.2's by the version in its header: it
