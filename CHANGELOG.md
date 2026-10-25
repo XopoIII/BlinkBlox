@@ -7,6 +7,33 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.3.6 — 2026-10-26
+
+A channel whose events are small decodes a packet in one call rather than one an event. The wire
+does not change, and a module from 1.3.5 talks to one from this release: nothing needs recompiling,
+though recompiling is what brings the faster decode. Every handler is called as it was.
+
+### Changed
+
+- **A channel's decoder holds the packet's loop** when none of its events reads an Instance or runs
+  a loop of its own -- an array, a map, packed booleans. Its decoder had always been a function the
+  loop called once an event; re-measured with linearisation back (1.3.5), holding the loop was
+  faster on small events and slower on large ones, ABBA on the M1:
+
+  | Decode, native | Function | Held loop |
+  |---|---|---|
+  | `Tiny`, a thousand one-byte events | 0.056 ms | 0.050 ms |
+  | Broadcast, a unit to every player | 0.0111 ms | 0.0104 ms |
+  | ManyEvents, a hundred among 128 | 0.0086 ms | 0.0083 ms |
+  | Instances, a hundred carrying a part | 0.0128 ms | 0.0154 ms |
+  | `EntitiesRandom`, a thousand arrays of structs | 3.92 ms | 4.07 ms |
+
+  So the shape is chosen per channel, and a channel that reads an Instance or an array keeps the
+  function: its code is what 1.3.5 generated, and the benchmark schema's reliable channel compiles
+  to exactly that. The rest decode 4-6% faster in `benchmark/Scenarios.luau`, natively and
+  interpreted; nothing got slower, and firing is untouched. A refused call or a missing Instance
+  still leaves only its own event, and `test/DecoderShapes.luau` checks it in the held loop.
+
 ## 1.3.5 — 2026-10-25
 
 A housekeeping release. A generated module differs from 1.3.4's by the version in its header: it
