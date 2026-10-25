@@ -102,9 +102,12 @@ end
 --> under one pcall for the whole packet. The decoder is a function of the module, made once. It was
 --> a closure written inside the loop, which allocated one and its upvalues for every event -- a
 --> quarter of what a one-byte event cost the server to decode -- and then one for every packet.
---> A loop with the dispatch inside it, one call a packet, interpreted faster, but it compiled to
---> slower native code: under Roblox's flags a long loop body is not linearised, and a hundred events
---> carrying a part decoded in 0.015 ms rather than 0.012.
+--> A loop with the dispatch inside it, one call a packet, was measured twice. Under Roblox's flags
+--> before client 0.744 it compiled to slower native code, a hundred events carrying a part decoding
+--> in 0.015 ms rather than 0.012. With linearisation back (LuneBlox 0.11.2) it decodes small events
+--> faster -- a thousand one-byte events in 0.050 ms natively rather than 0.056, a broadcast 5%
+--> faster -- but those hundred events with a part still in 0.0154 ms rather than 0.0128, ABBA on an
+--> M1; nothing may get slower, so the decoder stays a function called once an event.
 --> `Decoding` carries the index out of the pcall, so a failure can name the event it happened in.
 --> It is reset before the index is read: a listener that yields, or decodes another packet, can
 --> leave the cursor past the end of the one this loop holds, and that failure must be the packet's,
