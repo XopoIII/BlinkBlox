@@ -65,9 +65,15 @@ export type State = {
 	--- (N - 1) * 4 + 1.
 	RateSlots: { { Rate: number, Burst: number } },
 
-	--- How many events each channel carries, and the decode branch of each declaration this side
-	--- listens for on it: none means this side receives nothing there.
-	Channels: { [string]: { Count: number, Branches: { Branch } } },
+	--- How many events each channel carries, the decode branch of each declaration this side listens
+	--- for on it (none means this side receives nothing there), and whether any of them reads an
+	--- Instance or runs a loop, which keeps the channel's decoder a function `DecodeLoop` calls once an
+	--- event rather than one holding the loop (Packets.CloseDecode).
+	Channels: { [string]: { Count: number, Branches: { Branch }, Called: boolean } },
+
+	--- What a decode branch writes to leave its event and go on with the packet's next one. The
+	--- channel's decoder turns it into `return` or `continue` when it is closed, as its shape needs.
+	NEXT_EVENT: string,
 
 	Reset: () -> (),
 }
@@ -96,9 +102,11 @@ local State: State = {
 	UsesPromise = false,
 	RateSlots = {},
 	Channels = {
-		Reliable = { Count = 0, Branches = {} },
-		Unreliable = { Count = 0, Branches = {} },
+		Reliable = { Count = 0, Branches = {}, Called = false },
+		Unreliable = { Count = 0, Branches = {}, Called = false },
 	},
+
+	NEXT_EVENT = "return --[[next event]]",
 
 	Reset = nil :: any,
 }
@@ -125,6 +133,7 @@ function State.Reset()
 	for _, Channel in State.Channels do
 		Channel.Count = 0
 		table.clear(Channel.Branches)
+		Channel.Called = false
 	end
 end
 

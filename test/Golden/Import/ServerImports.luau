@@ -1570,47 +1570,51 @@ local function StepReplication()
 end
 local Decoding = -1
 local DecodeRemaining = 64
-local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, Size: number)
+RunService.Heartbeat:Connect(StepReplication)
+local function DecodeReliable(Player: Player, Size: number): ()
 	while RecieveCursor < Size do
 		if DecodeRemaining == 0 then
 			ReportDrop(Player, "Events", 64)
 			break
 		end
 		DecodeRemaining -= 1
-		DecodeEvent(Player)
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		error("[BlinkBlox]: This channel receives no events.")
 	end
 end
-RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	error("[BlinkBlox]: This channel receives no events.")
-end
-local function DecodeUnreliable(Player: Player): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	if Index == 0 then
-		local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Generics_ReadEVENT_Snapshot()
-		local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
-		if BOUND_LISTENER ~= nil then
-			SerdesEvent = "Snapshot"
-			Decoding = -2 - Index
-			BOUND_LISTENER(Player, Value)
+local function DecodeUnreliable(Player: Player, Size: number): ()
+	while RecieveCursor < Size do
+		if DecodeRemaining == 0 then
+			ReportDrop(Player, "Events", 64)
+			break
 		end
-	elseif Index == 1 then
-		local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Example_ReadEVENT_Snapshot()
-		local BOUND_LISTENER = Events.Unreliable[1] :: ((...any) -> ())?
-		if BOUND_LISTENER ~= nil then
-			SerdesEvent = "Snapshot"
-			Decoding = -2 - Index
-			BOUND_LISTENER(Player, Value)
+		DecodeRemaining -= 1
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		if Index == 0 then
+			local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Generics_ReadEVENT_Snapshot()
+			local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Snapshot"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Player, Value)
+			end
+		elseif Index == 1 then
+			local Value: { Sequence: number, Ack: number, Data: { Type: "Single", Data: { id: number, pos: Vector3, angle: number } } | { Type: "Fragment", Fragment: number, Fragments: number, Data: { id: number, pos: Vector3, angle: number } } } = SerdesFunctions.Example_ReadEVENT_Snapshot()
+			local BOUND_LISTENER = Events.Unreliable[1] :: ((...any) -> ())?
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Snapshot"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Player, Value)
+			end
+		else
+			error("[BlinkBlox]: Unknown event index.")
 		end
-	else
-		error("[BlinkBlox]: Unknown event index.")
 	end
 end
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -1642,7 +1646,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	DecodeRemaining = 64
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Player, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeReliable, Player, Size)
 		if Parsed then
 			break
 		end
@@ -1688,7 +1692,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	DecodeRemaining = 64
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Player, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Player, Size)
 		if Parsed then
 			break
 		end

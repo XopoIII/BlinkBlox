@@ -883,11 +883,6 @@ local function StepReplication()
     end
 end
 local Decoding = -1
-local function DecodeLoop(DecodeEvent: () -> (), Size: number)
-	while RecieveCursor < Size do
-		DecodeEvent()
-	end
-end
 local FLUSH_INTERVAL = 1 / 60
 local FlushClock = 0
 RunService.Heartbeat:Connect(function(Delta: number)
@@ -898,89 +893,93 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable(): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	if Index == 0 then
-		local Value: string = SerdesFunctions.ReadEVENT_Announce()
-		if #Events.Reliable[0] > 0 then
-			local Epoch = ListenerEpoch
-			for _, Listener in Events.Reliable[0] do
-				if ListenerEpoch ~= Epoch and table.find(Events.Reliable[0], Listener) == nil then continue end
-				SerdesEvent = "Announce"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
-				if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
-			end
-		else
-			if #Queue.Reliable[0] < 256 then
-				table.insert(Queue.Reliable[0], table.pack(Value))
-				if #Queue.Reliable[0] == 256 then
-					warn("[BlinkBlox]: \"Announce\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+local function DecodeReliable(Size: number): ()
+	while RecieveCursor < Size do
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		if Index == 0 then
+			local Value: string = SerdesFunctions.ReadEVENT_Announce()
+			if #Events.Reliable[0] > 0 then
+				local Epoch = ListenerEpoch
+				for _, Listener in Events.Reliable[0] do
+					if ListenerEpoch ~= Epoch and table.find(Events.Reliable[0], Listener) == nil then continue end
+					SerdesEvent = "Announce"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Value)
+					if not ListenerRan then task.spawn(error, ListenerFailure, 0) end
+				end
+			else
+				if #Queue.Reliable[0] < 256 then
+					table.insert(Queue.Reliable[0], table.pack(Value))
+					if #Queue.Reliable[0] == 256 then
+						warn("[BlinkBlox]: \"Announce\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+					end
 				end
 			end
-		end
-	elseif Index == 2 then
-		-- Read BLOCK: 2 bytes
-		local BLOCK_START = Read(2)
-		local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-			local Success, ReturnValue = pcall(function ()
-				if Answered ~= 1 then
-					error("The call failed on the side that answered it.")
+		elseif Index == 2 then
+			-- Read BLOCK: 2 bytes
+			local BLOCK_START = Read(2)
+			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+				local Success, ReturnValue = pcall(function ()
+					if Answered ~= 1 then
+						error("The call failed on the side that answered it.")
+					end
+					return SerdesFunctions.ReadFUNCTION_RETURN_Price()
+				end)
+			local Thread = TakeInvocation(Invocations, InvocationIdentifier, 2)
+			if Thread ~= nil then
+				if coroutine.status(Thread) == "suspended" then
+					task.spawn(Thread, Success, ReturnValue)
 				end
-				return SerdesFunctions.ReadFUNCTION_RETURN_Price()
-			end)
-		local Thread = TakeInvocation(Invocations, InvocationIdentifier, 2)
-		if Thread ~= nil then
-			if coroutine.status(Thread) == "suspended" then
-				task.spawn(Thread, Success, ReturnValue)
 			end
-		end
-		if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-	elseif Index == 3 then
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		local Value: number = SerdesFunctions.ReadFUNCTION_DATA_Confirm()
-		if Events.Reliable[3] ~= nil then
-			Spawn(Events.Reliable[3], Value, InvocationIdentifier)
+			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+		elseif Index == 3 then
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Value: number = SerdesFunctions.ReadFUNCTION_DATA_Confirm()
+			if Events.Reliable[3] ~= nil then
+				Spawn(Events.Reliable[3], Value, InvocationIdentifier)
+			else
+				if #Queue.Reliable[3] >= 256 then
+					Settle()
+					local ReplyStart, ReplyInstances = SendCursor, #SendInstances
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 3)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					Close(ReplyStart, ReplyInstances)
+					continue
+				end
+				table.insert(Queue.Reliable[3], table.pack(Value, InvocationIdentifier))
+				if #Queue.Reliable[3] == 256 then
+					warn("[BlinkBlox]: \"Confirm\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+				end
+			end
 		else
-			if #Queue.Reliable[3] >= 256 then
-				Settle()
-				local ReplyStart, ReplyInstances = SendCursor, #SendInstances
-				local Position = Allocate(3)
-				buffer.writeu8(SendBuffer, Position, 3)
-				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-				buffer.writeu8(SendBuffer, Position + 2, 0)
-				Close(ReplyStart, ReplyInstances)
-				return
-			end
-			table.insert(Queue.Reliable[3], table.pack(Value, InvocationIdentifier))
-			if #Queue.Reliable[3] == 256 then
-				warn("[BlinkBlox]: \"Confirm\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
-			end
+			error("[BlinkBlox]: Unknown event index.")
 		end
-	else
-		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable(): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	if Index == 0 then
-		local Value: number = SerdesFunctions.ReadEVENT_Position()
-		local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
-		if BOUND_LISTENER ~= nil then
-			SerdesEvent = "Position"
-			Decoding = -2 - Index
-			BOUND_LISTENER(Value)
+local function DecodeUnreliable(Size: number): ()
+	while RecieveCursor < Size do
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		if Index == 0 then
+			local Value: number = SerdesFunctions.ReadEVENT_Position()
+			local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Position"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Value)
+			end
+		else
+			error("[BlinkBlox]: Unknown event index.")
 		end
-	else
-		error("[BlinkBlox]: Unknown event index.")
 	end
 end
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -996,7 +995,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	SerdesThread = coroutine.running()
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeReliable, Size)
 		if Parsed then
 			break
 		end
@@ -1021,7 +1020,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	SerdesThread = coroutine.running()
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Size)
 		if Parsed then
 			break
 		end

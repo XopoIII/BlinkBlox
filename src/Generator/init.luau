@@ -180,7 +180,6 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	--> event per byte, so an 8 KB packet still means thousands of listener dispatches. Counting the
 	--> decoded events bounds that directly.
 	local MaxEvents = State.Options.MaxEventsPerPacket or DEFAULT_MAX_EVENTS_PER_PACKET
-	local DecodeLoop = Packets.DecodeLoop(MaxEvents)
 
 	State.Reliables = Packets.OpenDecode("Reliable")
 	State.Unreliables = Packets.OpenDecode("Unreliable")
@@ -209,6 +208,8 @@ function Generator.Generate(FileContext: Context, AbstractSyntaxTree: Parser.Bod
 	local ReliableDecoder, UnreliableDecoder = State.Reliables, State.Unreliables
 	ReliableConnection = Packets.CloseDecode(ReliableDecoder, ReliableConnection, "Reliable", MaxEvents)
 	UnreliableConnection = Packets.CloseDecode(UnreliableDecoder, UnreliableConnection, "Unreliable", MaxEvents)
+	--> After the declarations, which say whether a channel stays a function and so needs `DecodeLoop`
+	local DecodeLoop = Packets.DecodeLoop(MaxEvents)
 
 	State.Noop.Push(`\})`, 0, 1)
 	--> Through `any`: the stub table is as large as the module's API, and a direct cast has the new type

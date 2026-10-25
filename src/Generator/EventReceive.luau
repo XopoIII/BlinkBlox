@@ -235,7 +235,7 @@ function Receive.Listening(Shape: Shape)
 
 	State.Events.Push(`{Queue} = table.create(256)`)
 	State.Events.Push(`EventNames.{Shape.ChannelName}[{Index}] = "{Declaration.Name}"`)
-	local Block = Decode.Open(Shape.IsUnreliable, Index)
+	local Block = Decode.Open(Shape.IsUnreliable, Index, Value.Data)
 
 	--> Event recieve body
 	local Listener: Blocks.Block
@@ -278,7 +278,7 @@ function Receive.Polling(Shape: Shape)
 
 	State.Events.Push(`{Queue} = CreateQueue()`)
 	State.Events.Push(`EventNames.{Shape.ChannelName}[{Index}] = "{Declaration.Name}"`)
-	local Block = Decode.Open(Shape.IsUnreliable, Index)
+	local Block = Decode.Open(Shape.IsUnreliable, Index, Value.Data)
 
 	if Shape.IsSequenced then
 		Types.u16.Read("OrderIdentifier", Block)

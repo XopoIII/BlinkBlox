@@ -759,11 +759,6 @@ local function StepReplication()
     end
 end
 local Decoding = -1
-local function DecodeLoop(DecodeEvent: () -> (), Size: number)
-	while RecieveCursor < Size do
-		DecodeEvent()
-	end
-end
 local FLUSH_INTERVAL = 1 / 60
 local FlushClock = 0
 RunService.Heartbeat:Connect(function(Delta: number)
@@ -774,36 +769,40 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable(): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	if Index == 0 then
-		local Value: number = SerdesFunctions.ReadEVENT_Alpha()
-		local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
-		if BOUND_LISTENER ~= nil then
-			SerdesEvent = "Alpha"
-			Decoding = -2 - Index
-			BOUND_LISTENER(Value)
-		else
-			if #Queue.Reliable[0] < 256 then
-				table.insert(Queue.Reliable[0], table.pack(Value))
-				if #Queue.Reliable[0] == 256 then
-					warn("[BlinkBlox]: \"Alpha\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+local function DecodeReliable(Size: number): ()
+	while RecieveCursor < Size do
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		if Index == 0 then
+			local Value: number = SerdesFunctions.ReadEVENT_Alpha()
+			local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Alpha"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Value)
+			else
+				if #Queue.Reliable[0] < 256 then
+					table.insert(Queue.Reliable[0], table.pack(Value))
+					if #Queue.Reliable[0] == 256 then
+						warn("[BlinkBlox]: \"Alpha\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+					end
 				end
 			end
+		else
+			error("[BlinkBlox]: Unknown event index.")
 		end
-	else
-		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable(): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	error("[BlinkBlox]: This channel receives no events.")
+local function DecodeUnreliable(Size: number): ()
+	while RecieveCursor < Size do
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		error("[BlinkBlox]: This channel receives no events.")
+	end
 end
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	RecieveCursor = 0
@@ -818,7 +817,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	SerdesThread = coroutine.running()
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeReliable, Size)
 		if Parsed then
 			break
 		end
@@ -843,7 +842,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	SerdesThread = coroutine.running()
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Size)
 		if Parsed then
 			break
 		end

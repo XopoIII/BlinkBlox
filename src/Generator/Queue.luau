@@ -18,6 +18,7 @@
 --- describes. It stops at the cap too now, and says so once, when the queue fills. A call the server
 --- makes into a full queue is answered with a failure, as the server answers one.
 local Blocks = require("./Blocks")
+local State = require("./State")
 
 type Block = Blocks.Block
 
@@ -27,8 +28,8 @@ local CAPACITY = 256
 --- writes, so the caller rejects promptly. A dropped call is not an option -- the caller is parked
 --- until its timeout, holding one of its 32 slots the whole time.
 ---
---- `return`: this is emitted in the channel's decoder, which the decode loop calls once an event, and
---- returning from it goes on with the packet's next event.
+--- It ends in State.NEXT_EVENT: this is emitted in the channel's decoder, and leaving the event there
+--- goes on with the packet's next one, whichever shape the decoder takes (Packets.CloseDecode).
 local function Refuse(Target: Block, Index: number, Indent: number): Block
 	for _, Line in
 		{
@@ -38,7 +39,7 @@ local function Refuse(Target: Block, Index: number, Indent: number): Block
 			"buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)",
 			"buffer.writeu8(SendBuffer, Position + 2, 0)",
 			"SavePlayerBuffer(Player)",
-			"return",
+			State.NEXT_EVENT,
 		}
 	do
 		Target:Line(Line, Indent)
@@ -48,7 +49,7 @@ local function Refuse(Target: Block, Index: number, Indent: number): Block
 end
 
 --- The client's form of `Refuse`: the same failure reply, written into the client's one batch once
---- whatever a Fire that threw left there is settled. `return` for the same reason.
+--- whatever a Fire that threw left there is settled. State.NEXT_EVENT for the same reason.
 local function RefuseClient(Target: Block, Index: number, Indent: number): Block
 	for _, Line in
 		{
@@ -59,7 +60,7 @@ local function RefuseClient(Target: Block, Index: number, Indent: number): Block
 			"buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)",
 			"buffer.writeu8(SendBuffer, Position + 2, 0)",
 			"Close(ReplyStart, ReplyInstances)",
-			"return",
+			State.NEXT_EVENT,
 		}
 	do
 		Target:Line(Line, Indent)

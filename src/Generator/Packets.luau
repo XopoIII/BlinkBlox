@@ -46,9 +46,25 @@ function Packets.Connections(): (Blocks.Block, Blocks.Block)
 	return ReliableConnection, UnreliableConnection
 end
 
---> The loop over one packet's events, made once for the module and handed the channel's decoder;
---> see CloseDecode below. What one packet's decode keeps between events lives in the module, as
---> the cursor does, so no packet allocates anything to decode:
+--> The loop over one packet's events: the head of each turn, which on the server stops the packet at
+--> MaxEventsPerPacket and reports it. A channel whose events read no Instance and run no loop holds
+--> the loop in its decoder; the others are handed to `DecodeLoop`, made once for the module only when
+--> one is (see CloseDecode below).
+local function LoopHead(MaxEvents: number, Indent: string): { string }
+	if State.Context ~= "Server" then
+		return {}
+	end
+	return {
+		`{Indent}if DecodeRemaining == 0 then\n`,
+		`{Indent}\tReportDrop(Player, "Events", {MaxEvents})\n`,
+		`{Indent}\tbreak\n`,
+		`{Indent}end\n`,
+		`{Indent}DecodeRemaining -= 1\n`,
+	}
+end
+
+--> What one packet's decode keeps between events lives in the module, as the cursor does, so no
+--> packet allocates anything to decode:
 --> - `Decoding`, the index of the event being read, for a failure to name it, or `-2 - Index` while
 -->   that event's Sync listener runs (Listeners.Call);
 --> - `DecodeRemaining`, the events the packet may still decode before MaxEventsPerPacket.
@@ -59,30 +75,30 @@ end
 --> packet, MaxEventsPerPacket at most, reaches listeners with a Player already gone, as a packet
 --> already queued when the player leaves always has.
 function Packets.DecodeLoop(MaxEvents: number): { string }
-	local DecodeState = {
-		"local Decoding = -1\n",
-	}
-	return if State.Context == "Server"
-		then Table.Merge(DecodeState, {
-			`local DecodeRemaining = {MaxEvents}\n`,
-			"local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, Size: number)\n",
+	local OnServer = State.Context == "Server"
+	local Lines = { "local Decoding = -1\n" }
+	if OnServer then
+		table.insert(Lines, `local DecodeRemaining = {MaxEvents}\n`)
+	end
+	if not (State.Channels.Reliable.Called or State.Channels.Unreliable.Called) then
+		return Lines
+	end
+
+	return Table.Merge(
+		Lines,
+		{
+			if OnServer
+				then "local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, Size: number)\n"
+				else "local function DecodeLoop(DecodeEvent: () -> (), Size: number)\n",
 			"\twhile RecieveCursor < Size do\n",
-			"\t\tif DecodeRemaining == 0 then\n",
-			`\t\t\tReportDrop(Player, "Events", {MaxEvents})\n`,
-			"\t\t\tbreak\n",
-			"\t\tend\n",
-			"\t\tDecodeRemaining -= 1\n",
-			"\t\tDecodeEvent(Player)\n",
+		},
+		LoopHead(MaxEvents, "\t\t"),
+		{
+			if OnServer then "\t\tDecodeEvent(Player)\n" else "\t\tDecodeEvent()\n",
 			"\tend\n",
 			"end\n",
-		})
-		else Table.Merge(DecodeState, {
-			"local function DecodeLoop(DecodeEvent: () -> (), Size: number)\n",
-			"\twhile RecieveCursor < Size do\n",
-			"\t\tDecodeEvent()\n",
-			"\tend\n",
-			"end\n",
-		})
+		}
+	)
 end
 
 --> A TRUNCATED packet defeats every limit above, because it is SMALLER than a legitimate one: two
@@ -159,6 +175,43 @@ end
 --> the game's handler or raised on a thread of its own -- and the decode goes on from the next
 --> event, where the cursor already is. A packet's listeners that throw nothing cost no pcall each;
 --> one that throws costs one more for the rest of its packet.
+--> The shape of a channel's decoder, measured on LuneBlox 0.11.2 with Roblox's flags, ABBA on an M1.
+--> Holding the loop -- one call a packet -- decodes a thousand one-byte events in 0.050 ms natively
+--> rather than 0.056 and a broadcast 5% faster, but a hundred events carrying a part in 0.0154 ms
+--> rather than 0.0128, and a thousand random arrays of structs in 4.07 ms rather than 3.92 (the median
+--> of thirteen pairs, ten of them slower): an event's own loop compiles to slower native code nested
+--> in the packet's. Interpreted, the shapes tie. So a channel whose events read no Instance and run
+--> no loop (Decode.Open) holds the packet's loop, and any other stays a function `DecodeLoop` calls
+--> once an event. Each turn of the held loop starts as `DecodeLoop`'s does, and a branch's
+--> State.NEXT_EVENT becomes `continue` there and `return` in a function: either way the packet goes
+--> on with its next event.
+local NEXT_EVENT_PATTERN = string.gsub(State.NEXT_EVENT, "%p", "%%%0")
+
+local function Shape(Decoder: Blocks.Block, Name: string, MaxEvents: number): boolean
+	local Holds = not State.Channels[Name].Called
+	local NextEvent = if Holds then "continue" else "return"
+	for Index, Line in Decoder.Content do
+		Decoder.Content[Index] = string.gsub(Line, NEXT_EVENT_PATTERN, NextEvent)
+	end
+	if not Holds then
+		return false
+	end
+
+	local Body = table.move(Decoder.Content, 2, #Decoder.Content, 1, {})
+	table.clear(Decoder.Content)
+	local Parameters = if State.Context == "Server" then "Player: Player, Size: number" else "Size: number"
+	table.insert(Decoder.Content, `local function Decode{Name}({Parameters}): ()\n`)
+	table.insert(Decoder.Content, "\twhile RecieveCursor < Size do\n")
+	for _, Line in LoopHead(MaxEvents, "\t\t") do
+		table.insert(Decoder.Content, Line)
+	end
+	for _, Line in Body do
+		table.insert(Decoder.Content, (string.gsub(Line, "([^\n]+)", "\t%1")))
+	end
+	table.insert(Decoder.Content, "\tend\n")
+	return true
+end
+
 function Packets.CloseDecode(
 	Decoder: Blocks.Block,
 	Connection: Blocks.Block,
@@ -166,9 +219,11 @@ function Packets.CloseDecode(
 	MaxEvents: number
 ): Blocks.Block
 	local OnServer = State.Context == "Server"
+	local Holds = Shape(Decoder, Name, MaxEvents)
 	Decoder:End()
 	local Sender = if OnServer then `Player, "{Name}", ` else ""
-	local LoopArguments = if OnServer then `Decode{Name}, Player, Size` else `Decode{Name}, Size`
+	local Callee = if Holds then `Decode{Name}` else `DecodeLoop, Decode{Name}`
+	local LoopArguments = if OnServer then `{Callee}, Player, Size` else `{Callee}, Size`
 	if OnServer then
 		Connection:Line(`DecodeRemaining = {MaxEvents}`)
 	end
@@ -179,7 +234,7 @@ function Packets.CloseDecode(
 		Connection:Line("MissingInstance = false")
 	end
 	Connection:Line("while true do")
-	Connection:Line(`\tlocal Parsed: boolean, Failure: any = pcall(DecodeLoop, {LoopArguments})`)
+	Connection:Line(`\tlocal Parsed: boolean, Failure: any = pcall({LoopArguments})`)
 	Connection:Line("\tif Parsed then")
 	Connection:Line("\t\tbreak")
 	Connection:Line("\tend")

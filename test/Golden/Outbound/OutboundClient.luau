@@ -886,11 +886,6 @@ local function StreamAccept(Index: number, Time: number): boolean
     return true
 end
 local Decoding = -1
-local function DecodeLoop(DecodeEvent: () -> (), Size: number)
-	while RecieveCursor < Size do
-		DecodeEvent()
-	end
-end
 local FLUSH_INTERVAL = 1 / 60
 local FlushClock = 0
 RunService.Heartbeat:Connect(function(Delta: number)
@@ -901,75 +896,79 @@ RunService.Heartbeat:Connect(function(Delta: number)
 	FlushClock = math.min(FlushClock - FLUSH_INTERVAL, FLUSH_INTERVAL)
 	StepReplication()
 end)
-local function DecodeReliable(): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	if Index == 0 then
-		local Value: number = SerdesFunctions.ReadEVENT_Score()
-		local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
-		if BOUND_LISTENER ~= nil then
-			SerdesEvent = "Score"
-			Decoding = -2 - Index
-			BOUND_LISTENER(Value)
-		else
-			if #Queue.Reliable[0] < 256 then
-				table.insert(Queue.Reliable[0], table.pack(Value))
-				if #Queue.Reliable[0] == 256 then
-					warn("[BlinkBlox]: \"Score\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+local function DecodeReliable(Size: number): ()
+	while RecieveCursor < Size do
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		if Index == 0 then
+			local Value: number = SerdesFunctions.ReadEVENT_Score()
+			local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
+			if BOUND_LISTENER ~= nil then
+				SerdesEvent = "Score"
+				Decoding = -2 - Index
+				BOUND_LISTENER(Value)
+			else
+				if #Queue.Reliable[0] < 256 then
+					table.insert(Queue.Reliable[0], table.pack(Value))
+					if #Queue.Reliable[0] == 256 then
+						warn("[BlinkBlox]: \"Score\" has 256 events waiting for a listener, and later ones are dropped until one connects. Did you forget to implement a listener?")
+					end
 				end
 			end
+		else
+			error("[BlinkBlox]: Unknown event index.")
 		end
-	else
-		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable(): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	if Index == 0 then
-		local Value: buffer = SerdesFunctions.ReadEVENT_Chatter()
-		local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
-		if BOUND_LISTENER ~= nil then
-			SerdesEvent = "Chatter"
-			Decoding = -2 - Index
-			BOUND_LISTENER(Value)
-		end
-	elseif Index == 1 then
-		local Value: number = SerdesFunctions.ReadEVENT_Hit()
-		local BOUND_LISTENER = Events.Unreliable[1] :: ((...any) -> ())?
-		if BOUND_LISTENER ~= nil then
-			SerdesEvent = "Hit"
-			Decoding = -2 - Index
-			BOUND_LISTENER(Value)
-		end
-	elseif Index == 2 then
-		local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Crowd()
-		Value2 = UnwrapStamp(Value2)
-		if StreamAccept(2, Value2) == true then
-			local BOUND_LISTENER = Events.Unreliable[2] :: ((...any) -> ())?
+local function DecodeUnreliable(Size: number): ()
+	while RecieveCursor < Size do
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		if Index == 0 then
+			local Value: buffer = SerdesFunctions.ReadEVENT_Chatter()
+			local BOUND_LISTENER = Events.Unreliable[0] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Crowd"
+				SerdesEvent = "Chatter"
 				Decoding = -2 - Index
-				BOUND_LISTENER(Value1, Value2)
+				BOUND_LISTENER(Value)
 			end
-		end
-	elseif Index == 3 then
-		local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Mine()
-		Value2 = UnwrapStamp(Value2)
-		if StreamAccept(3, Value2) == true then
-			local BOUND_LISTENER = Events.Unreliable[3] :: ((...any) -> ())?
+		elseif Index == 1 then
+			local Value: number = SerdesFunctions.ReadEVENT_Hit()
+			local BOUND_LISTENER = Events.Unreliable[1] :: ((...any) -> ())?
 			if BOUND_LISTENER ~= nil then
-				SerdesEvent = "Mine"
+				SerdesEvent = "Hit"
 				Decoding = -2 - Index
-				BOUND_LISTENER(Value1, Value2)
+				BOUND_LISTENER(Value)
 			end
+		elseif Index == 2 then
+			local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Crowd()
+			Value2 = UnwrapStamp(Value2)
+			if StreamAccept(2, Value2) == true then
+				local BOUND_LISTENER = Events.Unreliable[2] :: ((...any) -> ())?
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "Crowd"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Value1, Value2)
+				end
+			end
+		elseif Index == 3 then
+			local Value1: number?, Value2: number = SerdesFunctions.ReadEVENT_Mine()
+			Value2 = UnwrapStamp(Value2)
+			if StreamAccept(3, Value2) == true then
+				local BOUND_LISTENER = Events.Unreliable[3] :: ((...any) -> ())?
+				if BOUND_LISTENER ~= nil then
+					SerdesEvent = "Mine"
+					Decoding = -2 - Index
+					BOUND_LISTENER(Value1, Value2)
+				end
+			end
+		else
+			error("[BlinkBlox]: Unknown event index.")
 		end
-	else
-		error("[BlinkBlox]: Unknown event index.")
 	end
 end
 Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
@@ -985,7 +984,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	SerdesThread = coroutine.running()
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeReliable, Size)
 		if Parsed then
 			break
 		end
@@ -1010,7 +1009,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	SerdesThread = coroutine.running()
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Size)
 		if Parsed then
 			break
 		end
