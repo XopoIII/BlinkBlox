@@ -449,8 +449,10 @@ Interpreted code, which most players' clients run, is faster on LuneBlox on both
 how much depends on the machine: under half the time on the M1, where Lune's size profile built Luau
 at `-Os` and LuneBlox builds it at `-O3`, and an eighth to three tenths less on the i7. Native code on
 the thousand-event benches is slower with Roblox's flags than with Luau's defaults on both: Roblox
-sets `DebugCodegenOptSize`, which skips a native optimisation, and the middle column is what a Roblox
-server gets. `LUNE_ROBLOX_FFLAGS=0` gives the last column. On the i7 the 128 declarations ran
+set `DebugCodegenOptSize` then, which skips a native optimisation, and the middle column is what a
+Roblox server got. `LUNE_ROBLOX_FFLAGS=0` gives the last column. Roblox client 0.744 turned the flag
+off, and LuneBlox 0.11.2 follows: on the M1 BlinkBlox's thousand-event benches now fire 13 to 36%
+faster natively than this middle column's flags allow, and decode 19 to 38% faster. On the i7 the 128 declarations ran
 natively even on Lune 0.10.5 -- 0.024 / 0.008 against 0.037 / 0.022 interpreted -- where on the M1
 that module stayed interpreted.
 
