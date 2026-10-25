@@ -101,6 +101,10 @@ easy to break without noticing.
 - A remote call costs about 11 bytes beside its payload (Studio: 240 calls of 40 B/s went out as
   13.2 KB/s, 60 of 160 as 11.2). No loss, warning or ping rise from 60 to 480 calls a second on
   either remote, so Roblox enforces no call cap to stay under. Hence `option ClientFlushRate`, 60.
+- Roblox sends a frame's remote calls together, whenever in the frame each was fired: an unreliable
+  event gathered for the Heartbeat flush arrived when one sent at once did, 16 ms after a late fire
+  and 33 after an early one in Studio (`benchmark/Latency.luau`). So batching costs no time, and a
+  `task.defer` flush has nothing to save.
 - The inbound budget charges a packet at least 128 bytes, and its burst is a whole second: after a
   hitch Roblox delivers the backlog at once, and a refused reliable packet takes its events along.
 - Luau allows 200 locals a function. Each struct field is scoped (`src/Generator/Scope.luau`), or a
@@ -192,6 +196,7 @@ schema on remotes nothing else shares. Each of these fails when the bug it is ab
 | Time the generated modules | `luneblox run Runtime` (from `benchmark`) |
 | Time the compiler | `luneblox run Performance` (from `benchmark`) |
 | Measure the unreliable payload limit in Studio | `luneblox run Probe` (from `benchmark`) |
+| Measure when a batched or unbatched event arrives, in Studio | `luneblox run Latency` (from `benchmark`) |
 | Docs, locally | `cd docs && npm install && npm run dev` |
 | Build the docs (dead links fail it) | `cd docs && npm run build` |
 

@@ -25,6 +25,12 @@ startup instead of misreading packets.
   Lune's default, the highest level, which found three-byte repeats Roblox does not and took a
   framed event's index and length back: BlinkBlox's random booleans read 125.81 bytes an event where
   Studio measured 128.14. Every level from 1 to 9 matches Studio; the column now reads 128.01.
+- **`BatchUnreliable` costs no time, measured.** Its page said an event waits up to a frame for the
+  flush. `luneblox run Latency` (new, in `benchmark`) fires unreliable events in Studio early and
+  late in the frame and sends them at once, at a Heartbeat flush or at a `task.defer`: each arrived
+  at the same time whichever way, 16 ms after a late fire and 33 after an early one, since Roblox
+  sends a frame's remote calls together. A deferred flush was the candidate for batching without a
+  wait, and there is no wait to remove, so the flush stays where it is.
 - **Studio's tables are rerun**, on an Apple M1 with 1.3.1's modules, Satset among them. Since 1.2.1
   BlinkBlox's client is interpreted there while most other tools' are native, which its `Fire ms`
   now reflects; `Benchmarks.md` says so above the tables.
