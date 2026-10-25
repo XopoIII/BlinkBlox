@@ -7,7 +7,12 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
-## Unreleased
+## 1.3.2 — 2026-10-25
+
+A benchmarks release. A generated module differs from 1.3.1's by the version in its header: it runs
+the same code, the wire does not change, and nothing needs recompiling. Satset joins the comparison,
+and of what it does differently its run framing was measured and dropped: up to a byte an event
+saved, at 32-68% on an event's write.
 
 ### Changed
 
