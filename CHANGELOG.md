@@ -7,6 +7,30 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## Unreleased
+
+### Changed
+
+- **The benchmarks run Satset v0.5.0** (bookek/satset) beside the other tools, in `Runtime`,
+  `Rivals` and Studio. Its token bucket is lifted in its modes as the other tools' limits are, and
+  every table now opens with what was lifted. It has no Instance type, so `Rivals` leaves it out of
+  `Instances`, and it runs `Tiny`, which until now was BlinkBlox's alone, since its framing is the
+  one thing it does differently. On an Apple M1, side by side, it is slower everywhere -- `Entities`
+  fires in 38.4 ms native against BlinkBlox's 2.5 and decodes in 43.0 against 4.5 -- and smaller
+  before compression on runs of one event: it writes a run of one id under one 3- or 5-byte header,
+  no index each, so `Tiny` costs it 1.01 bytes an event to BlinkBlox's 2.00 and `Booleans` 127.01 to
+  128.00. zstd takes the index bytes back in `Runtime`, but Roblox's compression did not in Studio,
+  where random booleans cost Satset 127.03 bytes an event to BlinkBlox's 128.14.
+- **Studio's tables are rerun**, on an Apple M1 with 1.3.1's modules, Satset among them. Since 1.2.1
+  BlinkBlox's client is interpreted there while most other tools' are native, which its `Fire ms`
+  now reflects; `Benchmarks.md` says so above the tables.
+
+### Fixed
+
+- **Studio's benchmark stopped at Warp.** Its mode registered a client's schemas in an `__index`
+  that waits for the server's ids, and a metamethod cannot yield; on a client that reached the
+  events first, the whole run ended there. The wait is in `Fire` and `On` now.
+
 ## 1.3.1 — 2026-10-21
 
 A housekeeping release. A generated module differs from 1.3.0's by the version in its header: it

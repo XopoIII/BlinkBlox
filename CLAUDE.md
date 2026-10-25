@@ -51,6 +51,11 @@ Two other projects occupy the neighbouring ground, and neither covers this one:
   protected decode.
 - **Jolt** is a runtime-typed library too. Its 4.4.1 removed the per-packet `pcall` and decodes a
   truncated payload to default values, silently, rather than refusing it.
+- **Satset** (bookek/satset) is runtime-schema too, benchmarked beside BlinkBlox from its 0.5.0.
+  Its token bucket charges a token a remote call, not an event, so one call carries up to 8191
+  events; a refusal, a failed decode and an array cut to the bytes left are all silent, and a
+  truncated `string8` decodes as `""`. Its run framing -- one header for consecutive events of one
+  id, no index each -- is the one thing it does that BlinkBlox does not (`benchmark/Benchmarks.md`).
 
 None of them reports every refusal to the game and bounds every allocation before it happens. That is the gap this fork fills: **the
 generated server module should be safe to point at the open internet** — without giving up the
