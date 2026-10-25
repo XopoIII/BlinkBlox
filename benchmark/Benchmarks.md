@@ -39,7 +39,11 @@ most players' clients run code, and decoding on the server, which Studio does no
 generated modules, ByteNet, Packet, QuickNet and Warp from the same files Studio runs (after
 `luneblox run build --download`) with just enough of Roblox mocked around them, and times a frame's thousand fires,
 the flush into packets, and the server decoding those packets and calling its listener. `Bytes/event` is the
-encoder's output; `zstd` is that output compressed as Roblox would.
+encoder's output; `zstd` is that output compressed as Roblox would, at zstd's default level, 3. Every level
+from 1 to 9 gives the same and matches the Studio tables; Lune's own default, the highest, found three-byte repeats
+Roblox does not and took BlinkBlox's index and length back from every random boolean array -- 125.81 bytes an event
+where Studio measured 128.14. The tables measured before 2026-10-25 used it, so their `zstd` column for the
+`Random` benches reads up to two bytes an event low for every tool that frames each event.
 
 The runs below were made on 2026-09-29 on an Intel Core i7-13700K with 64 GB of memory, Windows 11, LuneBlox 0.10.9
 (Luau 0.740), with this repository's compiler (0.42.0). Every run was the only one on the machine, pinned to one
@@ -88,13 +92,13 @@ where Satset differs.
 ||Satset|native|10.341|10.661|0.281|7.943|9.194|127.01|0.03|
 ||BlinkBlox|interpreted|15.891|16.347|0.005|9.225|9.955|128.00|0.02|
 ||Satset|interpreted|38.853|39.905|1.733|37.999|39.877|127.01|0.03|
-|Entities|BlinkBlox|native|2.452|2.509|0.012|4.546|11.764|602.00|0.67|
-||Satset|native|38.431|39.247|0.705|43.040|51.294|602.01|0.68|
-||BlinkBlox|interpreted|12.411|12.715|0.013|12.215|20.032|602.00|0.67|
-||Satset|interpreted|42.257|43.345|4.571|64.395|73.178|602.01|0.68|
-|BooleansRandom|BlinkBlox|native|6.006|6.061|0.006|2.819|4.032|128.00|125.81|
+|Entities|BlinkBlox|native|2.452|2.509|0.012|4.546|11.764|602.00|0.70|
+||Satset|native|38.431|39.247|0.705|43.040|51.294|602.01|0.71|
+||BlinkBlox|interpreted|12.411|12.715|0.013|12.215|20.032|602.00|0.70|
+||Satset|interpreted|42.257|43.345|4.571|64.395|73.178|602.01|0.71|
+|BooleansRandom|BlinkBlox|native|6.006|6.061|0.006|2.819|4.032|128.00|128.01|
 ||Satset|native|13.984|14.459|0.431|7.931|10.272|127.01|127.02|
-||BlinkBlox|interpreted|17.725|17.851|0.006|9.203|10.570|128.00|125.81|
+||BlinkBlox|interpreted|17.725|17.851|0.006|9.203|10.570|128.00|128.01|
 ||Satset|interpreted|33.678|34.473|3.637|47.384|49.622|127.01|127.02|
 |EntitiesRandom|BlinkBlox|native|3.036|3.175|0.014|4.533|19.990|602.00|602.02|
 ||Satset|native|38.771|39.881|0.763|42.825|58.638|602.01|602.03|
@@ -120,9 +124,9 @@ where Satset differs.
 Satset encodes each field through a function its schema holds, so it is slower to fire and decode everywhere, and
 its flush scans the frame's batch a second time to merge runs: consecutive events of one id go under one 3-byte
 header (5 past 255 events), with no index or length each. That is the one place it is smaller, by the byte of
-index BlinkBlox writes before every event: 1.01 bytes a `Tiny` to 2.00. zstd takes the repeated index bytes back on
-these pools, but Roblox's compression did not in Studio (Results below), where `BooleansRandom` cost Satset 127.03
-bytes an event to BlinkBlox's 128.14. It batches unreliable events by default, one call for `UnreliableInput`
+index BlinkBlox writes before every event: 1.01 bytes a `Tiny` to 2.00. Compression keeps that byte on random
+payloads: `BooleansRandom` cost Satset 127.02 bytes an event compressed to BlinkBlox's 128.01, and 127.03 to 128.14
+in Studio (Results below). It batches unreliable events by default, one call for `UnreliableInput`
 where BlinkBlox makes eight unless built with `BatchUnreliable`; an unreliable `FireAll` it copies to each player,
 50 calls for `WorldState`. It has no Instance type and sits out `Instances`.
 

@@ -176,8 +176,8 @@ then bytes an event before and after zstd.
 | Bench | BlinkBlox, native | Satset, native | BlinkBlox, interpreted | Satset, interpreted | Bytes, zstd: BlinkBlox | Satset |
 |---|---|---|---|---|---|---|
 | Booleans | **3.03** / **2.86** | 10.62 / 7.94 | **15.90** / **9.23** | 40.59 / 38.00 | 128, **0.02** | **127.01**, 0.03 |
-| Entities | **2.46** / **4.55** | 39.14 / 43.04 | **12.42** / **12.22** | 46.83 / 64.40 | **602**, **0.67** | 602.01, 0.68 |
-| BooleansRandom | **6.01** / **2.82** | 14.42 / 7.93 | **17.73** / **9.20** | 37.32 / 47.38 | 128, **125.81** | **127.01**, 127.02 |
+| Entities | **2.46** / **4.55** | 39.14 / 43.04 | **12.42** / **12.22** | 46.83 / 64.40 | **602**, **0.70** | 602.01, 0.71 |
+| BooleansRandom | **6.01** / **2.82** | 14.42 / 7.93 | **17.73** / **9.20** | 37.32 / 47.38 | 128, 128.01 | **127.01**, **127.02** |
 | EntitiesRandom | **3.05** / **4.53** | 39.53 / 42.83 | **12.61** / **12.47** | 47.38 / 64.76 | **602**, **602.02** | 602.01, 602.03 |
 | Tiny | **0.049** / **0.058** | 0.477 / 0.531 | **0.124** / **0.175** | 0.794 / 0.693 | 2, **0.02** | **1.01**, 0.03 |
 
@@ -192,10 +192,9 @@ then bytes an event before and after zstd.
 Satset is a runtime library: each field is written and read through a function the schema holds, and
 each frame's batch is scanned a second time at the flush to merge runs, which is where its flush time
 goes. That merge is the one place it is smaller: a run of events with one id goes under a single 3- or
-5-byte header with no index each, where BlinkBlox writes a byte of index for every event. zstd, as
-the harness applies it, takes those index bytes back and leaves BlinkBlox the smaller in every bench;
-Roblox's own compression did not on random payloads, and in Studio `BooleansRandom` cost Satset
-127.03 bytes an event to BlinkBlox's 128.14 -- the one byte of index, paid. A reliable `FireAll` is one
+5-byte header with no index each, where BlinkBlox writes a byte of index for every event. On random
+payloads compression keeps that byte: `BooleansRandom` cost Satset 127.02 bytes an event compressed
+to BlinkBlox's 128.01, and 127.03 to 128.14 in Studio. A reliable `FireAll` is one
 broadcast for both; an unreliable one Satset copies into each player's batch, 50 calls to BlinkBlox's
 one. It has no Instance type, so it sits out `Instances`.
 

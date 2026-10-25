@@ -19,8 +19,12 @@ startup instead of misreading packets.
   fires in 38.4 ms native against BlinkBlox's 2.5 and decodes in 43.0 against 4.5 -- and smaller
   before compression on runs of one event: it writes a run of one id under one 3- or 5-byte header,
   no index each, so `Tiny` costs it 1.01 bytes an event to BlinkBlox's 2.00 and `Booleans` 127.01 to
-  128.00. zstd takes the index bytes back in `Runtime`, but Roblox's compression did not in Studio,
-  where random booleans cost Satset 127.03 bytes an event to BlinkBlox's 128.14.
+  128.00. Compression keeps that byte on random payloads: random booleans cost Satset 127.03
+  bytes an event in Studio to BlinkBlox's 128.14.
+- **`Runtime`'s `zstd` column compresses at level 3**, as Roblox's own compression measures. It used
+  Lune's default, the highest level, which found three-byte repeats Roblox does not and took a
+  framed event's index and length back: BlinkBlox's random booleans read 125.81 bytes an event where
+  Studio measured 128.14. Every level from 1 to 9 matches Studio; the column now reads 128.01.
 - **Studio's tables are rerun**, on an Apple M1 with 1.3.1's modules, Satset among them. Since 1.2.1
   BlinkBlox's client is interpreted there while most other tools' are native, which its `Fire ms`
   now reflects; `Benchmarks.md` says so above the tables.

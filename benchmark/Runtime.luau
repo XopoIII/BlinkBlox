@@ -130,11 +130,17 @@ type Result = {
 	Compressed: number,
 }
 
---> Roblox compresses what a remote sends with zstd. Its level is not documented; this is Lune's.
+--> Roblox compresses what a remote sends with zstd at a level it does not document. Lune's own
+--> default is the highest, which finds three-byte repeats Roblox does not: it took BlinkBlox's index
+--> and length back from every random boolean array, 125.82 bytes an event where Studio measured
+--> 128.14. Every level from 1 to 9 gives 128.01 here and matches Studio on all four benches, so this
+--> is zstd's own default, 3.
+local ZSTD_LEVEL = 3
+
 local function Compressed(Packets: { Tools.Sent }): number
 	local Total = 0
 	for _, Packet in Packets do
-		Total += #serde.compress("zstd", buffer.tostring(Packet.Buffer))
+		Total += #serde.compress("zstd", buffer.tostring(Packet.Buffer), ZSTD_LEVEL)
 	end
 	return Total
 end
