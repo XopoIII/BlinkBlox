@@ -81,7 +81,10 @@ easy to break without noticing.
   each holds one current state that the next send replaces.
 - **Measured and dropped:** constant offsets in array loops (slower natively), branchless boolean
   packing (no faster), packing array elements' bits into one run (dynamic bit addressing in every
-  decode), a struct-of-arrays wire layout (no fewer builtin calls, one more pass).
+  decode), a struct-of-arrays wire layout (no fewer builtin calls, one more pass), Satset's run
+  framing -- one header over four or more consecutive events of one index, no index each: it saves
+  up to a byte an event even compressed, but every write must compare its index with the last and
+  keep the run's state, 32-68% on an event's write interpreted (2026-10-25).
 - **`@profile` defaults to `release`**, so forgetting the flag leaves a debug remote out rather than
   shipping it. An excluded declaration is still parsed and registered, and a compiled one naming it
   is refused (`src/Modules/Attributes.luau`).
