@@ -114,10 +114,13 @@ easy to break without noticing.
   skips block linearisation in native code; Roblox has turned it off, and LuneBlox 0.11.2 follows.
   Native rows taken on LuneBlox 0.11.1 or earlier carry it: on the M1, two builds differing only in
   the flag ran BlinkBlox 1.3.4's thousand-event benches 13 to 36% faster to fire natively and 19 to
-  38% faster to decode without it, interpreted unchanged. A channel's decoder is a function called
-  once an event rather than a loop with the dispatch inside it because the long loop body compiled to
-  slower native code without linearisation (`src/Generator/init.luau`); with it back, that has not
-  been measured again.
+  38% faster to decode without it, interpreted unchanged.
+- A channel's decoder is a function called once an event, not a loop with the dispatch inside it.
+  Re-measured on LuneBlox 0.11.2, ABBA on the M1: the loop decodes a thousand one-byte events 11%
+  faster natively and a broadcast 5% faster, but a hundred events carrying a part 19% slower (0.0154
+  ms against 0.0128), as it was before linearisation came back; interpreted, the two tie. A loop for
+  channels without Instances alone would buy a few microseconds a frame for a second decode path and
+  every event's early `return` made a `continue` (`src/Generator/Packets.luau`).
 - LuneBlox's macOS binaries before 0.11.2 were built with Apple Clang 17 (GitHub's `macos-15`), and
   interpreted about 30% slower than the same source built with Clang 21: interpreted rows taken on
   the M1 with an installed LuneBlox before 0.11.2 carry that. The i7's Windows binary was not
