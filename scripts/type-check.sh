@@ -39,10 +39,17 @@ fi
 #
 # `luneblox setup` is idempotent and takes under a second, so it runs unconditionally instead of guessing
 # at the path, which changes with the pinned Lune version.
+#
+# Since LuneBlox 0.11.0 `setup` also adds `Enum` and `warn` to `globals` in `.luaurc`, and luau-lsp
+# types a name listed there as `any` over what the Roblox definitions say: `local N: number =
+# Enum.KeyCode.A` reports `Expected this to be 'number', but got 'Enum.KeyCode'` without the entry
+# and nothing with it. The plugin and the generated modules use `Enum`, so the file is put back as
+# written once setup is done.
 echo "type-check: refreshing Lune type definitions"
-luneblox setup >/dev/null
-
 mkdir -p build
+cp .luaurc build/.luaurc.kept
+luneblox setup >/dev/null
+mv build/.luaurc.kept .luaurc
 
 echo "type-check: compiler (src)"
 luau-lsp analyze --defs globalTypes.d.luau src
