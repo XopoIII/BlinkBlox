@@ -6,8 +6,10 @@
 --- once it has been read -- whether its rate limit lets it through, and whether an ordered packet is
 --- newer than the last one seen.
 local Blocks = require("./Blocks")
+local Parser = require("../Parser")
 local Rates = require("./Rates")
 local State = require("./State")
+local Writes = require("./Writes")
 
 local Decode = {}
 
@@ -65,6 +67,7 @@ end
 --- one warning an event. `Answer`, for an invocation, writes the failure reply its caller is owed and
 --- returns; an event just returns, and the decode loop goes on with the packet's next event.
 function Decode.MissingGuard(Block: Blocks.Block, Unreliable: boolean, Name: string, Answer: ((Blocks.Block) -> ())?)
+	State.Channels[if Unreliable then "Unreliable" else "Reliable"].Called = true
 	Block:Line("if MissingInstance then")
 	Block:Line("\tMissingInstance = false")
 	if State.Context == "Server" then
@@ -77,16 +80,40 @@ function Decode.MissingGuard(Block: Blocks.Block, Unreliable: boolean, Name: str
 	if Answer then
 		Answer(Block)
 	else
-		Block:Line("\treturn")
+		Block:Line(`\t{State.NEXT_EVENT}`)
 	end
 	Block:Line("end")
 end
 
---- Opens the branch of a channel's decode loop that receives declaration `Index`. The branch is a
---- block of its own, kept until `Close` arranges the channel's branches into the dispatch.
-function Decode.Open(Unreliable: boolean, Index: number): Blocks.Block
+--- Whether reading a value of this type runs a loop: an array, packed booleans included, or a map.
+local function Loops(Node: Parser.TypeNode?): boolean
+	if not Node then
+		return false
+	elseif Node.Type == "Array" or Node.Type == "Map" then
+		return true
+	elseif Node.Type == "Optional" then
+		return Loops(Node.Value.Of)
+	elseif Node.Type == "Struct" or Node.Type == "Tuple" or Node.Type == "TagEnum" then
+		--> A tagged enum's variants are structs, which are type nodes like the fields of the others
+		for _, Field in Node.Value.Values :: { Parser.TypeNode } do
+			if Loops(Field) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+--- Opens the branch of a channel's decode loop that receives declaration `Index`, which reads `Data`
+--- (and an invocation's `Return`, read by the side that calls). The branch is a block of its own, kept
+--- until `Close` arranges the channel's branches into the dispatch. What it reads decides the shape of
+--- the channel's decoder (Packets.CloseDecode): an Instance or a loop of its own keeps it a function.
+function Decode.Open(Unreliable: boolean, Index: number, Data: Parser.TypeNode?, Return: Parser.TypeNode?): Blocks.Block
 	local Channel = if Unreliable then State.Channels.Unreliable else State.Channels.Reliable
 	local Decoder = if Unreliable then State.Unreliables else State.Reliables
+	if Writes.CarriesInstances(Data) or Writes.CarriesInstances(Return) or Loops(Data) or Loops(Return) then
+		Channel.Called = true
+	end
 
 	local Block = Blocks.Block(Decoder)
 	table.insert(Channel.Branches, { Index = Index, Block = Block })

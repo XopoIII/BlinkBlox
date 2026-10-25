@@ -1431,92 +1431,96 @@ end
 local function Listen()
 	local Decoding = -1
 	local DecodeRemaining = 64
-	local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, Size: number)
+	RunService.Heartbeat:Connect(StepReplication)
+	local function DecodeReliable(Player: Player, Size: number): ()
 		while RecieveCursor < Size do
 			if DecodeRemaining == 0 then
 				ReportDrop(Player, "Events", 64)
 				break
 			end
 			DecodeRemaining -= 1
-			DecodeEvent(Player)
-		end
-	end
-	RunService.Heartbeat:Connect(StepReplication)
-	local function DecodeReliable(Player: Player): ()
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-		RecieveCursor += 1
-		Decoding = Index
-		if Index == 1 then
-			local Value: number = SerdesFunctions.ReadEVENT_Ready()
-			if RateAccept(Player, 1, 10, 10, "Ready") == true then
-				local BOUND_LISTENER = Events.Reliable[1] :: ((...any) -> ())?
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "Ready"
-					Decoding = -2 - Index
-					BOUND_LISTENER(Player, Value)
-				else
-					if #Queue.Reliable[1] < 256 then
-						table.insert(Queue.Reliable[1], table.pack(Player, Value))
+			Decoding = -1
+			local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RecieveCursor += 1
+			Decoding = Index
+			if Index == 1 then
+				local Value: number = SerdesFunctions.ReadEVENT_Ready()
+				if RateAccept(Player, 1, 10, 10, "Ready") == true then
+					local BOUND_LISTENER = Events.Reliable[1] :: ((...any) -> ())?
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Ready"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Player, Value)
+					else
+						if #Queue.Reliable[1] < 256 then
+							table.insert(Queue.Reliable[1], table.pack(Player, Value))
+						end
 					end
 				end
-			end
-		elseif Index == 2 then
-			-- Read BLOCK: 1 bytes
-			local BLOCK_START = Read(1)
-			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			local Value: number = SerdesFunctions.ReadFUNCTION_DATA_Price()
-			if not RateAccept(Player, 5, 10, 10, "Price") then
-				LoadPlayer(Player)
-				local Position = Allocate(3)
-				buffer.writeu8(SendBuffer, Position, 2)
-				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-				buffer.writeu8(SendBuffer, Position + 2, 0)
-				SavePlayerBuffer(Player)
-				return
-			end
-			if Events.Reliable[2] ~= nil then
-				Spawn(Events.Reliable[2], Player, Value, InvocationIdentifier)
-			else
-				if #Queue.Reliable[2] >= 256 then
+			elseif Index == 2 then
+				-- Read BLOCK: 1 bytes
+				local BLOCK_START = Read(1)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Value: number = SerdesFunctions.ReadFUNCTION_DATA_Price()
+				if not RateAccept(Player, 5, 10, 10, "Price") then
 					LoadPlayer(Player)
 					local Position = Allocate(3)
 					buffer.writeu8(SendBuffer, Position, 2)
 					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
 					buffer.writeu8(SendBuffer, Position + 2, 0)
 					SavePlayerBuffer(Player)
-					return
+					continue
 				end
-				table.insert(Queue.Reliable[2], table.pack(Player, Value, InvocationIdentifier))
-			end
-		elseif Index == 3 then
-			-- Read BLOCK: 2 bytes
-			local BLOCK_START = Read(2)
-			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-			local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
-				local Success, ReturnValue = pcall(function ()
-					if Answered ~= 1 then
-						error("The call failed on the side that answered it.")
+				if Events.Reliable[2] ~= nil then
+					Spawn(Events.Reliable[2], Player, Value, InvocationIdentifier)
+				else
+					if #Queue.Reliable[2] >= 256 then
+						LoadPlayer(Player)
+						local Position = Allocate(3)
+						buffer.writeu8(SendBuffer, Position, 2)
+						buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+						buffer.writeu8(SendBuffer, Position + 2, 0)
+						SavePlayerBuffer(Player)
+						continue
 					end
-					return SerdesFunctions.ReadFUNCTION_RETURN_Confirm()
-				end)
-			local Thread = TakeInvocation(PlayerInvocations[Player], InvocationIdentifier, 3)
-			if Thread ~= nil then
-				if coroutine.status(Thread) == "suspended" then
-					task.spawn(Thread, Success, ReturnValue)
+					table.insert(Queue.Reliable[2], table.pack(Player, Value, InvocationIdentifier))
 				end
+			elseif Index == 3 then
+				-- Read BLOCK: 2 bytes
+				local BLOCK_START = Read(2)
+				local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+				local Answered = buffer.readu8(RecieveBuffer, BLOCK_START + 1)
+					local Success, ReturnValue = pcall(function ()
+						if Answered ~= 1 then
+							error("The call failed on the side that answered it.")
+						end
+						return SerdesFunctions.ReadFUNCTION_RETURN_Confirm()
+					end)
+				local Thread = TakeInvocation(PlayerInvocations[Player], InvocationIdentifier, 3)
+				if Thread ~= nil then
+					if coroutine.status(Thread) == "suspended" then
+						task.spawn(Thread, Success, ReturnValue)
+					end
+				end
+				if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
+			else
+				error("[BlinkBlox]: Unknown event index.")
 			end
-			if Answered == 1 and Success ~= true then error(ReturnValue, 0) end
-		else
-			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	local function DecodeUnreliable(Player: Player): ()
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-		RecieveCursor += 1
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
+	local function DecodeUnreliable(Player: Player, Size: number): ()
+		while RecieveCursor < Size do
+			if DecodeRemaining == 0 then
+				ReportDrop(Player, "Events", 64)
+				break
+			end
+			DecodeRemaining -= 1
+			Decoding = -1
+			local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RecieveCursor += 1
+			Decoding = Index
+			error("[BlinkBlox]: This channel receives no events.")
+		end
 	end
 	Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
 		if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
@@ -1547,7 +1551,7 @@ local function Listen()
 		DecodeRemaining = 64
 		Decoding = -1
 		while true do
-			local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Player, Size)
+			local Parsed: boolean, Failure: any = pcall(DecodeReliable, Player, Size)
 			if Parsed then
 				break
 			end
@@ -1593,7 +1597,7 @@ local function Listen()
 		DecodeRemaining = 64
 		Decoding = -1
 		while true do
-			local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Player, Size)
+			local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Player, Size)
 			if Parsed then
 				break
 			end

@@ -2084,47 +2084,51 @@ local STREAM_1 = CreateStream("Tick", 1 / 5, 1 / 5, 1, 0, SendSTREAM_1)
 local function Listen()
 	local Decoding = -1
 	local DecodeRemaining = 64
-	local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, Size: number)
+	RunService.Heartbeat:Connect(StepReplication)
+	local function DecodeReliable(Player: Player, Size: number): ()
 		while RecieveCursor < Size do
 			if DecodeRemaining == 0 then
 				ReportDrop(Player, "Events", 64)
 				break
 			end
 			DecodeRemaining -= 1
-			DecodeEvent(Player)
-		end
-	end
-	RunService.Heartbeat:Connect(StepReplication)
-	local function DecodeReliable(Player: Player): ()
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-		RecieveCursor += 1
-		Decoding = Index
-		if Index == 0 then
-			local Value: number = SerdesFunctions.ReadEVENT_Ready()
-			TrafficCounters[20] += 1
-			if RateAccept(Player, 1, 10, 10, "Ready") == true then
-				local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
-				if BOUND_LISTENER ~= nil then
-					SerdesEvent = "Ready"
-					Decoding = -2 - Index
-					BOUND_LISTENER(Player, Value)
-				else
-					if #Queue.Reliable[0] < 256 then
-						table.insert(Queue.Reliable[0], table.pack(Player, Value))
+			Decoding = -1
+			local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RecieveCursor += 1
+			Decoding = Index
+			if Index == 0 then
+				local Value: number = SerdesFunctions.ReadEVENT_Ready()
+				TrafficCounters[20] += 1
+				if RateAccept(Player, 1, 10, 10, "Ready") == true then
+					local BOUND_LISTENER = Events.Reliable[0] :: ((...any) -> ())?
+					if BOUND_LISTENER ~= nil then
+						SerdesEvent = "Ready"
+						Decoding = -2 - Index
+						BOUND_LISTENER(Player, Value)
+					else
+						if #Queue.Reliable[0] < 256 then
+							table.insert(Queue.Reliable[0], table.pack(Player, Value))
+						end
 					end
 				end
+			else
+				error("[BlinkBlox]: Unknown event index.")
 			end
-		else
-			error("[BlinkBlox]: Unknown event index.")
 		end
 	end
-	local function DecodeUnreliable(Player: Player): ()
-		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-		RecieveCursor += 1
-		Decoding = Index
-		error("[BlinkBlox]: This channel receives no events.")
+	local function DecodeUnreliable(Player: Player, Size: number): ()
+		while RecieveCursor < Size do
+			if DecodeRemaining == 0 then
+				ReportDrop(Player, "Events", 64)
+				break
+			end
+			DecodeRemaining -= 1
+			Decoding = -1
+			local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RecieveCursor += 1
+			Decoding = Index
+			error("[BlinkBlox]: This channel receives no events.")
+		end
 	end
 	Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
 		if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
@@ -2157,7 +2161,7 @@ local function Listen()
 		DecodeRemaining = 64
 		Decoding = -1
 		while true do
-			local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Player, Size)
+			local Parsed: boolean, Failure: any = pcall(DecodeReliable, Player, Size)
 			if Parsed then
 				break
 			end
@@ -2205,7 +2209,7 @@ local function Listen()
 		DecodeRemaining = 64
 		Decoding = -1
 		while true do
-			local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Player, Size)
+			local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Player, Size)
 			if Parsed then
 				break
 			end

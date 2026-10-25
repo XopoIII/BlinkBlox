@@ -1343,12 +1343,19 @@ local function DecodeReliable(Player: Player): ()
 		error("[BlinkBlox]: Unknown event index.")
 	end
 end
-local function DecodeUnreliable(Player: Player): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	error("[BlinkBlox]: This channel receives no events.")
+local function DecodeUnreliable(Player: Player, Size: number): ()
+	while RecieveCursor < Size do
+		if DecodeRemaining == 0 then
+			ReportDrop(Player, "Events", 64)
+			break
+		end
+		DecodeRemaining -= 1
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		error("[BlinkBlox]: This channel receives no events.")
+	end
 end
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
 	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
@@ -1431,7 +1438,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	Decoding = -1
 	MissingInstance = false
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Player, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Player, Size)
 		if Parsed then
 			break
 		end

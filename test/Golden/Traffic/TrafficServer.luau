@@ -1541,102 +1541,106 @@ local function StepReplication()
 end
 local Decoding = -1
 local DecodeRemaining = 64
-local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, Size: number)
+RunService.Heartbeat:Connect(StepReplication)
+local function DecodeReliable(Player: Player, Size: number): ()
 	while RecieveCursor < Size do
 		if DecodeRemaining == 0 then
 			ReportDrop(Player, "Events", 64)
 			break
 		end
 		DecodeRemaining -= 1
-		DecodeEvent(Player)
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		if Index == 0 then
+			local Value: number = SerdesFunctions.ReadEVENT_Byte()
+			TrafficCounters[12] += 1
+			if #Events.Reliable[0] > 0 then
+				local Epoch = ListenerEpoch
+				for _, Listener in Events.Reliable[0] do
+					if ListenerEpoch ~= Epoch and table.find(Events.Reliable[0], Listener) == nil then continue end
+					SerdesEvent = "Byte"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Player, Value)
+					if not ListenerRan and not ListenerFailed(Player, "Byte", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+				end
+			else
+				if #Queue.Reliable[0] < 256 then
+					table.insert(Queue.Reliable[0], table.pack(Player, Value))
+				end
+			end
+		elseif Index == 2 then
+			local TrafficStart = RecieveCursor - 1
+			local Value: string = SerdesFunctions.ReadEVENT_Note()
+			TrafficCounters[31] += RecieveCursor - TrafficStart
+			TrafficCounters[32] += 1
+			if #Events.Reliable[2] > 0 then
+				local Epoch = ListenerEpoch
+				for _, Listener in Events.Reliable[2] do
+					if ListenerEpoch ~= Epoch and table.find(Events.Reliable[2], Listener) == nil then continue end
+					SerdesEvent = "Note"
+					local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Player, Value)
+					if not ListenerRan and not ListenerFailed(Player, "Note", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+				end
+			else
+				if #Queue.Reliable[2] < 256 then
+					table.insert(Queue.Reliable[2], table.pack(Player, Value))
+				end
+			end
+		elseif Index == 3 then
+			-- Read BLOCK: 1 bytes
+			local BLOCK_START = Read(1)
+			local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
+			local Value: number = SerdesFunctions.ReadFUNCTION_DATA_Ask()
+			if Events.Reliable[3] ~= nil then
+				Spawn(Events.Reliable[3], Player, Value, InvocationIdentifier)
+			else
+				if #Queue.Reliable[3] >= 256 then
+					LoadPlayer(Player)
+					local Position = Allocate(3)
+					buffer.writeu8(SendBuffer, Position, 3)
+					buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
+					buffer.writeu8(SendBuffer, Position + 2, 0)
+					SavePlayerBuffer(Player)
+					continue
+				end
+				table.insert(Queue.Reliable[3], table.pack(Player, Value, InvocationIdentifier))
+			end
+		elseif Index == 4 then
+			local Arguments = table.pack(Player, SerdesFunctions.Inner_ReadEVENT_Poll())
+			if Queue.Reliable[4].count < MAX_POLLED then
+				Push(Queue.Reliable[4], Arguments)
+			end
+			TrafficCounters[40] += 1
+		else
+			error("[BlinkBlox]: Unknown event index.")
+		end
 	end
 end
-RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	if Index == 0 then
-		local Value: number = SerdesFunctions.ReadEVENT_Byte()
-		TrafficCounters[12] += 1
-		if #Events.Reliable[0] > 0 then
+local function DecodeUnreliable(Player: Player, Size: number): ()
+	while RecieveCursor < Size do
+		if DecodeRemaining == 0 then
+			ReportDrop(Player, "Events", 64)
+			break
+		end
+		DecodeRemaining -= 1
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		if Index == 1 then
+			local Value: number = SerdesFunctions.ReadEVENT_Ping()
+			TrafficCounters[24] += 1
 			local Epoch = ListenerEpoch
-			for _, Listener in Events.Reliable[0] do
-				if ListenerEpoch ~= Epoch and table.find(Events.Reliable[0], Listener) == nil then continue end
-				SerdesEvent = "Byte"
+			for _, Listener in Events.Unreliable[1] do
+				if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[1], Listener) == nil then continue end
+				SerdesEvent = "Ping"
 				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "Byte", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
+				if not ListenerRan and not ListenerFailed(Player, "Ping", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
 			end
 		else
-			if #Queue.Reliable[0] < 256 then
-				table.insert(Queue.Reliable[0], table.pack(Player, Value))
-			end
+			error("[BlinkBlox]: Unknown event index.")
 		end
-	elseif Index == 2 then
-		local TrafficStart = RecieveCursor - 1
-		local Value: string = SerdesFunctions.ReadEVENT_Note()
-		TrafficCounters[31] += RecieveCursor - TrafficStart
-		TrafficCounters[32] += 1
-		if #Events.Reliable[2] > 0 then
-			local Epoch = ListenerEpoch
-			for _, Listener in Events.Reliable[2] do
-				if ListenerEpoch ~= Epoch and table.find(Events.Reliable[2], Listener) == nil then continue end
-				SerdesEvent = "Note"
-				local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Player, Value)
-				if not ListenerRan and not ListenerFailed(Player, "Note", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-			end
-		else
-			if #Queue.Reliable[2] < 256 then
-				table.insert(Queue.Reliable[2], table.pack(Player, Value))
-			end
-		end
-	elseif Index == 3 then
-		-- Read BLOCK: 1 bytes
-		local BLOCK_START = Read(1)
-		local InvocationIdentifier = buffer.readu8(RecieveBuffer, BLOCK_START + 0)
-		local Value: number = SerdesFunctions.ReadFUNCTION_DATA_Ask()
-		if Events.Reliable[3] ~= nil then
-			Spawn(Events.Reliable[3], Player, Value, InvocationIdentifier)
-		else
-			if #Queue.Reliable[3] >= 256 then
-				LoadPlayer(Player)
-				local Position = Allocate(3)
-				buffer.writeu8(SendBuffer, Position, 3)
-				buffer.writeu8(SendBuffer, Position + 1, InvocationIdentifier)
-				buffer.writeu8(SendBuffer, Position + 2, 0)
-				SavePlayerBuffer(Player)
-				return
-			end
-			table.insert(Queue.Reliable[3], table.pack(Player, Value, InvocationIdentifier))
-		end
-	elseif Index == 4 then
-		local Arguments = table.pack(Player, SerdesFunctions.Inner_ReadEVENT_Poll())
-		if Queue.Reliable[4].count < MAX_POLLED then
-			Push(Queue.Reliable[4], Arguments)
-		end
-		TrafficCounters[40] += 1
-	else
-		error("[BlinkBlox]: Unknown event index.")
-	end
-end
-local function DecodeUnreliable(Player: Player): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	if Index == 1 then
-		local Value: number = SerdesFunctions.ReadEVENT_Ping()
-		TrafficCounters[24] += 1
-		local Epoch = ListenerEpoch
-		for _, Listener in Events.Unreliable[1] do
-			if ListenerEpoch ~= Epoch and table.find(Events.Unreliable[1], Listener) == nil then continue end
-			SerdesEvent = "Ping"
-			local ListenerRan: boolean, ListenerFailure: any = pcall(Listener, Player, Value)
-			if not ListenerRan and not ListenerFailed(Player, "Ping", ListenerFailure) then task.spawn(error, ListenerFailure, 0) end
-		end
-	else
-		error("[BlinkBlox]: Unknown event index.")
 	end
 end
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
@@ -1670,7 +1674,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	DecodeRemaining = 64
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Player, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeReliable, Player, Size)
 		if Parsed then
 			break
 		end
@@ -1718,7 +1722,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	DecodeRemaining = 64
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Player, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Player, Size)
 		if Parsed then
 			break
 		end

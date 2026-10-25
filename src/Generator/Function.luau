@@ -291,7 +291,7 @@ function Declarations.Function(Declaration: Parser.Function)
 		ReturnArguments = ReturnArguments,
 		DataCarriesInstances = DataCarriesInstances,
 		ReturnCarriesInstances = ReturnCarriesInstances,
-		Block = Decode.Open(false, Index),
+		Block = Decode.Open(false, Index, Value.Data, Value.Return),
 		Body = Body,
 		Indent = Indent,
 	}

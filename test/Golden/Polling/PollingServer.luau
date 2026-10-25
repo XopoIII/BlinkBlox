@@ -1288,42 +1288,46 @@ local function StepReplication()
 end
 local Decoding = -1
 local DecodeRemaining = 64
-local function DecodeLoop(DecodeEvent: (Player: Player) -> (), Player: Player, Size: number)
+RunService.Heartbeat:Connect(StepReplication)
+local function DecodeReliable(Player: Player, Size: number): ()
 	while RecieveCursor < Size do
 		if DecodeRemaining == 0 then
 			ReportDrop(Player, "Events", 64)
 			break
 		end
 		DecodeRemaining -= 1
-		DecodeEvent(Player)
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		if Index == 0 then
+			local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_PollingEvent())
+			if Queue.Reliable[0].count < MAX_POLLED then
+				Push(Queue.Reliable[0], Arguments)
+			end
+		elseif Index == 1 then
+			local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ImplicitPollingEvent())
+			if Queue.Reliable[1].count < MAX_POLLED then
+				Push(Queue.Reliable[1], Arguments)
+			end
+		else
+			error("[BlinkBlox]: Unknown event index.")
+		end
 	end
 end
-RunService.Heartbeat:Connect(StepReplication)
-local function DecodeReliable(Player: Player): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	if Index == 0 then
-		local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_PollingEvent())
-		if Queue.Reliable[0].count < MAX_POLLED then
-			Push(Queue.Reliable[0], Arguments)
+local function DecodeUnreliable(Player: Player, Size: number): ()
+	while RecieveCursor < Size do
+		if DecodeRemaining == 0 then
+			ReportDrop(Player, "Events", 64)
+			break
 		end
-	elseif Index == 1 then
-		local Arguments = table.pack(Player, SerdesFunctions.ReadEVENT_ImplicitPollingEvent())
-		if Queue.Reliable[1].count < MAX_POLLED then
-			Push(Queue.Reliable[1], Arguments)
-		end
-	else
-		error("[BlinkBlox]: Unknown event index.")
+		DecodeRemaining -= 1
+		Decoding = -1
+		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		Decoding = Index
+		error("[BlinkBlox]: This channel receives no events.")
 	end
-end
-local function DecodeUnreliable(Player: Player): ()
-	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
-	Decoding = Index
-	error("[BlinkBlox]: This channel receives no events.")
 end
 Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instances: {Instance})
 	if typeof(Buffer) ~= "buffer" or type(Instances) ~= "table" then
@@ -1354,7 +1358,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	DecodeRemaining = 64
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Player, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeReliable, Player, Size)
 		if Parsed then
 			break
 		end
@@ -1400,7 +1404,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	DecodeRemaining = 64
 	Decoding = -1
 	while true do
-		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Player, Size)
+		local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Player, Size)
 		if Parsed then
 			break
 		end

@@ -115,12 +115,15 @@ easy to break without noticing.
   Native rows taken on LuneBlox 0.11.1 or earlier carry it: on the M1, two builds differing only in
   the flag ran BlinkBlox 1.3.4's thousand-event benches 13 to 36% faster to fire natively and 19 to
   38% faster to decode without it, interpreted unchanged.
-- A channel's decoder is a function called once an event, not a loop with the dispatch inside it.
-  Re-measured on LuneBlox 0.11.2, ABBA on the M1: the loop decodes a thousand one-byte events 11%
-  faster natively and a broadcast 5% faster, but a hundred events carrying a part 19% slower (0.0154
-  ms against 0.0128), as it was before linearisation came back; interpreted, the two tie. A loop for
-  channels without Instances alone would buy a few microseconds a frame for a second decode path and
-  every event's early `return` made a `continue` (`src/Generator/Packets.luau`).
+- A channel's decoder holds the packet's loop, with the dispatch inside it, unless one of its events
+  reads an Instance or runs a loop of its own (an array or a map); then it stays a function
+  `DecodeLoop` calls once an event (`src/Generator/Packets.luau`, `Decode.Open`). Measured on
+  LuneBlox 0.11.2, ABBA on the M1: the held loop decodes a thousand one-byte events 11% faster
+  natively and a broadcast 6% faster, but a hundred events carrying a part 19% slower, and a thousand
+  random arrays of structs 4% slower (median of thirteen pairs, ten slower); interpreted, the shapes
+  tie. A branch that leaves its event writes `State.NEXT_EVENT`, which becomes `continue` in the held
+  loop and `return` in a function: a `return` left in the loop drops the rest of the packet
+  (`test/DecoderShapes.luau`).
 - LuneBlox's macOS binaries before 0.11.2 were built with Apple Clang 17 (GitHub's `macos-15`), and
   interpreted about 30% slower than the same source built with Clang 21: interpreted rows taken on
   the M1 with an installed LuneBlox before 0.11.2 carry that. The i7's Windows binary was not
