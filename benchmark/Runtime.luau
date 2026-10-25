@@ -133,7 +133,7 @@ type Result = {
 --> Roblox compresses what a remote sends with zstd at a level it does not document. Lune's own
 --> default is the highest, which finds three-byte repeats Roblox does not: it took BlinkBlox's index
 --> and length back from every random boolean array, 125.82 bytes an event where Studio measured
---> 128.14. Every level from 1 to 9 gives 128.01 here and matches Studio on all four benches, so this
+--> 128.26. Every level from 1 to 9 gives 128.01 here and matches Studio on all four benches, so this
 --> is zstd's own default, 3.
 local ZSTD_LEVEL = 3
 

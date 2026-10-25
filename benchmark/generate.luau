@@ -8,22 +8,39 @@ local Names = require("./Names")
 local VersionsJSON = fs.readFile("./tools/versions.json")
 local Versions = serde.decode("json", VersionsJSON)
 
-local RobloxResult = process.exec("run-in-roblox", { "--place", "Benchmark.rbxl", "--script", "run.luau" })
-if not RobloxResult.ok then
-	error(RobloxResult.stderr)
-end
+--> Where each run's raw results are kept, so the tables can be written again without Studio:
+--> `luneblox run generate -- --from tools/studio.json` after a change to how they are laid out.
+local RESULTS_PATH = "./tools/studio.json"
 
-local Stdout = string.split(RobloxResult.stdout, "--RESULTS JSON--")
-table.remove(Stdout, 1)
-
-local Result: { [string]: { [string]: Benchmark } }
-for _, Line in Stdout do
-	Line = string.gsub(Line, "\n", "")
-	if string.sub(Line, 1, 1) == "{" then
-		Result = serde.decode("json", Line)
-		break
+local From: string? = nil
+for Index, Argument in process.args do
+	if Argument == "--from" then
+		From = assert(process.args[Index + 1], "--from takes a path")
 	end
 end
+
+local Json: string? = nil
+if From then
+	Json = fs.readFile(From)
+else
+	local RobloxResult = process.exec("run-in-roblox", { "--place", "Benchmark.rbxl", "--script", "run.luau" })
+	if not RobloxResult.ok then
+		error(RobloxResult.stderr)
+	end
+
+	local Stdout = string.split(RobloxResult.stdout, "--RESULTS JSON--")
+	table.remove(Stdout, 1)
+	for _, Line in Stdout do
+		Line = string.gsub(Line, "\n", "")
+		if string.sub(Line, 1, 1) == "{" then
+			Json = Line
+			fs.writeFile(RESULTS_PATH, Line)
+			break
+		end
+	end
+end
+
+local Result: { [string]: { [string]: Benchmark } } = serde.decode("json", assert(Json, "Studio printed no results"))
 
 --> A table's keys, for Names.Sort to put in the published order.
 local function Keys(Map: { [string]: any }): { string }
@@ -103,6 +120,22 @@ type Benchmark = {
 	Drain: number?,
 	Framerate: { number },
 	FireTime: { number }?,
+	BytesRounds: { number }?,
+}
+
+--> How each tool's client code runs in Studio, which compiles a module natively only where it asks.
+--> BlinkBlox's client has asked for nothing since 1.2.1, and Packet never has; QuickNet marks each
+--> function `@native`; ByteNet, Warp and Satset mark their busiest files. A fire time is only
+--> comparable with one compiled the same way, so the fire table says which each is.
+local CLIENT_CODE: { [string]: string } = {
+	blink = "interpreted",
+	packet = "interpreted",
+	upstream = "native",
+	zap = "native",
+	quicknet = "native",
+	bytenet = "partly native",
+	warp = "partly native",
+	satset = "partly native",
 }
 
 local Metrics = {
@@ -162,24 +195,34 @@ local function WriteBenchResults(Name: string, Results: { [string]: Benchmark })
 				Formatted[Index] = string.format("%.2f", Value)
 			end
 
-			Output ..= `\n|{Names.Display(Tool)}|{table.concat(Formatted, "|")}|{LossText}|`
+			local Label = Names.Display(Tool)
+			if Metric.Samples == "FireTime" and CLIENT_CODE[Tool] then
+				Label ..= ` ({CLIENT_CODE[Tool]})`
+			end
+			Output ..= `\n|{Label}|{table.concat(Formatted, "|")}|{LossText}|`
 		end
 	end
 
-	--> One number per tool, not percentiles: it is every byte of the run over every event of it.
-	Output ..= "\n\n|Tool|Bytes/event|Drain (s)|Loss (%)|"
-	Output ..= "\n|---|---|---|---|"
+	--> One number per tool, not percentiles: it is every byte of a run over every event of it, the
+	--> median of the rounds, with the lowest and highest round beside it as the noise to read it by.
+	Output ..= "\n\n|Tool|Bytes/event|Rounds|Drain (s)|Loss (%)|"
+	Output ..= "\n|---|---|---|---|---|"
 	for _, Tool in Names.Sort(Keys(Results)) do
 		local Result = Results[Tool]
 		local Lost, LossText = Loss(Result)
 		if Result.BytesPerEvent == nil or Lost > 50 then
-			Output ..= `\n|{Names.Display(Tool)}|-|-|{LossText}|`
+			Output ..= `\n|{Names.Display(Tool)}|-|-|-|{LossText}|`
 			continue
 		end
 
 		local Bytes = string.format("%.2f", Result.BytesPerEvent)
 		local Drain = string.format("%.1f", Result.Drain or 0)
-		Output ..= `\n|{Names.Display(Tool)}|{Bytes}|{Drain}|{LossText}|`
+		local Spread = "-"
+		local Rounds = Result.BytesRounds
+		if Rounds and #Rounds > 1 then
+			Spread = string.format("%.2f-%.2f", math.min(table.unpack(Rounds)), math.max(table.unpack(Rounds)))
+		end
+		Output ..= `\n|{Names.Display(Tool)}|{Bytes}|{Spread}|{Drain}|{LossText}|`
 	end
 
 	Contents ..= Output

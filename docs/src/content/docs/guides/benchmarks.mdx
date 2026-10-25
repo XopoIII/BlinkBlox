@@ -194,7 +194,7 @@ each frame's batch is scanned a second time at the flush to merge runs, which is
 goes. That merge is the one place it is smaller: a run of events with one id goes under a single 3- or
 5-byte header with no index each, where BlinkBlox writes a byte of index for every event. On random
 payloads compression keeps that byte: `BooleansRandom` cost Satset 127.02 bytes an event compressed
-to BlinkBlox's 128.01, and 127.03 to 128.14 in Studio. A reliable `FireAll` is one
+to BlinkBlox's 128.01, and 127.15 to 128.26 in Studio. A reliable `FireAll` is one
 broadcast for both; an unreliable one Satset copies into each player's batch, 50 calls to BlinkBlox's
 one. It has no Instance type, so it sits out `Instances`.
 
