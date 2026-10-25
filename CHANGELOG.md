@@ -7,6 +7,27 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.3.3 — 2026-10-25
+
+A housekeeping release. A generated module differs from 1.3.2's by the version in its header: it
+runs the same code, the wire does not change, and nothing needs recompiling.
+
+### Changed
+
+- **The CLI archives are built on LuneBlox 0.11.0**, up from 0.10.18, and the tests and benchmarks
+  run on it. It runs the same Luau with the same fast flags; 0.10.19 between them fixed the
+  certificate checks behind `net`, and 0.11.0 makes Roblox's `Enum` a global. The suite passes
+  unchanged, and BlinkBlox's `Runtime` rows match 0.10.18's, ABBA in turn: `BooleansRandom` fires in
+  6.08 ms native and decodes in 2.86 to 6.08 and 2.91, 17.90 and 9.45 interpreted to 17.92 and 9.44.
+  Every other pin was already the latest release.
+
+### Fixed
+
+- **`type-check.sh` keeps `.luaurc` as it is written.** LuneBlox 0.11.0's `setup` adds `Enum` and
+  `warn` to its `globals`, and luau-lsp types a name listed there as `any` over what the Roblox
+  definitions say: `local N: number = Enum.KeyCode.A` went from an error to nothing. The plugin and
+  the generated modules use `Enum`, so the gate puts the file back once setup has run.
+
 ## 1.3.2 — 2026-10-25
 
 A benchmarks release. A generated module differs from 1.3.1's by the version in its header: it runs
