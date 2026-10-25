@@ -7,6 +7,29 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.3.5 — 2026-10-25
+
+A housekeeping release. A generated module differs from 1.3.4's by the version in its header: it
+runs the same code, the wire does not change, and nothing needs recompiling. What moves is the
+runtime it is measured and built on.
+
+### Changed
+
+- **The CLI archives are built on LuneBlox 0.11.2**, up from 0.11.1, and the tests and benchmarks
+  run on it. 0.11.2 sets the fast flags of the Roblox client 0.744, which turned
+  `DebugCodegenOptSize` off: native code gets block linearisation back. On the M1, two LuneBlox
+  builds that differ only in the flag table ran 1.3.4's thousand-event benches 13 to 36% faster to
+  fire natively and 19 to 38% faster to decode, ABBA: `Entities` fired in 1.58 ms from 2.47 and
+  `Booleans` decoded in 1.75 from 2.81. Interpreted code did not move. Native rows published before
+  this release carry the old flag.
+- **LuneBlox's macOS binaries are built with Apple Clang 21** from 0.11.2, where 0.11.1's came from
+  Clang 17 and interpreted about 30% slower than the same source allows (`Booleans` fired in
+  15.8 ms interpreted, 11.0 built locally). 0.11.2's published binary matches a local build, native
+  and interpreted. Interpreted rows taken on the M1 before this release carry the slower build.
+- **CLAUDE.md** says both, and that the reason a channel's decoder is a function called once an
+  event, rather than a loop with the dispatch inside it, was measured without linearisation and has
+  not been measured again.
+
 ## 1.3.4 — 2026-10-25
 
 A housekeeping release. A generated module differs from 1.3.3's by the version in its header: it
