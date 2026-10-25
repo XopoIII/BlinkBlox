@@ -110,12 +110,18 @@ easy to break without noticing.
 - Luau allows 200 locals a function. Each struct field is scoped (`src/Generator/Scope.luau`), or a
   struct of fifty CFrames fails to load.
 - Roblox runs Luau 0.740 (September 2026) with its own fast flags, and so does LuneBlox, which every
-  figure here is measured on. Among the flags is `DebugCodegenOptSize`, set in Studio as on clients,
-  which skips block linearisation in native code: native timings on LuneBlox are what Roblox gets,
-  slower on the thousand-event benches than Luau's defaults (`LUNE_ROBLOX_FFLAGS=0`) -- a tenth to a
-  fifth on decode, over half on Entities' fire, on both the M1 and the i7. It is also why a channel's
-  decoder is a function called once an event rather than a loop with the dispatch inside it: the long
-  loop body compiled to slower native code (`src/Generator/init.luau`).
+  figure here is measured on. Until client 0.744 the flags included `DebugCodegenOptSize`, which
+  skips block linearisation in native code; Roblox has turned it off, and LuneBlox 0.11.2 follows.
+  Native rows taken on LuneBlox 0.11.1 or earlier carry it: on the M1, two builds differing only in
+  the flag ran BlinkBlox 1.3.4's thousand-event benches 13 to 36% faster to fire natively and 19 to
+  38% faster to decode without it, interpreted unchanged. A channel's decoder is a function called
+  once an event rather than a loop with the dispatch inside it because the long loop body compiled to
+  slower native code without linearisation (`src/Generator/init.luau`); with it back, that has not
+  been measured again.
+- LuneBlox's macOS binaries before 0.11.2 were built with Apple Clang 17 (GitHub's `macos-15`), and
+  interpreted about 30% slower than the same source built with Clang 21: interpreted rows taken on
+  the M1 with an installed LuneBlox before 0.11.2 carry that. The i7's Windows binary was not
+  affected.
 - Lune 0.10.5's Luau 0.709 left a whole module interpreted once one function was too large to
   compile, so past about 70 events its "native" rows were interpreted; figures published before
   LuneBlox carry that. Luau 0.740 leaves only the too-large function interpreted.
