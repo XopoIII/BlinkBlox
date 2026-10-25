@@ -40,16 +40,24 @@ fi
 # `luneblox setup` is idempotent and takes under a second, so it runs unconditionally instead of guessing
 # at the path, which changes with the pinned Lune version.
 #
-# Since LuneBlox 0.11.0 `setup` also adds `Enum` and `warn` to `globals` in `.luaurc`, and luau-lsp
-# types a name listed there as `any` over what the Roblox definitions say: `local N: number =
-# Enum.KeyCode.A` reports `Expected this to be 'number', but got 'Enum.KeyCode'` without the entry
-# and nothing with it. The plugin and the generated modules use `Enum`, so the file is put back as
-# written once setup is done.
+# Setup must leave `.luaurc` as it is committed, and the gate fails if it does not. LuneBlox 0.11.0's
+# added `Enum` and `warn` to `globals`, and luau-lsp types a name listed there as `any` over what the
+# Roblox definitions say: `local N: number = Enum.KeyCode.A` reported `Expected this to be 'number',
+# but got 'Enum.KeyCode'` without the entry and nothing with it. 0.11.1 adds them only where
+# `.vscode/settings.json` turns the Roblox types off, and this project's does not. The other change
+# setup makes is the alias, after a LuneBlox bump that did not move it.
 echo "type-check: refreshing Lune type definitions"
 mkdir -p build
-cp .luaurc build/.luaurc.kept
+cp .luaurc build/.luaurc.before
 luneblox setup >/dev/null
-mv build/.luaurc.kept .luaurc
+if ! cmp -s build/.luaurc.before .luaurc; then
+	echo "type-check: luneblox setup changed .luaurc:" >&2
+	diff build/.luaurc.before .luaurc >&2 || true
+	echo "type-check: commit a moved alias after a LuneBlox bump; a name added to globals hides the Roblox types" >&2
+	rm build/.luaurc.before
+	exit 1
+fi
+rm build/.luaurc.before
 
 echo "type-check: compiler (src)"
 luau-lsp analyze --defs globalTypes.d.luau src
