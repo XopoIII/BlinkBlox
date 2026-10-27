@@ -1,0 +1,64 @@
+name: OCALE codec conformance
+
+on:
+  workflow_dispatch:
+  # Real Roblox execution stays outside the untrusted pull-request path.
+  schedule:
+    - cron: "0 8 * * 0"
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    name: Generated codecs in LuneBlox versus Roblox
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    # Forks do not have the dedicated test place or its credentials.
+    if: github.repository == 'XopoIII/BlinkBlox'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Install Tooling
+        uses: CompeyDev/setup-rokit@v0.2.1
+
+      - name: Build the shared codec script
+        run: luneblox run scripts/ocale/build
+
+      - name: Run locally
+        run: luneblox run build/ocale/conformance | tee local-ocale.log
+
+      - name: Install rocale-cli
+        run: |
+          curl --fail --location --retry 3 \
+            https://github.com/Roblox/rocale-cli/releases/download/v0.1.3/rocale-cli-linux-x86_64.zip \
+            --output rocale-cli.zip
+          echo "93b71143ecda25ab67c075843f4d82d283d600a25ea1ae27a7d70183bda1f1f  rocale-cli.zip" | sha256sum --check
+          unzip rocale-cli.zip -d rocale-cli
+          find rocale-cli -maxdepth 2 -type f -print
+
+      - name: Run in Roblox Open Cloud
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+        run: |
+          ROCALE=$(find rocale-cli -type f -name 'rocale-cli*' -print -quit)
+          "$ROCALE" run \
+            --universeId "${{ secrets.OCALE_UNIVERSE_ID }}" \
+            --placeId "${{ secrets.OCALE_PLACE_ID }}" \
+            --load.version 0 \
+            --script build/ocale/conformance.luau \
+            --timeout 300 | tee cloud-ocale.log
+
+      - name: Compare results
+        run: luneblox run scripts/ocale/compare local-ocale.log cloud-ocale.log
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: blinkblox-ocale-codec-logs
+          path: |
+            local-ocale.log
+            cloud-ocale.log
+          retention-days: 14

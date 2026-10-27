@@ -57,6 +57,14 @@ jobs:
         run: luneblox run Test --yes
         working-directory: test
 
+      # Exercise the actual generated codec locally on every PR. The credentialed Roblox comparison
+      # remains manual/scheduled in ocale.yaml, outside the untrusted PR path.
+      - name: OCALE local codec experiment
+        run: |
+          luneblox run scripts/ocale/build
+          luneblox run build/ocale/conformance | tee build/ocale/local.log
+          luneblox run scripts/ocale/compare build/ocale/local.log build/ocale/local.log
+
       # The release workflow was the only place the bundle was built, so a broken
       # darklua config surfaced at release time, after the tag existed. Building it
       # here puts that before review.
