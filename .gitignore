@@ -38,3 +38,6 @@ test/Sources/Issue.blink
 
 # Generated sourcemaps for luau-lsp
 /build/sourcemap*.json
+
+# Single-script OCALE bundle and local comparison logs
+/build/ocale/
