@@ -65,7 +65,7 @@ function Utility.NameWithExtension(Path: string): string?
 		return `{Name}.{Extension}`
 	end
 
-	return
+	return nil
 end
 
 --- Collapses "." and ".." so that two spellings of one file compare equal.

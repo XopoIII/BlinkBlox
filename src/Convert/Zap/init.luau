@@ -162,7 +162,7 @@ function Declarations(Self: Stream, Settings: Options.Settings, Closing: string?
 
 		local Declaration: Declaration
 		if Keyword.Text == "type" then
-			Declaration = { Kind = "Type", Name = Name, Type = Types.Parse(Self) }
+			Declaration = { Kind = "Type", Name = Name, Type = Types.Parse(Self) } :: Declaration
 			Stream.Accept(Self, ";")
 		elseif Keyword.Text == "event" then
 			Declaration = Event(Self, Name, Settings)
@@ -170,7 +170,7 @@ function Declarations(Self: Stream, Settings: Options.Settings, Closing: string?
 			Declaration = Function(Self, Name, Settings)
 		elseif Keyword.Text == "namespace" then
 			Stream.Expect(Self, "{")
-			Declaration = { Kind = "Scope", Name = Name, Body = Declarations(Self, Settings, "}") }
+			Declaration = { Kind = "Scope", Name = Name, Body = Declarations(Self, Settings, "}") } :: Declaration
 			Stream.Expect(Self, "}")
 		else
 			Stream.Fail(Keyword, "type, event, funct or namespace")

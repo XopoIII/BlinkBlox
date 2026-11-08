@@ -54,7 +54,7 @@ for Name in Grammar.OPTIONS do
 		table.insert(OPTIONS, { Label = Name, Insert = `{Name} = ` })
 	end
 end
-table.sort(OPTIONS, function(a, b)
+table.sort(OPTIONS, function(a: Symbol, b: Symbol)
 	return a.Label < b.Label
 end)
 
@@ -94,7 +94,7 @@ end
 --> in name order: `Settings.Primtives` is a map, so without it their order was whatever the table's
 --> layout happened to be, and adding `u24` put it after `u32`.
 for _, List in { PRIMITIVES, KEYWORDS } do
-	table.sort(List, function(a, b)
+	table.sort(List, function(a: Symbol, b: Symbol)
 		if #a.Label ~= #b.Label then
 			return #a.Label < #b.Label
 		end

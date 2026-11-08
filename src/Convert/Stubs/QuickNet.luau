@@ -194,11 +194,12 @@ function QuickNet.new(): ({ [string]: any }, () -> Draft.Draft)
 		for Index = 1, select("#", ...) do
 			local Type = Read((select(Index, ...)), `"{Subject}" value {Index}`)
 			for _, Original in Inbound.Unmapped(Type) do
-				table.insert(Into.Notes, {
+				local Note: Draft.Note = {
 					Severity = "Dropped",
 					Subject = Subject,
 					Message = `{Original} has no equivalent and became unknown, which is not validated`,
-				})
+				}
+				table.insert(Into.Notes, Note)
 			end
 			table.insert(Fields, { Type = Type })
 		end

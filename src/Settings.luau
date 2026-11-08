@@ -63,7 +63,7 @@ export type Primitive = {
 	MaxBytes: number?,
 }
 
-local Indexes = {
+local Indexes: { [string]: number } = {
 	Pascal = 1,
 	Camel = 2,
 	Snake = 3,
@@ -422,7 +422,7 @@ return {
 		option = true,
 
 		export = true,
-	},
+	} :: { [string]: boolean },
 
 	Primtives = Primitives,
 
@@ -431,7 +431,7 @@ return {
 	Casings = Indexes,
 
 	--> `option PackedBooleanReader`: see Generator/PackedBooleans.luau.
-	PackedBooleanReaders = { Auto = true, Bits = true, Rows = true },
+	PackedBooleanReaders = { Auto = true, Bits = true, Rows = true } :: { [string]: boolean },
 
 	GetCasing = function(Case: Case): Cases
 		local Index = Indexes[Case]

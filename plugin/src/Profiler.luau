@@ -10,8 +10,9 @@
 
 local Profiler = {}
 
---> Interface Instances
-local Container: typeof(script.Parent.Widget) = script.Widget
+--> Interface Instances. `Widget` is the tree inside Widget.rbxmx, which Rojo's sourcemap does not
+--> descend into; the cast says what the built plugin ships.
+local Container = (script :: any).Widget
 local DebugContainer = Container.Debug
 local MetricTemplate = DebugContainer.Metric:Clone()
 

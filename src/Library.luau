@@ -47,7 +47,7 @@ function Library.Compile(Schema: string, Options: Options?): Output
 	local Warnings: { string } = {}
 	local PreviousEmit = Error.OnEmit
 	local PreviousFiles = Source.Files
-	Error.OnEmit = function(Diagnostic)
+	Error.OnEmit = function(Diagnostic): boolean?
 		if Diagnostic.Severity == "Warning" then
 			table.insert(Warnings, Diagnostic.Message)
 			return true

@@ -1,4 +1,5 @@
 --!strict
+--!nolint DeprecatedApi
 
 -- ******************************* --
 -- 			AX3NX / AXEN		   --
@@ -42,7 +43,9 @@ local Toolbar = plugin:CreateToolbar("BlinkBlox Suite")
 local EditorButton = Toolbar:CreateButton("Editor", "Opens the configuration editor", "rbxassetid://82123176343108")
 EditorButton.ClickableWhenViewportHidden = true
 
-local Template = script.Widget
+--> `Widget` and `Error` are the trees inside Widget.rbxmx and Error.rbxmx, which Rojo's sourcemap
+--> does not descend into; the cast says what the built plugin ships.
+local Template = (script :: any).Widget
 local FileTemplate = Template.Side.Content.Top.Files.File:Clone()
 
 --> Remove templates
@@ -54,7 +57,7 @@ ErrorWidget.Name = "Generation Error"
 ErrorWidget.Title = "Error"
 ErrorWidget.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-local ErrorInterface = script.Error:Clone()
+local ErrorInterface = (script :: any).Error:Clone()
 ErrorInterface.Visible = true
 ErrorInterface.Parent = ErrorWidget
 
@@ -65,7 +68,7 @@ EditorWidget.Name = "BlinkBlox Editor"
 EditorWidget.Title = "Configuration Editor"
 EditorWidget.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-local EditorInterface = script.Widget
+local EditorInterface = (script :: any).Widget
 EditorInterface.Size = UDim2.fromScale(1, 1)
 EditorInterface.Parent = EditorWidget
 
@@ -162,8 +165,8 @@ local function LoadFiles()
 	Instances.ClearChildrenWhichAre(Files, "Frame")
 
 	--> Load new files
-	local FileInstances = FileStore.Folder():GetChildren()
-	table.sort(FileInstances, function(a, b)
+	local FileInstances: { Instance } = FileStore.Folder():GetChildren()
+	table.sort(FileInstances, function(a: Instance, b: Instance)
 		return a.Name < b.Name
 	end)
 
@@ -301,15 +304,19 @@ local function OnQuickClear()
 	Editor.SetSource("")
 end
 
+-- `PromptImportFile` is the dialog this plugin has shipped with; its `Async` replacement yields,
+-- and swapping it is a Studio pass of its own rather than a type-gate rider. The file-level nolint
+-- above keeps the one deprecation report that follows from it quiet until then.
 local function OnImport()
-	local File: File? = StudioService:PromptImportFile({ "blink", "txt" })
+	local File = StudioService:PromptImportFile({ "blink", "txt" })
 	if not File then
 		return
 	end
 
 	Editing = nil
 	Expanded:Set(false)
-	Editor.SetSource(File:GetBinaryContents())
+	--> The dialog's filter picks `.blink` and `.txt`; the defs type the answer as a bare Instance.
+	Editor.SetSource((File :: File):GetBinaryContents())
 end
 
 local function OnExpandRightClicked()
@@ -337,7 +344,7 @@ Profiler.Initialize()
 
 ---- Connections ----
 
-Expanded:OnChange(function(Value)
+Expanded:OnChange(function(Value: boolean)
 	--Content.Visible = Value
 	PlayTweens(Value and Tweens.Editor.Expand or Tweens.Editor.Retract)
 end)

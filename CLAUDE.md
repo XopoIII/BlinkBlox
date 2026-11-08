@@ -304,7 +304,7 @@ Consequences worth remembering:
 - `selene.toml` sets `std = "luau+roblox"` at the root; `plugin/selene.toml` sets `std = "roblox"`.
 - `scripts/type-check.sh` analyses the compiler and the plugin as two separate contours.
 - In a git worktree under `.claude/worktrees/` luau-lsp also loads the main checkout's `.luaurc`, from
-  above it; this one overrides every key that one sets, and luau-lsp 1.70.1 has no option to stop the walk.
+  above it; this one overrides every key that one sets, and luau-lsp has no option to stop the walk.
 - The compiler's range type is `Settings.NumberRange` (a plain `{ Min, Max }` table), deliberately
   **not** Roblox's `NumberRange` userdata, which does not exist on Lune. Settings, AST, Parser and
   Prefabs all refer to the one definition, and `Settings.NumberRange.new` is its one constructor.

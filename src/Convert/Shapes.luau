@@ -153,7 +153,8 @@ function Shapes.Name(Source: Draft.Draft)
 
 		if not Names[Shape] then
 			Names[Shape] = `Shape{#Declared + 1}`
-			table.insert(Declared, { Kind = "Type", Name = Names[Shape], Type = Copy })
+			local Named: Declaration = { Kind = "Type", Name = Names[Shape], Type = Copy }
+			table.insert(Declared, Named)
 		end
 
 		return Draft.Reference(Names[Shape])
@@ -174,11 +175,12 @@ function Shapes.Name(Source: Draft.Draft)
 		Source.Body[Index] = Declaration
 	end
 
-	table.insert(Source.Notes, {
+	local Note: Draft.Note = {
 		Severity = "Lossy",
 		Message = `{#Declared} struct(s) used by more than one event were named Shape1 onward: `
 			.. "the definitions give them no name, so choose one",
-	})
+	}
+	table.insert(Source.Notes, Note)
 end
 
 return Shapes

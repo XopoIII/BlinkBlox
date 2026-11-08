@@ -10,8 +10,9 @@
 #   plugin/  Roblox only, and it needs a Rojo sourcemap to resolve requires across the DataModel.
 #   test/Golden  what the compiler emits: strict modules that run in a game, checked as one would.
 #
-# `globalTypes.d.luau` is the Roblox API dump. It is downloaded once and git-ignored, so runs after
-# the first are offline.
+# `globalTypes.d.luau` is the Roblox API dump. It is downloaded once per luau-lsp pin, from that
+# pin's tag, and git-ignored, so runs after the first are offline and every machine reads the same
+# API.
 set -e
 
 # Rokit installs the CLIs under ~/.rokit/bin; make them reachable when this runs from a git hook
@@ -26,10 +27,17 @@ for arg in "$@"; do
 	exit 2
 done
 
-if [ ! -f globalTypes.d.luau ]; then
-	echo "type-check: fetching Roblox global type defs (one-time)…"
+lsp_repo="$(sed -n 's/^luau-lsp = "\([^"]*\/luau-lsp\)@.*/\1/p' rokit.toml)"
+lsp_version="$(sed -n 's/^luau-lsp = "[^"]*@\([^"]*\)".*/\1/p' rokit.toml)"
+if [ -z "$lsp_repo" ] || [ -z "$lsp_version" ]; then
+	echo "type-check: no luau-lsp pin found in rokit.toml" >&2
+	exit 1
+fi
+if [ ! -f globalTypes.d.luau ] || [ "$(cat globalTypes.d.luau.version 2>/dev/null)" != "$lsp_version" ]; then
+	echo "type-check: fetching Roblox global type defs for $lsp_repo@$lsp_version…"
 	curl -sSL -o globalTypes.d.luau \
-		"https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.d.luau"
+		"https://raw.githubusercontent.com/$lsp_repo/$lsp_version/scripts/globalTypes.d.luau"
+	echo "$lsp_version" >globalTypes.d.luau.version
 fi
 
 # LuneBlox's type definitions (Lune's, under LuneBlox's version), which `.luaurc` aliases as `@lune`. They live in the user's home
@@ -71,7 +79,13 @@ luau-lsp analyze --sourcemap build/sourcemap.json --defs globalTypes.d.luau plug
 # here, since only the compiler's own source was analysed. test/Golden is the committed output of
 # every test schema, so an emitter change that breaks strict mode fails here instead of in a game.
 echo "type-check: generated modules (test/Golden)"
-luau-lsp analyze --defs globalTypes.d.luau test/Golden
+# The two Test.blink modules are ignored here as they already are under the new solver below:
+# past 20,000 lines Luau 0.745's old solver no longer finishes either (blocked-type internal
+# errors, where 0.740 completed them), and the new solver's limit has not moved. What a game
+# needs from a module that size is that its types still reach the code requiring it, and the
+# consumers contour checks exactly that pair under both solvers.
+luau-lsp analyze --defs globalTypes.d.luau \
+	--ignore "test/Golden/Test/Server.luau" --ignore "test/Golden/Test/Client.luau" test/Golden
 
 # The same modules under the new type solver, which Studio offers a game and a game's editor may use.
 # Test.blink's pair is left out: at 20,000 lines they are past the size the solver finishes inferring

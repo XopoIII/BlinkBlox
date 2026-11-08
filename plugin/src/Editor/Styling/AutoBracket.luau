@@ -1,21 +1,21 @@
 --!strict
 local Hook = {}
 
-local Brackets = {
+local Brackets: { [string]: string } = {
 	["("] = ")",
 	["{"] = "}",
 	["["] = "]",
 	["<"] = ">",
 }
 
-local ClosingBrackets = {
+local ClosingBrackets: { [string]: boolean } = {
 	[")"] = true,
 	["}"] = true,
 	["]"] = true,
 	[">"] = true,
 }
 
-local IgnoredCharacters = {
+local IgnoredCharacters: { [string]: boolean } = {
 	["\n"] = true,
 	[""] = true,
 	[")"] = true,

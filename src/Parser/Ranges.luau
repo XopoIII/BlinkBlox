@@ -91,7 +91,7 @@ function Parser.Range(
 ): { Range: NumberRange, Token: Token }?
 	local Token = self:TryConsume("Range")
 	if Token == nil then
-		return
+		return nil
 	end
 
 	local ParsedRange
@@ -111,7 +111,7 @@ end
 function Parser.Array(self: Parser): { Range: NumberRange, Token: Token }?
 	local Token = self:TryConsume("Array")
 	if not Token then
-		return
+		return nil
 	end
 
 	local Value = Token.Value
@@ -136,7 +136,7 @@ end
 function Parser.Components(self: Parser, Primitive: Settings.Primitive): { string }?
 	local OpenChevrons = self:TryConsume("OpenChevrons")
 	if not OpenChevrons then
-		return
+		return nil
 	end
 
 	if Primitive.AllowedComponents == 0 then

@@ -223,7 +223,7 @@ Grammar.GENERICS_TYPES = {
 	Map = true,
 	Struct = true,
 	TagEnum = true,
-}
+} :: { [string]: boolean }
 
 --- Names the generated module already uses at the top level, so a declaration may not take them.
 Grammar.RESERVED = {
@@ -236,7 +236,7 @@ Grammar.RESERVED = {
 	--> start refusing a schema that compiled without it.
 	GetTrafficStats = true,
 	ResetTrafficStats = true,
-}
+} :: { [string]: boolean }
 
 --- Luau's built-in type names. A declared type becomes an exported Luau type of the same name, and
 --- Luau refuses to redefine these: `type number = u8` emitted `export type number = number`, a type
@@ -250,7 +250,7 @@ Grammar.LUAU_TYPES = {
 	string = true,
 	thread = true,
 	unknown = true,
-}
+} :: { [string]: boolean }
 
 --- Luau's reserved words. A named type-pack element becomes a LOCAL VARIABLE in the generated
 --- module -- unlike a struct field, which becomes a table key and is quoted by FormatKey -- so one
@@ -277,7 +277,7 @@ Grammar.LUAU_KEYWORDS = {
 	["true"] = true,
 	["until"] = true,
 	["while"] = true,
-}
+} :: { [string]: boolean }
 
 --- Names the public functions of a generated module use in their own bodies. A named type-pack
 --- element becomes a PARAMETER of those functions -- `Fire(chefId, dish)` -- so an element named after
@@ -345,7 +345,7 @@ Grammar.WRAPPER_NAMES = {
 	task = true,
 	coroutine = true,
 	typeof = true,
-}
+} :: { [string]: boolean }
 
 --- The option block's shape. Moved here from Parser.luau so that the code which PARSES it can
 --- live outside the parser without requiring it back.
@@ -427,6 +427,9 @@ export type Options = {
 	--> Adds a frozen `Rates` table of the rate limits the server enforces to every generated module.
 	--> See Generator/Rates.
 	ExportRates: boolean?,
+
+	--> The parser writes each option through the name it was given under; see Modules/Options.
+	[string]: any,
 }
 
 return Grammar

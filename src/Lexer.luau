@@ -65,7 +65,7 @@ local NUMBER = "%-?%d*%.?%d+"
 local Keywords = Settings.Keywords
 local Primitives = Settings.Primtives
 
-local Booleans = {
+local Booleans: { [string]: boolean } = {
 	["true"] = true,
 	["false"] = true,
 }

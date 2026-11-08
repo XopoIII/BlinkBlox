@@ -56,8 +56,9 @@ type CompletionItem = Completion.Item
 
 local Editor = {}
 
---> Interface Instances
-local Container: typeof(script.Parent.Widget) = script.Widget
+--> Interface Instances. `Widget` is the tree inside Widget.rbxmx, which Rojo's sourcemap does not
+--> descend into; the cast says what the built plugin ships.
+local Container = (script :: any).Widget
 local EditorContainer = Container.Editor
 local CompletionContainer = Container.Completion
 
@@ -475,7 +476,7 @@ function Editor.Initialize(Widget: DockWidgetPluginGui)
 	Input:GetPropertyChangedSignal("SelectionStart"):Connect(OnSelectionChanged)
 	Input:GetPropertyChangedSignal("CursorPosition"):Connect(OnSelectionChanged)
 	Input:GetPropertyChangedSignal("CursorPosition"):Connect(OnCursorPositionChanged)
-	Input.InputChanged:Connect(function(InputObject)
+	Input.InputChanged:Connect(function(InputObject: InputObject)
 		if InputObject.UserInputType == Enum.UserInputType.MouseWheel then
 			ScrollTowards(-InputObject.Position.Z)
 		end

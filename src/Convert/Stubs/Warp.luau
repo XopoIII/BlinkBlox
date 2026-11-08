@@ -180,13 +180,14 @@ function Warp.new(): ({ [string]: any }, () -> Draft.Draft)
 			for _, Name in Names do
 				local Declaration = Events[Name]
 				for _, Original in Inbound.Unmapped(Declaration.Data) do
-					table.insert(Into.Notes, {
+					local Note: Draft.Note = {
 						Severity = "Dropped",
 						Subject = Name,
 						Message = if Original == NO_SCHEMA
 							then "the definitions name this event and give it no schema: its data is unknown, which is not validated"
 							else `{Original} has no equivalent and became unknown, which is not validated`,
-					})
+					}
+					table.insert(Into.Notes, Note)
 				end
 				table.insert(Into.Body, Declaration)
 			end

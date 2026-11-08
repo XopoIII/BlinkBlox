@@ -192,11 +192,12 @@ function Sandbox.Record(Path: string, Stub: Stub): Draft.Draft
 
 	local Into = Collect()
 	for _, Name in Unfollowed do
-		table.insert(Into.Notes, {
+		local Note: Draft.Note = {
 			Severity = "Dropped",
 			Message = `require of {Name} was not followed: a placeholder stood in for it, `
 				.. "so anything the definitions took from it is missing",
-		})
+		}
+		table.insert(Into.Notes, Note)
 	end
 
 	return Into

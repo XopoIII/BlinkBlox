@@ -46,7 +46,8 @@ function Parser.Reference(self: Parser, Bucket: Bucket, Identifier: string): (Sc
 		end
 
 		local Symbols = Scope.Symbols
-		local Symbol = if Offset == Length then Symbols[Bucket][Index] else Symbols.Scopes[Index]
+		local Held = if Bucket == "Types" then Symbols.Types else Symbols.Scopes
+		local Symbol = if Offset == Length then Held[Index] else Symbols.Scopes[Index]
 
 		--> Nothing found in the current scope search upwards
 		if Symbol == nil then
@@ -89,7 +90,12 @@ function Parser.SetReference(self: Parser, Bucket: Bucket, Identifier: Token, De
 	end
 
 	self.Symbols[Name] = true
-	self.Scope.Symbols[Bucket][Name] = {
+
+	--> Luau does not permit indexing sealed props by a union of their names, so the bucket this
+	--> writes into is picked out first, as the read in `Reference` above picks out its own.
+	local Symbols = self.Scope.Symbols
+	local Held = if Bucket == "Types" then Symbols.Types else Symbols.Scopes
+	Held[Name] = {
 		To = Declaration,
 		Name = Identifier,
 	} :: Reference
@@ -102,7 +108,7 @@ function Parser.GetGenerics(self: Parser): Generics?
 
 	local OpenChevrons = self:TryConsume("OpenChevrons")
 	if not OpenChevrons then
-		return
+		return nil
 	end
 
 	--> Parse generics
@@ -143,7 +149,9 @@ end
 local SHARED: { [any]: true } = { Scope = true }
 
 function Parser.ReplaceGenerics(self: Parser, Of: TypeNode): TypeNode
-	local Clone = Table.DeepClone(Of, SHARED) :: Struct
+	--> A `TypeNode` is a union of node shapes, which Luau will not take as a `{ [any]: any }`; the
+	--> clone happens on an any, as `table.clone`'s does in `Declaration` below.
+	local Clone = Table.DeepClone(Of :: any, SHARED) :: Struct
 	local Generics = Clone.Value.Generics :: Generics
 	local Replacements: { [string]: TypeNode } = {}
 
@@ -161,7 +169,7 @@ function Parser.ReplaceGenerics(self: Parser, Of: TypeNode): TypeNode
 		Replacements[Key] = Declaration
 
 		for _, Generic in List do
-			local Replacement = Table.DeepClone(Declaration, SHARED)
+			local Replacement = Table.DeepClone(Declaration :: any, SHARED)
 
 			Generic.Type = Replacement.Type
 			Generic.Value = Replacement.Value
@@ -198,7 +206,7 @@ function Parser.ReplaceGenerics(self: Parser, Of: TypeNode): TypeNode
 			return
 		end
 
-		local Replacement = Table.DeepClone(Declaration, SHARED)
+		local Replacement = Table.DeepClone(Declaration :: any, SHARED)
 
 		Type.Type = Replacement.Type
 		Type.Value = Replacement.Value

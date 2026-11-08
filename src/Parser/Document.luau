@@ -34,6 +34,7 @@ type Generic = ParserClass.Generic
 type Event = ParserClass.Event
 type Function = ParserClass.Function
 type ScopeNode = ParserClass.ScopeNode
+type TypeNode = ParserClass.TypeNode
 
 local BUCKETS = Grammar.BUCKETS
 local KEYWORDS = Grammar.KEYWORDS
@@ -217,7 +218,10 @@ end
 
 --- The declaration a keyword of class `Type` opens, its keyword and name already consumed.
 local function ParseDeclaration(self: Parser, Type: string, Name: Token, Keyword: Token): Declaration
-	local Declaration: Declaration
+	--> `Declaration` types its body and tokens as `{ [any]: any }`, which Luau accepts no concrete
+	--> node as; the local is the union of the shapes a declaration really is, and becomes any once,
+	--> on the way out.
+	local Declaration: TypeNode | Event | Function | ScopeNode
 	if Type == "Type" then
 		local Node = self:Type(Name, Keyword)
 		local Value: Attributes = Node.Value
@@ -231,7 +235,7 @@ local function ParseDeclaration(self: Parser, Type: string, Name: Token, Keyword
 		Declaration = self:Namespace(Name)
 	end
 
-	return Declaration
+	return Declaration :: any
 end
 
 --- Refuses an `export` on a declaration that cannot be one.

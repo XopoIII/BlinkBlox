@@ -155,7 +155,10 @@ local function Color(Text: string, ColorName: Color): string
 		return `<font color="{Colors[ColorName]}">{Text}</font>`
 	end
 
-	return `{stdio.color(ColorName)}{Text}{stdio.color("reset")}`
+	--> `stdio` is only required outside Roblox; the early return above is the nil check for it
+	local Stdio = stdio :: typeof(require("@lune/stdio"))
+
+	return `{Stdio.color(ColorName)}{Text}{Stdio.color("reset")}`
 end
 
 local function Style(Text: string, StyleName: "bold" | "dim"): string
@@ -163,7 +166,10 @@ local function Style(Text: string, StyleName: "bold" | "dim"): string
 		return Text
 	end
 
-	return `{stdio.style(StyleName)}{Text}{stdio.style("reset")}`
+	--> `stdio` is only required outside Roblox; the early return above is the nil check for it
+	local Stdio = stdio :: typeof(require("@lune/stdio"))
+
+	return `{Stdio.style(StyleName)}{Text}{Stdio.style("reset")}`
 end
 
 function Error.SetCompact(Value: boolean)
@@ -171,7 +177,7 @@ function Error.SetCompact(Value: boolean)
 end
 
 function Error.GetNameFromCode(From: number): string
-	for Name, Code in Error do
+	for Name, Code in Error :: { [string]: number } do
 		if Code == From then
 			return Name :: string
 		end

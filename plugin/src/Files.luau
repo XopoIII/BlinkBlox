@@ -25,7 +25,7 @@ local Files = {}
 
 --- The folder the files live in, created the first time it is asked for.
 function Files.Folder(): Folder
-	local SaveFolder = ServerStorage:FindFirstChild(FILES_FOLDER)
+	local SaveFolder = ServerStorage:FindFirstChild(FILES_FOLDER) :: Folder?
 	if not SaveFolder then
 		local Folder = Instance.new("Folder")
 		Folder.Name = FILES_FOLDER
@@ -33,7 +33,8 @@ function Files.Folder(): Folder
 		SaveFolder = Folder
 	end
 
-	return SaveFolder
+	--> The branch above leaves the folder in place whenever it was missing.
+	return SaveFolder :: Folder
 end
 
 --- Writes `Source` under `Name`, replacing a file of that name. One undo step.

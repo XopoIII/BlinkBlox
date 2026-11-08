@@ -143,7 +143,7 @@ local UNRELIABLE_BODY = {
 	"KeepScratch()\n",
 }
 
-local IGNORED_TYPES_IN_SHARED = {
+local IGNORED_TYPES_IN_SHARED: { [string]: boolean } = {
 	Event = true,
 	Function = true,
 }

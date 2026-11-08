@@ -87,11 +87,11 @@ end
 function Parser.TryConsume(self: Parser, Type: Lexer.Types): Token?
 	local Token = self.LookAhead
 	if not Token then
-		return
+		return nil
 	end
 
 	if Token.Type ~= Type then
-		return
+		return nil
 	end
 
 	self.LookAhead = self.Lexer:GetNextToken()
@@ -124,7 +124,7 @@ function Parser.ConsumeAny(self: Parser, ...: Lexer.Types): Token
 end
 
 function Parser.ConsumeAll(self: Parser, ...: Lexer.Types): ...Token
-	local Tokens = {}
+	local Tokens: { Token } = {}
 	for _, Type: Lexer.Types in { ... } do
 		table.insert(Tokens, self:Consume(Type))
 	end

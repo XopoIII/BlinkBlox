@@ -94,8 +94,10 @@ local function Loops(Node: Parser.TypeNode?): boolean
 	elseif Node.Type == "Optional" then
 		return Loops(Node.Value.Of)
 	elseif Node.Type == "Struct" or Node.Type == "Tuple" or Node.Type == "TagEnum" then
-		--> A tagged enum's variants are structs, which are type nodes like the fields of the others
-		for _, Field in Node.Value.Values :: { Parser.TypeNode } do
+		--> A tagged enum's variants are structs, which are type nodes like the fields of the others.
+		--> The new solver does not refine through a chain of `or`ed discriminant tests, so the node is
+		--> cast to the three kinds whose values carry fields.
+		for _, Field in (Node :: Parser.Struct | Parser.Tuple | Parser.TagEnum).Value.Values :: { Parser.TypeNode } do
 			if Loops(Field) then
 				return true
 			end

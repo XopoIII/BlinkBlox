@@ -104,7 +104,7 @@ local function PrintHelpMessage()
 		end
 	end
 
-	table.sort(Sorted, function(a, b)
+	table.sort(Sorted, function(a: Argument, b: Argument)
 		return a.Aliases[1] < b.Aliases[1]
 	end)
 
@@ -120,7 +120,7 @@ end
 local RawArguments = process.args
 
 --> Parse optional arguments
-local Arguments = {}
+local Arguments: { [string]: boolean } = {}
 local IsFlag: { [string]: true } = {}
 for Key, Argument in ARGUMENTS do
 	local IsSupplied = false

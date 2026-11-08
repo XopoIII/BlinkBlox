@@ -59,7 +59,7 @@ function Utility.Read(Path: string, Directory: string): (string?, string?, strin
 	Path = GetDefinitionFilePath(Path)
 
 	if not fs.isFile(Path) then
-		return
+		return nil, nil, nil
 	end
 
 	local FileDirectory = PathParser.Directory(Path) or "./"

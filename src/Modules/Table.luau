@@ -35,7 +35,8 @@ return {
 				Cache[Original] = Copy
 
 				for Key, Value in Original do
-					if Shared and Shared[Key] then
+					--> The new solver does not carry the `Shared` refinement through the `and`, hence the cast
+					if Shared and (Shared :: { [any]: true })[Key] then
 						Copy[Key] = Value
 					else
 						Copy[Clone(Key)] = Clone(Value)

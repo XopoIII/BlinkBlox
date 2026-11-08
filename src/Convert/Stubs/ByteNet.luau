@@ -111,17 +111,19 @@ function ByteNet.new(): ({ [string]: any }, () -> Draft.Draft)
 				error(`{Name}.{Key} is not a packet made by definePacket`, 0)
 			end
 
-			table.insert(Body, {
+			local Declaration: Declaration = {
 				Kind = "Event",
 				Name = Draft.Identifier(Key),
 				--> Each listener ByteNet calls may yield, and a packet may have many.
 				Call = "ManyAsync",
 				Reliability = Packet.Reliability,
 				Data = Packet.Data,
-			})
+			}
+			table.insert(Body, Declaration)
 		end
 
-		table.insert(Into.Body, { Kind = "Scope", Name = Draft.Identifier(tostring(Name)), Body = Body })
+		local Scope: Declaration = { Kind = "Scope", Name = Draft.Identifier(tostring(Name)), Body = Body }
+		table.insert(Into.Body, Scope)
 		return Packets
 	end
 

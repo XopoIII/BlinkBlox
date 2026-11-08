@@ -63,7 +63,8 @@ function Parser.StreamData(self: Parser, Name: Token, Structure: { [string]: any
 
 	local Data: TypeNode? = Structure.Data
 	if not Data then
-		return Refuse(`Stream "{Event}" has no Data`, "Add the state it streams", "A stream sends a state.")
+		--> `Refuse` is never, but a never call is still one value where this returns two
+		return Refuse(`Stream "{Event}" has no Data`, "Add the state it streams", "A stream sends a state.") :: any
 	end
 
 	--> nil is how a cleared stream arrives, so the state itself cannot also be nil, and a pack has no

@@ -14,9 +14,17 @@ local Walk = {}
 --- The type nodes directly inside `Node`, in the order they are written. A tagged enum's children
 --- are its variants, each a struct whose fields are one level further down.
 function Walk.Children(Node: TypeNode): { TypeNode }
-	if Node.Type == "Array" or Node.Type == "Optional" then
+	--> One comparison per branch: the new solver narrows a discriminated union on a single
+	--> equality, but not through the `or` chains these used to be.
+	if Node.Type == "Array" then
 		return { Node.Value.Of }
-	elseif Node.Type == "Map" or Node.Type == "Struct" or Node.Type == "Tuple" then
+	elseif Node.Type == "Optional" then
+		return { Node.Value.Of }
+	elseif Node.Type == "Map" then
+		return Node.Value.Values
+	elseif Node.Type == "Struct" then
+		return Node.Value.Values
+	elseif Node.Type == "Tuple" then
 		return Node.Value.Values
 	elseif Node.Type == "TagEnum" then
 		return Node.Value.Values :: { any }

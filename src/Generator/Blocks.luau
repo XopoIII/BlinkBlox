@@ -395,7 +395,9 @@ function Block.Branch(
 
 	--> Create new branch
 	if Branch == "Conditional" then
-		Parent:Line(`elseif {Left} {Operators[Operator]} {Right} then`)
+		--> A conditional branch is made with an operator by construction, which the new solver cannot
+		--> see from the branch kind alone.
+		Parent:Line(`elseif {Left} {Operators[Operator :: EqualityOperator]} {Right} then`)
 	else
 		Parent:Line(`else`)
 	end

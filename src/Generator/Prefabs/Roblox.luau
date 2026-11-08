@@ -237,7 +237,7 @@ do
 	}
 
 	Primitives.Instance = {
-		Type = function(Declaration)
+		Type = function(Declaration: any)
 			--> The parser defaults an Instance without an explicit class to "Instance", so this is never
 			--> nil in practice; the fallback states that instead of asserting it.
 			return Declaration.Value.Class or "Instance"

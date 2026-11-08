@@ -89,10 +89,9 @@ function Lexer.Tokenise(Source: string): { Token }
 		Position = Finish + 1
 	end
 
-	table.insert(
-		Tokens,
+	local Token: Token =
 		{ Kind = "End", Text = "the end of the file", Line = Line, Start = Length + 1, Finish = Length }
-	)
+	table.insert(Tokens, Token)
 	return Tokens
 end
 

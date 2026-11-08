@@ -35,7 +35,8 @@ local function ShouldntWrap(value: any): boolean
 	return true
 end
 
-local Cache
+--> Reset by `Format` at depth 0 before `FormatTable` ever reads it; kept module-local on purpose
+local Cache: { [any]: boolean }
 local INDENT = string.rep(" ", 3)
 
 local function Noop() end

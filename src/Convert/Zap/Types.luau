@@ -271,7 +271,7 @@ local function Primary(Self: Stream): Type
 
 	--> A name, or a path through namespaces: scopes are named the same way.
 	while Stream.Accept(Self, ".") do
-		Name ..= `.{Stream.Word(Self, "a name").Text}`
+		Name = Name .. `.{Stream.Word(Self, "a name").Text}`
 	end
 
 	if Name == "AlignedCFrame" then

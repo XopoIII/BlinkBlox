@@ -107,7 +107,9 @@ end
 --- Compiles the draft with the compiler itself: a draft that does not compile is the converter's
 --- bug, and is said to be one instead of being left for its reader to find.
 local function Compiles(Text: string): (boolean, { string })
-	local Success, Result = pcall(Library.Compile, Text)
+	-- The options argument is passed as an explicit nil: the new solver enforces argument
+	-- arity, and a defaulted parameter is still a parameter.
+	local Success, Result = pcall(Library.Compile, Text, nil)
 	if not Success then
 		return false, { tostring(Result) }
 	end

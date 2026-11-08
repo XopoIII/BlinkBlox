@@ -167,8 +167,16 @@ local function Collect(Declarations: { Node }, Channels: { Reliable: number, Unr
 			--> Ordered events ride the unreliable channel, exactly as the generator routes them.
 			local Unreliable = (Value.Type == "Unreliable" or Value.Type == "OrderedUnreliable")
 			local Name = if Unreliable then "Unreliable" else "Reliable"
-			local Index = Channels[Name :: "Reliable"]
-			Channels[Name :: "Reliable"] = Index + 1
+
+			--> The new solver refuses a union index into sealed props, so branch per channel
+			local Index
+			if Unreliable then
+				Index = Channels.Unreliable
+				Channels.Unreliable = Index + 1
+			else
+				Index = Channels.Reliable
+				Channels.Reliable = Index + 1
+			end
 
 			--> Call and Rate are deliberately absent. Call decides whether a listener is spawned,
 			--> Rate whether the server accepts it -- neither changes a byte, and a schema that only

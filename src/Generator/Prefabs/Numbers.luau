@@ -25,7 +25,7 @@ local DOUBLE = Common.DOUBLE
 local Asserts = AssertsModule.Asserts
 
 local function GenerateNumberGenerator(Type: string, Bytes: number): (TypePrefab, { Type: string, Generate: Generate })
-	local Prefab = {
+	local Prefab: TypePrefab = {
 		Read = function(Variable: string, Block: Block)
 			Block:Line(`{Block:Declare(Variable)} = buffer.read{Type}({RECIEVE_BUFFER}, {Block:Read(Bytes)})`)
 		end,
@@ -67,7 +67,7 @@ local function WriteTriple(Offset: string, Value: string, Block: Block)
 end
 
 local function GenerateTripleGenerator(High: string): (TypePrefab, { Type: string, Generate: Generate })
-	local Prefab = {
+	local Prefab: TypePrefab = {
 		Read = function(Variable: string, Block: Block)
 			local Offset = Block:Read(TRIPLE)
 			Block:Line(

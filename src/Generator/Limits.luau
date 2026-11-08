@@ -156,8 +156,10 @@ function Limits.Declarations(Declarations: { Parser.Declaration }, Word: (string
 			Add(Declaration.Name, if Inner.Entries and #Inner.Entries > 0 then Inner else nil)
 		elseif Kind == "Event" then
 			--> A stream's `Data` is its wire pack, `(Value: T?, ServerTime: u16)`; the schema declared `T`,
-			--> and the table mirrors the schema.
-			local Data = if Value.Stream then Value.Stream.Value else Value.Data
+			--> and the table mirrors the schema. The block is read through a narrowed local: the new
+			--> solver narrows an `any` under a truthiness test to a complement with no keys.
+			local Stream: Parser.StreamSettings? = Value.Stream
+			local Data = if Stream ~= nil then Stream.Value else Value.Data
 			Add(Declaration.Name, if Data then Limits.Of(Data, Word) else nil)
 		elseif Kind == "Function" then
 			local Parts = {}

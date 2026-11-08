@@ -14,7 +14,7 @@ type Declaration = Draft.Declaration
 type Entry = Inbound.Entry
 
 --- Kinds that `type` cannot name: each has a keyword of its own.
-local KEYWORDED = { Struct = true, Enum = true, TaggedEnum = true, Map = true }
+local KEYWORDED: { [string]: boolean } = { Struct = true, Enum = true, TaggedEnum = true, Map = true }
 
 local Aliases = {}
 
@@ -158,12 +158,13 @@ function Aliases.Settle(Source: Draft.Draft)
 				Walk(Declaration.Body :: { Declaration }, Path)
 			elseif Written[Declaration] then
 				Declaration.IsWrittenOut = true
-				table.insert(Source.Notes, {
+				local Note: Draft.Note = {
 					Severity = "Lossy",
 					Subject = Declaration.Name,
 					Message = "a schema names no array or optional of a struct, an enum or a map, "
 						.. "nor a second name for one: this type is written out where it was used",
-				})
+				}
+				table.insert(Source.Notes, Note)
 			else
 				Declaration.Type = Expand(Declaration.Type, Scope, false, 0)
 				Declaration.Data = Expand(Declaration.Data, Scope, false, 0)

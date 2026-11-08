@@ -5,7 +5,7 @@
 local Builder = {}
 
 function Builder.new(): Builder
-	local Strings = table.create(512)
+	local Strings = table.create(512) :: { string }
 
 	local function PushLines(Lines: { string }, Returns: number?, Tabs: number?)
 		local Size = #Lines
