@@ -273,8 +273,10 @@ do
 		return {}
 	end
 
-	--> One event is its index and its u8: the second packet is exactly one fortieth of the first.
-	if buffer.len(Small) * 40 ~= buffer.len(Large) or buffer.readu8(Small, buffer.len(Small) - 1) ~= 7 then
+	--> The forty same-index events travel as one run, three header bytes and a byte of payload each;
+	--> the single event after them is a plain entry of index and u8. Exact lengths either way: a
+	--> frame carries its own bytes and nothing of its predecessor's.
+	if buffer.len(Large) ~= 43 or buffer.len(Small) ~= 2 or buffer.readu8(Small, 1) ~= 7 then
 		ErrorPrint(`Failed "{Name}": the second frame was {buffer.len(Small)} bytes after {buffer.len(Large)}.`)
 	end
 

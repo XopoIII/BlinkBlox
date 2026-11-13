@@ -153,7 +153,11 @@ local function Commit()
     if PacketEvents > MAX_EVENTS_PER_PACKET or SendCursor - PacketStart > MAX_PACKET_SIZE then
         Cut(Start, CommittedInstances)
     end
+    --> Where the committed event begins, for the run framing that follows a Fire; see Frame below.
+    return Start
 end
+
+-- FRAME --
 
 local function SendPacket(From: number, To: number, FromInstances: number, ToInstances: number)
     local Buffer = buffer.create(To - From)

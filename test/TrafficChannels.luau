@@ -253,11 +253,12 @@ RunClosure("A client's batch cut into packets counts each packet", function()
 	end
 	Client.StepReplication()
 
-	--> Four events a packet, two bytes an event.
+	--> Four events a packet: the first two travel as runs, three header bytes and a byte of payload
+	--> each, and the last two, under the merge threshold, as plain entries of index and value.
 	local Sizes, Total = Lengths(Pair.Sent)
-	Same("packet sizes", Sizes, "4, 8, 8")
-	Same("bytes on the wire", Total, 20)
-	Channel("cut", Client.GetTrafficStats(), 3, 20)
+	Same("packet sizes", Sizes, "4, 7, 7")
+	Same("bytes on the wire", Total, 18)
+	Channel("cut", Client.GetTrafficStats(), 3, 18)
 	Same("Byte events", Client.GetTrafficStats().Events.Byte.Sent, 10)
 
 	--> A batch that fits one packet goes the other way through the flush, and counts one.
@@ -266,7 +267,7 @@ RunClosure("A client's batch cut into packets counts each packet", function()
 	end
 	Client.StepReplication()
 	Same("packets after the second frame", #Pair.Sent, 4)
-	Channel("cut, then whole", Client.GetTrafficStats(), 4, 26)
+	Channel("cut, then whole", Client.GetTrafficStats(), 4, 24)
 end)
 
 RunClosure("Without the option neither flush counts anything", function()

@@ -35,7 +35,10 @@
 --- 3: 0.40.0 dropped a stream's sequence number, which it is now ordered by its server time instead,
 ---    wrote a length nobody bounded, or one of two-byte span, as a varint, and a span past two bytes in
 ---    three where it had taken four, and put an enum's index and a tagged enum's tag in the bitfield.
-local WIRE_VERSION = 3
+--- 4: run framing. Four or more consecutive events of one index in a batch travel under a 3-byte
+---    header -- 255, the index, the count less one -- instead of a byte of index each, and 255 stops
+---    being an event index, so a channel declares at most 255 events and functions.
+local WIRE_VERSION = 4
 
 --- Structural stand-ins for the parser's nodes. Requiring the parser here would close a cycle.
 type Node = any

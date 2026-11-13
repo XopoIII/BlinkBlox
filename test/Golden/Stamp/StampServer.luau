@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "8886a63d397ac093"
+local SCHEMA_SIGNATURE = "8d570ede5fea15b4"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -1782,6 +1782,8 @@ local function SendSTREAM_1(Player: Player, Value: { Gap: number, Bucket: number
 end
 local STREAM_1 = CreatePlayerStream("Trust", 1 / 10, 1 / 20, 2, 0.01, SendSTREAM_1)
 local Decoding = -1
+local RunIndex = 0
+local RunRemaining = 0
 local DecodeRemaining = 64
 RunService.Heartbeat:Connect(StepReplication)
 local function DecodeReliable(Player: Player, Size: number): ()
@@ -1792,8 +1794,20 @@ local function DecodeReliable(Player: Player, Size: number): ()
 		end
 		DecodeRemaining -= 1
 		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-		RecieveCursor += 1
+		local Index: number
+		if RunRemaining > 0 then
+			Index = RunIndex
+			RunRemaining -= 1
+		else
+			Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RecieveCursor += 1
+			if Index == 255 then
+				Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+				RunIndex = Index
+				RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+				RecieveCursor += 2
+			end
+		end
 		Decoding = Index
 		if Index == 0 then
 			local Value1: number = SerdesFunctions.ReadEVENT_Swing()
@@ -1823,8 +1837,20 @@ local function DecodeUnreliable(Player: Player, Size: number): ()
 		end
 		DecodeRemaining -= 1
 		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-		RecieveCursor += 1
+		local Index: number
+		if RunRemaining > 0 then
+			Index = RunIndex
+			RunRemaining -= 1
+		else
+			Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RecieveCursor += 1
+			if Index == 255 then
+				Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+				RunIndex = Index
+				RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+				RecieveCursor += 2
+			end
+		end
 		Decoding = Index
 		if Index == 0 then
 			-- Read BLOCK: 2 bytes
@@ -1874,6 +1900,7 @@ Reliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instance
 	SerdesThread = coroutine.running()
 	DecodeRemaining = 64
 	Decoding = -1
+	RunRemaining = 0
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeReliable, Player, Size)
 		if Parsed then
@@ -1920,6 +1947,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 	SerdesThread = coroutine.running()
 	DecodeRemaining = 64
 	Decoding = -1
+	RunRemaining = 0
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Player, Size)
 		if Parsed then

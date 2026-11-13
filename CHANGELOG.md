@@ -7,6 +7,80 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.4.0 — 2026-11-14
+
+**Recompile both modules.** A wire release: run framing, byte-level wire goldens, and every
+benchmark table re-measured against every rival at its current release. The compiler's own code
+changes nothing else -- no handler signature, option or diagnostic changes but one: a channel now
+declares at most 255 events and functions, where 255 was the last index it now being the run marker.
+
+### Added
+
+- **Run framing.** Four or more consecutive events of one index in a batch now travel under a shared
+  3-byte header -- 255, the index, the count less one -- instead of a byte of index each (wire
+  version 4). Satset's flush-time merge of such runs costs every write a comparison with the last
+  event and its state, measured here at 32-68% of an event's write interpreted, which is why framing
+  was rejected when Satset 0.5.0 was measured. What shipped instead runs after each write returns:
+  the entry goes down whole, as it always did; three same-index entries turn into a run when the
+  fourth arrives, by four small copies in the batch's tail; every member after that moves its body
+  one byte left over the index it will not need. The cut check runs before the framing, on the
+  entry's still-plain bytes, so a run never crosses the packet a cut opens and the client never
+  builds a packet the server would refuse. The decoder reads the marker once and then that many
+  events without an index each.
+- **Byte-level wire goldens** (`test/WireGolden.luau`, `test/Golden/Wire/`): every exported type of
+  the test schema is written onto a fixed fixture and the exact bytes are compared against a
+  committed golden, so any wire change -- intended or not -- fails the suite with a hex diff. The
+  source goldens in `test/Golden` freeze what the emitter writes, but only a reader fluent in the
+  generator can tell a diff that reorders locals from one that changes a byte on the wire; these
+  captures cut out the reading. Satset's wire goldens (its 0.6.0) are the precedent.
+
+### Changed
+
+- **A channel holds at most 255 events and functions**, from 256: 255 is the run marker on the wire,
+  so an index is 0 to 254 (E3030, as the 257th was refused before). A schema that declared exactly
+  256 on one channel needs one declaration fewer; nothing else changes.
+- **The benchmark harness downloads ByteNet 0.4.3 and Satset 0.6.0**, from 0.4.2's and 0.5.0's
+  sources; zap 0.6.29, Packet 1.7.0, QuickNet v0.4.0-beta (edba9a2) and Warp 1.1.0-pre8 were already
+  current. Satset 0.6.0's transposed delta layout is for its entity sync, which the harness does not
+  exercise -- it sends plain events, as the other tools must.
+
+### Validation
+
+Every table below is the median of three runs, each alone on one performance core of the i7-13700K,
+LuneBlox 0.11.4, every tool at the versions above and BlinkBlox built from this checkout.
+
+Against 1.3.9's own figures, run framing costs a run's member one small byte-move and a count byte:
+every send figure moved under five percent -- 1000 booleans fire in 16.8 ms interpreted and 1.77
+native, from 16.7 and 1.69 -- except the smallest possible event, where the byte-move is most of
+the work: a thousand one-byte events fire in 0.256 ms interpreted rather than 0.126 and 0.047
+native rather than 0.028, still 1.9 and 6.9 times faster than the next tool. Every decode figure
+improved, by 0.5 to 5.3 percent: booleans decode in 5.99 ms native from 6.12. The bytes: 127.01 an
+event on the boolean benches, from 128, and 601.01 on entities, from 602.
+
+Against every rival, on the same runs: BlinkBlox now sends fastest and decodes fastest on every
+bench, natively and interpreted, and its bytes are the fewest on every bench -- 127.01 where
+QuickNet and Warp pay 128 and Satset's own run framing pays 127.01, 601.01 on entities where every
+other tool pays 602 or 603, and in the scenario tables a frame's hundred same-index Instance events
+cost 103 bytes where every other tool pays 200 to 303. zap remains a byte an event smaller on the
+smallest unreliable inputs (32 to 40), by bit-stream packing its booleans against BlinkBlox's
+byte-aligned bitfield. The README and the benchmarks page now state plainly why Blink's and zap's
+client figures assume an Android client (`--!native`, which Roblox supports nowhere else on
+clients) while BlinkBlox's generated client asks for no such thing, and why Warp's near-zero fire
+time is deferred encoding rather than a faster encoder. The full tables, with p99s and every
+scenario interpreted and native, are in `benchmark/Benchmarks.md`.
+
+The suite passes at 776 specs with the new wire goldens; type gates, lint, formatting, the strict
+directives, the file-size caps and the English check are all clean, and the docs build with no dead
+links.
+
+### Upgrading
+
+- **Recompile both modules**: a client from 1.3.9 and a server from 1.4.0 refuse each other at
+  startup, as a schema-signature mismatch always has. The schema itself needs no change unless a
+  channel declared exactly 256 events or functions.
+- `Tiny` and Instance-heavy client fire times are the one measurable cost, as above; real payload
+  sizes move under five percent, and everything on the decode side is faster.
+
 ## 1.3.9 — 2026-11-06
 
 A maintenance release. The compiler, generated wire format and plugin code are those of 1.3.8;

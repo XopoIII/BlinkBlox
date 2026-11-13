@@ -54,6 +54,11 @@ export type State = {
 	--- (Templates/Stamp.luau) is emitted only where something uses it.
 	UsesStamps: boolean,
 
+	--- Set when the module this build is writes events into a batch it flushes as packets and can
+	--- frame runs of consecutive same-index events under a shared header; see Writes.luau and the
+	--- client template's Frame. Only a client that fires a reliable event needs it.
+	UsesFraming: boolean,
+
 	--- Set when this side's module invokes a function whose Yield is Future or Promise -- only the
 	--- invoking side does -- so the library is required only by a module that calls into it. A
 	--- require nothing used was a lint warning in every listening module.
@@ -98,6 +103,7 @@ local State: State = {
 	UsesStreams = false,
 	UsesBatches = false,
 	UsesStamps = false,
+	UsesFraming = false,
 	UsesFuture = false,
 	UsesPromise = false,
 	RateSlots = {},
@@ -127,6 +133,7 @@ function State.Reset()
 	State.UsesStreams = false
 	State.UsesBatches = false
 	State.UsesStamps = false
+	State.UsesFraming = false
 	State.UsesFuture = false
 	State.UsesPromise = false
 

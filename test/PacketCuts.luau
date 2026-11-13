@@ -95,8 +95,10 @@ RunClosure("A frame of more events than a packet takes is cut at the event cap",
 		end
 	end)
 
-	--> Two bytes an event: its index and its value.
-	Expect("packet sizes", Result.Sizes, { 8, 8, 4 })
+	--> Four consecutive events of one index travel under a 3-byte run header -- the marker, the
+	--> index, the count less one -- with a byte of payload each, and the last two events, a run of
+	--> two under the merge threshold, as plain entries of index and value.
+	Expect("packet sizes", Result.Sizes, { 7, 7, 4 })
 	Expect("drops", Result.Drops, {})
 	assert(#Result.Received == 10, `the server received {#Result.Received} of 10 events`)
 	assert(Result.Received[10] == "Byte 10", `the last event was {Result.Received[10]}`)
@@ -109,7 +111,8 @@ RunClosure("A frame of more bytes than a packet takes is cut before the event th
 		end
 	end)
 
-	--> An index, a one-byte length and a hundred bytes: two fit in 256, the third does not.
+	--> An index, a one-byte length and a hundred bytes: two fit in 256, the third does not. Three
+	--> events never merge into a run, which takes four.
 	Expect("packet sizes", Result.Sizes, { 204, 102 })
 	Expect("drops", Result.Drops, {})
 	Expect("received", Result.Received, { "Note 100", "Note 100", "Note 100" })
@@ -139,7 +142,10 @@ RunClosure("A Fire that throws between the others is left out and cuts nothing",
 		end
 	end)
 
-	Expect("packet sizes", Result.Sizes, { 8, 4 })
+	--> The run the fourth Byte promotes spans the failure: its write threw before Frame ran, so the
+	--> run's first three members are Bytes 1 to 3 and the fourth is Byte 4, whole packets either
+	--> side of the cap as before.
+	Expect("packet sizes", Result.Sizes, { 7, 4 })
 	Expect("drops", Result.Drops, {})
 	Expect("received", Result.Received, { "Byte 1", "Byte 2", "Byte 3", "Byte 4", "Byte 5", "Byte 6" })
 end)
