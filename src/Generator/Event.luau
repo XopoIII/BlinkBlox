@@ -35,6 +35,7 @@ local function ClientFire(Shape: Shape, Writer: Writes.Write, FireValues: string
 
 	local Fire = Blocks.Function(State.Casing.Fire, FireValues, "()", true)
 	if Shape.IsReliable then
+		State.UsesFraming = true
 		--> Rolled back rather than left, because this write lands in the batch every other event
 		--> is queued in. Half an event in there is not one bad send: the receiver reads the
 		--> truncated event and then decodes the REST of the batch from the wrong offset.
@@ -156,7 +157,7 @@ local function Sending(Shape: Shape)
 	--> batch is put back whatever happens. How a Fire writes into a batch that outlives it is
 	--> Writes.luau's.
 	local TryWriteEvent = `pcall({Util.GetPath(Shape.Identifier, true, State.Scope)}, {WriteArguments})`
-	local Writer = Writes.new(Shape.Identifier, WriteArguments, WriteEvent, Value.Data, Shape.Counters)
+	local Writer = Writes.new(Shape.Identifier, WriteArguments, WriteEvent, Value.Data, Shape.Counters, Shape.Index)
 
 	if State.Context == "Client" then
 		ClientFire(Shape, Writer, FireValues, TryWriteEvent)

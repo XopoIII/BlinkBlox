@@ -76,7 +76,7 @@ end
 --> already queued when the player leaves always has.
 function Packets.DecodeLoop(MaxEvents: number): { string }
 	local OnServer = State.Context == "Server"
-	local Lines = { "local Decoding = -1\n" }
+	local Lines = { "local Decoding = -1\n", "local RunIndex = 0\n", "local RunRemaining = 0\n" }
 	if OnServer then
 		table.insert(Lines, `local DecodeRemaining = {MaxEvents}\n`)
 	end
@@ -134,8 +134,26 @@ function Packets.OpenDecode(Name: string): Blocks.Block
 	local DecoderArguments = if State.Context == "Server" then "Player: Player" else ""
 	local Decoder = Blocks.Function(`Decode{Name}`, DecoderArguments, "()", false, true)
 	Decoder:Line("Decoding = -1")
-	Decoder:Line("local Index = buffer.readu8(RecieveBuffer, RecieveCursor)")
-	Decoder:Line("RecieveCursor += 1")
+	--> A run's members arrive without an index each: the entry that opened the run carried
+	--> [255, the index, the count less one], and the count says how many payloads follow it.
+	--> `RunRemaining` is the module's because a packet decodes one event at a time, through this
+	--> function or a loop holding it, and a member of a run is an event like any other to
+	--> everything but the index read. Index 255 belongs to the marker alone, which is why a channel
+	--> declares at most 255 events and functions.
+	Decoder:Line("local Index: number")
+	Decoder:Line("if RunRemaining > 0 then")
+	Decoder:Line("\tIndex = RunIndex")
+	Decoder:Line("\tRunRemaining -= 1")
+	Decoder:Line("else")
+	Decoder:Line("\tIndex = buffer.readu8(RecieveBuffer, RecieveCursor)")
+	Decoder:Line("\tRecieveCursor += 1")
+	Decoder:Line("\tif Index == 255 then")
+	Decoder:Line("\t\tIndex = buffer.readu8(RecieveBuffer, RecieveCursor)")
+	Decoder:Line("\t\tRunIndex = Index")
+	Decoder:Line("\t\tRunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)")
+	Decoder:Line("\t\tRecieveCursor += 2")
+	Decoder:Line("\tend")
+	Decoder:Line("end")
 	Decoder:Line("Decoding = Index")
 	return Decoder
 end
@@ -228,6 +246,7 @@ function Packets.CloseDecode(
 		Connection:Line(`DecodeRemaining = {MaxEvents}`)
 	end
 	Connection:Line("Decoding = -1")
+	Connection:Line("RunRemaining = 0")
 	--> A packet that failed after a read raised the flag, and before its event's check cleared it,
 	--> must not refuse the first event of the next one.
 	if Prefabs.Missing.Count > 0 then

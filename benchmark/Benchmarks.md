@@ -451,6 +451,209 @@ function is too large, and a module's top-level function grows with every declar
 server, 85 on the client. Luau 0.740 leaves only that function interpreted, and on the i7 above the same decode takes
 0.008 ms natively and 0.020 ms interpreted in 0.42.0 (the `ManyEvents` rows under Streams).
 
+### 1.4.0's run framing, every tool current -- 2026-11-14
+Three full runs of `Runtime` and `Rivals`, each alone on one performance core, on the i7-13700K below
+with LuneBlox 0.11.4 (Luau 0.740), BlinkBlox built from this checkout at 1.4.0. Tool versions: Blink
+0.18.9, zap 0.6.29, ByteNet 0.4.3, Packet 1.7.0, QuickNet v0.4.0-beta (edba9a2), Warp 1.1.0-pre8 and
+Satset 0.6.0. What changed in BlinkBlox since the tables above: four or more consecutive events of
+one index in a batch travel under a shared 3-byte header -- 255, the index, the count less one --
+with no index each, and 255 stops being an event index, so a channel numbers 0 to 254
+(**Recompile both modules**; wire version 4).
+
+The framing runs after each write returns -- the write itself is unchanged, three same-index entries
+turn into a run when the fourth arrives, and every member after that moves its body one byte left
+over the index it will not need -- so every send figure but the smallest moved under five percent:
+a thousand one-byte events (`Tiny`) fire in 0.047 ms natively rather than 1.3.9's 0.028 and 0.256
+interpreted rather than 0.126, still six times faster than the next tool. The decoder reads the
+marker once and then that many events without an index each: every decode figure IMPROVED, by 0.5
+to 5.3 percent. The bytes: 127.01 an event on the boolean benches (Satset's own run framing number,
+tied), 601.01 on Entities (a byte under every other tool), and on `Instances` a frame's hundred
+same-index events cost 103 bytes where every other tool pays 200 to 303.
+
+**Runtime** (medians of the three runs):
+#### Booleans
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|1.774|1.955|0.0070|5.992|11.103|127.010|0.040|
+|BlinkBlox|interpreted|16.835|18.127|0.012|14.307|20.217|127.010|0.040|
+|Blink|native|3.987|4.390|0.229|10.929|15.991|1003.000|0.110|
+|Blink|interpreted|30.053|32.920|0.247|36.726|42.626|1003.000|0.110|
+|zap|native|11.941|12.551|0.237|11.688|16.898|1003.000|0.110|
+|zap|interpreted|68.817|74.257|0.257|40.142|46.460|1003.000|0.110|
+|ByteNet|native|26.281|28.459|0.253|51.681|58.115|1003.000|0.110|
+|ByteNet|interpreted|58.069|59.966|0.261|51.737|58.505|1003.000|0.110|
+|Packet|native|57.225|60.709|0.281|52.398|61.602|1003.000|0.110|
+|Packet|interpreted|56.508|59.046|0.280|52.362|61.144|1003.000|0.110|
+|QuickNet|native|1.871|7.683|0.010|6.657|12.388|128.000|0.030|
+|QuickNet|interpreted|17.109|23.188|0.018|18.271|23.844|128.000|0.030|
+|Warp|native|0.185|0.346|3.911|11.917|19.059|128.000|0.020|
+|Warp|interpreted|0.186|0.373|40.634|45.321|54.024|128.000|0.020|
+|Satset|native|4.107|4.428|0.220|9.283|14.847|127.010|0.030|
+|Satset|interpreted|36.383|38.550|1.609|41.931|48.017|127.010|0.030|
+#### Entities
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|1.323|1.507|0.027|3.171|8.481|601.010|0.710|
+|BlinkBlox|interpreted|12.541|13.576|0.037|12.751|18.187|601.010|0.710|
+|Blink|native|1.787|2.086|0.133|22.896|27.430|603.000|0.700|
+|Blink|interpreted|12.936|14.020|0.148|31.879|35.755|603.000|0.700|
+|zap|native|7.249|8.036|0.134|22.490|27.108|603.000|0.700|
+|zap|interpreted|34.553|36.884|0.145|33.211|38.356|603.000|0.700|
+|ByteNet|native|27.055|29.557|0.089|44.581|53.176|603.000|0.700|
+|ByteNet|interpreted|43.830|47.259|0.092|44.587|51.613|603.000|0.700|
+|Packet|native|41.371|44.003|0.126|57.003|73.754|603.000|0.700|
+|Packet|interpreted|41.427|44.292|0.118|57.124|73.252|603.000|0.700|
+|QuickNet|native|5.355|12.893|0.037|9.799|20.468|603.000|0.710|
+|QuickNet|interpreted|17.818|24.880|0.047|24.701|35.455|603.000|0.710|
+|Warp|native|0.166|0.398|18.259|28.749|44.786|602.000|0.040|
+|Warp|interpreted|0.165|0.403|72.673|62.236|75.464|602.000|0.200|
+|Satset|native|39.688|42.827|0.617|38.698|44.961|602.010|0.710|
+|Satset|interpreted|42.085|45.674|5.654|71.016|77.258|602.010|0.710|
+#### BooleansRandom
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|4.825|5.280|0.010|6.220|12.365|127.010|127.020|
+|BlinkBlox|interpreted|17.618|18.280|0.013|14.195|20.163|127.010|127.020|
+|Blink|native|9.468|10.050|0.245|11.085|17.251|1003.000|190.050|
+|Blink|interpreted|30.954|33.951|0.248|38.984|45.745|1003.000|190.050|
+|zap|native|18.081|19.846|0.251|11.914|18.275|1003.000|190.050|
+|zap|interpreted|70.679|75.521|0.261|39.921|46.281|1003.000|190.050|
+|ByteNet|native|29.710|33.010|0.263|57.378|66.813|1003.000|190.050|
+|ByteNet|interpreted|60.008|64.039|0.260|56.798|64.787|1003.000|190.050|
+|Packet|native|59.316|63.992|0.287|56.447|65.451|1003.000|190.050|
+|Packet|interpreted|59.520|65.081|0.286|57.081|65.323|1003.000|190.050|
+|QuickNet|native|7.296|10.868|0.015|7.239|15.664|128.000|128.010|
+|QuickNet|interpreted|22.665|24.799|0.020|18.531|27.558|128.000|128.010|
+|Warp|native|0.189|0.296|10.613|11.855|21.576|128.000|128.010|
+|Warp|interpreted|0.197|0.321|41.132|51.795|61.148|128.000|128.010|
+|Satset|native|9.703|10.285|0.359|9.237|17.009|127.010|127.020|
+|Satset|interpreted|33.353|36.974|3.041|49.048|58.219|127.010|127.020|
+#### EntitiesRandom
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|2.003|2.777|0.039|3.242|18.569|601.010|601.030|
+|BlinkBlox|interpreted|13.246|14.304|0.041|12.730|26.301|601.010|601.030|
+|Blink|native|2.444|3.134|0.088|22.593|33.449|603.000|603.020|
+|Blink|interpreted|13.691|15.017|0.152|31.925|43.045|603.000|603.020|
+|zap|native|7.846|8.928|0.078|22.709|33.173|603.000|603.020|
+|zap|interpreted|35.742|37.441|0.095|33.686|46.180|603.000|603.020|
+|ByteNet|native|28.416|30.172|0.094|45.042|55.622|603.000|603.020|
+|ByteNet|interpreted|45.643|50.397|0.090|45.269|55.702|603.000|603.020|
+|Packet|native|42.507|46.112|0.168|56.600|75.303|603.000|603.020|
+|Packet|interpreted|42.505|44.998|0.129|56.914|76.166|603.000|603.020|
+|QuickNet|native|6.141|13.647|0.048|10.815|21.607|603.000|603.020|
+|QuickNet|interpreted|18.610|26.551|0.052|25.586|35.871|603.000|603.020|
+|Warp|native|0.219|0.586|19.672|28.994|46.496|602.000|602.020|
+|Warp|interpreted|0.222|0.577|73.333|61.263|80.866|602.000|602.020|
+|Satset|native|40.811|43.933|1.146|38.884|54.786|602.010|602.030|
+|Satset|interpreted|42.344|44.941|12.128|68.590|81.712|602.010|602.030|
+#### Tiny
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.047|0.076|0.0000|0.048|0.083|1.010|0.030|
+|BlinkBlox|interpreted|0.256|0.340|0.0010|0.168|0.244|1.010|0.030|
+|Satset|native|0.324|0.420|0.129|0.599|0.808|1.010|0.020|
+|Satset|interpreted|0.498|0.672|0.427|0.788|1.026|1.010|0.020|
+
+**Rivals** (medians of the three runs):
+#### Broadcast
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.017|0.0010|0.033|1|85000|
+|BlinkBlox|interpreted|0.039|0.0010|0.028|1|85000|
+|Blink|native|0.716|0.022|0.028|50|90000|
+|Blink|interpreted|1.767|0.026|0.053|50|90000|
+|zap|native|0.753|0.021|0.026|50|85000|
+|zap|interpreted|1.852|0.027|0.046|50|85000|
+|ByteNet|native|0.045|0.0020|0.148|1|90000|
+|ByteNet|interpreted|0.078|0.0040|0.131|1|90000|
+|Packet|native|0.087|0.0020|0.185|1|90000|
+|Packet|interpreted|0.082|0.0020|0.179|1|90000|
+|QuickNet|native|0.290|0.010|0.045|50|90100|
+|QuickNet|interpreted|0.810|0.019|0.099|50|90100|
+|Warp|native|1.058|1.359|0.132|50|90150|
+|Warp|interpreted|1.070|5.486|0.194|50|90150|
+|Satset|native|0.076|0.010|0.086|1|85250|
+|Satset|interpreted|0.099|0.042|0.133|1|85250|
+#### UnreliableInput
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.0050|0.0000|0.0030|8|40|
+|BlinkBlox|interpreted|0.0050|0.0000|0.0070|8|40|
+|Blink|native|0.0020|0.0000|0.0030|8|48|
+|Blink|interpreted|0.0050|0.0000|0.0050|8|48|
+|zap|native|0.0030|0.0000|0.0020|8|32|
+|zap|interpreted|0.0060|0.0000|0.0040|8|32|
+|ByteNet|native|0.0030|0.0010|0.0090|1|48|
+|ByteNet|interpreted|0.0050|0.0010|0.010|1|48|
+|QuickNet|native|0.0020|0.0000|0.0040|1|50|
+|QuickNet|interpreted|0.0050|0.0010|0.0080|1|50|
+|Warp|native|0.0020|0.0020|0.010|1|51|
+|Warp|interpreted|0.0020|0.0060|0.012|1|51|
+|Satset|native|0.0040|0.0010|0.0060|1|52|
+|Satset|interpreted|0.0060|0.0010|0.0090|1|52|
+#### Instances
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.031|0.0010|0.012|1|103|
+|BlinkBlox|interpreted|0.030|0.0010|0.020|1|103|
+|Blink|native|0.0040|0.0010|0.014|1|200|
+|Blink|interpreted|0.013|0.0010|0.017|1|200|
+|zap|native|0.0050|0.0010|0.0090|1|200|
+|zap|interpreted|0.016|0.0010|0.022|1|200|
+|ByteNet|native|0.030|0.0010|0.102|1|300|
+|ByteNet|interpreted|0.049|0.0010|0.116|1|300|
+|Packet|native|0.037|0.0020|0.136|1|200|
+|Packet|interpreted|0.037|0.0020|0.136|1|200|
+|QuickNet|native|0.013|0.0010|0.032|1|202|
+|QuickNet|interpreted|0.033|0.0010|0.071|1|202|
+|Warp|native|0.018|0.013|0.100|1|303|
+|Warp|interpreted|0.018|0.043|0.128|1|303|
+#### WorldState
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.0010|0.0000|0.0030|1|12900|
+|BlinkBlox|interpreted|0.0040|0.0000|0.0030|1|12900|
+|Blink|native|0.0010|0.0000|0.0040|1|13700|
+|Blink|interpreted|0.0040|0.0000|0.0060|1|13700|
+|zap|native|0.0030|0.0000|0.0040|1|12850|
+|zap|interpreted|0.0070|0.0000|0.0060|1|12850|
+|ByteNet|native|0.0060|0.0020|0.0090|1|13750|
+|ByteNet|interpreted|0.0090|0.0030|0.0090|1|13750|
+|QuickNet|native|0.0060|0.0080|0.0030|50|13850|
+|QuickNet|interpreted|0.015|0.018|0.0090|50|13850|
+|Warp|native|0.010|0.207|0.0070|50|13850|
+|Warp|interpreted|0.011|0.813|0.017|50|13850|
+|Satset|native|0.016|0.021|0.0080|50|14050|
+|Satset|interpreted|0.026|0.041|0.015|50|14050|
+#### SelfState
+
+|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.011|0.0000|0.0010|50|850|
+|BlinkBlox|interpreted|0.025|0.0010|0.0010|50|850|
+|Blink|native|0.012|0.0000|0.0010|50|900|
+|Blink|interpreted|0.025|0.0000|0.0010|50|900|
+|zap|native|0.015|0.0000|0.0010|50|800|
+|zap|interpreted|0.035|0.0000|0.0010|50|800|
+|ByteNet|native|0.022|0.0090|0.0020|50|900|
+|ByteNet|interpreted|0.041|0.016|0.0020|50|900|
+|QuickNet|native|0.016|0.0080|0.0010|50|1000|
+|QuickNet|interpreted|0.043|0.018|0.0020|50|1000|
+|Warp|native|0.012|0.045|0.0020|50|1050|
+|Warp|interpreted|0.012|0.105|0.0030|50|1050|
+|Satset|native|0.039|0.020|0.0010|50|1100|
+|Satset|interpreted|0.051|0.040|0.0020|50|1100|
+
 ## Results
 
 The Studio run below was made on 2026-10-25 on an Apple M1 MacBook Air with BlinkBlox 1.3.1's
@@ -477,16 +680,16 @@ together.
 
 `P[NUMBER]` = [NUMBER] Percentile  
 *The tables below were automatically generated by this [script](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/generate.luau).*
-## Last Updated 2026-10-25 06:01:51 UTC
+## Last Updated 2026-11-14 (LuneBlox tables above; the Results below are Studio's, last recorded 2026-10-25)
 ## Tool Versions
-BlinkBlox: v1.3.1, compiled from this repository  
+BlinkBlox: v1.4.0, compiled from this repository  
 Blink: v0.18.9  
 zap: v0.6.29  
 ByteNet: v0.4.3  
 Packet: 1.7.0  
 QuickNet: v0.4.0-beta (edba9a2)  
 Warp: 1.1.0-pre8  
-Satset: v0.5.0  
+Satset: v0.6.0  
 ## Computer Specs
 Processor: `Apple M1`  
 Memory: `16GB`  

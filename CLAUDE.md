@@ -79,12 +79,22 @@ easy to break without noticing.
   with a keyframe a second, both remotes on one sequence byte: an unreliable packet lost or reordered
   silently drops the reliable ones after it until the next keyframe. `Per: Player` streams are not deltas:
   each holds one current state that the next send replaces.
+- **Run framing is shipped, but not the way Satset does it.** Four or more consecutive events of
+  one index in a batch travel under a 3-byte header -- 255, the index, the count less one -- with no
+  index each, and 255 stops being an event index, so a channel numbers 0 to 254 (wire version 4).
+  Satset's shape, every write comparing its index with the last and keeping the run's state, was
+  measured and dropped first: 32-68% on an event's write interpreted (2026-10-25). What shipped
+  instead runs AFTER the write (`Frame` in the client template, called by WriteBegun in
+  Generator/Writes.luau): the entry goes down whole, as it always did, three same-index entries
+  turn into a run when the fourth arrives (four small copies in the batch's tail), and every member
+  after that moves its body one byte left over the index it will not need. The cut check runs
+  BEFORE Frame, on the entry's still-plain bytes, so a run never crosses the packet a Cut opens and
+  the client never builds a packet the server would refuse. The decoder reads the marker once and
+  then that many events without an index each.
 - **Measured and dropped:** constant offsets in array loops (slower natively), branchless boolean
   packing (no faster), packing array elements' bits into one run (dynamic bit addressing in every
-  decode), a struct-of-arrays wire layout (no fewer builtin calls, one more pass), Satset's run
-  framing -- one header over four or more consecutive events of one index, no index each: it saves
-  up to a byte an event even compressed, but every write must compare its index with the last and
-  keep the run's state, 32-68% on an event's write interpreted (2026-10-25).
+  decode), a struct-of-arrays wire layout (no fewer builtin calls, one more pass), Satset's
+  write-side run framing (the 32-68% above).
 - **`@profile` defaults to `release`**, so forgetting the flag leaves a debug remote out rather than
   shipping it. An excluded declaration is still parsed and registered, and a compiled one naming it
   is refused (`src/Modules/Attributes.luau`).

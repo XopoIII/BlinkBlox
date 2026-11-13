@@ -141,8 +141,10 @@ RunClosure("A packet the server cannot decode is reported to the game", function
 	Remote.OnServerEvent:Fire(Shared.Player, buffer.fromstring(string.char(ReliableIndex("PlainFromClient"))), {})
 	task.wait(0.2)
 
-	--> Nonsense: an index that names no event.
-	Remote.OnServerEvent:Fire(Shared.Player, buffer.fromstring("\255"), {})
+	--> Nonsense: an index that names no event. 255 is the run marker on the wire (wire version 4),
+	--> so the nonsense index is the last plain one; a lone 255 is a truncated run header, which the
+	--> decode reports as the bounds failure it is.
+	Remote.OnServerEvent:Fire(Shared.Player, buffer.fromstring("\254"), {})
 	task.wait(0.2)
 
 	Server.SetDecodeErrorHandler(nil)

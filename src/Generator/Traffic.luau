@@ -106,7 +106,10 @@ function Traffic.Sent(
 	local Indent = Prefix or ""
 	local Total = if Times then `{Bytes} * {Times}` else Bytes
 	local Count = Times or "1"
-	if not Fixed(Base) then
+	--> A fixed-size event's bytes are its count times its size -- unless this module frames runs,
+	--> where a member of a run costs a byte less than its size and the bytes have to be counted as
+	--> they are taken, like a varying event's.
+	if not Fixed(Base) or State.UsesFraming then
 		Target:Line(`{Indent}TrafficCounters[{Base}] += {Total}`)
 	end
 	Target:Line(`{Indent}TrafficCounters[{Base + 1}] += {Count}`)
@@ -120,7 +123,7 @@ end
 --- cursor is past the index and, for an ordered event, the sequence number: the branch's own reads
 --- are declared at its top, so they precede this line wherever it is written.
 function Traffic.Start(Target: Blocks.Block, Base: number?, Ordered: boolean)
-	if Base and not Fixed(Base) then
+	if Base and (not Fixed(Base) or State.UsesFraming) then
 		local Header = 1 + (if Ordered then Size.OrderingBytes else 0)
 		Target:Line(`local TrafficStart = RecieveCursor - {Header}`)
 	end
@@ -133,7 +136,7 @@ function Traffic.Received(Target: Blocks.Block, Base: number?)
 		return
 	end
 
-	if not Fixed(Base) then
+	if not Fixed(Base) or State.UsesFraming then
 		Target:Line(`TrafficCounters[{Base + 2}] += RecieveCursor - TrafficStart`)
 	end
 	Target:Line(`TrafficCounters[{Base + 3}] += 1`)
@@ -221,7 +224,9 @@ function Traffic.Body(): { string }
 
 	local Sized: { string } = {}
 	for _, Bytes in Sizes do
-		table.insert(Sized, tostring(Bytes))
+		--> Under run framing a fixed-size event's sent bytes are counted as taken (Traffic.Sent):
+		--> a member of a run costs a byte less than its size.
+		table.insert(Sized, if Bytes > 0 and State.UsesFraming then "0" else tostring(Bytes))
 	end
 
 	local Counts = `\{ {F.Sent}: number, {F.SentBytes}: number, {F.Received}: number, {F.ReceivedBytes}: number \}`

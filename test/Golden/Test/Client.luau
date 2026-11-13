@@ -17,7 +17,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "8de55dc8ff79032a"
+local SCHEMA_SIGNATURE = "dee94bfded200cad"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -10542,7 +10542,73 @@ local function Commit()
     if PacketEvents > MAX_EVENTS_PER_PACKET or SendCursor - PacketStart > MAX_PACKET_SIZE then
         Cut(Start, CommittedInstances)
     end
+    --> Where the committed event begins, for the run framing that follows a Fire; see Frame below.
+    return Start
 end
+
+local RunIndex = -1
+local RunCount = 0
+local RunHead = 0
+local RunTail = 0
+local RunPacket = 0
+local RunFirst = 0
+local RunSecond = 0
+local RunThird = 0
+
+local function Frame(Start: number, Index: number, Packet: number): ()
+    if Index ~= RunIndex or Start ~= RunTail or Packet ~= RunPacket or RunCount == 256 then
+        RunIndex = Index
+        RunCount = 1
+        RunHead = Start
+        RunPacket = Packet
+        RunFirst = Start
+        RunSecond = 0
+        RunThird = 0
+    elseif RunCount < 3 then
+        if RunCount == 1 then
+            RunSecond = Start
+        else
+            RunThird = Start
+        end
+        RunCount += 1
+    elseif RunCount == 3 then
+        local End = SendCursor
+        local First = RunSecond - RunFirst - 1
+        local Second = RunThird - RunSecond - 1
+        local Third = Start - RunThird - 1
+        local Fourth = End - Start - 1
+        buffer.copy(SendBuffer, RunHead + 3 + First + Second + Third, SendBuffer, Start + 1, Fourth)
+        buffer.copy(SendBuffer, RunHead + 3 + First, SendBuffer, RunSecond + 1, Second)
+        buffer.copy(SendBuffer, RunHead + 3, SendBuffer, RunHead + 1, First)
+        buffer.writeu8(SendBuffer, RunHead, 255)
+        buffer.writeu8(SendBuffer, RunHead + 1, Index)
+        buffer.writeu8(SendBuffer, RunHead + 2, 3)
+        SendCursor = RunHead + 3 + First + Second + Third + Fourth
+        RunCount = 4
+    else
+        local End = SendCursor
+        local Body = End - Start - 1
+        --> A buffer.copy call costs more than a small body is worth -- a run of one-byte events paid
+        --> half again on its fire -- so the common widths move by read and write, and the copy is
+        --> for the rest.
+        if Body == 1 then
+            buffer.writeu8(SendBuffer, RunTail, buffer.readu8(SendBuffer, Start + 1))
+        elseif Body == 2 then
+            buffer.writeu16(SendBuffer, RunTail, buffer.readu16(SendBuffer, Start + 1))
+        elseif Body == 4 then
+            buffer.writeu32(SendBuffer, RunTail, buffer.readu32(SendBuffer, Start + 1))
+        else
+            --> No u64: Roblox's buffer library stops at four bytes, and the generated module runs
+            --> there, not only on LuneBlox.
+            buffer.copy(SendBuffer, RunTail, SendBuffer, Start + 1, Body)
+        end
+        buffer.writeu8(SendBuffer, RunHead + 2, RunCount)
+        SendCursor = RunTail + Body
+        RunCount += 1
+    end
+    RunTail = SendCursor
+end
+
 
 local function SendPacket(From: number, To: number, FromInstances: number, ToInstances: number)
     local Buffer = buffer.create(To - From)
@@ -10614,6 +10680,8 @@ local function ReportMissingInstance(Event: string)
 	end
 end
 local Decoding = -1
+local RunIndex = 0
+local RunRemaining = 0
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -10631,8 +10699,20 @@ RunService.Heartbeat:Connect(function(Delta: number)
 end)
 local function DecodeReliable(): ()
 	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
+	local Index: number
+	if RunRemaining > 0 then
+		Index = RunIndex
+		RunRemaining -= 1
+	else
+		Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		if Index == 255 then
+			Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RunIndex = Index
+			RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+			RecieveCursor += 2
+		end
+	end
 	Decoding = Index
 	if Index < 31 then
 		if Index < 17 then
@@ -11451,8 +11531,20 @@ local function DecodeReliable(): ()
 end
 local function DecodeUnreliable(): ()
 	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
+	local Index: number
+	if RunRemaining > 0 then
+		Index = RunIndex
+		RunRemaining -= 1
+	else
+		Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		if Index == 255 then
+			Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RunIndex = Index
+			RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+			RecieveCursor += 2
+		end
+	end
 	Decoding = Index
 	if Index < 12 then
 		if Index == 0 then
@@ -11563,6 +11655,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
+	RunRemaining = 0
 	MissingInstance = false
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeReliable, Size)
@@ -11593,6 +11686,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
+	RunRemaining = 0
 	MissingInstance = false
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
@@ -16102,14 +16196,14 @@ Returns.RateLimited = {
 	Fire = function(Value: number): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_RateLimited(Value)
-		Commit()
+		Frame(Commit(), 0, PacketStart)
 	end
 }
 Returns.RateLimitedPoll = {
 	Fire = function(Value: number): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_RateLimitedPoll(Value)
-		Commit()
+		Frame(Commit(), 1, PacketStart)
 	end
 }
 Returns.UnreliableOversize = {
@@ -16526,7 +16620,7 @@ Returns.ClientPollEvent = {
 	Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_ClientPollEvent(Value)
-		Commit()
+		Frame(Commit(), 5, PacketStart)
 	end
 }
 Returns.ClientUnreliablePollEvent = {
@@ -16548,7 +16642,7 @@ Returns.ClientEmptyPollEvent = {
 	Fire = function(Value: nil): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_ClientEmptyPollEvent(Value)
-		Commit()
+		Frame(Commit(), 6, PacketStart)
 	end
 }
 Returns.ClientEmptyUnreliablePollEvent = {
@@ -16678,7 +16772,7 @@ Returns.ClientEmptyEvent = {
 	Fire = function(Value: nil): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_ClientEmptyEvent(Value)
-		Commit()
+		Frame(Commit(), 9, PacketStart)
 	end
 }
 Returns.ClientEmptyUnreliableEvent = {
@@ -17033,7 +17127,7 @@ Returns.Booleans = {
 	Fire = function(Value: { boolean }): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_Booleans(Value)
-		Commit()
+		Frame(Commit(), 20, PacketStart)
 	end
 }
 Returns.Generic = {
@@ -17510,7 +17604,7 @@ Returns.ReliableClient = {
 	Fire = function(Value: number): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_ReliableClient(Value)
-		Commit()
+		Frame(Commit(), 32, PacketStart)
 	end
 }
 Returns.UnreliableServer = {
@@ -18056,6 +18150,7 @@ Returns.UnknownInbound = {
 		CommittedInstances = Count
 		PacketEvents += 1
 		if PacketEvents > MAX_EVENTS_PER_PACKET or SendCursor - PacketStart > MAX_PACKET_SIZE or Count - PacketInstances > MAX_INSTANCES_PER_PACKET then Cut(Start, Before) end
+		Frame(Start, 47, PacketStart)
 	end
 }
 Returns.NamedTuple = {
@@ -18207,7 +18302,7 @@ Returns.RangedFromClient = {
 	Fire = function(Value: number): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_RangedFromClient(Value)
-		Commit()
+		Frame(Commit(), 53, PacketStart)
 	end
 }
 Returns.RangedUnreliableFromClient = {
@@ -18229,7 +18324,7 @@ Returns.RangedVectorFromClient = {
 	Fire = function(Value: Vector3): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_RangedVectorFromClient(Value)
-		Commit()
+		Frame(Commit(), 54, PacketStart)
 	end
 }
 Returns.BadlyAnswered = {
@@ -18256,14 +18351,14 @@ Returns.PlainFromClient = {
 	Fire = function(Value: number): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_PlainFromClient(Value)
-		Commit()
+		Frame(Commit(), 56, PacketStart)
 	end
 }
 Returns.Unlistened = {
 	Fire = function(Value: nil): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_Unlistened(Value)
-		Commit()
+		Frame(Commit(), 57, PacketStart)
 	end
 }
 Returns.Unanswered = {
@@ -18992,14 +19087,14 @@ Returns.RangedFloat32 = {
 	Fire = function(Value: number): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_RangedFloat32(Value)
-		Commit()
+		Frame(Commit(), 60, PacketStart)
 	end
 }
 Returns.RangedFloat16 = {
 	Fire = function(Value: number): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_RangedFloat16(Value)
-		Commit()
+		Frame(Commit(), 61, PacketStart)
 	end
 }
 Returns.NamedLength = {
@@ -19170,7 +19265,7 @@ Returns.RangedFloat24 = {
 	Fire = function(Value: number): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_RangedFloat24(Value)
-		Commit()
+		Frame(Commit(), 64, PacketStart)
 	end
 }
 Returns.FixedTenths = {

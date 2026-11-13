@@ -35,13 +35,15 @@ export type Write = {
 }
 
 --- `WriteEvent` is the call that serialises the event from `WriteArguments`; `Counters` is where its
---- traffic counters start under `option TrafficStats`, and nil otherwise.
+--- traffic counters start under `option TrafficStats`, and nil otherwise. `Index` is the event's
+--- channel index, which Frame merges consecutive same-index events under one header with.
 function Writes.new(
 	Identifier: string,
 	WriteArguments: string,
 	WriteEvent: string,
 	Data: Type?,
-	Counters: number?
+	Counters: number?,
+	Index: number?
 ): Write
 	--> The same call, protected. `LoadPlayer` installs the player's saved instance list itself rather
 	--> than a copy, so an Instance appended before a later field threw stayed in it even though the
@@ -69,7 +71,14 @@ function Writes.new(
 				Target:Line("local Cursor = SendCursor")
 			end
 			Target:Line(WriteEvent)
-			Target:Line("Commit()")
+			if Index ~= nil then
+				--> After the cut Commit may make, so a run never crosses the packet a Cut opens; the
+				--> packet boundary Frame then sees is the new one, and the event starts the new
+				--> packet's first run as a plain entry. Commit returns where the event began.
+				Target:Line(`Frame(Commit(), {Index}, PacketStart)`)
+			else
+				Target:Line("Commit()")
+			end
 			return
 		end
 
@@ -84,6 +93,12 @@ function Writes.new(
 		Target:Line(
 			"if PacketEvents > MAX_EVENTS_PER_PACKET or SendCursor - PacketStart > MAX_PACKET_SIZE or Count - PacketInstances > MAX_INSTANCES_PER_PACKET then Cut(Start, Before) end"
 		)
+		if Index ~= nil then
+			--> The cut above, when it fires, is at the entry's still-plain boundary; Frame runs after
+			--> it and its Packet argument says which packet the event landed in, so a run never spans
+			--> two packets however the cuts fall.
+			Target:Line(`Frame(Start, {Index}, PacketStart)`)
+		end
 		if Counters then
 			Target:Line("local Cursor = Start")
 		end

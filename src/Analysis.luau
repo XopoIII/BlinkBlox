@@ -329,8 +329,10 @@ local function Rotations(Source: string, File: string?, Declarations: { Declarat
 	end)
 end
 
---- How many declarations one channel can number: the index travels as a single byte.
-local CHANNEL_CAPACITY = 256
+--- How many declarations one channel can number: the index travels as a single byte, and 255 of
+--- the 256 values are indices -- the last is the run marker a batch of consecutive same-index
+--- events travels under, so a channel numbers 0 to 254.
+local CHANNEL_CAPACITY = 255
 
 --- Refuses a channel with more declarations than its one-byte index can number.
 ---
@@ -378,8 +380,8 @@ local function Channels(Source: string, File: string?, Declarations: { Declarati
 			end
 
 			Diagnostic:Note(
-				`Each channel numbers its declarations with one byte, so it holds at most {CHANNEL_CAPACITY}: `
-					.. "the next would be sent with the first one's index."
+				`Each channel numbers its declarations with one byte, and the highest value is the run `
+					.. `marker, so it holds at most {CHANNEL_CAPACITY}: the next would be sent with the first one's index.`
 			)
 				:Note(
 					"Reliable events and functions share a channel; Unreliable and OrderedUnreliable events share the other."

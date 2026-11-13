@@ -17,7 +17,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "Datatypes_BLINK"
-local SCHEMA_SIGNATURE = "83462a5b2b7f2915"
+local SCHEMA_SIGNATURE = "09fb20d67e21a052"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local REMOTES_FOLDER = "Network"
 local SendSize = 64
@@ -1344,7 +1344,73 @@ local function Commit()
     if PacketEvents > MAX_EVENTS_PER_PACKET or SendCursor - PacketStart > MAX_PACKET_SIZE then
         Cut(Start, CommittedInstances)
     end
+    --> Where the committed event begins, for the run framing that follows a Fire; see Frame below.
+    return Start
 end
+
+local RunIndex = -1
+local RunCount = 0
+local RunHead = 0
+local RunTail = 0
+local RunPacket = 0
+local RunFirst = 0
+local RunSecond = 0
+local RunThird = 0
+
+local function Frame(Start: number, Index: number, Packet: number): ()
+    if Index ~= RunIndex or Start ~= RunTail or Packet ~= RunPacket or RunCount == 256 then
+        RunIndex = Index
+        RunCount = 1
+        RunHead = Start
+        RunPacket = Packet
+        RunFirst = Start
+        RunSecond = 0
+        RunThird = 0
+    elseif RunCount < 3 then
+        if RunCount == 1 then
+            RunSecond = Start
+        else
+            RunThird = Start
+        end
+        RunCount += 1
+    elseif RunCount == 3 then
+        local End = SendCursor
+        local First = RunSecond - RunFirst - 1
+        local Second = RunThird - RunSecond - 1
+        local Third = Start - RunThird - 1
+        local Fourth = End - Start - 1
+        buffer.copy(SendBuffer, RunHead + 3 + First + Second + Third, SendBuffer, Start + 1, Fourth)
+        buffer.copy(SendBuffer, RunHead + 3 + First, SendBuffer, RunSecond + 1, Second)
+        buffer.copy(SendBuffer, RunHead + 3, SendBuffer, RunHead + 1, First)
+        buffer.writeu8(SendBuffer, RunHead, 255)
+        buffer.writeu8(SendBuffer, RunHead + 1, Index)
+        buffer.writeu8(SendBuffer, RunHead + 2, 3)
+        SendCursor = RunHead + 3 + First + Second + Third + Fourth
+        RunCount = 4
+    else
+        local End = SendCursor
+        local Body = End - Start - 1
+        --> A buffer.copy call costs more than a small body is worth -- a run of one-byte events paid
+        --> half again on its fire -- so the common widths move by read and write, and the copy is
+        --> for the rest.
+        if Body == 1 then
+            buffer.writeu8(SendBuffer, RunTail, buffer.readu8(SendBuffer, Start + 1))
+        elseif Body == 2 then
+            buffer.writeu16(SendBuffer, RunTail, buffer.readu16(SendBuffer, Start + 1))
+        elseif Body == 4 then
+            buffer.writeu32(SendBuffer, RunTail, buffer.readu32(SendBuffer, Start + 1))
+        else
+            --> No u64: Roblox's buffer library stops at four bytes, and the generated module runs
+            --> there, not only on LuneBlox.
+            buffer.copy(SendBuffer, RunTail, SendBuffer, Start + 1, Body)
+        end
+        buffer.writeu8(SendBuffer, RunHead + 2, RunCount)
+        SendCursor = RunTail + Body
+        RunCount += 1
+    end
+    RunTail = SendCursor
+end
+
 
 local function SendPacket(From: number, To: number, FromInstances: number, ToInstances: number)
     local Buffer = buffer.create(To - From)
@@ -1405,6 +1471,8 @@ local function StepReplication()
     end
 end
 local Decoding = -1
+local RunIndex = 0
+local RunRemaining = 0
 local function DecodeLoop(DecodeEvent: () -> (), Size: number)
 	while RecieveCursor < Size do
 		DecodeEvent()
@@ -1423,8 +1491,20 @@ end)
 local function DecodeReliable(Size: number): ()
 	while RecieveCursor < Size do
 		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-		RecieveCursor += 1
+		local Index: number
+		if RunRemaining > 0 then
+			Index = RunIndex
+			RunRemaining -= 1
+		else
+			Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RecieveCursor += 1
+			if Index == 255 then
+				Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+				RunIndex = Index
+				RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+				RecieveCursor += 2
+			end
+		end
 		Decoding = Index
 		if Index == 0 then
 			local Value: { Size: UDim2, Padding: UDim, Anchor: Vector2, Spread: NumberRange, Fade: ColorSequence, Open: TweenInfo, Surface: Enum.Material, Key: Enum.KeyCode? } = SerdesFunctions.ReadEVENT_Styled()
@@ -1448,8 +1528,20 @@ local function DecodeReliable(Size: number): ()
 end
 local function DecodeUnreliable(): ()
 	Decoding = -1
-	local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-	RecieveCursor += 1
+	local Index: number
+	if RunRemaining > 0 then
+		Index = RunIndex
+		RunRemaining -= 1
+	else
+		Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+		RecieveCursor += 1
+		if Index == 255 then
+			Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RunIndex = Index
+			RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+			RecieveCursor += 2
+		end
+	end
 	Decoding = Index
 	if Index == 0 then
 		local Value: { Enum.Font } = SerdesFunctions.ReadEVENT_Fonts()
@@ -1475,6 +1567,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
+	RunRemaining = 0
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeReliable, Size)
 		if Parsed then
@@ -1500,6 +1593,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
+	RunRemaining = 0
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeLoop, DecodeUnreliable, Size)
 		if Parsed then
@@ -1716,7 +1810,7 @@ Returns.Pressed = {
 	Fire = function(Value1: Enum.KeyCode, Value2: Vector2): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_Pressed(Value1, Value2)
-		Commit()
+		Frame(Commit(), 1, PacketStart)
 	end
 }
 Returns.Fonts = {
@@ -1892,7 +1986,7 @@ Returns.Placed = {
 	Fire = function(Value: { Custom: PhysicalProperties?, Size: NumberSequence, Clip: Rect, Zone: Region3, Aim: Ray }): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_Placed(Value)
-		Commit()
+		Frame(Commit(), 2, PacketStart)
 	end
 }
 table.freeze(Returns)

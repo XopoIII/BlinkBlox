@@ -17,7 +17,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "82a4181b3949691b"
+local SCHEMA_SIGNATURE = "6784c3e8e59ee0fc"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -794,6 +794,8 @@ local function Commit()
     if PacketEvents > MAX_EVENTS_PER_PACKET or SendCursor - PacketStart > MAX_PACKET_SIZE then
         Cut(Start, CommittedInstances)
     end
+    --> Where the committed event begins, for the run framing that follows a Fire; see Frame below.
+    return Start
 end
 
 local function SendPacket(From: number, To: number, FromInstances: number, ToInstances: number)
@@ -886,6 +888,8 @@ local function StreamAccept(Index: number, Time: number): boolean
     return true
 end
 local Decoding = -1
+local RunIndex = 0
+local RunRemaining = 0
 local FLUSH_INTERVAL = 1 / 60
 local FlushClock = 0
 RunService.Heartbeat:Connect(function(Delta: number)
@@ -899,8 +903,20 @@ end)
 local function DecodeReliable(Size: number): ()
 	while RecieveCursor < Size do
 		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-		RecieveCursor += 1
+		local Index: number
+		if RunRemaining > 0 then
+			Index = RunIndex
+			RunRemaining -= 1
+		else
+			Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RecieveCursor += 1
+			if Index == 255 then
+				Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+				RunIndex = Index
+				RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+				RecieveCursor += 2
+			end
+		end
 		Decoding = Index
 		if Index == 0 then
 			local Value: number = SerdesFunctions.ReadEVENT_Score()
@@ -925,8 +941,20 @@ end
 local function DecodeUnreliable(Size: number): ()
 	while RecieveCursor < Size do
 		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-		RecieveCursor += 1
+		local Index: number
+		if RunRemaining > 0 then
+			Index = RunIndex
+			RunRemaining -= 1
+		else
+			Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RecieveCursor += 1
+			if Index == 255 then
+				Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+				RunIndex = Index
+				RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+				RecieveCursor += 2
+			end
+		end
 		Decoding = Index
 		if Index == 0 then
 			local Value: buffer = SerdesFunctions.ReadEVENT_Chatter()
@@ -983,6 +1011,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
+	RunRemaining = 0
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeReliable, Size)
 		if Parsed then
@@ -1008,6 +1037,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
+	RunRemaining = 0
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Size)
 		if Parsed then

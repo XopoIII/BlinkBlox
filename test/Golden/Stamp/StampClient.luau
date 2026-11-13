@@ -17,7 +17,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "BLINK"
-local SCHEMA_SIGNATURE = "8886a63d397ac093"
+local SCHEMA_SIGNATURE = "8d570ede5fea15b4"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -835,7 +835,73 @@ local function Commit()
     if PacketEvents > MAX_EVENTS_PER_PACKET or SendCursor - PacketStart > MAX_PACKET_SIZE then
         Cut(Start, CommittedInstances)
     end
+    --> Where the committed event begins, for the run framing that follows a Fire; see Frame below.
+    return Start
 end
+
+local RunIndex = -1
+local RunCount = 0
+local RunHead = 0
+local RunTail = 0
+local RunPacket = 0
+local RunFirst = 0
+local RunSecond = 0
+local RunThird = 0
+
+local function Frame(Start: number, Index: number, Packet: number): ()
+    if Index ~= RunIndex or Start ~= RunTail or Packet ~= RunPacket or RunCount == 256 then
+        RunIndex = Index
+        RunCount = 1
+        RunHead = Start
+        RunPacket = Packet
+        RunFirst = Start
+        RunSecond = 0
+        RunThird = 0
+    elseif RunCount < 3 then
+        if RunCount == 1 then
+            RunSecond = Start
+        else
+            RunThird = Start
+        end
+        RunCount += 1
+    elseif RunCount == 3 then
+        local End = SendCursor
+        local First = RunSecond - RunFirst - 1
+        local Second = RunThird - RunSecond - 1
+        local Third = Start - RunThird - 1
+        local Fourth = End - Start - 1
+        buffer.copy(SendBuffer, RunHead + 3 + First + Second + Third, SendBuffer, Start + 1, Fourth)
+        buffer.copy(SendBuffer, RunHead + 3 + First, SendBuffer, RunSecond + 1, Second)
+        buffer.copy(SendBuffer, RunHead + 3, SendBuffer, RunHead + 1, First)
+        buffer.writeu8(SendBuffer, RunHead, 255)
+        buffer.writeu8(SendBuffer, RunHead + 1, Index)
+        buffer.writeu8(SendBuffer, RunHead + 2, 3)
+        SendCursor = RunHead + 3 + First + Second + Third + Fourth
+        RunCount = 4
+    else
+        local End = SendCursor
+        local Body = End - Start - 1
+        --> A buffer.copy call costs more than a small body is worth -- a run of one-byte events paid
+        --> half again on its fire -- so the common widths move by read and write, and the copy is
+        --> for the rest.
+        if Body == 1 then
+            buffer.writeu8(SendBuffer, RunTail, buffer.readu8(SendBuffer, Start + 1))
+        elseif Body == 2 then
+            buffer.writeu16(SendBuffer, RunTail, buffer.readu16(SendBuffer, Start + 1))
+        elseif Body == 4 then
+            buffer.writeu32(SendBuffer, RunTail, buffer.readu32(SendBuffer, Start + 1))
+        else
+            --> No u64: Roblox's buffer library stops at four bytes, and the generated module runs
+            --> there, not only on LuneBlox.
+            buffer.copy(SendBuffer, RunTail, SendBuffer, Start + 1, Body)
+        end
+        buffer.writeu8(SendBuffer, RunHead + 2, RunCount)
+        SendCursor = RunTail + Body
+        RunCount += 1
+    end
+    RunTail = SendCursor
+end
+
 
 local function SendPacket(From: number, To: number, FromInstances: number, ToInstances: number)
     local Buffer = buffer.create(To - From)
@@ -932,6 +998,8 @@ local function StreamAccept(Index: number, Time: number): boolean
     return true
 end
 local Decoding = -1
+local RunIndex = 0
+local RunRemaining = 0
 local FLUSH_INTERVAL = 1 / 60
 local FlushClock = 0
 RunService.Heartbeat:Connect(function(Delta: number)
@@ -945,8 +1013,20 @@ end)
 local function DecodeReliable(Size: number): ()
 	while RecieveCursor < Size do
 		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-		RecieveCursor += 1
+		local Index: number
+		if RunRemaining > 0 then
+			Index = RunIndex
+			RunRemaining -= 1
+		else
+			Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RecieveCursor += 1
+			if Index == 255 then
+				Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+				RunIndex = Index
+				RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+				RecieveCursor += 2
+			end
+		end
 		Decoding = Index
 		error("[BlinkBlox]: This channel receives no events.")
 	end
@@ -954,8 +1034,20 @@ end
 local function DecodeUnreliable(Size: number): ()
 	while RecieveCursor < Size do
 		Decoding = -1
-		local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-		RecieveCursor += 1
+		local Index: number
+		if RunRemaining > 0 then
+			Index = RunIndex
+			RunRemaining -= 1
+		else
+			Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+			RecieveCursor += 1
+			if Index == 255 then
+				Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+				RunIndex = Index
+				RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+				RecieveCursor += 2
+			end
+		end
 		Decoding = Index
 		if Index == 1 then
 			local Value1: { Gap: number, Bucket: number }?, Value2: number = SerdesFunctions.ReadEVENT_Trust()
@@ -985,6 +1077,7 @@ Reliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
+	RunRemaining = 0
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeReliable, Size)
 		if Parsed then
@@ -1010,6 +1103,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: {Instance})
 	end
 	SerdesThread = coroutine.running()
 	Decoding = -1
+	RunRemaining = 0
 	while true do
 		local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Size)
 		if Parsed then
@@ -1035,7 +1129,7 @@ Returns.Swing = {
 	Fire = function(): ()
 		Begin()
 		SerdesFunctions.WriteEVENT_Swing(StampNow())
-		Commit()
+		Frame(Commit(), 0, PacketStart)
 	end
 }
 Returns.Aim = {

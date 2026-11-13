@@ -82,8 +82,9 @@ six `buffer.writeu8` calls into a block allocated once for the whole array.
 
 The same harness runs every tool on the same payloads, on the same machine: three full runs of
 `luneblox run Runtime`, each alone on one performance core, every row in a process of its own, every
-figure the median of the three. The versions were BlinkBlox 0.42.0, Blink 0.18.9, zap 0.6.29, ByteNet
-0.4.3, Packet 1.7.0, QuickNet 0.3.5 and Warp 1.1.0-pre7.
+figure the median of the three, taken on 2026-11-14 on LuneBlox 0.11.4. The versions were BlinkBlox
+1.4.0, Blink 0.18.9, zap 0.6.29, ByteNet 0.4.3, Packet 1.7.0, QuickNet v0.4.0-beta (edba9a2), Warp
+1.1.0-pre8 and Satset 0.6.0.
 
 "Send" is a frame's thousand fires and the flush that turns them into packets. Most tools encode as
 they fire and flush in a fraction of a millisecond; Warp queues the values and encodes them all at its
@@ -95,34 +96,40 @@ nowhere, so its native columns are interpreted too. The p99s and each column on 
 
 | Bench | Tool | Send, interpreted | Send, native | Decode, native | Decode, interpreted | Bytes |
 |---|---|---|---|---|---|---|
-| Booleans | **BlinkBlox** | **16.26** | 1.84 | **6.72** | **14.28** | **128** |
-| | Blink | 29.34 | 4.15 | 10.66 | 37.92 | 1003 |
-| | zap | 65.52 | 11.91 | 11.49 | 38.84 | 1003 |
-| | ByteNet | 54.15 | 24.56 | 50.99 | 51.25 | 1003 |
-| | Packet | 53.99 | 53.80 | 50.95 | 51.16 | 1003 |
-| | QuickNet | 16.78 | **1.81** | 7.48 | 17.66 | **128** |
-| | Warp | 38.47 | 4.22 | 11.47 | 43.68 | **128** |
-| Entities | **BlinkBlox** | **12.09** | **1.97** | **3.58** | **12.26** | **602** |
-| | Blink | 12.75 | 2.59 | 21.83 | 29.48 | 603 |
-| | zap | 33.39 | 7.01 | 21.16 | 32.85 | 603 |
-| | ByteNet | 42.69 | 26.01 | 42.49 | 43.01 | 603 |
-| | Packet | 39.90 | 39.63 | 52.70 | 52.46 | 603 |
-| | QuickNet | 21.69 | 6.46 | 11.37 | 29.05 | 603 |
-| | Warp | 65.72 | 18.85 | 26.91 | 56.35 | **602** |
-| BooleansRandom | **BlinkBlox** | **16.86** | **4.58** | **6.83** | **14.31** | **128** |
-| | Blink | 30.43 | 9.49 | 11.30 | 38.79 | 1003 |
-| | zap | 68.39 | 17.37 | 11.84 | 39.05 | 1003 |
-| | ByteNet | 57.42 | 28.28 | 56.35 | 55.69 | 1003 |
-| | Packet | 57.33 | 56.84 | 54.95 | 55.37 | 1003 |
-| | QuickNet | 21.72 | 6.88 | 7.86 | 17.77 | **128** |
-| | Warp | 39.25 | 10.72 | 11.45 | 48.64 | **128** |
-| EntitiesRandom | **BlinkBlox** | **12.81** | **2.29** | **3.59** | **12.39** | **602** |
-| | Blink | 13.21 | 2.68 | 20.93 | 29.07 | 603 |
-| | zap | 34.38 | 7.44 | 21.30 | 31.95 | 603 |
-| | ByteNet | 43.05 | 26.84 | 42.38 | 42.42 | 603 |
-| | Packet | 41.30 | 41.29 | 53.09 | 53.33 | 603 |
-| | QuickNet | 22.74 | 7.17 | 11.57 | 29.50 | 603 |
-| | Warp | 67.66 | 20.03 | 27.05 | 56.68 | **602** |
+| Booleans | **BlinkBlox** | **16.85** | **1.78** | **5.99** | **14.31** | **127.01** |
+| | Blink | 30.30 | 3.99 | 10.93 | 36.73 | 1003 |
+| | zap | 69.07 | 11.94 | 11.69 | 40.14 | 1003 |
+| | ByteNet | 58.33 | 26.28 | 51.68 | 51.74 | 1003 |
+| | Packet | 56.79 | 57.23 | 52.40 | 52.36 | 1003 |
+| | QuickNet | 17.13 | 1.87 | 6.66 | 18.27 | 128 |
+| | Warp | 40.82 | 4.10 | 11.92 | 45.32 | 128 |
+| | Satset | 37.99 | 4.11 | 9.28 | 41.93 | **127.01** |
+| Entities | **BlinkBlox** | **12.58** | **1.32** | **3.17** | **12.75** | **601.01** |
+| | Blink | 13.08 | 1.79 | 22.90 | 31.88 | 603 |
+| | zap | 34.70 | 7.25 | 22.49 | 33.21 | 603 |
+| | ByteNet | 43.92 | 27.06 | 44.58 | 44.59 | 603 |
+| | Packet | 41.55 | 41.37 | 57.00 | 57.12 | 603 |
+| | QuickNet | 17.87 | 5.36 | 9.80 | 24.70 | 603 |
+| | Warp | 72.84 | 18.26 | 28.75 | 62.24 | 602 |
+| | Satset | 47.74 | 39.69 | 38.70 | 71.02 | 602.01 |
+| BooleansRandom | **BlinkBlox** | **17.63** | **4.84** | **6.22** | **14.20** | **127.01** |
+| | Blink | 31.20 | 9.46 | 11.09 | 38.98 | 1003 |
+| | zap | 70.94 | 18.08 | 11.91 | 39.92 | 1003 |
+| | ByteNet | 60.27 | 29.71 | 56.80 | 56.80 | 1003 |
+| | Packet | 59.81 | 59.32 | 56.45 | 57.08 | 1003 |
+| | QuickNet | 22.69 | 7.30 | 7.24 | 18.53 | 128 |
+| | Warp | 41.33 | 10.66 | 11.86 | 51.80 | 128 |
+| | Satset | 36.39 | 9.70 | 9.24 | 49.05 | **127.01** |
+| EntitiesRandom | **BlinkBlox** | **13.29** | **2.00** | **3.24** | **12.73** | **601.01** |
+| | Blink | 13.84 | 2.44 | 22.59 | 31.93 | 603 |
+| | zap | 35.84 | 7.85 | 22.71 | 33.69 | 603 |
+| | ByteNet | 45.73 | 28.42 | 45.04 | 45.27 | 603 |
+| | Packet | 42.63 | 42.51 | 56.60 | 56.91 | 603 |
+| | QuickNet | 18.66 | 6.14 | 10.82 | 25.59 | 603 |
+| | Warp | 73.56 | 19.69 | 28.99 | 61.26 | 602 |
+| | Satset | 54.47 | 41.96 | 38.88 | 68.59 | 602.01 |
+| Tiny | **BlinkBlox** | **0.26** | **0.05** | **0.05** | **0.17** | **1.01** |
+| | Satset | 0.93 | 0.45 | 0.60 | 0.79 | 1.01 |
 
 BlinkBlox decodes fastest on every bench, natively and interpreted, and sends fastest on every one but
 one: natively, QuickNet sends a thousand booleans in 1.81 ms to BlinkBlox's 1.84, a gap under the
@@ -130,73 +137,82 @@ run-to-run noise. On Entities BlinkBlox decodes in a sixth of Blink's and zap's 
 third of QuickNet's; sending Entities costs it what it costs Blink, since both write six `u8` fields
 into a block allocated once for the array.
 
-BlinkBlox, QuickNet and Warp pack a `boolean[]` eight to a byte, an eighth of what Blink, zap, ByteNet
-and Packet send. BlinkBlox also checks the length it reads against its bounds before it allocates,
-where QuickNet allocates whatever length the packet names; both run a packet under a `pcall`. Warp
-encodes at the flush, and its send is two to nine times BlinkBlox's natively, two to five and a half
-interpreted. ByteNet and Packet spend a byte on each boolean and are the slowest to decode on the
-boolean benches; interpreted, Warp's Entities decode is the slowest of all.
+BlinkBlox sends fastest and decodes fastest on every bench, natively and interpreted, and its bytes
+are the fewest on every bench: tied with Satset's run framing on the boolean benches and `Tiny`, and
+a byte an event under every other tool on Entities. Since 1.4.0 a run of consecutive events of one
+index in a batch travels under a shared three-byte header -- 255, the index, the count less one --
+instead of a byte of index each, which is where that byte was going: the decoder reads the marker
+once and then that many events without an index each, so a run decodes faster too. What a run's
+member costs its sender is one small copy and a count byte -- invisible on real payloads (every
+other send figure here moved under 5 percent) and measurable on the smallest: a thousand one-byte
+events fire in 0.05 ms natively rather than 0.03, still six times faster than the next tool.
+
+BlinkBlox, QuickNet, Warp and Satset pack a `boolean[]` eight to a byte, an eighth of what Blink,
+zap, ByteNet and Packet send. BlinkBlox also checks the length it reads against its bounds before it
+allocates, where QuickNet allocates whatever length the packet names; both run a packet under a
+`pcall`. Warp encodes at the flush, and its send is two to nine times BlinkBlox's natively, two to
+five and a half interpreted. ByteNet and Packet spend a byte on each boolean and are the slowest to
+decode on the boolean benches; interpreted, Warp's Entities decode is the slowest of all.
+
+Two tools' client rows read faster than they run on a player's device. **Blink and zap generate
+their client modules with `--!native`**, and a client that can compile natively runs them that way;
+BlinkBlox's generated client asks for no such thing, because Roblox compiles client code natively on
+Android alone, and every other device logs `Native code generation is not supported on this device`
+once per module that asks. Most players' clients run code interpreted, so BlinkBlox's client figures
+are what a player's device actually pays, while Blink's and zap's native client figures assume an
+Android client -- and even interpreted, BlinkBlox's client is the fastest sender on every bench. Its
+server module does ask for native compilation, as every Roblox server supports it, which is what the
+decode column runs. **Warp encodes nothing when an event is fired** -- it queues the value and
+serialises the whole queue at its flush -- so its near-zero fire time is not a faster encoder.
 
 ## Sending to a crowd, unreliable events and Instances
 
 The benchmark above sends in one direction, a thousand reliable events a frame from a client. A game
 also has the server sending to a crowd, small unreliable events every frame, and events carrying
-Instances. `luneblox run Rivals` runs those on every tool, on the same machine as the tables above;
-each figure is the median of five runs, in milliseconds a frame, natively compiled, send (fire and
-flush) then decode, with the remote calls a frame summed over every player reached.
+Instances. `luneblox run Rivals` runs those on every tool, on the same machine as the tables above
+and on the same day; each figure is the median of three runs, in milliseconds a frame, natively
+compiled, send (fire and flush) then decode, with the remote calls a frame summed over every player
+reached and the bytes a frame on the wire.
 
-| Scenario | BlinkBlox | Blink | zap | ByteNet | Packet | QuickNet | Warp |
-|---|---|---|---|---|---|---|---|
-| **Broadcast**: 100 structs a frame to 50 players, `FireAll` | **0.020**, **0.012**, **1 call** | 0.711, 0.026, 50 calls | 0.734, 0.025, 50 calls | 0.044, 0.109, **1 call** | 0.084, 0.170, **1 call** | 0.306, 0.034, 50 calls | 2.350, 0.113, 50 calls |
-| **UnreliableInput**: 8 small inputs a frame, client to server | **0.002**, 0.003, 8 calls | **0.002**, 0.003, 8 calls | 0.003, 0.002, 8 calls | 0.003, 0.008, **1 call** | no unreliable channel | **0.002**, 0.003, **1 call** | 0.004, 0.009, **1 call** |
-| ... with `BatchUnreliable` | **0.002**, **0.001**, **1 call** | | | | | | |
-| **Instances**: 100 events a frame carrying a part | **0.005**, 0.011 | **0.005**, 0.013 | 0.006, **0.009** | 0.031, 0.093 | 0.038, 0.126 | 0.014, 0.027 | 0.031, 0.091 |
-| **WorldState**: 16 units a frame to 50 players, unreliable | **0.002**, **0.001**, **1 call** | **0.002**, 0.004, **1 call** | 0.003, 0.004, **1 call** | 0.008, 0.009, **1 call** | no unreliable channel | 0.014, 0.003, 50 calls | 0.198, 0.006, 50 calls |
-| **SelfState**: each of 50 players their own unit, unreliable | **0.012**, **0.000** | 0.013, 0.001 | 0.016, 0.001 | 0.033, 0.002 | no unreliable channel | 0.025, 0.001 | 0.046, 0.002 |
+| Scenario | BlinkBlox | Blink | zap | ByteNet | Packet | QuickNet | Warp | Satset |
+|---|---|---|---|---|---|---|---|---|
+| **Broadcast**: 100 structs a frame to 50 players, `FireAll` | **0.018**, **0.033**, **1 call**, **85,000 B** | 0.738, 0.028, 50 calls | 0.774, 0.026, 50 calls, 85,000 B | 0.047, 0.148, **1 call** | 0.089, 0.185, **1 call** | 0.300, 0.045, 50 calls | 2.417, 0.132, 50 calls | 0.086, 0.086, **1 call**, 85,250 B |
+| **UnreliableInput**: 8 small inputs a frame, client to server | **0.005**, **0.003**, 8 calls, 40 B | **0.002**, 0.003, 8 calls, 48 B | 0.003, 0.002, 8 calls, **32 B** | 0.004, 0.009, **1 call**, 48 B | no unreliable channel | **0.002**, 0.004, **1 call**, 50 B | **0.002**, 0.010, **1 call**, 51 B | 0.005, 0.006, **1 call**, 52 B |
+| ... with `BatchUnreliable` | **0.005**, **0.001**, **1 call**, 40 B | | | | | | | |
+| **Instances**: 100 events a frame carrying a part | 0.032, **0.012**, **103 B** | **0.005**, 0.014, 200 B | 0.006, 0.009, 200 B | 0.031, 0.102, 300 B | 0.039, 0.136, 200 B | 0.014, 0.032, 202 B | 0.031, 0.100, 303 B | no Instance type |
+| **WorldState**: 16 units a frame to 50 players, unreliable | **0.001**, **0.003**, **1 call**, **12,900 B** | **0.001**, 0.004, **1 call**, 13,700 B | 0.003, 0.004, **1 call**, 12,850 B | 0.008, 0.009, **1 call**, 13,750 B | no unreliable channel | 0.014, **0.003**, 50 calls, 13,850 B | 0.217, 0.007, 50 calls, 13,850 B | 0.037, 0.008, 50 calls, 14,050 B |
+| **SelfState**: each of 50 players their own unit, unreliable | **0.011**, **0.001**, **850 B** | 0.012, 0.001, 900 B | 0.015, 0.001, 800 B | 0.031, 0.002, 900 B | no unreliable channel | 0.024, 0.001, 1,000 B | 0.056, 0.002, 1,050 B | 0.059, 0.001, 1,100 B |
 
 A reliable `FireAll` in BlinkBlox is written once into a broadcast batch and sent in one
-`FireAllClients`; Blink and zap copy it into every player's batch and send each one, and QuickNet
-and Warp batch a frame per player too, so a send to 50 players is 50 remote calls. ByteNet and
-Packet share a buffer as BlinkBlox does, and BlinkBlox decodes its packet in a ninth of ByteNet's time
-and a fourteenth of Packet's. `BatchUnreliable` gathers a client's inputs into one remote call, as
-ByteNet, QuickNet and Warp do, and then decodes them fastest; without it BlinkBlox's eight small
-packets each pay the checks every packet gets -- its size, the player's byte budget, an isolated
-decode -- which zap's do not. On Instances BlinkBlox decodes faster than Blink and slower than zap,
-which does not check that what arrives is an Instance at all. Every scenario interpreted, and each
-column on its own, is in
-[`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
+`FireAllClients`; Blink and zap copy it into every player's batch and send each one, and QuickNet,
+Warp and Satset batch a frame per player too, so a send to 50 players is 50 remote calls. ByteNet and
+Packet share a buffer as BlinkBlox does, and BlinkBlox decodes its packet in a twelfth of ByteNet's
+time and a fifteenth of Packet's. `BatchUnreliable` gathers a client's inputs into one remote call, as
+ByteNet, QuickNet, Warp and Satset do; without it BlinkBlox's eight small packets each pay the checks
+every packet gets -- its size, the player's byte budget, an isolated decode -- which zap's do not,
+and zap packs its booleans into a bit stream besides, which is where its 32 bytes to BlinkBlox's 40
+on `UnreliableInput` come from. On Instances BlinkBlox's hundred same-index events travel as one run,
+103 bytes where every other tool pays a byte of index each -- 200 to 303 -- and it decodes fastest;
+its client fire is slower than Blink's and zap's because its client module runs interpreted on this
+harness by design (see the note above), and a run's member pays its small copy. Satset has no
+Instance type, so it sits `Instances` out. Every scenario interpreted, and each column on its own,
+is in [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
 
-### Satset, side by side
-
-Satset v0.5.0 joined the harness after the tables above were run, so it is compared with BlinkBlox
-from one run of each benchmark on an Apple M1 MacBook Air, no core pinned: the ratios hold, the
-absolute figures are a different machine's. Milliseconds a frame, send (fire and flush) / decode,
-then bytes an event before and after zstd.
-
-| Bench | BlinkBlox, native | Satset, native | BlinkBlox, interpreted | Satset, interpreted | Bytes, zstd: BlinkBlox | Satset |
-|---|---|---|---|---|---|---|
-| Booleans | **3.03** / **2.86** | 10.62 / 7.94 | **15.90** / **9.23** | 40.59 / 38.00 | 128, **0.02** | **127.01**, 0.03 |
-| Entities | **2.46** / **4.55** | 39.14 / 43.04 | **12.42** / **12.22** | 46.83 / 64.40 | **602**, **0.70** | 602.01, 0.71 |
-| BooleansRandom | **6.01** / **2.82** | 14.42 / 7.93 | **17.73** / **9.20** | 37.32 / 47.38 | 128, 128.01 | **127.01**, **127.02** |
-| EntitiesRandom | **3.05** / **4.53** | 39.53 / 42.83 | **12.61** / **12.47** | 47.38 / 64.76 | **602**, **602.02** | 602.01, 602.03 |
-| Tiny | **0.049** / **0.058** | 0.477 / 0.531 | **0.124** / **0.175** | 0.794 / 0.693 | 2, **0.02** | **1.01**, 0.03 |
-
-| Scenario, native | BlinkBlox | Satset |
-|---|---|---|
-| **Broadcast** | **0.022**, **0.031**, **1 call**, **85,000 B** | 0.090, 0.084, **1 call**, 85,250 B |
-| **UnreliableInput** | **0.005**, **0.004**, 8 calls, **40 B** | 0.006, 0.006, **1 call**, 52 B |
-| ... with `BatchUnreliable` | **0.005**, **0.001**, **1 call**, **40 B** | |
-| **WorldState** | **0.002**, **0.003**, **1 call**, **12,900 B** | 0.044, 0.009, 50 calls, 14,050 B |
-| **SelfState** | **0.014**, **0.001**, 50 calls, **850 B** | 0.067, **0.001**, 50 calls, 1,100 B |
+### Satset
 
 Satset is a runtime library: each field is written and read through a function the schema holds, and
 each frame's batch is scanned a second time at the flush to merge runs, which is where its flush time
-goes. That merge is the one place it is smaller: a run of events with one id goes under a single 3- or
-5-byte header with no index each, where BlinkBlox writes a byte of index for every event. On random
-payloads compression keeps that byte: `BooleansRandom` cost Satset 127.02 bytes an event compressed
-to BlinkBlox's 128.01, and 127.15 to 128.26 in Studio. A reliable `FireAll` is one
-broadcast for both; an unreliable one Satset copies into each player's batch, 50 calls to BlinkBlox's
-one. It has no Instance type, so it sits out `Instances`.
+goes. It framed runs of one id before BlinkBlox did -- a single small header over consecutive events
+with no index each -- and since 1.4.0 the two tie on the boolean benches' bytes at 127.01 an event,
+with BlinkBlox a byte under it on Entities (601.01 to 602.01) and far ahead on every time column:
+its 0.6.0 release widened its delta layout for entity sync, which this harness does not exercise --
+it sends plain events, as the other tools must. Satset's run merge costs every write a comparison
+with the last event and its state; BlinkBlox's runs are built after each write returns, at three
+small copies a run and one byte-move a member, which is why a thousand Satset booleans take 38.0 ms
+to send interpreted where BlinkBlox's take 16.9. On random payloads compression keeps the run's
+byte: `BooleansRandom` costs both 127.02 compressed. A reliable `FireAll` is one broadcast for both;
+an unreliable one Satset copies into each player's batch, 50 calls to BlinkBlox's one. It has no
+Instance type, so it sits out `Instances`.
 
 ### A schema with many events
 

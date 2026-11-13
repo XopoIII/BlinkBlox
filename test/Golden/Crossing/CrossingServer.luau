@@ -19,7 +19,7 @@ local RunService = game:GetService("RunService")
 
 local SerdesFunctions = {}
 local BASE_EVENT_NAME = "Crossing_BLINK"
-local SCHEMA_SIGNATURE = "246f9fd568b7522d"
+local SCHEMA_SIGNATURE = "61af44d2b0106e0a"
 local REMOTE_NAMES = table.freeze({ Reliable = BASE_EVENT_NAME .. "_RELIABLE_REMOTE", Unreliable = BASE_EVENT_NAME .. "_UNRELIABLE_REMOTE" })
 local SendSize = 64
 local SendOffset = 0
@@ -2083,6 +2083,8 @@ end
 local STREAM_1 = CreateStream("Tick", 1 / 5, 1 / 5, 1, 0, SendSTREAM_1)
 local function Listen()
 	local Decoding = -1
+	local RunIndex = 0
+	local RunRemaining = 0
 	local DecodeRemaining = 64
 	RunService.Heartbeat:Connect(StepReplication)
 	local function DecodeReliable(Player: Player, Size: number): ()
@@ -2093,8 +2095,20 @@ local function Listen()
 			end
 			DecodeRemaining -= 1
 			Decoding = -1
-			local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-			RecieveCursor += 1
+			local Index: number
+			if RunRemaining > 0 then
+				Index = RunIndex
+				RunRemaining -= 1
+			else
+				Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+				RecieveCursor += 1
+				if Index == 255 then
+					Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+					RunIndex = Index
+					RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+					RecieveCursor += 2
+				end
+			end
 			Decoding = Index
 			if Index == 0 then
 				local Value: number = SerdesFunctions.ReadEVENT_Ready()
@@ -2124,8 +2138,20 @@ local function Listen()
 			end
 			DecodeRemaining -= 1
 			Decoding = -1
-			local Index = buffer.readu8(RecieveBuffer, RecieveCursor)
-			RecieveCursor += 1
+			local Index: number
+			if RunRemaining > 0 then
+				Index = RunIndex
+				RunRemaining -= 1
+			else
+				Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+				RecieveCursor += 1
+				if Index == 255 then
+					Index = buffer.readu8(RecieveBuffer, RecieveCursor)
+					RunIndex = Index
+					RunRemaining = buffer.readu8(RecieveBuffer, RecieveCursor + 1)
+					RecieveCursor += 2
+				end
+			end
 			Decoding = Index
 			error("[BlinkBlox]: This channel receives no events.")
 		end
@@ -2160,6 +2186,7 @@ local function Listen()
 		SerdesThread = coroutine.running()
 		DecodeRemaining = 64
 		Decoding = -1
+		RunRemaining = 0
 		while true do
 			local Parsed: boolean, Failure: any = pcall(DecodeReliable, Player, Size)
 			if Parsed then
@@ -2208,6 +2235,7 @@ local function Listen()
 		SerdesThread = coroutine.running()
 		DecodeRemaining = 64
 		Decoding = -1
+		RunRemaining = 0
 		while true do
 			local Parsed: boolean, Failure: any = pcall(DecodeUnreliable, Player, Size)
 			if Parsed then
