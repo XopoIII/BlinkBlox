@@ -1,0 +1,92 @@
+
+> blinkblox-docs@0.0.1 build
+> astro build
+
+11:50:15 [content] Syncing content
+11:50:15 [content] Synced content
+11:50:15 [types] Generated 329ms
+11:50:15 [build] output: "static"
+11:50:15 [build] mode: "static"
+11:50:15 [build] directory: /Users/xopoiii/Programming/BlinkBlox/docs/dist/
+11:50:15 [build] Collecting build info...
+11:50:15 [build] ✓ Completed in 482ms.
+11:50:15 [build] Building static entrypoints...
+11:50:16 [vite] ✓ built in 1.45s
+11:50:16 [vite] ✓ built in 33ms
+11:50:16 [build] Rearranging server assets...
+
+ generating static routes 
+11:50:16   ├─ /404.html (+14ms) 
+11:50:16   ├─ /getting-started/1-installation/index.html (+1ms) 
+11:50:16   ├─ /getting-started/2-introduction/index.html (+0ms) 
+11:50:16   ├─ /getting-started/3-cli/index.html (+0ms) 
+11:50:16   ├─ /getting-started/4-plugin/index.html (+0ms) 
+11:50:16   ├─ /language/1-options/index.html (+0ms) 
+11:50:16   ├─ /language/2-scopes/index.html (+0ms) 
+11:50:16   ├─ /language/3-imports/index.html (+0ms) 
+11:50:16   ├─ /language/4-types/index.html (+0ms) 
+11:50:16   ├─ /language/5-events/index.html (+0ms) 
+11:50:16   ├─ /language/6-functions/index.html (+0ms) 
+11:50:16   ├─ /language/7-profiles/index.html (+0ms) 
+11:50:16   ├─ /llms-full.txt (+961ms) 
+11:50:17   ├─ /llms-small.txt (+779ms) 
+11:50:18   ├─ /llms.txt (+1ms) 
+11:50:18   ├─ /changelog/index.html (+4ms) 
+11:50:18   ├─ /getting-started/cli/index.html (+3ms) 
+11:50:18   ├─ /getting-started/installation/index.html (+3ms) 
+11:50:18   ├─ /getting-started/quick-start/index.html (+4ms) 
+11:50:18   ├─ /getting-started/studio-plugin/index.html (+8ms) 
+11:50:18   ├─ /guides/ai-assistants/index.html (+2ms) 
+11:50:18   ├─ /guides/bandwidth/index.html (+2ms) 
+11:50:18   ├─ /guides/benchmarks/index.html (+2ms) 
+11:50:18   ├─ /guides/coming-from-bytenet/index.html (+3ms) 
+11:50:18   ├─ /guides/coming-from-packet/index.html (+2ms) 
+11:50:18   ├─ /guides/coming-from-quicknet/index.html (+2ms) 
+11:50:18   ├─ /guides/coming-from-remote-events/index.html (+2ms) 
+11:50:18   ├─ /guides/coming-from-warp/index.html (+2ms) 
+11:50:18   ├─ /guides/coming-from-zap/index.html (+2ms) 
+11:50:18   ├─ /guides/common-pitfalls/index.html (+1ms) 
+11:50:18   ├─ /guides/hand-written-buffers/index.html (+1ms) 
+11:50:18   ├─ /guides/migrating-from-blink/index.html (+2ms) 
+11:50:18   ├─ /guides/places-without-a-server/index.html (+2ms) 
+11:50:18   ├─ /guides/roblox-ts/index.html (+2ms) 
+11:50:18   ├─ /guides/securing-the-server/index.html (+4ms) 
+11:50:18   ├─ /guides/streaming-state/index.html (+2ms) 
+11:50:18   ├─ /guides/switching/index.html (+2ms) 
+11:50:18   ├─ /guides/whats-new/index.html (+1ms) 
+11:50:18   ├─ /index.html (+4ms) 
+11:50:18   ├─ /language/events/index.html (+4ms) 
+11:50:18   ├─ /language/functions/index.html (+2ms) 
+11:50:18   ├─ /language/imports/index.html (+1ms) 
+11:50:18   ├─ /language/options/index.html (+2ms) 
+11:50:18   ├─ /language/profiles/index.html (+1ms) 
+11:50:18   ├─ /language/scopes/index.html (+1ms) 
+11:50:18   ├─ /language/stamps/index.html (+2ms) 
+11:50:18   ├─ /language/streams/index.html (+1ms) 
+11:50:18   ├─ /language/types/index.html (+2ms) 
+11:50:18   ├─ /reference/diagnostics/index.html (+2ms) 
+11:50:18   ├─ /reference/generated-api/index.html (+1ms) 
+11:50:18   ├─ /reference/options/index.html (+1ms) 
+11:50:18   ├─ /reference/wire-compatibility/index.html (+1ms) 
+11:50:18 ✓ Completed in 1.91s.
+
+ generating optimized images 
+11:50:18 [vite] ✓ built in 7ms
+11:50:19   ▶ /_astro/logo.CXFcfMio_2eDd65.webp (before: 367kB, after: 1kB) (+1.04s) (1/2)
+11:50:19   ▶ /_astro/logo.CXFcfMio_1XlQbL.webp (before: 367kB, after: 33kB) (+47ms) (2/2)
+11:50:19 ✓ Completed in 1.09s.
+
+11:50:19 [build] ✓ Completed in 4.52s.
+11:50:19 [starlight:pagefind] Building search index with Pagefind...
+11:50:21 [starlight:pagefind] Found 49 HTML files.
+11:50:21 [starlight:pagefind] Finished building search index in 1.75s.
+
+ validating links 
+
+╭─                             ─╮
+· All internal links are valid. ·
+╰─                             ─╯
+
+11:50:21 [@astrojs/sitemap] `sitemap-index.xml` created at `dist`
+11:50:21 [build] 38 page(s) built in 6.78s
+11:50:21 [build] Complete!

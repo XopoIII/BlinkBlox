@@ -1,0 +1,37 @@
+BlinkBlox 0.0.0, 200 frames of 1000 events, times in ms per frame, on LuneBlox 0.11.4 (Luau 0.740)
+Limits lifted on every tool: BlinkBlox's inbound limits, Packet's 8000-byte cap, QuickNet's rate limit and packet caps, Warp's 8000-byte cap, Satset's token bucket. Nothing was refused.
+
+### Booleans
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|2.313|2.488|0.004|1.758|2.581|128.00|0.02|
+|BlinkBlox|interpreted|11.120|12.460|0.006|7.735|9.730|128.00|0.02|
+
+### Entities
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|1.604|1.791|0.013|4.176|12.878|602.00|0.70|
+|BlinkBlox|interpreted|9.699|11.584|0.016|10.751|20.920|602.00|0.70|
+
+### BooleansRandom
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|5.239|5.988|0.006|1.837|3.457|128.00|128.01|
+|BlinkBlox|interpreted|15.474|17.187|0.009|7.945|10.484|128.00|128.01|
+
+### EntitiesRandom
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|2.308|5.397|0.017|4.395|36.036|602.00|602.02|
+|BlinkBlox|interpreted|10.220|34.515|0.018|11.279|38.150|602.00|602.02|
+
+### Tiny
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.048|0.054|0.000|0.058|0.061|2.00|0.02|
+|BlinkBlox|interpreted|0.111|0.117|0.000|0.155|0.174|2.00|0.02|

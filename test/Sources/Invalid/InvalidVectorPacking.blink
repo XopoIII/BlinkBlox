@@ -1,0 +1,11 @@
+-- expect E2003
+-- A packing other than the three the generator knows would otherwise pick one in silence.
+option VectorPacking = Sometimes
+option ServerOutput = "out/InvalidVectorPackingServer.luau"
+option ClientOutput = "out/InvalidVectorPackingClient.luau"
+
+event Ping {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync
+}

@@ -46,6 +46,7 @@ A few rules hold for all of them:
 | `UsePolling` | boolean | `false` | [Runtime behaviour](#usepolling) |
 | `Predict` | boolean | `false` | [Runtime behaviour](#predict) |
 | `PackedBooleanReader` | `"Auto"`, `"Bits"`, `"Rows"` | `"Auto"` | [Runtime behaviour](#packedbooleanreader) |
+| `VectorPacking` | `Auto`, `Off`, `On` | `Auto` | [Runtime behaviour](#vectorpacking) |
 | `ClientConnectTimeout` | seconds | wait for ever | [Starting up](#clientconnecttimeout) |
 | `AutoStart` | boolean | `true` | [Starting up](#autostart) |
 | `WriteValidations` | boolean | `false` | [Validation](#writevalidations) |
@@ -430,6 +431,29 @@ the two sides may differ. A schema without a `boolean[]` emits neither.
 
 ```blink
 option PackedBooleanReader = "Bits"
+```
+
+### `VectorPacking`
+Default: `Auto`
+Values: `Auto`, `Off`, `On`
+
+Whether a run of three plain `f32` fields of a struct -- `X: f32, Y: f32, Z: f32`, one after another
+with no range, class, scale or saturation -- travels in one call. Luau 0.747 adds
+`buffer.writevectorf32x3` and `buffer.readvectorf32x3`, which move three floats in one instruction, and
+the Roblox client keeps them behind a fast flag that a running game may or may not have.
+
+`Auto` asks the module's own buffer library at each packet: where the call is there it writes the run
+with it, and where it is not it writes the three floats one at a time. Both put the same twelve bytes
+at the same offset, so a client and a server built by the same release read each other's packets
+whichever way the flag falls, and a build made today starts packing the day the flag turns on -- with
+no recompile. `On` takes the call without asking, which is for a game that has seen it answer in the
+engine it runs, and `Off` never packs.
+
+The checks a field's own write would emit are emitted for the three before the write, so a wrong type
+is refused with the same message either way.
+
+```blink
+option VectorPacking = On
 ```
 
 ## Starting up

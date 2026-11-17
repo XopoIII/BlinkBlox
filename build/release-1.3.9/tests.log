@@ -1,0 +1,1282 @@
+[34mClearing Network folder...
+[0m[[32mOK[0m] Cleared Network folder.
+[34mCompiling source files...
+[0m[36mCompiling: Crossing.blink...[0m[[32mOK[0m] Crossing.blink compiled successfully.
+[36mCompiling: Datatypes.blink...[0m[[32mOK[0m] Datatypes.blink compiled successfully.
+[36mCompiling: Drift.blink...[0m[[32mOK[0m] Drift.blink compiled successfully.
+[36mCompiling: DriftStale.blink...[0m[[32mOK[0m] DriftStale.blink compiled successfully.
+[36mCompiling: Generics.blink...[0m[[32mOK[0m] Generics.blink compiled successfully.
+[36mCompiling: Handwritten.blink...[0m[[32mOK[0m] Handwritten.blink compiled successfully.
+[36mCompiling: Import.blink...[0m[[32mOK[0m] Import.blink compiled successfully.
+[36mCompiling: Indexers.blink...[0m[[32mOK[0m] Indexers.blink compiled successfully.
+[36mCompiling: NoGenerics.blink...[0m[[32mOK[0m] NoGenerics.blink compiled successfully.
+[36mCompiling: Outbound.blink...[0m[[32mOK[0m] Outbound.blink compiled successfully.
+[36mCompiling: Polling.blink...[0m[[32mOK[0m] Polling.blink compiled successfully.
+[36mCompiling: Scope.blink...[0m[[32mOK[0m] Scope.blink compiled successfully.
+[36mCompiling: Showroom.blink...[0m[[32mOK[0m] Showroom.blink compiled successfully.
+[36mCompiling: Stamp.blink...[0m[[32mOK[0m] Stamp.blink compiled successfully.
+[36mCompiling: Stream.blink...[0m[[32mOK[0m] Stream.blink compiled successfully.
+[36mCompiling: Test.blink...[0m[[32mOK[0m] Test.blink compiled successfully.
+[36mCompiling: Traffic.blink...[0m[[32mOK[0m] Traffic.blink compiled successfully.
+[32mSuccessfully compiled 22/22 source files!
+[0m[34mChecking output determinism...
+[0m[[32mOK[0m] Output is deterministic across recompiles.
+[34mChecking diagnostics...
+[0m[[32mOK[0m] DeprecatedUseColon.blink reports W3017.
+[[32mOK[0m] PriorityWithoutBudget.blink reports W3035.
+[[32mOK[0m] TooManyComponents.blink reports E3023.
+[[32mOK[0m] ReservedRates.blink reports E3005.
+[[32mOK[0m] ScaledRangeBetweenSteps.blink reports E3009.
+[[32mOK[0m] QuatStandalone.blink reports E3023.
+[[32mOK[0m] ReservedLimits.blink reports E3005.
+[[32mOK[0m] MissingRateLimit.blink reports E3020.
+[[32mOK[0m] ChannelTooLarge.blink reports E3030.
+[[32mOK[0m] StreamPolled.blink reports E3033.
+[[32mOK[0m] SaturateTwice.blink reports E3032.
+[[32mOK[0m] FractionalBurst.blink reports E2003.
+[[32mOK[0m] StreamReliable.blink reports E3033.
+[[32mOK[0m] InstancesNested.blink reports E3031.
+[[32mOK[0m] ExcludedReference.blink reports E3027.
+[[32mOK[0m] StreamWithoutRate.blink reports E2005.
+[[32mOK[0m] DuplicateEnumValue.blink reports E3004.
+[[32mOK[0m] CostlessRepetition.blink reports E3021.
+[[32mOK[0m] TrafficTypeName.blink reports E3005.
+[[32mOK[0m] DuplicateVariant.blink reports E3004.
+[[32mOK[0m] ReservedPackName.blink reports E3005.
+[[32mOK[0m] StreamOptional.blink reports E3033.
+[[32mOK[0m] ScaleTwice.blink reports E3032.
+[[32mOK[0m] StructMapKey.blink reports E3001.
+[[32mOK[0m] ReservedScope.blink reports E3005.
+[[32mOK[0m] ReservedCamelTrafficReset.blink reports E3005.
+[[32mOK[0m] PriorityReliable.blink reports E3035.
+[[32mOK[0m] DeprecatedPoll.blink reports W3017.
+[[32mOK[0m] QuatTwice.blink reports E3023.
+[[32mOK[0m] ExportedInstance.blink reports E3013.
+[[32mOK[0m] StampFromServer.blink reports E3034.
+[[32mOK[0m] OptionalUnknown.blink reports E3002.
+[[32mOK[0m] DuplicateOption.blink reports E3024.
+[[32mOK[0m] ZeroConnectTimeout.blink reports E2003.
+[[32mOK[0m] RepeatedImport.blink reports W3036.
+[[32mOK[0m] RecursiveType.blink reports E3022.
+[[32mOK[0m] EmptyEnum.blink reports E3029.
+[[32mOK[0m] ManyOptions.blink reports W3017.
+[[32mOK[0m] SmallInboundBurst.blink reports E2003.
+[[32mOK[0m] ModuleTypeName.blink reports E3005.
+[[32mOK[0m] ScaleOnFloat.blink reports E3032.
+[[32mOK[0m] ReservedTrafficStats.blink reports E3005.
+[[32mOK[0m] ConcurrencyFraction.blink reports E2003.
+[[32mOK[0m] InvalidPackedBooleanReader.blink reports E2003.
+[[32mOK[0m] ReservedSnakeScope.blink reports E3005.
+[[32mOK[0m] EnumTooLarge.blink reports E3029.
+[[32mOK[0m] ScaleNotNumber.blink reports E3032.
+[[32mOK[0m] ReservedRemotes.blink reports E3005.
+[[32mOK[0m] OversizeStream.blink reports E3018.
+[[32mOK[0m] EmptyTagEnum.blink reports E3029.
+[[32mOK[0m] UnreliableInstances.blink reports W3019.
+[[32mOK[0m] RangeOnColor3.blink reports E3008.
+[[32mOK[0m] BurstWithoutRate.blink reports E3020.
+[[32mOK[0m] CyclicImportA.blink reports E3015.
+[[32mOK[0m] QuatVector.blink reports E3023.
+[[32mOK[0m] TagEnumTooLarge.blink reports E3029.
+[[32mOK[0m] ReservedStart.blink reports E3005.
+[[32mOK[0m] OversizeUnreliable.blink reports E3018.
+[[32mOK[0m] InstancesWithoutSlots.blink reports E3031.
+[[32mOK[0m] TrafficStatsNotBoolean.blink reports E2002.
+[[32mOK[0m] ReservedCamelMember.blink reports E3005.
+[[32mOK[0m] ScaledRangeOutside.blink reports E3009.
+[[32mOK[0m] ReservedListenerHandler.blink reports E3005.
+[[32mOK[0m] EnumWithoutName.blink reports E3037.
+[[32mOK[0m] InvalidCasing.blink reports E2003.
+[[32mOK[0m] RobloxTypeName.blink reports E3005.
+[[32mOK[0m] ConcurrencyOnServer.blink reports W3020.
+[[32mOK[0m] StreamSlowFast.blink reports E3033.
+[[32mOK[0m] ZeroPacketSize.blink reports E2003.
+[[32mOK[0m] UnboundedUnreliable.blink reports W3019.
+[[32mOK[0m] ScaleZero.blink reports E3032.
+[[32mOK[0m] DuplicateFlag.blink reports E3004.
+[[32mOK[0m] LuauTypeName.blink reports E3005.
+[[32mOK[0m] CyclicImportB.blink reports E3015.
+[[32mOK[0m] StreamFromClient.blink reports E3033.
+[[32mOK[0m] RateOnServerEvent.blink reports W3020.
+[[32mOK[0m] ReservedDropHandler.blink reports E3005.
+[[32mOK[0m] ScaleNegative.blink reports E3032.
+[[32mOK[0m] InstancesImported.blink reports E3031.
+[[32mOK[0m] InstanceReplyWithoutSlots.blink reports E3031.
+[34mRunning output tests...
+[0m[36mTesting: Reliable Server...[0m[[32mOK[0m] Test "Reliable Server" passed!
+[36mTesting: Unreliable Server...[0m[[32mOK[0m] Test "Unreliable Server" passed!
+[36mTesting: Empty Reliable Server...[0m[[32mOK[0m] Test "Empty Reliable Server" passed!
+[36mTesting: Empty Unreliable Server...[0m[[32mOK[0m] Test "Empty Unreliable Server" passed!
+[36mTesting: Reliable Client...[0m[[32mOK[0m] Test "Reliable Client" passed!
+[36mTesting: Unreliable Client...[0m[[32mOK[0m] Test "Unreliable Client" passed!
+[36mTesting: Empty Reliable Client...[0m[[32mOK[0m] Test "Empty Reliable Client" passed!
+[36mTesting: Empty Unreliable Client...[0m[[32mOK[0m] Test "Empty Unreliable Client" passed!
+[36mTesting: Many Reliable Sync Server...[0m[[32mOK[0m] Test "Many Reliable Sync Server" passed!
+[36mTesting: Many Reliable Async Server...[0m[[32mOK[0m] Test "Many Reliable Async Server" passed!
+[36mTesting: Many Unreliable Sync Server...[0m[[32mOK[0m] Test "Many Unreliable Sync Server" passed!
+[36mTesting: Many Unreliable Async Server...[0m[[32mOK[0m] Test "Many Unreliable Async Server" passed!
+[36mTesting: Unknown...[0m[[32mOK[0m] Test "Unknown" passed!
+[36mTesting: Unknown (false)...[0m[[32mOK[0m] Test "Unknown (false)" passed!
+[36mTesting: Unknown (nil mixed)...[0m[[32mOK[0m] Test "Unknown (nil mixed)" passed!
+[36mTesting: Generic...[0m[[32mOK[0m] Test "Generic" passed!
+[36mTesting: Set 8...[0m[[32mOK[0m] Test "Set 8" passed!
+[36mTesting: Set 16...[0m[[32mOK[0m] Test "Set 16" passed!
+[36mTesting: Set 32...[0m[[32mOK[0m] Test "Set 32" passed!
+[36mTesting: Set >32...[0m[[32mOK[0m] Test "Set >32" passed!
+[36mTesting: Map...[0m[[32mOK[0m] Test "Map" passed!
+[36mTesting: Map Struct...[0m[[32mOK[0m] Test "Map Struct" passed!
+[36mTesting: Map Complex...[0m[[32mOK[0m] Test "Map Complex" passed!
+[36mTesting: Map Reference...[0m[[32mOK[0m] Test "Map Reference" passed!
+[36mTesting: Struct...[0m[[32mOK[0m] Test "Struct" passed!
+[36mTesting: Array...[0m[[32mOK[0m] Test "Array" passed!
+[36mTesting: Optional...[0m[[32mOK[0m] Test "Optional" passed!
+[36mTesting: Optional (nil)...[0m[[32mOK[0m] Test "Optional (nil)" passed!
+[36mTesting: Instance Any...[0m[[32mOK[0m] Test "Instance Any" passed!
+[36mTesting: Instance Type...[0m[[32mOK[0m] Test "Instance Type" passed!
+[36mTesting: Instance Type (Fail)...[0m[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "InstanceOfType": [string "../Network/Client.luau"]:2658: Expected an Instance, got userdata instead.
+[[32mOK[0m] Test "Instance Type (Fail)" passed!
+[36mTesting: Instance Optional...[0m[[32mOK[0m] Test "Instance Optional" passed!
+[36mTesting: Instance Optional (nil)...[0m[[32mOK[0m] Test "Instance Optional (nil)" passed!
+[36mTesting: Reference...[0m[[32mOK[0m] Test "Reference" passed!
+[36mTesting: Referency Array...[0m[[32mOK[0m] Test "Referency Array" passed!
+[36mTesting: Referency Optional...[0m[[32mOK[0m] Test "Referency Optional" passed!
+[36mTesting: Referency Optional (nil)...[0m[[32mOK[0m] Test "Referency Optional (nil)" passed!
+[36mTesting: Remote Function...[0m[[32mOK[0m] Test "Remote Function" passed!
+[36mTesting: Remote Function (yield)...[0m[WARN]
+[BlinkBlox]: "RemoteFunction" already has a listener. A function keeps only the newest one.
+[[32mOK[0m] Test "Remote Function (yield)" passed!
+[36mTesting: Remote Function (error)...[0m[WARN]
+[BlinkBlox]: "RemoteFunction" already has a listener. A function keeps only the newest one.
+[WARN]
+"RemoteFunction" encountered an error, /Users/xopoiii/Programming/BlinkBlox/test/Assertions:111: Expects fail
+[[32mOK[0m] Test "Remote Function (error)" passed!
+[36mTesting: Empty Remote Function...[0m[[32mOK[0m] Test "Empty Remote Function" passed!
+[36mTesting: Unit Remote Function...[0m[[32mOK[0m] Test "Unit Remote Function" passed!
+[36mTesting: Reliable Queue...[0m[[32mOK[0m] Test "Reliable Queue" passed!
+[36mTesting: Many Reliable Sync Queue...[0m[[32mOK[0m] Test "Many Reliable Sync Queue" passed!
+[36mTesting: Many Reliable Async Queue...[0m[[32mOK[0m] Test "Many Reliable Async Queue" passed!
+[36mTesting: Invalid Instance Any...[0m[[32mOK[0m] Event "Invalid Instance Any" passed!
+[36mTesting: Invalid Instance Type...[0m[[32mOK[0m] Event "Invalid Instance Type" passed!
+[36mTesting: Correct order...[0m[[32mOK[0m] Test "Correct order" passed!
+[36mTesting: Multiple instances (nil and non nil)...[0m[[32mOK[0m] Test "Multiple instances (nil and non nil)" passed!
+[36mTesting: Many primitive...[0m[[32mOK[0m] Test "Many primitive" passed!
+[36mTesting: Many structs...[0m[[32mOK[0m] Test "Many structs" passed!
+[36mTesting: Reliable Tuple...[0m[[32mOK[0m] Test "Reliable Tuple" passed!
+[36mTesting: Unreliable Tuple...[0m[[32mOK[0m] Test "Unreliable Tuple" passed!
+[36mTesting: Function Tuple...[0m[[32mOK[0m] Test "Function Tuple" passed!
+[36mTesting: Many events...[0m[[32mOK[0m] Test "Many events" passed!
+[36mTesting: TagEnum Join...[0m[[32mOK[0m] Test "TagEnum Join" passed!
+[36mTesting: TagEnum Chat...[0m[[32mOK[0m] Test "TagEnum Chat" passed!
+[36mTesting: TagEnum Leave...[0m[[32mOK[0m] Test "TagEnum Leave" passed!
+[36mTesting: Color3...[0m[[32mOK[0m] Test "Color3" passed!
+[36mTesting: Color3 Array...[0m[[32mOK[0m] Test "Color3 Array" passed!
+[36mTesting: DateTime...[0m[[32mOK[0m] Test "DateTime" passed!
+[36mTesting: DateTimeMillis...[0m[[32mOK[0m] Test "DateTimeMillis" passed!
+[36mTesting: BrickColor...[0m[[32mOK[0m] Test "BrickColor" passed!
+[36mTesting: Nested Map...[0m[[32mOK[0m] Test "Nested Map" passed!
+[36mTesting: Standalone...[0m[[32mOK[0m] Test "Standalone" passed!
+[36mTesting: Disconnect & Queue...[0m[[32mOK[0m] Test "Disconnect & Queue" passed!
+[36mTesting: Dynamic Array Data Integrity...[0m[[32mOK[0m] Test "Dynamic Array Data Integrity" passed!
+[36mTesting: Dynamic Map Data Integrity...[0m[[32mOK[0m] Test "Dynamic Map Data Integrity" passed!
+[36mTesting: Poll Reliable Client...[0m[[32mOK[0m] Test "Poll Reliable Client" passed!
+[36mTesting: Poll Reliable Server...[0m[[32mOK[0m] Test "Poll Reliable Server" passed!
+[36mTesting: Poll Unreliable Client...[0m[[32mOK[0m] Test "Poll Unreliable Client" passed!
+[36mTesting: Poll Unreliable Server...[0m[[32mOK[0m] Test "Poll Unreliable Server" passed!
+[36mTesting: Poll Empty Reliable Client...[0m[[32mOK[0m] Test "Poll Empty Reliable Client" passed!
+[36mTesting: Poll Empty Reliable Server...[0m[[32mOK[0m] Test "Poll Empty Reliable Server" passed!
+[36mTesting: Poll Empty Unreliable Client...[0m[[32mOK[0m] Test "Poll Empty Unreliable Client" passed!
+[36mTesting: Poll Empty Unreliable Server...[0m[[32mOK[0m] Test "Poll Empty Unreliable Server" passed!
+[36mTesting: Queue up and poll...[0m[[32mOK[0m] Test "Queue up and poll" passed!
+[36mTesting: Ranges should be enforced...[0m[[32mOK[0m] Test "Ranges should be enforced" passed!
+[36mTesting: Multi Dimensional Array...[0m[[32mOK[0m] Test "Multi Dimensional Array" passed!
+[36mTesting: Generics containing a unit enum value...[0m[[32mOK[0m] Test "Generics containing a unit enum value" passed!
+[36mTesting: A float range accepts the values it names once they are narrowed...[0m[[32mOK[0m] Test "A float range accepts the values it names once they are narrowed" passed!
+[36mTesting: A scaled integer sends the nearest whole step and reads it back exactly...[0m[[32mOK[0m] Test "A scaled integer sends the nearest whole step and reads it back exactly" passed!
+[36mTesting: A scaled integer past its range is refused under WriteValidations...[0m[[32mOK[0m] Test "A scaled integer past its range is refused under WriteValidations" passed!
+[36mTesting: A scaled integer past its range wraps without WriteValidations, as an integer does...[0m[[32mOK[0m] Test "A scaled integer past its range wraps without WriteValidations, as an integer does" passed!
+[36mTesting: A scaled range is checked on receipt in whole steps...[0m[[32mOK[0m] Test "A scaled range is checked on receipt in whole steps" passed!
+[36mTesting: A saturated number is clamped exactly to its bounds, with or without WriteValidations...[0m[[32mOK[0m] Test "A saturated number is clamped exactly to its bounds, with or without WriteValidations" passed!
+[36mTesting: A saturated number sends NaN as the value in its range nearest zero...[0m[[32mOK[0m] Test "A saturated number sends NaN as the value in its range nearest zero" passed!
+[36mTesting: Saturation changes what is sent, never what is accepted...[0m[[32mOK[0m] Test "Saturation changes what is sent, never what is accepted" passed!
+[36mTesting: ExportLimits puts the schema's bounds in the server, client and types modules...[0m[[32mOK[0m] Test "ExportLimits puts the schema's bounds in the server, client and types modules" passed!
+[36mTesting: ExportLimits follows option Casing for its structural words...[0m[[32mOK[0m] Test "ExportLimits follows option Casing for its structural words" passed!
+[36mTesting: ExportLimits declares its table in the TypeScript output...[0m[[32mOK[0m] Test "ExportLimits declares its table in the TypeScript output" passed!
+[36mTesting: Without ExportLimits a module has no Limits and the name stays free...[0m[[32mOK[0m] Test "Without ExportLimits a module has no Limits and the name stays free" passed!
+[36mTesting: A scale is part of the signature, and saturate is not...[0m[[32mOK[0m] Test "A scale is part of the signature, and saturate is not" passed!
+[36mTesting: A bad number modifier is refused with what is wrong...[0m[[32mOK[0m] Test "A bad number modifier is refused with what is wrong" passed!
+[36mTesting: ExportRates puts the enforced rates in the server, client and types modules...[0m[[32mOK[0m] Test "ExportRates puts the enforced rates in the server, client and types modules" passed!
+[36mTesting: ExportRates states what the server's guards enforce...[0m[[32mOK[0m] Test "ExportRates states what the server's guards enforce" passed!
+[36mTesting: ExportRates follows option Casing for its structural words...[0m[[32mOK[0m] Test "ExportRates follows option Casing for its structural words" passed!
+[36mTesting: ExportRates leaves out what nothing limits, and keeps a lone Concurrency...[0m[[32mOK[0m] Test "ExportRates leaves out what nothing limits, and keeps a lone Concurrency" passed!
+[36mTesting: ExportRates declares its table in the TypeScript output...[0m[[32mOK[0m] Test "ExportRates declares its table in the TypeScript output" passed!
+[36mTesting: Without ExportRates a module has no Rates and the name stays free...[0m[[32mOK[0m] Test "Without ExportRates a module has no Rates and the name stays free" passed!
+[36mTesting: A declaration named after the Rates member is refused under the option...[0m[[32mOK[0m] Test "A declaration named after the Rates member is refused under the option" passed!
+[36mTesting: Export buffer trimming...[0m[[32mOK[0m] Test "Export buffer trimming" passed!
+[36mTesting: Indexers...[0m[[32mOK[0m] Test "Indexers" passed!
+[36mTesting: Buffer (Default, Fixed, Bounded)...[0m[[32mOK[0m] Test "Buffer (Default, Fixed, Bounded)" passed!
+[36mTesting: A yielding Async listener does not hold up the next dispatch...[0m[[32mOK[0m] Test "A yielding Async listener does not hold up the next dispatch" passed!
+[36mTesting: A second listener on a Single event is reported, and the first one's disconnect stops working...[0m[WARN]
+[BlinkBlox]: "ReliableServer" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.
+[[32mOK[0m] Test "A second listener on a Single event is reported, and the first one's disconnect stops working" passed!
+[36mTesting: A queued event keeps every value after a nil...[0m[[32mOK[0m] Test "A queued event keeps every value after a nil" passed!
+[36mTesting: A listener that disconnects itself does not cost the next one the event...[0m[[32mOK[0m] Test "A listener that disconnects itself does not cost the next one the event" passed!
+[36mTesting: A Sync listener that throws costs nothing but its own call...[0m[[32mOK[0m] Test "A Sync listener that throws costs nothing but its own call" passed!
+[36mTesting: A Sync listener that throws on a queued event still connects, and the queue is spent once...[0m[[32mOK[0m] Test "A Sync listener that throws on a queued event still connects, and the queue is spent once" passed!
+[36mTesting: A listener disconnected by another during dispatch does not run...[0m[[32mOK[0m] Test "A listener disconnected by another during dispatch does not run" passed!
+[36mTesting: A second listener on a function is reported...[0m[[32mOK[0m] Test "A second listener on a function is reported" passed!
+[36mTesting: Static size analysis matches the emitter...[0m[33m[W3017] Warning[0m: Field "Poll" is deprecated
+    ╭─[Test.blink:1:1036]
+    │
+[2m434[0m │     Poll: true,
+    ┆     [33m──[0m[33m┬[0m[33m──[0m
+    ┆       [33m│[0m
+    ┆       [33m╰──[0m [33mUse `Call: Polling` instead[0m
+    │ [2m= note:[0m The two compile to the same thing, but only `Call` is documented.
+    │
+────╯
+[33m[W3019] Warning[0m: Unreliable event "UnreliableOversize" may exceed the packet limit
+    ╭─[Test.blink:1:1036]
+    │
+[2m232[0m │ event UnreliableOversize {
+    ┆       [33m─────────[0m[33m┬[0m[33m─────────[0m
+    ┆                [33m│[0m
+    ┆                [33m╰──[0m [33mUnbounded, and the limit is 980 bytes[0m
+[2m236[0m │     Data: string,
+    ┆           [34m───[0m[34m┬[0m[34m───[0m
+    ┆              [34m│[0m
+    ┆              [34m╰──[0m [34mThis has no upper bound[0m
+    │ [2m= note:[0m Bound the variable-length fields -- `string(0..64)`, `u8[..16]` -- or send it reliably.
+    │
+────╯
+[33m[W3019] Warning[0m: Unreliable event "UnreliableInstances" may exceed the packet limit
+    ╭─[Test.blink:1:1036]
+    │
+[2m242[0m │ event UnreliableInstances {
+    ┆       [33m─────────[0m[33m┬[0m[33m─────────[0m
+    ┆                [33m│[0m
+    ┆                [33m╰──[0m [33mUp to 998 bytes, the limit is 980[0m
+    │ [2m= note:[0m Bound the variable-length fields -- `string(0..64)`, `u8[..16]` -- or send it reliably.
+    │
+────╯
+[33m[W3019] Warning[0m: Unreliable event "ClientUnreliablePollEvent" may exceed the packet limit
+    ╭─[Test.blink:1:1036]
+    │
+[2m391[0m │ event ClientUnreliablePollEvent {
+    ┆       [33m────────────[0m[33m┬[0m[33m────────────[0m
+    ┆                   [33m│[0m
+    ┆                   [33m╰──[0m [33mUnbounded, and the limit is 980 bytes[0m
+[2m357[0m │ map GenericMap<K, V> = {[K]: V}
+    ┆                          [34m[0m[34m┬[0m[34m[0m
+    ┆                          [34m│[0m
+    ┆                          [34m╰──[0m [34mThis has no upper bound[0m
+    │ [2m= note:[0m Bound the variable-length fields -- `string(0..64)`, `u8[..16]` -- or send it reliably.
+    │
+────╯
+[33m[W3019] Warning[0m: Unreliable event "ServerUnreliablePollEvent" may exceed the packet limit
+    ╭─[Test.blink:1:1036]
+    │
+[2m417[0m │ event ServerUnreliablePollEvent {
+    ┆       [33m────────────[0m[33m┬[0m[33m────────────[0m
+    ┆                   [33m│[0m
+    ┆                   [33m╰──[0m [33mUnbounded, and the limit is 980 bytes[0m
+[2m357[0m │ map GenericMap<K, V> = {[K]: V}
+    ┆                          [34m[0m[34m┬[0m[34m[0m
+    ┆                          [34m│[0m
+    ┆                          [34m╰──[0m [34mThis has no upper bound[0m
+    │ [2m= note:[0m Bound the variable-length fields -- `string(0..64)`, `u8[..16]` -- or send it reliably.
+    │
+────╯
+[[32mOK[0m] Test "Static size analysis matches the emitter" passed!
+[36mTesting: An unbounded measurement names its culprit...[0m[[32mOK[0m] Test "An unbounded measurement names its culprit" passed!
+[36mTesting: Firing at a player who left does not resurrect their buffer...[0m[[32mOK[0m] Test "Firing at a player who left does not resurrect their buffer" passed!
+[36mTesting: Inbound packets are bounded...[0m[WARN]
+[BlinkBlox]: Dropped an oversized packet from Player.
+[WARN]
+[BlinkBlox]: Dropped the rest of a packet from Player, too many events.
+[WARN]
+[BlinkBlox]: Dropped a malformed packet from Player.
+[[32mOK[0m] Test "Inbound packets are bounded" passed!
+[36mTesting: Edit mode stubs keep the shape of the real API...[0m[[32mOK[0m] Test "Edit mode stubs keep the shape of the real API" passed!
+[36mTesting: Rate limiting...[0m[WARN]
+[BlinkBlox]: Rate limited event "RateLimited" from Player, 6 refused.
+[WARN]
+[BlinkBlox]: Rate limited event "RateLimitedPoll" from Player, 1 refused.
+[WARN]
+[BlinkBlox]: Rate limited event "RateLimitedCall" from Player, 1 refused.
+[[32mOK[0m] Test "Rate limiting" passed!
+[36mTesting: Invocation slots are recycled...[0m[WARN]
+[BlinkBlox]: "RemoteFunction" already has a listener. A function keeps only the newest one.
+[[32mOK[0m] Test "Invocation slots are recycled" passed!
+[36mTesting: Oversized unreliable payloads are dropped, not sent...[0m[WARN]
+[BlinkBlox]: Dropped unreliable event "UnreliableOversize", 2003 bytes exceeds the 980 byte limit.
+[[32mOK[0m] Test "Oversized unreliable payloads are dropped, not sent" passed!
+[36mTesting: Instances count against the unreliable limit...[0m[WARN]
+[BlinkBlox]: Dropped unreliable event "UnreliableInstances", 997 bytes exceeds the 980 byte limit.
+[[32mOK[0m] Test "Instances count against the unreliable limit" passed!
+[36mTesting: Decoding stops when the player leaves...[0m[[32mOK[0m] Test "Decoding stops when the player leaves" passed!
+[36mTesting: A client cannot grow a polled event's queue past its cap...[0m[[32mOK[0m] Test "A client cannot grow a polled event's queue past its cap" passed!
+[36mTesting: A client cannot grow the queue of an event nobody listens to...[0m[[32mOK[0m] Test "A client cannot grow the queue of an event nobody listens to" passed!
+[36mTesting: A packet the server cannot decode is reported to the game...[0m[[32mOK[0m] Test "A packet the server cannot decode is reported to the game" passed!
+[36mTesting: Invoking a player who has left fails at once...[0m[[32mOK[0m] Test "Invoking a player who has left fails at once" passed!
+[36mTesting: A packet on a channel with no events is reported once and read no further...[0m[[32mOK[0m] Test "A packet on a channel with no events is reported once and read no further" passed!
+[36mTesting: A burst of refused events is reported once a second, with its count...[0m[[32mOK[0m] Test "A burst of refused events is reported once a second, with its count" passed!
+[36mTesting: What a client can make the server report is limited to once a second...[0m[WARN]
+[BlinkBlox]: Dropped a malformed packet from Player.
+[WARN]
+[BlinkBlox]: Dropped a malformed packet from Player.
+[[32mOK[0m] Test "What a client can make the server report is limited to once a second" passed!
+[36mTesting: Predict delivers to local listeners...[0m[[32mOK[0m] Test "Predict delivers to local listeners" passed!
+[36mTesting: Predict queues a Many event that has no listener yet...[0m[[32mOK[0m] Test "Predict queues a Many event that has no listener yet" passed!
+[36mTesting: Predict reaches every listener of a Many event...[0m[[32mOK[0m] Test "Predict reaches every listener of a Many event" passed!
+[36mTesting: Honest traffic never reaches the inbound budget...[0m[[32mOK[0m] Test "Honest traffic never reaches the inbound budget" passed!
+[36mTesting: The inbound budget admits a burst, refuses the rest, and refills...[0m[WARN]
+[BlinkBlox]: Dropped packets from Player over the inbound budget of 65536 bytes a second, 1 refused.
+[WARN]
+[BlinkBlox]: Dropped packets from Player over the inbound budget of 65536 bytes a second, 88 refused.
+[[32mOK[0m] Test "The inbound budget admits a burst, refuses the rest, and refills" passed!
+[36mTesting: The inbound budget is one per player, shared by both remotes...[0m[WARN]
+[BlinkBlox]: Dropped packets from Player over the inbound budget of 65536 bytes a second, 1 refused.
+[WARN]
+[BlinkBlox]: Dropped packets from Player over the inbound budget of 65536 bytes a second, 1 refused.
+[[32mOK[0m] Test "The inbound budget is one per player, shared by both remotes" passed!
+[36mTesting: The inbound budget charges a packet by its size...[0m[WARN]
+[BlinkBlox]: Dropped packets from Player over the inbound budget of 65536 bytes a second, 1 refused.
+[WARN]
+[BlinkBlox]: Dropped packets from Player over the inbound budget of 65536 bytes a second, 1 refused.
+[[32mOK[0m] Test "The inbound budget charges a packet by its size" passed!
+[36mTesting: A packet-drop handler takes the inbound budget's reports from the rate-limit handler...[0m[WARN]
+[BlinkBlox]: Dropped packets from Player over the inbound budget of 65536 bytes a second, 1 refused.
+[[32mOK[0m] Test "A packet-drop handler takes the inbound budget's reports from the rate-limit handler" passed!
+[36mTesting: A player who leaves takes their inbound budget with them...[0m[[32mOK[0m] Test "A player who leaves takes their inbound budget with them" passed!
+[36mTesting: A low event goes until the player's budget is spent, and a normal one always goes...[0m[[32mOK[0m] Test "A low event goes until the player's budget is spent, and a normal one always goes" passed!
+[36mTesting: A spent budget refills, and a low event goes again...[0m[[32mOK[0m] Test "A spent budget refills, and a low event goes again" passed!
+[36mTesting: A reliable broadcast is charged to everyone it reaches...[0m[[32mOK[0m] Test "A reliable broadcast is charged to everyone it reaches" passed!
+[36mTesting: A low FireAll leaves out only the players whose budget is spent...[0m[[32mOK[0m] Test "A low FireAll leaves out only the players whose budget is spent" passed!
+[36mTesting: A low stream held per player waits for the budget, then sends its latest state...[0m[[32mOK[0m] Test "A low stream held per player waits for the budget, then sends its latest state" passed!
+[36mTesting: A schema without the option has no outbound budget in its module...[0m[31m[E3035] Error[0m: Priority of "Chatter" has no effect
+    ╭─[input.blink:1:12]
+    │
+[2m001[0m │ event Chatter { From: Server, Type: Unreliable, Call: SingleSync, Priority: Low, Data: buffer(0..400) }
+    ┆       [31m───[0m[31m┬[0m[31m───[0m
+    ┆          [31m│[0m
+    ┆          [31m╰──[0m [31mDeclared Priority: Low[0m
+    │ [2m= note:[0m Without option OutboundBytesPerSecond there is no budget, and every send goes.
+    │
+────╯
+[[32mOK[0m] Test "A schema without the option has no outbound budget in its module" passed!
+[36mTesting: A client at or below the flush rate sends every frame...[0m[[32mOK[0m] Test "A client at or below the flush rate sends every frame" passed!
+[36mTesting: A client above the flush rate sends at most that often...[0m[[32mOK[0m] Test "A client above the flush rate sends at most that often" passed!
+[36mTesting: The server's Heartbeat is not rate limited...[0m[[32mOK[0m] Test "The server's Heartbeat is not rate limited" passed!
+[36mTesting: A malformed packet reaches the packet-drop handler...[0m[[32mOK[0m] Test "A malformed packet reaches the packet-drop handler" passed!
+[36mTesting: An oversized packet reaches the packet-drop handler with its length...[0m[[32mOK[0m] Test "An oversized packet reaches the packet-drop handler with its length" passed!
+[36mTesting: A packet with too many instances reaches the packet-drop handler with its count...[0m[[32mOK[0m] Test "A packet with too many instances reaches the packet-drop handler with its count" passed!
+[36mTesting: A packet cut at the event cap reaches the packet-drop handler with the events decoded...[0m[[32mOK[0m] Test "A packet cut at the event cap reaches the packet-drop handler with the events decoded" passed!
+[36mTesting: Packets over the inbound budget reach the packet-drop handler, not the rate-limit handler...[0m[[32mOK[0m] Test "Packets over the inbound budget reach the packet-drop handler, not the rate-limit handler" passed!
+[36mTesting: Without a packet-drop handler, refusals warn as before and Budget reaches the rate-limit handler instead of a warning...[0m[[32mOK[0m] Test "Without a packet-drop handler, refusals warn as before and Budget reaches the rate-limit handler instead of a warning" passed!
+[36mTesting: A packet-drop handler that throws does not stop the server decoding...[0m/Users/xopoiii/Programming/BlinkBlox/test/PacketDrops:289: the game's handler failed
+[Stack Begin]
+    Script '[C]' - function 'error'
+    Script '/Users/xopoiii/Programming/BlinkBlox/test/PacketDrops', Line 289
+    Script '../Network/IsolatedDROPSServer.luau', Line 354
+    Script '../Network/IsolatedDROPSServer.luau', Line 361
+[Stack End]
+
+/Users/xopoiii/Programming/BlinkBlox/test/PacketDrops:289: the game's handler failed
+[Stack Begin]
+    Script '[C]' - function 'error'
+    Script '/Users/xopoiii/Programming/BlinkBlox/test/PacketDrops', Line 289
+    Script '../Network/IsolatedDROPSServer.luau', Line 354
+    Script '../Network/IsolatedDROPSServer.luau', Line 361
+[Stack End]
+
+[[32mOK[0m] Test "A packet-drop handler that throws does not stop the server decoding" passed!
+[36mTesting: SetPacketDropHandler follows Casing, and is stubbed in edit mode and typed for TypeScript...[0m[[32mOK[0m] Test "SetPacketDropHandler follows Casing, and is stubbed in edit mode and typed for TypeScript" passed!
+[36mTesting: MaxInstancesPerPacket may be 0, and then every packet carrying one is dropped...[0m[[32mOK[0m] Test "MaxInstancesPerPacket may be 0, and then every packet carrying one is dropped" passed!
+[36mTesting: Without a rate-limit handler, a rate refusal is warned about...[0m[[32mOK[0m] Test "Without a rate-limit handler, a rate refusal is warned about" passed!
+[36mTesting: A rate-limit handler owns the report of a rate refusal, and nothing is warned...[0m[[32mOK[0m] Test "A rate-limit handler owns the report of a rate refusal, and nothing is warned" passed!
+[36mTesting: Only the server module asks to be compiled natively...[0m[[32mOK[0m] Test "Only the server module asks to be compiled natively" passed!
+[36mTesting: A frame of more events than a packet takes is cut at the event cap...[0m[[32mOK[0m] Test "A frame of more events than a packet takes is cut at the event cap" passed!
+[36mTesting: A frame of more bytes than a packet takes is cut before the event that overflows it...[0m[[32mOK[0m] Test "A frame of more bytes than a packet takes is cut before the event that overflows it" passed!
+[36mTesting: A frame of more Instances than a packet takes is cut at the instance cap...[0m[[32mOK[0m] Test "A frame of more Instances than a packet takes is cut at the instance cap" passed!
+[36mTesting: A Fire that throws between the others is left out and cuts nothing...[0m[[32mOK[0m] Test "A Fire that throws between the others is left out and cuts nothing" passed!
+[36mTesting: A frame of broadcasts goes out as one FireAllClients...[0m[[32mOK[0m] Test "A frame of broadcasts goes out as one FireAllClients" passed!
+[36mTesting: A player's own events keep their order against the broadcasts around them...[0m[[32mOK[0m] Test "A player's own events keep their order against the broadcasts around them" passed!
+[36mTesting: A player's own events before the first broadcast arrive ahead of it...[0m[[32mOK[0m] Test "A player's own events before the first broadcast arrive ahead of it" passed!
+[36mTesting: The broadcast batch is empty after the flush...[0m[[32mOK[0m] Test "The broadcast batch is empty after the flush" passed!
+[36mTesting: Streams due in the same frame go out in one packet...[0m[[32mOK[0m] Test "Streams due in the same frame go out in one packet" passed!
+[36mTesting: A client's unreliable events wait for the flush and go out together...[0m[[32mOK[0m] Test "A client's unreliable events wait for the flush and go out together" passed!
+[36mTesting: A client's unreliable batch is cut at the server's event cap...[0m[[32mOK[0m] Test "A client's unreliable batch is cut at the server's event cap" passed!
+[36mTesting: A client's unreliable batch is cut before an event that would take it past the limit...[0m[[32mOK[0m] Test "A client's unreliable batch is cut before an event that would take it past the limit" passed!
+[36mTesting: A server's unreliable events to everyone go out in one FireAllClients a frame...[0m[[32mOK[0m] Test "A server's unreliable events to everyone go out in one FireAllClients a frame" passed!
+[36mTesting: An ordered event in a batch carries the player's own sequence...[0m[[32mOK[0m] Test "An ordered event in a batch carries the player's own sequence" passed!
+[36mTesting: An event that would overflow its player's batch sends what came before it first...[0m[[32mOK[0m] Test "An event that would overflow its player's batch sends what came before it first" passed!
+[36mTesting: A send that throws leaves no Instance behind in the batch it was written into...[0m[[32mOK[0m] Test "A send that throws leaves no Instance behind in the batch it was written into" passed!
+[36mTesting: A Sync listener that throws reports the player, the event, the error and a count...[0m[[32mOK[0m] Test "A Sync listener that throws reports the player, the event, the error and a count" passed!
+[36mTesting: Errors inside one second are counted into the next report, per event...[0m[[32mOK[0m] Test "Errors inside one second are counted into the next report, per event" passed!
+[36mTesting: An Async listener that throws is reported, Many and Single, reliable and unreliable...[0m[[32mOK[0m] Test "An Async listener that throws is reported, Many and Single, reliable and unreliable" passed!
+[36mTesting: A queued event replayed to a listener that throws is reported, and the queue carries on...[0m[[32mOK[0m] Test "A queued event replayed to a listener that throws is reported, and the queue carries on" passed!
+[36mTesting: A function listener that throws is answered with a failure and reported...[0m[[32mOK[0m] Test "A function listener that throws is answered with a failure and reported" passed!
+[36mTesting: Without a listener-error handler, listener errors surface as they did before it...[0m[[32mOK[0m] Test "Without a listener-error handler, listener errors surface as they did before it" passed!
+[36mTesting: Removing the listener-error handler brings the old behaviour back...[0m[[32mOK[0m] Test "Removing the listener-error handler brings the old behaviour back" passed!
+[36mTesting: A listener-error handler that throws does not stop the server decoding...[0m[[32mOK[0m] Test "A listener-error handler that throws does not stop the server decoding" passed!
+[36mTesting: Without a handler, a Sync listener that throws on a replayed event still connects...[0m[[32mOK[0m] Test "Without a handler, a Sync listener that throws on a replayed event still connects" passed!
+[36mTesting: On the server, a listener disconnected mid-dispatch is skipped, and the next is reported...[0m[[32mOK[0m] Test "On the server, a listener disconnected mid-dispatch is skipped, and the next is reported" passed!
+[36mTesting: A listener that throws after its player left is reported at once, each time...[0m[[32mOK[0m] Test "A listener that throws after its player left is reported at once, each time" passed!
+[36mTesting: SetListenerErrorHandler follows Casing, is stubbed in edit mode, and is a no-op on the client...[0m[[32mOK[0m] Test "SetListenerErrorHandler follows Casing, is stubbed in edit mode, and is a no-op on the client" passed!
+[36mTesting: A u8 event fired three times counts three events and six bytes, on both sides...[0m[[32mOK[0m] Test "A u8 event fired three times counts three events and six bytes, on both sides" passed!
+[36mTesting: Unreliable and ordered events count their packets and their sequence number...[0m[[32mOK[0m] Test "Unreliable and ordered events count their packets and their sequence number" passed!
+[36mTesting: Server sends count once per recipient, and the client counts what it receives...[0m[[32mOK[0m] Test "Server sends count once per recipient, and the client counts what it receives" passed!
+[36mTesting: A polled event in a scope is counted under its path...[0m[[32mOK[0m] Test "A polled event in a scope is counted under its path" passed!
+[36mTesting: Events of varying size count the bytes each one took, both ways...[0m[[32mOK[0m] Test "Events of varying size count the bytes each one took, both ways" passed!
+[36mTesting: Refused and undecodable packets are not counted as events...[0m[[32mOK[0m] Test "Refused and undecodable packets are not counted as events" passed!
+[36mTesting: ResetTrafficStats zeroes every count and keeps every name...[0m[[32mOK[0m] Test "ResetTrafficStats zeroes every count and keeps every name" passed!
+[36mTesting: GetTrafficStats hands out a fresh table each call...[0m[[32mOK[0m] Test "GetTrafficStats hands out a fresh table each call" passed!
+[36mTesting: Without the option there are no members and no counting...[0m[[32mOK[0m] Test "Without the option there are no members and no counting" passed!
+[36mTesting: The members and fields follow Casing, in Luau and TypeScript...[0m[[32mOK[0m] Test "The members and fields follow Casing, in Luau and TypeScript" passed!
+[36mTesting: The edit-mode stub hands out the real functions, reporting zeros...[0m[[32mOK[0m] Test "The edit-mode stub hands out the real functions, reporting zeros" passed!
+[36mTesting: A frame of nothing but FireAll counts the broadcast batch once per player...[0m[[32mOK[0m] Test "A frame of nothing but FireAll counts the broadcast batch once per player" passed!
+[36mTesting: A broadcast of varying size counts its bytes once per player...[0m[[32mOK[0m] Test "A broadcast of varying size counts its bytes once per player" passed!
+[36mTesting: A broadcast a diverged player took in their own packet is not counted twice...[0m[[32mOK[0m] Test "A broadcast a diverged player took in their own packet is not counted twice" passed!
+[36mTesting: The players who did not diverge are counted one packet each...[0m[[32mOK[0m] Test "The players who did not diverge are counted one packet each" passed!
+[36mTesting: A broadcast to a server with no players counts nothing...[0m[[32mOK[0m] Test "A broadcast to a server with no players counts nothing" passed!
+[36mTesting: ResetTrafficStats clears what the broadcasts counted...[0m[[32mOK[0m] Test "ResetTrafficStats clears what the broadcasts counted" passed!
+[36mTesting: A client's batch cut into packets counts each packet...[0m[[32mOK[0m] Test "A client's batch cut into packets counts each packet" passed!
+[36mTesting: Without the option neither flush counts anything...[0m[[32mOK[0m] Test "Without the option neither flush counts anything" passed!
+[36mTesting: A member's name is reserved only in the spelling Casing gives it...[0m[[32mOK[0m] Test "A member's name is reserved only in the spelling Casing gives it" passed!
+[36mTesting: MaxInstancesPerPacket = 0 accepts Instances the client never sends...[0m[[32mOK[0m] Test "MaxInstancesPerPacket = 0 accepts Instances the client never sends" passed!
+[36mTesting: The TypeScript declarations type all four handler setters...[0m[[32mOK[0m] Test "The TypeScript declarations type all four handler setters" passed!
+[36mTesting: An invocation nobody answers fails its caller instead of hanging...[0m[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[[32mOK[0m] Test "An invocation nobody answers fails its caller instead of hanging" passed!
+[36mTesting: A timed-out invocation returns its slot...[0m[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[[32mOK[0m] Test "A timed-out invocation returns its slot" passed!
+[36mTesting: A function the server invokes reaches the client and comes back...[0m[[32mOK[0m] Test "A function the server invokes reaches the client and comes back" passed!
+[36mTesting: A function the server invokes that the client never answers fails, naming the player...[0m[WARN]
+[BlinkBlox]: "AskClient" already has a listener. A function keeps only the newest one.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "AskClient" was never answered by Player within 3 seconds, so the call failed.
+[WARN]
+[BlinkBlox]: "AskClient" already has a listener. A function keeps only the newest one.
+[[32mOK[0m] Test "A function the server invokes that the client never answers fails, naming the player" passed!
+[36mTesting: A failure reply leaves the events batched after it intact...[0m[WARN]
+"BadlyAnswered" encountered an error, [string "../Network/Server.luau"]:3675: Expected Value to be of type number, got string instead.
+[[32mOK[0m] Test "A failure reply leaves the events batched after it intact" passed!
+[36mTesting: A call's timer cannot fail a later call from the same thread...[0m[WARN]
+[BlinkBlox]: "RemoteFunction" already has a listener. A function keeps only the newest one.
+[[32mOK[0m] Test "A call's timer cannot fail a later call from the same thread" passed!
+[36mTesting: A reply resumes only the call it answers...[0m[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[[32mOK[0m] Test "A reply resumes only the call it answers" passed!
+[36mTesting: A function runs at most its Concurrency of one player's calls at once...[0m[[32mOK[0m] Test "A function runs at most its Concurrency of one player's calls at once" passed!
+[36mTesting: Without a rate-limit handler, calls past the Concurrency are warned about...[0m[WARN]
+[BlinkBlox]: "ConcurrentCall" already has a listener. A function keeps only the newest one.
+[WARN]
+[BlinkBlox]: "ConcurrentCall" from Player already has 2 calls running, 2 refused.
+[[32mOK[0m] Test "Without a rate-limit handler, calls past the Concurrency are warned about" passed!
+[36mTesting: A call that fails still makes room for the next...[0m[WARN]
+[BlinkBlox]: "ConcurrentCall" already has a listener. A function keeps only the newest one.
+[WARN]
+"ConcurrentCall" encountered an error, refused by the game
+[WARN]
+"ConcurrentCall" encountered an error, refused by the game
+[[32mOK[0m] Test "A call that fails still makes room for the next" passed!
+[36mTesting: Casing is not part of the wire...[0m[[32mOK[0m] Test "Casing is not part of the wire" passed!
+[36mTesting: Typescript output is not part of the wire...[0m[[32mOK[0m] Test "Typescript output is not part of the wire" passed!
+[36mTesting: Output paths are not part of the wire...[0m[[32mOK[0m] Test "Output paths are not part of the wire" passed!
+[36mTesting: SyncValidation is not part of the wire...[0m[[32mOK[0m] Test "SyncValidation is not part of the wire" passed!
+[36mTesting: Packet caps are not part of the wire...[0m[[32mOK[0m] Test "Packet caps are not part of the wire" passed!
+[36mTesting: Comments and whitespace are not part of the wire...[0m[[32mOK[0m] Test "Comments and whitespace are not part of the wire" passed!
+[36mTesting: A rate limit is not part of the wire...[0m[[32mOK[0m] Test "A rate limit is not part of the wire" passed!
+[36mTesting: The call type is not part of the wire...[0m[[32mOK[0m] Test "The call type is not part of the wire" passed!
+[36mTesting: An event inserted ahead of another...[0m[[32mOK[0m] Test "An event inserted ahead of another" passed!
+[36mTesting: A function inserted ahead of an event...[0m[[32mOK[0m] Test "A function inserted ahead of an event" passed!
+[36mTesting: A change of reliability...[0m[[32mOK[0m] Test "A change of reliability" passed!
+[36mTesting: Unreliable becoming ordered...[0m[[32mOK[0m] Test "Unreliable becoming ordered" passed!
+[36mTesting: A wider number...[0m[[32mOK[0m] Test "A wider number" passed!
+[36mTesting: A bound on a string, which changes how its length is encoded...[0m[[32mOK[0m] Test "A bound on a string, which changes how its length is encoded" passed!
+[36mTesting: Two struct fields transposed...[0m[[32mOK[0m] Test "Two struct fields transposed" passed!
+[36mTesting: An enum variant inserted mid-list...[0m[[32mOK[0m] Test "An enum variant inserted mid-list" passed!
+[36mTesting: A change of direction...[0m[[32mOK[0m] Test "A change of direction" passed!
+[36mTesting: A function changing direction...[0m[[32mOK[0m] Test "A function changing direction" passed!
+[36mTesting: An omitted function direction is Client...[0m[[32mOK[0m] Test "An omitted function direction is Client" passed!
+[36mTesting: A renamed event...[0m[[32mOK[0m] Test "A renamed event" passed!
+[36mTesting: A trailing comma in generic arguments...[0m[[32mOK[0m] Test "A trailing comma in generic arguments" passed!
+[36mTesting: A trailing comma in components...[0m[[32mOK[0m] Test "A trailing comma in components" passed!
+[36mTesting: A build without a profile leaves dev declarations out...[0m[[32mOK[0m] Test "A build without a profile leaves dev declarations out" passed!
+[36mTesting: The release profile leaves dev declarations out...[0m[[32mOK[0m] Test "The release profile leaves dev declarations out" passed!
+[36mTesting: The dev profile keeps them...[0m[[32mOK[0m] Test "The dev profile keeps them" passed!
+[36mTesting: A profile other than the one marked leaves them out...[0m[[32mOK[0m] Test "A profile other than the one marked leaves them out" passed!
+[36mTesting: A scope's profile covers everything inside it...[0m[[32mOK[0m] Test "A scope's profile covers everything inside it" passed!
+[36mTesting: An attribute right after the option block reaches its declaration...[0m[[32mOK[0m] Test "An attribute right after the option block reaches its declaration" passed!
+[36mTesting: A gated option applies only under its profile...[0m[[32mOK[0m] Test "A gated option applies only under its profile" passed!
+[36mTesting: One option may be set once per profile...[0m[[32mOK[0m] Test "One option may be set once per profile" passed!
+[36mTesting: An option set with and without a profile clashes (under release)...[0m[[32mOK[0m] Test "An option set with and without a profile clashes (under release)" passed!
+[36mTesting: An option set with and without a profile clashes (under dev)...[0m[[32mOK[0m] Test "An option set with and without a profile clashes (under dev)" passed!
+[36mTesting: A compiled declaration cannot name an excluded one...[0m[[32mOK[0m] Test "A compiled declaration cannot name an excluded one" passed!
+[36mTesting: A misspelt profile is refused...[0m[[32mOK[0m] Test "A misspelt profile is refused" passed!
+[36mTesting: An unknown attribute is refused...[0m[[32mOK[0m] Test "An unknown attribute is refused" passed!
+[36mTesting: An attribute with nothing after it is refused...[0m[[32mOK[0m] Test "An attribute with nothing after it is refused" passed!
+[36mTesting: A statement takes one profile...[0m[[32mOK[0m] Test "A statement takes one profile" passed!
+[36mTesting: Builds under different profiles refuse each other...[0m[[32mOK[0m] Test "Builds under different profiles refuse each other" passed!
+[36mTesting: A parser used again forgets the excluded declarations...[0m[[32mOK[0m] Test "A parser used again forgets the excluded declarations" passed!
+[36mTesting: A parse that failed inside an attribute does not carry it over...[0m[[32mOK[0m] Test "A parse that failed inside an attribute does not carry it over" passed!
+[36mTesting: Each channel holds exactly 256...[0m[[32mOK[0m] Test "Each channel holds exactly 256" passed!
+[36mTesting: Full channels load as native code on both sides...[0m[[32mOK[0m] Test "Full channels load as native code on both sides" passed!
+[36mTesting: A module past the size limit is warned about...[0m[[32mOK[0m] Test "A module past the size limit is warned about" passed!
+[36mTesting: A 257th reliable event is refused...[0m[[32mOK[0m] Test "A 257th reliable event is refused" passed!
+[36mTesting: Functions share the reliable channel's count...[0m[[32mOK[0m] Test "Functions share the reliable channel's count" passed!
+[36mTesting: A 257th unreliable event is refused...[0m[[32mOK[0m] Test "A 257th unreliable event is refused" passed!
+[36mTesting: Declarations inside a scope count...[0m[[32mOK[0m] Test "Declarations inside a scope count" passed!
+[36mTesting: A declaration left out by its profile takes no index...[0m[[32mOK[0m] Test "A declaration left out by its profile takes no index" passed!
+[36mTesting: The same schema under the profile that keeps it is refused...[0m[[32mOK[0m] Test "The same schema under the profile that keeps it is refused" passed!
+[36mTesting: An import that brings a channel past 256 is refused at the import...[0m[[32mOK[0m] Test "An import that brings a channel past 256 is refused at the import" passed!
+[36mTesting: A matching pair loads...[0m[[32mOK[0m] Test "A matching pair loads" passed!
+[36mTesting: A client built from a different schema refuses to load...[0m[[32mOK[0m] Test "A client built from a different schema refuses to load" passed!
+[36mTesting: A server that publishes no signature is reported as such...[0m[WARN]
+[BlinkBlox]: "NeverAnswered" was never answered within 3 seconds, so the call failed.
+[[32mOK[0m] Test "A server that publishes no signature is reported as such" passed!
+[36mTesting: Named Tuple...[0m[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[[32mOK[0m] Test "Named Tuple" passed!
+[36mTesting: Partially named Tuple...[0m[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[[32mOK[0m] Test "Partially named Tuple" passed!
+[36mTesting: Named function Tuple...[0m[[32mOK[0m] Test "Named function Tuple" passed!
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[36mTesting: An element named Length after a string...[0m[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[[32mOK[0m] Test "An element named Length after a string" passed!
+[36mTesting: An element named Length before a string...[0m[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[[32mOK[0m] Test "An element named Length before a string" passed!
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[36mTesting: An unknown event index stops the parse instead of decoding past it...[0m[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/Client.luau"]:11446: [BlinkBlox]: Unknown event index.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[[32mOK[0m] Test "An unknown event index stops the parse instead of decoding past it" passed!
+[36mTesting: A packet that cannot be decoded is reported rather than dropped in silence...[0m[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "ReliableServer": [string "../Network/Client.luau"]:2585: buffer access out of bounds
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[[32mOK[0m] Test "A packet that cannot be decoded is reported rather than dropped in silence" passed!
+[36mTesting: A yield in a Sync listener discards the rest of its packet, and says so...[0m[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[WARN]
+[BlinkBlox]: Event "ReliableServer" yielded in a Sync call, so the rest of the packet it arrived in was discarded. Use an Async call if the listener needs to yield.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[[32mOK[0m] Test "A yield in a Sync listener discards the rest of its packet, and says so" passed!
+[36mTesting: Keywords are painted...[0m[[32mOK[0m] Test "Keywords are painted" passed!
+[36mTesting: Primitives are painted...[0m[[32mOK[0m] Test "Primitives are painted" passed!
+[36mTesting: Comments are painted...[0m[[32mOK[0m] Test "Comments are painted" passed!
+[36mTesting: Strings are painted...[0m[[32mOK[0m] Test "Strings are painted" passed!
+[36mTesting: A field reads as text, not as an identifier...[0m[[32mOK[0m] Test "A field reads as text, not as an identifier" passed!
+[36mTesting: A type reference reads as an identifier...[0m[[32mOK[0m] Test "A type reference reads as an identifier" passed!
+[36mTesting: A map key stays an identifier...[0m[[32mOK[0m] Test "A map key stays an identifier" passed!
+[36mTesting: A component's brackets are escaped...[0m[[32mOK[0m] Test "A component's brackets are escaped" passed!
+[36mTesting: A component does not emit a raw bracket...[0m[[32mOK[0m] Test "A component does not emit a raw bracket" passed!
+[36mTesting: A bounded range paints both ends...[0m[[32mOK[0m] Test "A bounded range paints both ends" passed!
+[36mTesting: An exact array size is painted...[0m[[32mOK[0m] Test "An exact array size is painted" passed!
+[36mTesting: An attribute is painted as a keyword...[0m[[32mOK[0m] Test "An attribute is painted as a keyword" passed!
+[36mTesting: An attribute's profile is painted as a string...[0m[[32mOK[0m] Test "An attribute's profile is painted as a string" passed!
+[36mTesting: An attribute is not painted as an error...[0m[[32mOK[0m] Test "An attribute is not painted as an error" passed!
+[[32mOK[0m] Test "An empty document renders empty" passed!
+[[32mOK[0m] Test "The syntax grammar names every type the compiler knows" passed!
+[36mTesting: Completion offers keywords, primitives and declared names where each belongs...[0m[[32mOK[0m] Test "Completion offers keywords, primitives and declared names where each belongs" passed!
+[36mTesting: Tab expands the chosen item over the word it completes...[0m[[32mOK[0m] Test "Tab expands the chosen item over the word it completes" passed!
+[36mTesting: The arrow keys step through the list, wrapping at both ends...[0m[[32mOK[0m] Test "The arrow keys step through the list, wrapping at both ends" passed!
+[36mTesting: The line at the cursor is the one splitting the whole text finds...[0m[[32mOK[0m] Test "The line at the cursor is the one splitting the whole text finds" passed!
+[36mTesting: The editor shows a warning, and an error over it, and clears both...[0m[[32mOK[0m] Test "The editor shows a warning, and an error over it, and clears both" passed!
+[36mTesting: A file of events imported twice warns once, at the second import...[0m[[32mOK[0m] Test "A file of events imported twice warns once, at the second import" passed!
+[36mTesting: A file of types imported twice does not warn...[0m[[32mOK[0m] Test "A file of types imported twice does not warn" passed!
+[36mTesting: Parsing again with the same parser does not warn about the last parse's imports...[0m[[32mOK[0m] Test "Parsing again with the same parser does not warn about the last parse's imports" passed!
+[36mTesting: Vector2, UDim, UDim2 and NumberRange round-trip...[0m[[32mOK[0m] Test "Vector2, UDim, UDim2 and NumberRange round-trip" passed!
+[36mTesting: A ColorSequence round-trips its keypoints...[0m[[32mOK[0m] Test "A ColorSequence round-trips its keypoints" passed!
+[36mTesting: TweenInfo and Enum(Name) round-trip by Value...[0m[[32mOK[0m] Test "TweenInfo and Enum(Name) round-trip by Value" passed!
+[36mTesting: A struct of the new datatypes round-trips...[0m[[32mOK[0m] Test "A struct of the new datatypes round-trips" passed!
+[36mTesting: Readers refuse what the constructors would throw on...[0m[[32mOK[0m] Test "Readers refuse what the constructors would throw on" passed!
+[36mTesting: Enum(Name) refuses an item of another enum on send...[0m[[32mOK[0m] Test "Enum(Name) refuses an item of another enum on send" passed!
+[36mTesting: A type named Enum is refused only beside the datatypes that name Enum...[0m[[32mOK[0m] Test "A type named Enum is refused only beside the datatypes that name Enum" passed!
+[36mTesting: PhysicalProperties round-trip every field...[0m[[32mOK[0m] Test "PhysicalProperties round-trip every field" passed!
+[36mTesting: PhysicalProperties refuses NaN and out-of-range fields, and takes each bound...[0m[[32mOK[0m] Test "PhysicalProperties refuses NaN and out-of-range fields, and takes each bound" passed!
+[36mTesting: A NaN PhysicalProperties from a client never reaches the listener...[0m[[32mOK[0m] Test "A NaN PhysicalProperties from a client never reaches the listener" passed!
+[36mTesting: A NumberSequence round-trips its keypoints...[0m[[32mOK[0m] Test "A NumberSequence round-trips its keypoints" passed!
+[36mTesting: NumberSequence readers refuse what Roblox would throw on, and NaN...[0m[[32mOK[0m] Test "NumberSequence readers refuse what Roblox would throw on, and NaN" passed!
+[36mTesting: NumberSequence refuses more than 20 keypoints on send...[0m[[32mOK[0m] Test "NumberSequence refuses more than 20 keypoints on send" passed!
+[36mTesting: Rect and Ray round-trip...[0m[[32mOK[0m] Test "Rect and Ray round-trip" passed!
+[36mTesting: Region3 round-trips, exactly when its corners are whole...[0m[[32mOK[0m] Test "Region3 round-trips, exactly when its corners are whole" passed!
+[36mTesting: A struct of the five round-trips...[0m[[32mOK[0m] Test "A struct of the five round-trips" passed!
+[36mTesting: The five type names are taken, and NumberSequenceKeypoint only beside a NumberSequence...[0m[[32mOK[0m] Test "The five type names are taken, and NumberSequenceKeypoint only beside a NumberSequence" passed!
+[36mTesting: The size analysis measures each type as the emitter writes it...[0m[[32mOK[0m] Test "The size analysis measures each type as the emitter writes it" passed!
+[36mTesting: Library.Compile returns three modules that load, and its warnings...[0m[[32mOK[0m] Test "Library.Compile returns three modules that load, and its warnings" passed!
+[36mTesting: Library.Compile raises a schema's error and leaves no hook behind...[0m[[32mOK[0m] Test "Library.Compile raises a schema's error and leaves no hook behind" passed!
+[36mTesting: Convert: an empty draft is a schema that compiles...[0m[[32mOK[0m] Test "Convert: an empty draft is a schema that compiles" passed!
+[36mTesting: Convert: an event with no direction or reliability is marked, and still compiles...[0m[[32mOK[0m] Test "Convert: an event with no direction or reliability is marked, and still compiles" passed!
+[36mTesting: Convert: a rate the source carried is written, not asked for...[0m[[32mOK[0m] Test "Convert: a rate the source carried is written, not asked for" passed!
+[36mTesting: Convert: a tuple, an optional and nested types print as a schema writes them...[0m[[32mOK[0m] Test "Convert: a tuple, an optional and nested types print as a schema writes them" passed!
+[36mTesting: zap Everything converts to its golden, and the draft compiles...[0m[[32mOK[0m] Test "zap Everything converts to its golden, and the draft compiles" passed!
+[36mTesting: zap Definition converts to its golden, and the draft compiles...[0m[[32mOK[0m] Test "zap Definition converts to its golden, and the draft compiles" passed!
+[36mTesting: zap Scenarios converts to its golden, and the draft compiles...[0m[[32mOK[0m] Test "zap Scenarios converts to its golden, and the draft compiles" passed!
+[36mTesting: zap: an event a client fires is marked for a Rate, and one the server fires is not...[0m[[32mOK[0m] Test "zap: an event a client fires is marked for a Rate, and one the server fires is not" passed!
+[36mTesting: zap: a length a client sends unbounded is marked where it is declared...[0m[[32mOK[0m] Test "zap: a length a client sends unbounded is marked where it is declared" passed!
+[36mTesting: zap: what has no equivalent is said, never left out quietly...[0m[[32mOK[0m] Test "zap: what has no equivalent is said, never left out quietly" passed!
+[36mTesting: zap: a type a schema cannot name is written out where it was used...[0m[[32mOK[0m] Test "zap: a type a schema cannot name is written out where it was used" passed!
+[36mTesting: zap: zap's defaults are written into the draft...[0m[[32mOK[0m] Test "zap: zap's defaults are written into the draft" passed!
+[36mTesting: zap: a config zap would refuse fails with its line...[0m[[32mOK[0m] Test "zap: a config zap would refuse fails with its line" passed!
+[36mTesting: bytenet/Scenarios converts to its golden, and the draft compiles...[0m[[32mOK[0m] Test "bytenet/Scenarios converts to its golden, and the draft compiles" passed!
+[36mTesting: bytenet/Packets converts to its golden, and the draft compiles...[0m[[32mOK[0m] Test "bytenet/Packets converts to its golden, and the draft compiles" passed!
+[36mTesting: packet/Scenarios converts to its golden, and the draft compiles...[0m[[32mOK[0m] Test "packet/Scenarios converts to its golden, and the draft compiles" passed!
+[36mTesting: packet/Packets converts to its golden, and the draft compiles...[0m[[32mOK[0m] Test "packet/Packets converts to its golden, and the draft compiles" passed!
+[36mTesting: quicknet/Scenarios converts to its golden, and the draft compiles...[0m[[32mOK[0m] Test "quicknet/Scenarios converts to its golden, and the draft compiles" passed!
+[36mTesting: quicknet/Events converts to its golden, and the draft compiles...[0m[[32mOK[0m] Test "quicknet/Events converts to its golden, and the draft compiles" passed!
+[36mTesting: warp/Scenarios converts to its golden, and the draft compiles...[0m[[32mOK[0m] Test "warp/Scenarios converts to its golden, and the draft compiles" passed!
+[36mTesting: warp/Remotes converts to its golden, and the draft compiles...[0m[[32mOK[0m] Test "warp/Remotes converts to its golden, and the draft compiles" passed!
+[36mTesting: ByteNet: every packet's direction is asked for, and its reliability is not...[0m[[32mOK[0m] Test "ByteNet: every packet's direction is asked for, and its reliability is not" passed!
+[36mTesting: ByteNet: a struct built twice by one function is declared once...[0m[[32mOK[0m] Test "ByteNet: a struct built twice by one function is declared once" passed!
+[36mTesting: ByteNet: a module beside the definitions is run, and one that is missing is named...[0m[[32mOK[0m] Test "ByteNet: a module beside the definitions is run, and one that is missing is named" passed!
+[36mTesting: ByteNet: a name the stub does not know fails, naming the version it was written for...[0m[[32mOK[0m] Test "ByteNet: a name the stub does not know fails, naming the version it was written for" passed!
+[36mTesting: ByteNet: definitions that pass something else for a type fail, saying where...[0m[[32mOK[0m] Test "ByteNet: definitions that pass something else for a type fail, saying where" passed!
+[36mTesting: The sandbox gives definitions no way to the disk, the network or a process...[0m[[32mOK[0m] Test "The sandbox gives definitions no way to the disk, the network or a process" passed!
+[36mTesting: Packet: a packet with a response is a function, and its caller is asked for...[0m[[32mOK[0m] Test "Packet: a packet with a response is a function, and its caller is asked for" passed!
+[36mTesting: Packet: a one-byte length is kept as a bound, and a two-byte one is asked about...[0m[[32mOK[0m] Test "Packet: a one-byte length is kept as a bound, and a two-byte one is asked about" passed!
+[36mTesting: Packet: types with no equivalent and a name that is not one are each said...[0m[[32mOK[0m] Test "Packet: types with no equivalent and a name that is not one are each said" passed!
+[36mTesting: Packet: a type name the stub does not know fails, naming the version...[0m[[32mOK[0m] Test "Packet: a type name the stub does not know fails, naming the version" passed!
+[36mTesting: QuickNet: a rate limit is carried, the default is written, and a lifted one is asked for...[0m[[32mOK[0m] Test "QuickNet: a rate limit is carried, the default is written, and a lifted one is asked for" passed!
+[36mTesting: QuickNet: each kind of table is the type it stands for...[0m[[32mOK[0m] Test "QuickNet: each kind of table is the type it stands for" passed!
+[36mTesting: QuickNet: what has no equivalent is each said...[0m[[32mOK[0m] Test "QuickNet: what has no equivalent is each said" passed!
+[36mTesting: QuickNet: a function carries its rate and is asked for its concurrency...[0m[[32mOK[0m] Test "QuickNet: a function carries its rate and is asked for its concurrency" passed!
+[36mTesting: Warp: every event's direction and reliability are asked for...[0m[[32mOK[0m] Test "Warp: every event's direction and reliability are asked for" passed!
+[36mTesting: Warp: an event named with no schema is kept as unknown, and said to be...[0m[[32mOK[0m] Test "Warp: an event named with no schema is kept as unknown, and said to be" passed!
+[36mTesting: Warp: a custom datatype and the types with no equivalent are each said...[0m[[32mOK[0m] Test "Warp: a custom datatype and the types with no equivalent are each said" passed!
+[36mTesting: Warp: schemas handed over from a table come out in the same order every time...[0m[[32mOK[0m] Test "Warp: schemas handed over from a table come out in the same order every time" passed!
+[36mTesting: Ordered unreliable events...[0m[[32mOK[0m] Test "Ordered unreliable events" passed!
+[36mTesting: Offset-encoded lengths...[0m[[32mOK[0m] Test "Offset-encoded lengths" passed!
+[36mTesting: Bit packing...[0m[[32mOK[0m] Test "Bit packing" passed!
+[36mTesting: Packed boolean arrays...[0m[[32mOK[0m] Test "Packed boolean arrays" passed!
+[36mTesting: An ordered packet from before the wrap is stale after it...[0m[[32mOK[0m] Test "An ordered packet from before the wrap is stale after it" passed!
+[36mTesting: A player left out of many ordered sends still receives the next...[0m[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:833: [BlinkBlox]: This channel receives no events.
+[[32mOK[0m] Test "A player left out of many ordered sends still receives the next" passed!
+[36mTesting: A changing stream sends ten times a second at a Rate of 10...[0m[[32mOK[0m] Test "A changing stream sends ten times a second at a Rate of 10" passed!
+[36mTesting: SetFast sends at the Fast rate, and SetFast(false) goes back...[0m[[32mOK[0m] Test "SetFast sends at the Fast rate, and SetFast(false) goes back" passed!
+[36mTesting: An unchanged state is skipped and sent again every Keepalive...[0m[[32mOK[0m] Test "An unchanged state is skipped and sent again every Keepalive" passed!
+[36mTesting: A stream that stops moving sends its still state once...[0m[[32mOK[0m] Test "A stream that stops moving sends its still state once" passed!
+[36mTesting: A stream that starts still is sent once...[0m[[32mOK[0m] Test "A stream that starts still is sent once" passed!
+[36mTesting: Urgent sends at the next step and restarts the interval...[0m[[32mOK[0m] Test "Urgent sends at the next step and restarts the interval" passed!
+[36mTesting: A number within Epsilon of the last one sent is the same state...[0m[[32mOK[0m] Test "A number within Epsilon of the last one sent is the same state" passed!
+[36mTesting: A vector is the same state while each component is within Epsilon...[0m[[32mOK[0m] Test "A vector is the same state while each component is within Epsilon" passed!
+[36mTesting: A table the game changes after Set is compared as it was sent...[0m[[32mOK[0m] Test "A table the game changes after Set is compared as it was sent" passed!
+[36mTesting: Set(nil) throws and leaves the stream as it was...[0m[[32mOK[0m] Test "Set(nil) throws and leaves the stream as it was" passed!
+[36mTesting: An interval or a keepalive a hair short of due still counts as due...[0m[[32mOK[0m] Test "An interval or a keepalive a hair short of due still counts as due" passed!
+[36mTesting: A stream's stamp wraps at 65536 ms and the client unwraps it...[0m[[32mOK[0m] Test "A stream's stamp wraps at 65536 ms and the client unwraps it" passed!
+[36mTesting: A stream is ordered by its stamp: a state older than the last one taken is dropped...[0m[[32mOK[0m] Test "A stream is ordered by its stamp: a state older than the last one taken is dropped" passed!
+[36mTesting: A stream packet is its header, then the state...[0m[[32mOK[0m] Test "A stream packet is its header, then the state" passed!
+[36mTesting: Clear sends nil once, and the stream is silent until the next Set...[0m[[32mOK[0m] Test "Clear sends nil once, and the stream is silent until the next Set" passed!
+[36mTesting: Clearing a stream the clients never saw sends nothing...[0m[[32mOK[0m] Test "Clearing a stream the clients never saw sends nothing" passed!
+[36mTesting: A Set after Clear in the same frame sends the state, not the clear...[0m[[32mOK[0m] Test "A Set after Clear in the same frame sends the state, not the clear" passed!
+[36mTesting: An emptied set is a state, not a clear: sent, then kept alive...[0m[[32mOK[0m] Test "An emptied set is a state, not a clear: sent, then kept alive" passed!
+[36mTesting: A state that fails to send is reported and stops the stream...[0m[[32mOK[0m] Test "A state that fails to send is reported and stops the stream" passed!
+[36mTesting: A state too large for one packet is reported once and stops the stream...[0m[[32mOK[0m] Test "A state too large for one packet is reported once and stops the stream" passed!
+[36mTesting: The compiler refuses a stream it cannot schedule...[0m[[32mOK[0m] Test "The compiler refuses a stream it cannot schedule" passed!
+[36mTesting: A stream's members follow Casing, are stubbed in edit mode and typed for TypeScript...[0m[[32mOK[0m] Test "A stream's members follow Casing, are stubbed in edit mode and typed for TypeScript" passed!
+[36mTesting: A stream's edit-mode stub can be driven without remotes...[0m[[32mOK[0m] Test "A stream's edit-mode stub can be driven without remotes" passed!
+[36mTesting: A stamped event carries the client's send time, and the listener gets it in seconds...[0m[[32mOK[0m] Test "A stamped event carries the client's send time, and the listener gets it in seconds" passed!
+[36mTesting: SentAt is held between the window's start and the moment the event arrived...[0m[[32mOK[0m] Test "SentAt is held between the window's start and the moment the event arrived" passed!
+[36mTesting: A stamp unwraps across the 65536 ms it wraps at...[0m[[32mOK[0m] Test "A stamp unwraps across the 65536 ms it wraps at" passed!
+[36mTesting: A stamped event's values arrive before SentAt, and its Fire takes only them...[0m[[32mOK[0m] Test "A stamped event's values arrive before SentAt, and its Fire takes only them" passed!
+[36mTesting: TypeScript types a stamped Fire without the stamp, and its listener with SentAt...[0m[[32mOK[0m] Test "TypeScript types a stamped Fire without the stamp, and its listener with SentAt" passed!
+[36mTesting: The compiler refuses a stamp it cannot honour...[0m[[32mOK[0m] Test "The compiler refuses a stamp it cannot honour" passed!
+[36mTesting: A per-player stream sends each player their own state, to them alone...[0m[[32mOK[0m] Test "A per-player stream sends each player their own state, to them alone" passed!
+[36mTesting: Each player's state is compared and kept alive on its own...[0m[[32mOK[0m] Test "Each player's state is compared and kept alive on its own" passed!
+[36mTesting: Clear, Urgent and SetFast touch only the player they name...[0m[[32mOK[0m] Test "Clear, Urgent and SetFast touch only the player they name" passed!
+[36mTesting: Setting a player's state to nil throws, and names Clear...[0m[[32mOK[0m] Test "Setting a player's state to nil throws, and names Clear" passed!
+[36mTesting: A player who leaves takes their state, and one who has left gets none...[0m[[32mOK[0m] Test "A player who leaves takes their state, and one who has left gets none" passed!
+[36mTesting: TrafficStats counts a stream's sends and receives, bytes and all, on its channel...[0m[[32mOK[0m] Test "TrafficStats counts a stream's sends and receives, bytes and all, on its channel" passed!
+[36mTesting: A fixed-point field in a stream's state round-trips, compared in real units...[0m[[32mOK[0m] Test "A fixed-point field in a stream's state round-trips, compared in real units" passed!
+[36mTesting: ExportLimits holds the bounds of the type a stream streams, not of its wire pack...[0m[[32mOK[0m] Test "ExportLimits holds the bounds of the type a stream streams, not of its wire pack" passed!
+[36mTesting: Under AutoStart = false a stream's scheduler does not run before Start...[0m[[32mOK[0m] Test "Under AutoStart = false a stream's scheduler does not run before Start" passed!
+[36mTesting: A client that gave up on the remotes keeps GetTrafficStats, Limits and a stream's On...[0m[[32mOK[0m] Test "A client that gave up on the remotes keeps GetTrafficStats, Limits and a stream's On" passed!
+[36mTesting: Color3 channels are rounded and clamped, not truncated and wrapped...[0m[[32mOK[0m] Test "Color3 channels are rounded and clamped, not truncated and wrapped" passed!
+[36mTesting: Quaternion CFrames round-trip within their precision...[0m[[32mOK[0m] Test "Quaternion CFrames round-trip within their precision" passed!
+[36mTesting: An array of optionals keeps its holes where they were...[0m[[32mOK[0m] Test "An array of optionals keeps its holes where they were" passed!
+[36mTesting: Half floats keep NaN, the infinities and the carry out of a subnormal...[0m[[32mOK[0m] Test "Half floats keep NaN, the infinities and the carry out of a subnormal" passed!
+[36mTesting: A set flag named like a reader's local leaves no global behind...[0m[[32mOK[0m] Test "A set flag named like a reader's local leaves no global behind" passed!
+[36mTesting: 24-bit numbers take three bytes, low byte first...[0m[[32mOK[0m] Test "24-bit numbers take three bytes, low byte first" passed!
+[34mChecking serialiser properties (seed 29)...
+[0m[36mTesting: properties of Byte (WriteValidations on)...[0m[[32mOK[0m] Test "properties of Byte (WriteValidations on)" passed!
+[36mTesting: properties of ExactRange (WriteValidations on)...[0m[[32mOK[0m] Test "properties of ExactRange (WriteValidations on)" passed!
+[36mTesting: properties of DecimalRange (WriteValidations on)...[0m[[32mOK[0m] Test "properties of DecimalRange (WriteValidations on)" passed!
+[36mTesting: properties of NegativeRange (WriteValidations on)...[0m[[32mOK[0m] Test "properties of NegativeRange (WriteValidations on)" passed!
+[36mTesting: properties of UnboundUpper (WriteValidations on)...[0m[[32mOK[0m] Test "properties of UnboundUpper (WriteValidations on)" passed!
+[36mTesting: properties of UnboundLower (WriteValidations on)...[0m[[32mOK[0m] Test "properties of UnboundLower (WriteValidations on)" passed!
+[36mTesting: properties of RangedFields (WriteValidations on)...[0m[[32mOK[0m] Test "properties of RangedFields (WriteValidations on)" passed!
+[36mTesting: properties of RangedList (WriteValidations on)...[0m[[32mOK[0m] Test "properties of RangedList (WriteValidations on)" passed!
+[36mTesting: properties of Quantized (WriteValidations on)...[0m[[32mOK[0m] Test "properties of Quantized (WriteValidations on)" passed!
+[36mTesting: properties of QuantizedWide (WriteValidations on)...[0m[[32mOK[0m] Test "properties of QuantizedWide (WriteValidations on)" passed!
+[36mTesting: properties of QuantizedSaturated (WriteValidations on)...[0m[[32mOK[0m] Test "properties of QuantizedSaturated (WriteValidations on)" passed!
+[36mTesting: properties of QuantizedFields (WriteValidations on)...[0m[[32mOK[0m] Test "properties of QuantizedFields (WriteValidations on)" passed!
+[36mTesting: properties of Buffer (WriteValidations on)...[0m[[32mOK[0m] Test "properties of Buffer (WriteValidations on)" passed!
+[36mTesting: properties of ExactBuffer (WriteValidations on)...[0m[[32mOK[0m] Test "properties of ExactBuffer (WriteValidations on)" passed!
+[36mTesting: properties of BoundedBuffer (WriteValidations on)...[0m[[32mOK[0m] Test "properties of BoundedBuffer (WriteValidations on)" passed!
+[36mTesting: properties of MultiDimensionalArray (WriteValidations on)...[0m[[32mOK[0m] Test "properties of MultiDimensionalArray (WriteValidations on)" passed!
+[36mTesting: properties of SizeByte (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SizeByte (WriteValidations on)" passed!
+[36mTesting: properties of SizeFixedString (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SizeFixedString (WriteValidations on)" passed!
+[36mTesting: properties of SizeBoundedString (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SizeBoundedString (WriteValidations on)" passed!
+[36mTesting: properties of SizeFixedArray (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SizeFixedArray (WriteValidations on)" passed!
+[36mTesting: properties of SizeBoundedArray (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SizeBoundedArray (WriteValidations on)" passed!
+[36mTesting: properties of SizeOptionalByte (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SizeOptionalByte (WriteValidations on)" passed!
+[36mTesting: properties of SizeStruct (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SizeStruct (WriteValidations on)" passed!
+[36mTesting: properties of SizeEnum (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SizeEnum (WriteValidations on)" passed!
+[36mTesting: properties of SizeFlags (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SizeFlags (WriteValidations on)" passed!
+[36mTesting: properties of SizeMap (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SizeMap (WriteValidations on)" passed!
+[36mTesting: properties of OffsetArray (WriteValidations on)...[0m[[32mOK[0m] Test "properties of OffsetArray (WriteValidations on)" passed!
+[36mTesting: properties of OffsetString (WriteValidations on)...[0m[[32mOK[0m] Test "properties of OffsetString (WriteValidations on)" passed!
+[36mTesting: properties of OffsetBuffer (WriteValidations on)...[0m[[32mOK[0m] Test "properties of OffsetBuffer (WriteValidations on)" passed!
+[36mTesting: properties of BitsOne (WriteValidations on)...[0m[[32mOK[0m] Test "properties of BitsOne (WriteValidations on)" passed!
+[36mTesting: properties of BitsSeven (WriteValidations on)...[0m[[32mOK[0m] Test "properties of BitsSeven (WriteValidations on)" passed!
+[36mTesting: properties of BitsEight (WriteValidations on)...[0m[[32mOK[0m] Test "properties of BitsEight (WriteValidations on)" passed!
+[36mTesting: properties of BitsNine (WriteValidations on)...[0m[[32mOK[0m] Test "properties of BitsNine (WriteValidations on)" passed!
+[36mTesting: properties of BitsSeventeen (WriteValidations on)...[0m[[32mOK[0m] Test "properties of BitsSeventeen (WriteValidations on)" passed!
+[36mTesting: properties of BitsMixed (WriteValidations on)...[0m[[32mOK[0m] Test "properties of BitsMixed (WriteValidations on)" passed!
+[36mTesting: properties of PackedBooleans (WriteValidations on)...[0m[[32mOK[0m] Test "properties of PackedBooleans (WriteValidations on)" passed!
+[36mTesting: properties of PackedFixed (WriteValidations on)...[0m[[32mOK[0m] Test "properties of PackedFixed (WriteValidations on)" passed!
+[36mTesting: properties of PackedRanged (WriteValidations on)...[0m[[32mOK[0m] Test "properties of PackedRanged (WriteValidations on)" passed!
+[36mTesting: properties of PackedNested (WriteValidations on)...[0m[[32mOK[0m] Test "properties of PackedNested (WriteValidations on)" passed!
+[36mTesting: properties of PackedThroughAlias (WriteValidations on)...[0m[[32mOK[0m] Test "properties of PackedThroughAlias (WriteValidations on)" passed!
+[36mTesting: properties of PackedBeside (WriteValidations on)...[0m[[32mOK[0m] Test "properties of PackedBeside (WriteValidations on)" passed!
+[36mTesting: properties of PackedMap (WriteValidations on)...[0m[[32mOK[0m] Test "properties of PackedMap (WriteValidations on)" passed!
+[36mTesting: properties of PackedOptional (WriteValidations on)...[0m[[32mOK[0m] Test "properties of PackedOptional (WriteValidations on)" passed!
+[36mTesting: properties of MapNested (WriteValidations on)...[0m[[32mOK[0m] Test "properties of MapNested (WriteValidations on)" passed!
+[36mTesting: properties of Standalone (WriteValidations on)...[0m[[32mOK[0m] Test "properties of Standalone (WriteValidations on)" passed!
+[36mTesting: properties of OptionalHoles (WriteValidations on)...[0m[[32mOK[0m] Test "properties of OptionalHoles (WriteValidations on)" passed!
+[36mTesting: properties of HalfFloat (WriteValidations on)...[0m[[32mOK[0m] Test "properties of HalfFloat (WriteValidations on)" passed!
+[36mTesting: properties of Float24 (WriteValidations on)...[0m[[32mOK[0m] Test "properties of Float24 (WriteValidations on)" passed!
+[36mTesting: properties of Unsigned24 (WriteValidations on)...[0m[[32mOK[0m] Test "properties of Unsigned24 (WriteValidations on)" passed!
+[36mTesting: properties of Signed24 (WriteValidations on)...[0m[[32mOK[0m] Test "properties of Signed24 (WriteValidations on)" passed!
+[36mTesting: properties of FlagCarrier (WriteValidations on)...[0m[[32mOK[0m] Test "properties of FlagCarrier (WriteValidations on)" passed!
+[36mTesting: properties of FixedTenths (WriteValidations on)...[0m[[32mOK[0m] Test "properties of FixedTenths (WriteValidations on)" passed!
+[36mTesting: properties of FixedRanged (WriteValidations on)...[0m[[32mOK[0m] Test "properties of FixedRanged (WriteValidations on)" passed!
+[36mTesting: properties of FixedSigned (WriteValidations on)...[0m[[32mOK[0m] Test "properties of FixedSigned (WriteValidations on)" passed!
+[36mTesting: properties of FixedCoarse (WriteValidations on)...[0m[[32mOK[0m] Test "properties of FixedCoarse (WriteValidations on)" passed!
+[36mTesting: properties of FixedTriple (WriteValidations on)...[0m[[32mOK[0m] Test "properties of FixedTriple (WriteValidations on)" passed!
+[36mTesting: properties of FixedWide (WriteValidations on)...[0m[[32mOK[0m] Test "properties of FixedWide (WriteValidations on)" passed!
+[36mTesting: properties of FixedWhole (WriteValidations on)...[0m[[32mOK[0m] Test "properties of FixedWhole (WriteValidations on)" passed!
+[36mTesting: properties of SaturatedCount (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SaturatedCount (WriteValidations on)" passed!
+[36mTesting: properties of SaturatedSigned (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SaturatedSigned (WriteValidations on)" passed!
+[36mTesting: properties of SaturatedNegative (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SaturatedNegative (WriteValidations on)" passed!
+[36mTesting: properties of SaturatedTenths (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SaturatedTenths (WriteValidations on)" passed!
+[36mTesting: properties of SaturatedHalf (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SaturatedHalf (WriteValidations on)" passed!
+[36mTesting: properties of SaturatedUnit (WriteValidations on)...[0m[[32mOK[0m] Test "properties of SaturatedUnit (WriteValidations on)" passed!
+[36mTesting: properties of FixedStruct (WriteValidations on)...[0m[[32mOK[0m] Test "properties of FixedStruct (WriteValidations on)" passed!
+[36mTesting: properties of Byte (default options)...[0m[[32mOK[0m] Test "properties of Byte (default options)" passed!
+[36mTesting: properties of ExactRange (default options)...[0m[[32mOK[0m] Test "properties of ExactRange (default options)" passed!
+[36mTesting: properties of DecimalRange (default options)...[0m[[32mOK[0m] Test "properties of DecimalRange (default options)" passed!
+[36mTesting: properties of NegativeRange (default options)...[0m[[32mOK[0m] Test "properties of NegativeRange (default options)" passed!
+[36mTesting: properties of UnboundUpper (default options)...[0m[[32mOK[0m] Test "properties of UnboundUpper (default options)" passed!
+[36mTesting: properties of UnboundLower (default options)...[0m[[32mOK[0m] Test "properties of UnboundLower (default options)" passed!
+[36mTesting: properties of RangedFields (default options)...[0m[[32mOK[0m] Test "properties of RangedFields (default options)" passed!
+[36mTesting: properties of RangedList (default options)...[0m[[32mOK[0m] Test "properties of RangedList (default options)" passed!
+[36mTesting: properties of Quantized (default options)...[0m[[32mOK[0m] Test "properties of Quantized (default options)" passed!
+[36mTesting: properties of QuantizedWide (default options)...[0m[[32mOK[0m] Test "properties of QuantizedWide (default options)" passed!
+[36mTesting: properties of QuantizedSaturated (default options)...[0m[[32mOK[0m] Test "properties of QuantizedSaturated (default options)" passed!
+[36mTesting: properties of QuantizedFields (default options)...[0m[[32mOK[0m] Test "properties of QuantizedFields (default options)" passed!
+[36mTesting: properties of Buffer (default options)...[0m[[32mOK[0m] Test "properties of Buffer (default options)" passed!
+[36mTesting: properties of ExactBuffer (default options)...[0m[[32mOK[0m] Test "properties of ExactBuffer (default options)" passed!
+[36mTesting: properties of BoundedBuffer (default options)...[0m[[32mOK[0m] Test "properties of BoundedBuffer (default options)" passed!
+[36mTesting: properties of MultiDimensionalArray (default options)...[0m[[32mOK[0m] Test "properties of MultiDimensionalArray (default options)" passed!
+[36mTesting: properties of SizeByte (default options)...[0m[[32mOK[0m] Test "properties of SizeByte (default options)" passed!
+[36mTesting: properties of SizeFixedString (default options)...[0m[[32mOK[0m] Test "properties of SizeFixedString (default options)" passed!
+[36mTesting: properties of SizeBoundedString (default options)...[0m[[32mOK[0m] Test "properties of SizeBoundedString (default options)" passed!
+[36mTesting: properties of SizeFixedArray (default options)...[0m[[32mOK[0m] Test "properties of SizeFixedArray (default options)" passed!
+[36mTesting: properties of SizeBoundedArray (default options)...[0m[[32mOK[0m] Test "properties of SizeBoundedArray (default options)" passed!
+[36mTesting: properties of SizeOptionalByte (default options)...[0m[[32mOK[0m] Test "properties of SizeOptionalByte (default options)" passed!
+[36mTesting: properties of SizeStruct (default options)...[0m[[32mOK[0m] Test "properties of SizeStruct (default options)" passed!
+[36mTesting: properties of SizeEnum (default options)...[0m[[32mOK[0m] Test "properties of SizeEnum (default options)" passed!
+[36mTesting: properties of SizeFlags (default options)...[0m[[32mOK[0m] Test "properties of SizeFlags (default options)" passed!
+[36mTesting: properties of SizeMap (default options)...[0m[[32mOK[0m] Test "properties of SizeMap (default options)" passed!
+[36mTesting: properties of OffsetArray (default options)...[0m[[32mOK[0m] Test "properties of OffsetArray (default options)" passed!
+[36mTesting: properties of OffsetString (default options)...[0m[[32mOK[0m] Test "properties of OffsetString (default options)" passed!
+[36mTesting: properties of OffsetBuffer (default options)...[0m[[32mOK[0m] Test "properties of OffsetBuffer (default options)" passed!
+[36mTesting: properties of BitsOne (default options)...[0m[[32mOK[0m] Test "properties of BitsOne (default options)" passed!
+[36mTesting: properties of BitsSeven (default options)...[0m[[32mOK[0m] Test "properties of BitsSeven (default options)" passed!
+[36mTesting: properties of BitsEight (default options)...[0m[[32mOK[0m] Test "properties of BitsEight (default options)" passed!
+[36mTesting: properties of BitsNine (default options)...[0m[[32mOK[0m] Test "properties of BitsNine (default options)" passed!
+[36mTesting: properties of BitsSeventeen (default options)...[0m[[32mOK[0m] Test "properties of BitsSeventeen (default options)" passed!
+[36mTesting: properties of BitsMixed (default options)...[0m[[32mOK[0m] Test "properties of BitsMixed (default options)" passed!
+[36mTesting: properties of PackedBooleans (default options)...[0m[[32mOK[0m] Test "properties of PackedBooleans (default options)" passed!
+[36mTesting: properties of PackedFixed (default options)...[0m[[32mOK[0m] Test "properties of PackedFixed (default options)" passed!
+[36mTesting: properties of PackedRanged (default options)...[0m[[32mOK[0m] Test "properties of PackedRanged (default options)" passed!
+[36mTesting: properties of PackedNested (default options)...[0m[[32mOK[0m] Test "properties of PackedNested (default options)" passed!
+[36mTesting: properties of PackedThroughAlias (default options)...[0m[[32mOK[0m] Test "properties of PackedThroughAlias (default options)" passed!
+[36mTesting: properties of PackedBeside (default options)...[0m[[32mOK[0m] Test "properties of PackedBeside (default options)" passed!
+[36mTesting: properties of PackedMap (default options)...[0m[[32mOK[0m] Test "properties of PackedMap (default options)" passed!
+[36mTesting: properties of PackedOptional (default options)...[0m[[32mOK[0m] Test "properties of PackedOptional (default options)" passed!
+[36mTesting: properties of MapNested (default options)...[0m[[32mOK[0m] Test "properties of MapNested (default options)" passed!
+[36mTesting: properties of Standalone (default options)...[0m[[32mOK[0m] Test "properties of Standalone (default options)" passed!
+[36mTesting: properties of OptionalHoles (default options)...[0m[[32mOK[0m] Test "properties of OptionalHoles (default options)" passed!
+[36mTesting: properties of HalfFloat (default options)...[0m[[32mOK[0m] Test "properties of HalfFloat (default options)" passed!
+[36mTesting: properties of Float24 (default options)...[0m[[32mOK[0m] Test "properties of Float24 (default options)" passed!
+[36mTesting: properties of Unsigned24 (default options)...[0m[[32mOK[0m] Test "properties of Unsigned24 (default options)" passed!
+[36mTesting: properties of Signed24 (default options)...[0m[[32mOK[0m] Test "properties of Signed24 (default options)" passed!
+[36mTesting: properties of FlagCarrier (default options)...[0m[[32mOK[0m] Test "properties of FlagCarrier (default options)" passed!
+[36mTesting: properties of FixedTenths (default options)...[0m[[32mOK[0m] Test "properties of FixedTenths (default options)" passed!
+[36mTesting: properties of FixedRanged (default options)...[0m[[32mOK[0m] Test "properties of FixedRanged (default options)" passed!
+[36mTesting: properties of FixedSigned (default options)...[0m[[32mOK[0m] Test "properties of FixedSigned (default options)" passed!
+[36mTesting: properties of FixedCoarse (default options)...[0m[[32mOK[0m] Test "properties of FixedCoarse (default options)" passed!
+[36mTesting: properties of FixedTriple (default options)...[0m[[32mOK[0m] Test "properties of FixedTriple (default options)" passed!
+[36mTesting: properties of FixedWide (default options)...[0m[[32mOK[0m] Test "properties of FixedWide (default options)" passed!
+[36mTesting: properties of FixedWhole (default options)...[0m[[32mOK[0m] Test "properties of FixedWhole (default options)" passed!
+[36mTesting: properties of SaturatedCount (default options)...[0m[[32mOK[0m] Test "properties of SaturatedCount (default options)" passed!
+[36mTesting: properties of SaturatedSigned (default options)...[0m[[32mOK[0m] Test "properties of SaturatedSigned (default options)" passed!
+[36mTesting: properties of SaturatedNegative (default options)...[0m[[32mOK[0m] Test "properties of SaturatedNegative (default options)" passed!
+[36mTesting: properties of SaturatedTenths (default options)...[0m[[32mOK[0m] Test "properties of SaturatedTenths (default options)" passed!
+[36mTesting: properties of SaturatedHalf (default options)...[0m[[32mOK[0m] Test "properties of SaturatedHalf (default options)" passed!
+[36mTesting: properties of SaturatedUnit (default options)...[0m[[32mOK[0m] Test "properties of SaturatedUnit (default options)" passed!
+[36mTesting: properties of FixedStruct (default options)...[0m[[32mOK[0m] Test "properties of FixedStruct (default options)" passed!
+[36mTesting: properties of Byte (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of Byte (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of ExactRange (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of ExactRange (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of DecimalRange (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of DecimalRange (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of NegativeRange (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of NegativeRange (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of UnboundUpper (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of UnboundUpper (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of UnboundLower (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of UnboundLower (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of RangedFields (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of RangedFields (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of RangedList (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of RangedList (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of Quantized (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of Quantized (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of QuantizedWide (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of QuantizedWide (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of QuantizedSaturated (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of QuantizedSaturated (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of QuantizedFields (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of QuantizedFields (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of Buffer (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of Buffer (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of ExactBuffer (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of ExactBuffer (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of BoundedBuffer (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of BoundedBuffer (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of MultiDimensionalArray (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of MultiDimensionalArray (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SizeByte (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SizeByte (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SizeFixedString (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SizeFixedString (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SizeBoundedString (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SizeBoundedString (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SizeFixedArray (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SizeFixedArray (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SizeBoundedArray (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SizeBoundedArray (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SizeOptionalByte (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SizeOptionalByte (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SizeStruct (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SizeStruct (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SizeEnum (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SizeEnum (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SizeFlags (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SizeFlags (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SizeMap (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SizeMap (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of OffsetArray (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of OffsetArray (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of OffsetString (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of OffsetString (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of OffsetBuffer (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of OffsetBuffer (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of BitsOne (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of BitsOne (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of BitsSeven (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of BitsSeven (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of BitsEight (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of BitsEight (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of BitsNine (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of BitsNine (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of BitsSeventeen (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of BitsSeventeen (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of BitsMixed (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of BitsMixed (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of PackedBooleans (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of PackedBooleans (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of PackedFixed (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of PackedFixed (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of PackedRanged (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of PackedRanged (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of PackedNested (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of PackedNested (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of PackedThroughAlias (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of PackedThroughAlias (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of PackedBeside (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of PackedBeside (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of PackedMap (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of PackedMap (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of PackedOptional (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of PackedOptional (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of MapNested (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of MapNested (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of Standalone (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of Standalone (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of OptionalHoles (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of OptionalHoles (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of HalfFloat (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of HalfFloat (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of Float24 (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of Float24 (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of Unsigned24 (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of Unsigned24 (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of Signed24 (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of Signed24 (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of FlagCarrier (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of FlagCarrier (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of FixedTenths (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of FixedTenths (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of FixedRanged (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of FixedRanged (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of FixedSigned (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of FixedSigned (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of FixedCoarse (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of FixedCoarse (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of FixedTriple (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of FixedTriple (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of FixedWide (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of FixedWide (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of FixedWhole (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of FixedWhole (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SaturatedCount (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SaturatedCount (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SaturatedSigned (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SaturatedSigned (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SaturatedNegative (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SaturatedNegative (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SaturatedTenths (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SaturatedTenths (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SaturatedHalf (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SaturatedHalf (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of SaturatedUnit (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of SaturatedUnit (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of FixedStruct (PackedBooleanReader "Bits")...[0m[[32mOK[0m] Test "properties of FixedStruct (PackedBooleanReader "Bits")" passed!
+[36mTesting: properties of Byte (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of Byte (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of ExactRange (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of ExactRange (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of DecimalRange (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of DecimalRange (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of NegativeRange (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of NegativeRange (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of UnboundUpper (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of UnboundUpper (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of UnboundLower (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of UnboundLower (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of RangedFields (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of RangedFields (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of RangedList (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of RangedList (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of Quantized (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of Quantized (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of QuantizedWide (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of QuantizedWide (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of QuantizedSaturated (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of QuantizedSaturated (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of QuantizedFields (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of QuantizedFields (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of Buffer (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of Buffer (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of ExactBuffer (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of ExactBuffer (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of BoundedBuffer (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of BoundedBuffer (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of MultiDimensionalArray (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of MultiDimensionalArray (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SizeByte (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SizeByte (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SizeFixedString (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SizeFixedString (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SizeBoundedString (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SizeBoundedString (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SizeFixedArray (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SizeFixedArray (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SizeBoundedArray (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SizeBoundedArray (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SizeOptionalByte (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SizeOptionalByte (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SizeStruct (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SizeStruct (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SizeEnum (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SizeEnum (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SizeFlags (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SizeFlags (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SizeMap (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SizeMap (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of OffsetArray (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of OffsetArray (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of OffsetString (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of OffsetString (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of OffsetBuffer (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of OffsetBuffer (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of BitsOne (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of BitsOne (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of BitsSeven (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of BitsSeven (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of BitsEight (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of BitsEight (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of BitsNine (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of BitsNine (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of BitsSeventeen (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of BitsSeventeen (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of BitsMixed (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of BitsMixed (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of PackedBooleans (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of PackedBooleans (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of PackedFixed (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of PackedFixed (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of PackedRanged (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of PackedRanged (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of PackedNested (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of PackedNested (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of PackedThroughAlias (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of PackedThroughAlias (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of PackedBeside (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of PackedBeside (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of PackedMap (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of PackedMap (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of PackedOptional (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of PackedOptional (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of MapNested (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of MapNested (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of Standalone (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of Standalone (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of OptionalHoles (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of OptionalHoles (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of HalfFloat (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of HalfFloat (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of Float24 (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of Float24 (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of Unsigned24 (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of Unsigned24 (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of Signed24 (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of Signed24 (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of FlagCarrier (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of FlagCarrier (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of FixedTenths (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of FixedTenths (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of FixedRanged (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of FixedRanged (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of FixedSigned (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of FixedSigned (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of FixedCoarse (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of FixedCoarse (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of FixedTriple (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of FixedTriple (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of FixedWide (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of FixedWide (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of FixedWhole (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of FixedWhole (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SaturatedCount (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SaturatedCount (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SaturatedSigned (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SaturatedSigned (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SaturatedNegative (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SaturatedNegative (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SaturatedTenths (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SaturatedTenths (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SaturatedHalf (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SaturatedHalf (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of SaturatedUnit (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of SaturatedUnit (PackedBooleanReader "Rows")" passed!
+[36mTesting: properties of FixedStruct (PackedBooleanReader "Rows")...[0m[[32mOK[0m] Test "properties of FixedStruct (PackedBooleanReader "Rows")" passed!
+[[32mOK[0m] Checked 130 exported types in two builds, 100 draws each; 28 with Roblox datatypes are covered elsewhere.
+[36mTesting: Every f16 bit pattern reads as IEEE says, and writes back to itself...[0m[[32mOK[0m] Test "Every f16 bit pattern reads as IEEE says, and writes back to itself" passed!
+[36mTesting: A value between two f16 neighbours is written as one of them...[0m[[32mOK[0m] Test "A value between two f16 neighbours is written as one of them" passed!
+[36mTesting: Every f24 pattern checked reads as the format says, and writes back to itself...[0m[[32mOK[0m] Test "Every f24 pattern checked reads as the format says, and writes back to itself" passed!
+[36mTesting: A value between two f24 neighbours is written as the nearer one...[0m[[32mOK[0m] Test "A value between two f24 neighbours is written as the nearer one" passed!
+[36mTesting: f24 overflows into infinity and underflows into a signed zero...[0m[[32mOK[0m] Test "f24 overflows into infinity and underflows into a signed zero" passed!
+[36mTesting: Every event index is routed or refused, on every test schema's server...[0m[[32mOK[0m] Test "Every event index is routed or refused, on every test schema's server" passed!
+[36mTesting: Events fired together arrive together, and apart...[0m[[32mOK[0m] Test "Events fired together arrive together, and apart" passed!
+[36mTesting: A missing Instance refuses its own event, and the packet goes on...[0m[[32mOK[0m] Test "A missing Instance refuses its own event, and the packet goes on" passed!
+[36mTesting: A map keyed by a missing Instance, and an array whose last one is missing, refuse only themselves...[0m[[32mOK[0m] Test "A map keyed by a missing Instance, and an array whose last one is missing, refuse only themselves" passed!
+[36mTesting: An event refused where its first Instance is missing leaves the next event its own...[0m[[32mOK[0m] Test "An event refused where its first Instance is missing leaves the next event its own" passed!
+[36mTesting: Something other than an Instance in the slot still stops the packet...[0m[[32mOK[0m] Test "Something other than an Instance in the slot still stops the packet" passed!
+[36mTesting: An absent optional Instance is delivered as nil, not refused...[0m[[32mOK[0m] Test "An absent optional Instance is delivered as nil, not refused" passed!
+[36mTesting: A polled event missing an Instance is not queued...[0m[[32mOK[0m] Test "A polled event missing an Instance is not queued" passed!
+[36mTesting: A call missing an Instance is answered with a failure at once...[0m[[32mOK[0m] Test "A call missing an Instance is answered with a failure at once" passed!
+[36mTesting: On the client, a missing Instance warns once an event and the rest is delivered...[0m[[32mOK[0m] Test "On the client, a missing Instance warns once an event and the rest is delivered" passed!
+[36mTesting: A client queue stops at 256, warns once, and replays what it kept...[0m[[32mOK[0m] Test "A client queue stops at 256, warns once, and replays what it kept" passed!
+[36mTesting: A channel holds its decode loop unless its events read an Instance or run a loop...[0m[[32mOK[0m] Test "A channel holds its decode loop unless its events read an Instance or run a loop" passed!
+[36mTesting: A refused call in a channel that holds its loop goes on with the packet's next event...[0m[[32mOK[0m] Test "A refused call in a channel that holds its loop goes on with the packet's next event" passed!
+[36mTesting: A server send called with ':' says so...[0m[[32mOK[0m] Test "A server send called with ':' says so" passed!
+[36mTesting: A server send called with ':' says so where nothing checks its value...[0m[[32mOK[0m] Test "A server send called with ':' says so where nothing checks its value" passed!
+[36mTesting: A client send called with ':' says so...[0m[[32mOK[0m] Test "A client send called with ':' says so" passed!
+[36mTesting: A struct wider than a function's locals loads and arrives intact...[0m[[32mOK[0m] Test "A struct wider than a function's locals loads and arrives intact" passed!
+[36mTesting: A length its prefix cannot hold is refused on send, not wrapped...[0m[[32mOK[0m] Test "A length its prefix cannot hold is refused on send, not wrapped" passed!
+[36mTesting: A name Luau reserves is quoted wherever it becomes a key...[0m[[32mOK[0m] Test "A name Luau reserves is quoted wherever it becomes a key" passed!
+[36mTesting: A tagged enum's tag is quoted in the TypeScript output as in the Luau output...[0m[[32mOK[0m] Test "A tagged enum's tag is quoted in the TypeScript output as in the Luau output" passed!
+[36mTesting: A string longer than its bound is rejected...[0m[[32mOK[0m] Test "A string longer than its bound is rejected" passed!
+[36mTesting: A string length is checked before the read, not after...[0m[[32mOK[0m] Test "A string length is checked before the read, not after" passed!
+[36mTesting: An offset-encoded length is bounded after reconstruction...[0m[[32mOK[0m] Test "An offset-encoded length is bounded after reconstruction" passed!
+[36mTesting: A buffer larger than its bound is rejected before it is allocated...[0m[[32mOK[0m] Test "A buffer larger than its bound is rejected before it is allocated" passed!
+[36mTesting: A vector with a NaN component fails its range...[0m[[32mOK[0m] Test "A vector with a NaN component fails its range" passed!
+[36mTesting: An unbounded length is bounded by the packet...[0m[[32mOK[0m] Test "An unbounded length is bounded by the packet" passed!
+[36mTesting: An array is refused before its slots are reserved...[0m[[32mOK[0m] Test "An array is refused before its slots are reserved" passed!
+[36mTesting: A packed boolean array is refused before its slots are reserved...[0m[[32mOK[0m] Test "A packed boolean array is refused before its slots are reserved" passed!
+[36mTesting: A packed boolean array that fits is not refused...[0m[[32mOK[0m] Test "A packed boolean array that fits is not refused" passed!
+[36mTesting: A length in more bytes than it needs is refused...[0m[[32mOK[0m] Test "A length in more bytes than it needs is refused" passed!
+[36mTesting: A length that asks for a fourth byte is refused...[0m[[32mOK[0m] Test "A length that asks for a fourth byte is refused" passed!
+[36mTesting: A rotation index past 3 is refused...[0m[[32mOK[0m] Test "A rotation index past 3 is refused" passed!
+[36mTesting: An impossible quaternion still decodes to a rotation...[0m[[32mOK[0m] Test "An impossible quaternion still decodes to a rotation" passed!
+[36mTesting: A packet that under-supplies instances is dropped...[0m[[32mOK[0m] Test "A packet that under-supplies instances is dropped" passed!
+[36mTesting: A rejected fire leaves no phantom event in the batch it shared...[0m[[32mOK[0m] Test "A rejected fire leaves no phantom event in the batch it shared" passed!
+[36mTesting: A rejected unreliable fire does not discard the batch already queued...[0m[[32mOK[0m] Test "A rejected unreliable fire does not discard the batch already queued" passed!
+[36mTesting: A rejected invocation gives its slot back...[0m[[32mOK[0m] Test "A rejected invocation gives its slot back" passed!
+[36mTesting: A reply that cannot be serialised still answers the caller...[0m[WARN]
+[BlinkBlox]: "BadlyAnswered" already has a listener. A function keeps only the newest one.
+[WARN]
+"BadlyAnswered" encountered an error, [string "../Network/Server.luau"]:3675: Expected Value to be of type number, got string instead.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[[32mOK[0m] Test "A reply that cannot be serialised still answers the caller" passed!
+[36mTesting: A range on client data is enforced against the bytes, not the sender...[0m[[32mOK[0m] Test "A range on client data is enforced against the bytes, not the sender" passed!
+[36mTesting: A frame after a larger one carries none of its bytes...[0m[[32mOK[0m] Test "A frame after a larger one carries none of its bytes" passed!
+[36mTesting: A rejected server fire leaves no instance behind in the player's batch...[0m[WARN]
+[BlinkBlox]: "InstanceAny" already has a listener. SingleSync keeps only the newest one, and the replaced listener's disconnect stops working.
+[WARN]
+[BlinkBlox]: Dropped a packet that could not be decoded, at event "unknown": [string "../Network/DriftClient.luau"]:823: [BlinkBlox]: Unknown event index.
+[[32mOK[0m] Test "A rejected server fire leaves no instance behind in the player's batch" passed!
+[36mTesting: A failed exported Write leaves the queued batch in place...[0m[[32mOK[0m] Test "A failed exported Write leaves the queued batch in place" passed!
+[36mTesting: ClientConnectTimeout returns a disconnected client once the timeout passes...[0m[[32mOK[0m] Test "ClientConnectTimeout returns a disconnected client once the timeout passes" passed!
+[36mTesting: ClientConnectTimeout connects at once to a server that is there...[0m[[32mOK[0m] Test "ClientConnectTimeout connects at once to a server that is there" passed!
+[36mTesting: ClientConnectTimeout connects to remotes that appear during the wait...[0m[[32mOK[0m] Test "ClientConnectTimeout connects to remotes that appear during the wait" passed!
+[36mTesting: A client without ClientConnectTimeout has no Connected and waits unbounded...[0m[[32mOK[0m] Test "A client without ClientConnectTimeout has no Connected and waits unbounded" passed!
+[36mTesting: A client without ClientConnectTimeout says once why it waits, and connects when the server comes...[0m[[32mOK[0m] Test "A client without ClientConnectTimeout says once why it waits, and connects when the server comes" passed!
+[36mTesting: RemotesFolder puts both remotes in a folder, and the client finds them there...[0m[[32mOK[0m] Test "RemotesFolder puts both remotes in a folder, and the client finds them there" passed!
+[36mTesting: RemotesFolder with ClientConnectTimeout waits for the folder within the timeout...[0m[[32mOK[0m] Test "RemotesFolder with ClientConnectTimeout waits for the folder within the timeout" passed!
+[36mTesting: AutoStart = false creates nothing until Start, and Start twice changes nothing...[0m[[32mOK[0m] Test "AutoStart = false creates nothing until Start, and Start twice changes nothing" passed!
+[36mTesting: AutoStart left on creates the remotes at require, as before...[0m[[32mOK[0m] Test "AutoStart left on creates the remotes at require, as before" passed!
+[36mTesting: The client module ignores AutoStart...[0m[[32mOK[0m] Test "The client module ignores AutoStart" passed!
+[36mTesting: A second VM requiring either module is refused, and made remotes are not archivable...[0m[[32mOK[0m] Test "A second VM requiring either module is refused, and made remotes are not archivable" passed!
+[36mTesting: ClientConnectTimeout takes a positive number of seconds and nothing else...[0m[[32mOK[0m] Test "ClientConnectTimeout takes a positive number of seconds and nothing else" passed!
+[36mTesting: AutoStart takes a boolean and nothing else...[0m[[32mOK[0m] Test "AutoStart takes a boolean and nothing else" passed!
+[36mTesting: The lifecycle members are refused as declaration names where they exist...[0m[[32mOK[0m] Test "The lifecycle members are refused as declaration names where they exist" passed!
+[36mTesting: @profile gates the lifecycle options like any other...[0m[[32mOK[0m] Test "@profile gates the lifecycle options like any other" passed!
+[36mTesting: The TypeScript declarations carry the lifecycle members where they exist...[0m[[32mOK[0m] Test "The TypeScript declarations carry the lifecycle members where they exist" passed!
+[36mTesting: A client that timed out on its remotes stubs SetListenerErrorHandler...[0m[[32mOK[0m] Test "A client that timed out on its remotes stubs SetListenerErrorHandler" passed!
+[36mTesting: An AutoStart = false server reports listener errors after Start...[0m[[32mOK[0m] Test "An AutoStart = false server reports listener errors after Start" passed!
+[36mTesting: The TypeScript declarations carry SetListenerErrorHandler beside the lifecycle members...[0m[[32mOK[0m] Test "The TypeScript declarations carry SetListenerErrorHandler beside the lifecycle members" passed!
+[34mCompiling documentation examples...
+[0m[33m[W3019] Warning[0m: Unreliable event "Snapshot" may exceed the packet limit
+    ╭─[input.blink:1:6]
+    │
+[2m001[0m │ event Snapshot {
+    ┆       [33m────[0m[33m┬[0m[33m────[0m
+    ┆           [33m│[0m
+    ┆           [33m╰──[0m [33mUnbounded, and the limit is 980 bytes[0m
+[2m005[0m │     Data: struct { Names: string[], Tick: u32 }
+    ┆                           [34m───[0m[34m┬[0m[34m───[0m
+    ┆                              [34m│[0m
+    ┆                              [34m╰──[0m [34mThis has no upper bound[0m
+    │ [2m= note:[0m Bound the variable-length fields -- `string(0..64)`, `u8[..16]` -- or send it reliably.
+    │
+────╯
+[[32mOK[0m] All 114 documentation examples behave as marked.
+[36mTesting: The zap guide's bridge answers to zap's names...[0m[[32mOK[0m] Test "The zap guide's bridge answers to zap's names" passed!
+[36mTesting: The ByteNet guide's bridge answers to ByteNet's names and argument order...[0m[[32mOK[0m] Test "The ByteNet guide's bridge answers to ByteNet's names and argument order" passed!
+[36mTesting: The Packet guide's bridge answers to Packet's methods, signals and invokes...[0m[[32mOK[0m] Test "The Packet guide's bridge answers to Packet's methods, signals and invokes" passed!
+[36mTesting: The QuickNet guide's bridge answers to QuickNet's methods, signals and invokes...[0m[[32mOK[0m] Test "The QuickNet guide's bridge answers to QuickNet's methods, signals and invokes" passed!
+[36mTesting: The Warp guide's bridge takes an event's name, and ignores the reliability it is passed...[0m[[32mOK[0m] Test "The Warp guide's bridge takes an event's name, and ignores the reliability it is passed" passed!
+[36mTesting: The RemoteEvents guide's bridge answers to a remote's own methods...[0m[[32mOK[0m] Test "The RemoteEvents guide's bridge answers to a remote's own methods" passed!
+[34mChecking the generated code the documentation quotes...
+[0m[[32mOK[0m] All 3 quoted excerpts are in their goldens, and none of 36 generated modules uses a metatable.
+[36mTesting: CLI compile prompt...[0m[[32mOK[0m] Test "CLI compile prompt" passed!
+[36mTesting: CLI compile --yes...[0m[[32mOK[0m] Test "CLI compile --yes" passed!
+[36mTesting: CLI --version prints a version...[0m[[32mOK[0m] Test "CLI --version prints a version" passed!
+[36mTesting: CLI --help names the executable for this platform...[0m[[32mOK[0m] Test "CLI --help names the executable for this platform" passed!
+[36mTesting: CLI --version answers even when quiet...[0m[[32mOK[0m] Test "CLI --version answers even when quiet" passed!
+[36mTesting: CLI --quiet prints no banner...[0m[[32mOK[0m] Test "CLI --quiet prints no banner" passed!
+[36mTesting: CLI builds release without --profile...[0m[[32mOK[0m] Test "CLI builds release without --profile" passed!
+[36mTesting: CLI --profile dev after the path...[0m[[32mOK[0m] Test "CLI --profile dev after the path" passed!
+[36mTesting: CLI -p dev before the path...[0m[[32mOK[0m] Test "CLI -p dev before the path" passed!
+[36mTesting: CLI refuses an unknown profile...[0m[[32mOK[0m] Test "CLI refuses an unknown profile" passed!
+[36mTesting: CLI --check writes nothing...[0m[[32mOK[0m] Test "CLI --check writes nothing" passed!
+[36mTesting: CLI --json reports a clean compile...[0m[[32mOK[0m] Test "CLI --json reports a clean compile" passed!
+[36mTesting: CLI --json reports an error with its position...[0m[[32mOK[0m] Test "CLI --json reports an error with its position" passed!
+[36mTesting: CLI --json reports a warning without failing...[0m[[32mOK[0m] Test "CLI --json reports a warning without failing" passed!
+[36mTesting: CLI --json reports a missing schema...[0m[[32mOK[0m] Test "CLI --json reports a missing schema" passed!
+[36mTesting: CLI refuses --json with --watch...[0m[[32mOK[0m] Test "CLI refuses --json with --watch" passed!
+[36mTesting: CLI --from zap writes a draft beside the definitions...[0m[[32mOK[0m] Test "CLI --from zap writes a draft beside the definitions" passed!
+[36mTesting: CLI --from will not replace a draft without --yes...[0m[[32mOK[0m] Test "CLI --from will not replace a draft without --yes" passed!
+[36mTesting: CLI --from --check prints the draft alone and writes nothing...[0m[[32mOK[0m] Test "CLI --from --check prints the draft alone and writes nothing" passed!
+[36mTesting: CLI refuses an unknown tool, and --from with --watch...[0m[[32mOK[0m] Test "CLI refuses an unknown tool, and --from with --watch" passed!
+[36mTesting: CLI --verify with no outputs reports each missing and creates nothing...[0m[[32mOK[0m] Test "CLI --verify with no outputs reports each missing and creates nothing" passed!
+[36mTesting: CLI --verify passes on fresh output and writes nothing...[0m[[32mOK[0m] Test "CLI --verify passes on fresh output and writes nothing" passed!
+[36mTesting: CLI --verify --json lists every compared file...[0m[[32mOK[0m] Test "CLI --verify --json lists every compared file" passed!
+[36mTesting: CLI --verify names a file changed by one byte...[0m[[32mOK[0m] Test "CLI --verify names a file changed by one byte" passed!
+[36mTesting: CLI --verify reports a deleted file as missing and leaves it deleted...[0m[[32mOK[0m] Test "CLI --verify reports a deleted file as missing and leaves it deleted" passed!
+[36mTesting: CLI --verify ignores files the compiler would not write...[0m[[32mOK[0m] Test "CLI --verify ignores files the compiler would not write" passed!
+[36mTesting: CLI --verify compares the outputs of the profile it is given...[0m[[32mOK[0m] Test "CLI --verify compares the outputs of the profile it is given" passed!
+[36mTesting: CLI --verify reports a schema error before comparing...[0m[[32mOK[0m] Test "CLI --verify reports a schema error before comparing" passed!
+[36mTesting: CLI refuses --verify with --watch...[0m[[32mOK[0m] Test "CLI refuses --verify with --watch" passed!
+[32mAll tests passed successfully!
+[0m

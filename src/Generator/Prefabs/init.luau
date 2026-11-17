@@ -30,6 +30,8 @@ return {
 	Present = Common.Present,
 	GetTypeToUse = Common.GetTypeToUse,
 	GetTypeToUseByBits = Common.GetTypeToUseByBits,
+	---> The type check a primitive emits for a written field, so a packed run can say the same thing.
+	TypeCheck = Common.TypeCheck,
 	ReadPrefix = Lengths.ReadPrefix,
 	WritePrefix = Lengths.WritePrefix,
 }

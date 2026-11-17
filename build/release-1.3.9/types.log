@@ -1,0 +1,20 @@
+type-check: refreshing Lune type definitions
+type-check: compiler (src)
+[INFO] Loading definitions file: @roblox - globalTypes.d.luau
+[INFO] sourcemap is disabled - automatic updating on sourcemap changes disabled
+[INFO] Loading Luau configuration from /Users/xopoiii/Programming/BlinkBlox/.luaurc
+type-check: Studio plugin (plugin/src)
+[INFO] Loading definitions file: @roblox - globalTypes.d.luau
+[WARN] client does not allow didChangeWatchedFiles registration - automatic updating on sourcemap changes disabled
+[INFO] Loading Luau configuration from /Users/xopoiii/Programming/BlinkBlox/.luaurc
+type-check: generated modules (test/Golden)
+[INFO] Loading definitions file: @roblox - globalTypes.d.luau
+[INFO] sourcemap is disabled - automatic updating on sourcemap changes disabled
+[INFO] Loading Luau configuration from /Users/xopoiii/Programming/BlinkBlox/.luaurc
+type-check: generated modules under the new solver (test/Golden)
+[INFO] Loading definitions file: @roblox - globalTypes.d.luau
+[INFO] sourcemap is disabled - automatic updating on sourcemap changes disabled
+[INFO] Loading Luau configuration from /Users/xopoiii/Programming/BlinkBlox/.luaurc
+type-check: a game's code using the modules, LuauSolverV2=false (test/Consumers)
+type-check: a game's code using the modules, LuauSolverV2=true (test/Consumers)
+type-check: clean

@@ -1,0 +1,36 @@
+[33m!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! [1mThis is LuneBlox 0.11.3, and rokit.toml pins 0.11.4.[0m[33m
+! BlinkBlox is tested and measured on LuneBlox 0.11.4: the Luau version Roblox runs,
+! with Roblox's fast flags. These timings may differ from ours. To reproduce them:
+! 
+!     rokit install        (rokit.toml pins it)
+!     luneblox run ...     (in place of lune run ...)
+! 
+! https://github.com/XopoIII/LuneBlox
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!![0m
+BlinkBlox 0.0.0, 200 frames, times in ms per frame, 50 players where a crowd, on LuneBlox 0.11.3 (Luau 0.740)
+
+|Scenario|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
+|---|---|---|---|---|---|---|
+|ManyEvents|native|0.026|0.001|0.008|1.0|200.0|
+|Broadcast|native|0.017|0.001|0.010|1.0|85000.0|
+|UnreliableInput|native|0.002|0.000|0.003|8.0|40.0|
+|Instances|native|0.007|0.000|0.013|1.0|200.0|
+|StreamWorld|native|0.001|0.006|0.001|1.0|13050.0|
+|StreamPerPlayer|native|0.005|0.037|0.001|50.0|1000.0|
+|ManyEvents|interpreted|0.037|0.001|0.020|1.0|200.0|
+|Broadcast|interpreted|0.035|0.001|0.027|1.0|85000.0|
+|UnreliableInput|interpreted|0.004|0.000|0.005|8.0|40.0|
+|Instances|interpreted|0.016|0.000|0.020|1.0|200.0|
+|StreamWorld|interpreted|0.001|0.011|0.003|1.0|13050.0|
+|StreamPerPlayer|interpreted|0.008|0.066|0.001|50.0|1000.0|
+[33m!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! [1mThis is LuneBlox 0.11.3, and rokit.toml pins 0.11.4.[0m[33m
+! BlinkBlox is tested and measured on LuneBlox 0.11.4: the Luau version Roblox runs,
+! with Roblox's fast flags. These timings may differ from ours. To reproduce them:
+! 
+!     rokit install        (rokit.toml pins it)
+!     luneblox run ...     (in place of lune run ...)
+! 
+! https://github.com/XopoIII/LuneBlox
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!![0m
