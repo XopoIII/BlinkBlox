@@ -14,6 +14,7 @@ local Bits = require("./Bits")
 local Blocks = require("./Blocks")
 local Fragments = require("./Fragments")
 local PackedBooleans = require("./PackedBooleans")
+local PackingModule = require("./Packing")
 local Prefabs = require("./Prefabs")
 local Scope = require("./Scope")
 local State = require("./State")
@@ -205,9 +206,10 @@ end
 --- and a placeholder would then be decoded as a value.
 function Serde.Struct(Declaration: Parser.Struct, Read: Blocks.Block, Write: Blocks.Block, Variable: string)
 	local Value = Declaration.Value
+	local Fields = Value.Values
 
 	local Slots = {}
-	for _, Field in Value.Values do
+	for _, Field in Fields do
 		if Field.Type ~= "Optional" then
 			local Name = Field.Name
 			table.insert(Slots, if Util.IsValidIdentifier(Name) then `{Name} = false` else `["{Name}"] = false`)
@@ -216,15 +218,35 @@ function Serde.Struct(Declaration: Parser.Struct, Read: Blocks.Block, Write: Blo
 
 	Read:Line(`{Read:Declare(Variable)} = \{{table.concat(Slots, ", ")}\} :: any`)
 
-	--> Each field in a scope of its own, so that its locals end with it; see Scope.luau.
-	for _, Field in Value.Values do
-		local Name = Field.Name
-		local FieldVariable = `{Variable}{FormatIndex(Name)}`
-		Scope(Read, function()
-			Scope(Write, function()
-				Serde.Emit(Field :: Type, Read, Write, FieldVariable)
+	---> Each field in a scope of its own, so that its locals end with it; see Scope.luau. Three plain
+	---> `f32` in a row are one vector where the option allows it.
+	local Packing = State.Options.VectorPacking or "Auto"
+	local Index = 1
+	while Index <= #Fields do
+		local First, Second, Third = Fields[Index], Fields[Index + 1], Fields[Index + 2]
+		local Pack = Packing ~= "Off"
+			and Third ~= nil
+			and PackingModule.IsPlainF32(First)
+			and PackingModule.IsPlainF32(Second)
+			and PackingModule.IsPlainF32(Third)
+		if Pack then
+			local Names = {
+				`{Variable}{FormatIndex(First.Name)}`,
+				`{Variable}{FormatIndex(Second.Name)}`,
+				`{Variable}{FormatIndex(Third.Name)}`,
+			}
+			PackingModule.Emit(Names, Read, Write, Packing)
+			Index += PackingModule.FIELDS
+		else
+			local Field = Fields[Index]
+			local FieldVariable = `{Variable}{FormatIndex(Field.Name)}`
+			Scope(Read, function()
+				Scope(Write, function()
+					Serde.Emit(Field :: Type, Read, Write, FieldVariable)
+				end)
 			end)
-		end)
+			Index += 1
+		end
 	end
 end
 

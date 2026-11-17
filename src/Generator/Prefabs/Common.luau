@@ -216,6 +216,23 @@ local function CheckedLocal(
 	return Target
 end
 
+--- The check that a written value has the Luau type its schema declares, with the hint for a call
+--- made with `:` that shifted a value into the wrong argument. Shared so that a packed run of `f32`
+--- fields -- which cannot go through the primitive's own generate, since the pack is one write -- says
+--- exactly what the same field says unpacked.
+local function TypeCheck(Block: Block, TargetVariable: string, Type: string)
+	--> A table where a value belongs is most often the event itself, handed over by a call made
+	--> with `:`, and a Player -- userdata -- is what a server send's value becomes when its
+	--> arguments are shifted that way. The hint costs nothing until the check has failed.
+	--> `type` where the value cannot be userdata: it does not look for a userdata's own name.
+	local Check = if LUAU_TYPES[Type] then "type" else "typeof"
+	Block:Compare(`{Check}({TargetVariable})`, `"{Type}"`, "Not")
+		:Line(
+			`error(\`Expected {TargetVariable} to be of type {Type}, got \{type({TargetVariable})} instead.\{if type({TargetVariable}) == "table" or type({TargetVariable}) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}\`)`
+		)
+		:End()
+end
+
 local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertGenerator: AssertGenerator?): Generate
 	return function(
 		Declaration: Parser.Primitive,
@@ -250,16 +267,7 @@ local function GeneratePrimitivePrefab(Type: string, Prefab: TypePrefab, AssertG
 			end
 
 			if Block == Write and Type ~= "any" then
-				--> A table where a value belongs is most often the event itself, handed over by a call made
-				--> with `:`, and a Player -- userdata -- is what a server send's value becomes when its
-				--> arguments are shifted that way. The hint costs nothing until the check has failed.
-				--> `type` where the value cannot be userdata: it does not look for a userdata's own name.
-				local Check = if LUAU_TYPES[Type] then "type" else "typeof"
-				Block:Compare(`{Check}({TargetVariable})`, `"{Type}"`, "Not")
-					:Line(
-						`error(\`Expected {TargetVariable} to be of type {Type}, got \{type({TargetVariable})} instead.\{if type({TargetVariable}) == "table" or type({TargetVariable}) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}\`)`
-					)
-					:End()
+				TypeCheck(Block, TargetVariable, Type)
 			end
 
 			if not AssertGenerator then
@@ -327,6 +335,7 @@ return {
 	GetTypeToUse = GetTypeToUse,
 	GetTypeToUseByBits = GetTypeToUseByBits,
 	GeneratePrimitivePrefab = GeneratePrimitivePrefab,
+	TypeCheck = TypeCheck,
 	SEND_BUFFER = SEND_BUFFER,
 	RECIEVE_BUFFER = RECIEVE_BUFFER,
 	RECIEVE_CURSOR = RECIEVE_CURSOR,

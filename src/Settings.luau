@@ -433,6 +433,11 @@ return {
 	--> `option PackedBooleanReader`: see Generator/PackedBooleans.luau.
 	PackedBooleanReaders = { Auto = true, Bits = true, Rows = true },
 
+	--> `option VectorPacking`: a run of three `f32` fields through `buffer.writevectorf32x3`, which
+	--> Luau 0.747 adds behind a Roblox flag. Auto keeps the run when the VM has the call and falls
+	--> back to three writes when it does not; see Generator/Serde.luau.
+	VectorPackings = { Auto = true, Off = true, On = true },
+
 	GetCasing = function(Case: Case): Cases
 		local Index = Indexes[Case]
 		if not Index then

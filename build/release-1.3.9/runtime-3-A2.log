@@ -1,0 +1,57 @@
+[33m!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! [1mThis is LuneBlox 0.11.3, and rokit.toml pins 0.11.4.[0m[33m
+! BlinkBlox is tested and measured on LuneBlox 0.11.4: the Luau version Roblox runs,
+! with Roblox's fast flags. These timings may differ from ours. To reproduce them:
+! 
+!     rokit install        (rokit.toml pins it)
+!     luneblox run ...     (in place of lune run ...)
+! 
+! https://github.com/XopoIII/LuneBlox
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!![0m
+BlinkBlox 0.0.0, 200 frames of 1000 events, times in ms per frame, on LuneBlox 0.11.3 (Luau 0.740)
+Limits lifted on every tool: BlinkBlox's inbound limits, Packet's 8000-byte cap, QuickNet's rate limit and packet caps, Warp's 8000-byte cap, Satset's token bucket. Nothing was refused.
+
+### Booleans
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|2.339|2.772|0.005|1.791|2.634|128.00|0.02|
+|BlinkBlox|interpreted|11.184|12.293|0.005|7.839|9.017|128.00|0.02|
+
+### Entities
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|1.605|1.785|0.013|3.929|11.499|602.00|0.70|
+|BlinkBlox|interpreted|9.873|11.432|0.017|10.956|18.536|602.00|0.70|
+
+### BooleansRandom
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|5.331|5.900|0.007|1.835|3.116|128.00|128.01|
+|BlinkBlox|interpreted|15.894|17.662|0.010|8.347|9.859|128.00|128.01|
+
+### EntitiesRandom
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|2.273|2.442|0.015|3.824|18.620|602.00|602.02|
+|BlinkBlox|interpreted|10.192|20.078|0.017|11.034|31.316|602.00|602.02|
+
+### Tiny
+
+|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
+|---|---|---|---|---|---|---|---|---|
+|BlinkBlox|native|0.048|0.050|0.000|0.057|0.060|2.00|0.02|
+|BlinkBlox|interpreted|0.111|0.120|0.000|0.154|0.172|2.00|0.02|
+[33m!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! [1mThis is LuneBlox 0.11.3, and rokit.toml pins 0.11.4.[0m[33m
+! BlinkBlox is tested and measured on LuneBlox 0.11.4: the Luau version Roblox runs,
+! with Roblox's fast flags. These timings may differ from ours. To reproduce them:
+! 
+!     rokit install        (rokit.toml pins it)
+!     luneblox run ...     (in place of lune run ...)
+! 
+! https://github.com/XopoIII/LuneBlox
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!![0m

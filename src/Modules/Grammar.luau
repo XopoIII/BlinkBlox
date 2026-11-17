@@ -63,6 +63,7 @@ Grammar.OPTIONS = {
 	SyncValidation = "Boolean",
 	WriteValidations = "Boolean",
 	PackedBooleanReader = "String",
+	VectorPacking = "Identifier",
 	ManualReplication = "Boolean",
 	BatchUnreliable = "Boolean",
 	RemoteScope = "String",
@@ -363,6 +364,9 @@ export type Options = {
 	WriteValidations: boolean?,
 	--- How a packed `boolean[]` is read: "Auto" (measured as the module loads), "Bits" or "Rows".
 	PackedBooleanReader: string?,
+	--- Whether a run of three `f32` fields travels in one call: "Auto" (when the VM has the call),
+	--- "Off", or "On".
+	VectorPacking: string?,
 	ManualReplication: boolean?,
 	BatchUnreliable: boolean?,
 	RemoteScope: string?,

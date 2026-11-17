@@ -1,0 +1,23 @@
+Scenario/mode: A fire/decode -> B fire/decode (ms); change %
+runtime Booleans native: 2.3095,1.7694999999999999 -> 2.309,1.752; -0.02,-0.99
+runtime Booleans interpreted: 11.2035,7.8385 -> 11.1475,7.768000000000001; -0.50,-0.90
+runtime Entities native: 1.6,3.982 -> 1.6065,4.0969999999999995; 0.41,2.89
+runtime Entities interpreted: 9.6475,10.3775 -> 9.663,10.2715; 0.16,-1.02
+runtime BooleansRandom native: 5.2545,1.802 -> 5.23,1.8035; -0.47,0.08
+runtime BooleansRandom interpreted: 15.585,8.088000000000001 -> 15.596499999999999,8.0195; 0.07,-0.85
+runtime EntitiesRandom native: 2.2569999999999997,3.8655 -> 2.264,4.0200000000000005; 0.31,4.00
+runtime EntitiesRandom interpreted: 9.821,10.259 -> 9.807,10.286; -0.14,0.26
+runtime Tiny native: 0.048,0.057 -> 0.048,0.058; 0.00,1.75
+runtime Tiny interpreted: 0.111,0.154 -> 0.111,0.155; 0.00,0.65
+scenarios ManyEvents native: 0.026,0.008 -> 0.026,0.008; 0.00,0.00
+scenarios Broadcast native: 0.017,0.01 -> 0.017,0.01; 0.00,0.00
+scenarios UnreliableInput native: 0.002,0.003 -> 0.002,0.003; 0.00,0.00
+scenarios Instances native: 0.006500000000000001,0.013 -> 0.007,0.013; 7.69,0.00
+scenarios StreamWorld native: 0.001,0.001 -> 0.001,0.001; 0.00,0.00
+scenarios StreamPerPlayer native: 0.005,0.001 -> 0.005,0.001; 0.00,0.00
+scenarios ManyEvents interpreted: 0.037,0.02 -> 0.037,0.02; 0.00,0.00
+scenarios Broadcast interpreted: 0.035,0.027 -> 0.035,0.027; 0.00,0.00
+scenarios UnreliableInput interpreted: 0.004,0.005 -> 0.004,0.005; 0.00,0.00
+scenarios Instances interpreted: 0.015,0.02 -> 0.0155,0.0195; 3.33,-2.50
+scenarios StreamWorld interpreted: 0.001,0.003 -> 0.001,0.003; 0.00,0.00
+scenarios StreamPerPlayer interpreted: 0.008,0.001 -> 0.008,0.001; 0.00,0.00

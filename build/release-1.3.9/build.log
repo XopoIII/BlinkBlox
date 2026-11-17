@@ -1,0 +1,25 @@
+* Build pesde source
+* Built Wally package
+* Bundled CLI source code
+Compiling standalone binary from release/blinkblox.luau
+Writing standalone binary to release/blinkblox
+a blinkblox
+* Built executable for macos-x86_64
+Compiling standalone binary from release/blinkblox.luau
+Writing standalone binary to release/blinkblox
+a blinkblox
+* Built executable for macos-aarch64
+Compiling standalone binary from release/blinkblox.luau
+Writing standalone binary to release/blinkblox
+a blinkblox
+* Built executable for linux-x86_64
+Compiling standalone binary from release/blinkblox.luau
+Writing standalone binary to release/blinkblox
+a blinkblox
+* Built executable for linux-aarch64
+Compiling standalone binary from release/blinkblox.luau
+Writing standalone binary to release/blinkblox.exe
+a blinkblox.exe
+* Built executable for windows-x86_64
+* Built studio plugin
+Finished build in 13.50 seconds

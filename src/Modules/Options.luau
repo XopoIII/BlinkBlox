@@ -117,6 +117,12 @@ local function CheckValue(Reader: Reader, Name: string, Value: Lexer.Token)
 			:Emit()
 	end
 
+	if Name == "VectorPacking" and Settings.VectorPackings[Value.Value] == nil then
+		Error.new(Error.ParserUnknownOption, Reader.Source, `Invalid value for option "VectorPacking"`, Reader.File)
+			:Primary(Value, `Expected one of {ListKeys(Settings.VectorPackings)}`)
+			:Emit()
+	end
+
 	if Name == "RemotesFolder" and Value.Value == "" then
 		Error.new(Error.ParserUnknownOption, Reader.Source, `Invalid value for option "RemotesFolder"`, Reader.File)
 			:Primary(Value, "Expected the name of a folder")
