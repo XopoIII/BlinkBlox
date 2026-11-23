@@ -632,6 +632,30 @@ local SharedInstances: {Instance} = {}
 local SharedUnderused = 0
 local Diverged: {[Player]: true} = {}
 
+--> A FireAll writes straight into the broadcast batch above, one copy fewer an event than writing
+--> it in the scratch buffer and appending that. A write that throws is undone lazily, as the
+--> client's batch is (Begin and Settle in the base template): SharedCursor only moves on a commit,
+--> so the bytes a failed write left past it are never read, and only the Instances it appended must
+--> be taken back. Whatever touches the batch next -- the next FireAll, a player's own send, or the
+--> flush -- takes them back first.
+-->
+--> The generated FireAll loads and commits the batch inline rather than through calls: it is the
+--> hottest send the module has, and a call is most of an event's fire. `CommitDiverged` is the one
+--> piece left as a function, and it runs only while a player has a batch of their own in flight.
+local PendingShared = -1
+--> Whether anyone in `Diverged` is there at all, kept so a FireAll does not walk an empty table
+--> through `next` on every event. Cleared with the table, at the flush.
+local AnyDiverged = false
+
+local function RollbackShared()
+    if PendingShared >= 0 then
+        for Index = #SharedInstances, PendingShared + 1, -1 do
+            SharedInstances[Index] = nil
+        end
+        PendingShared = -1
+    end
+end
+
 --> How many rows a polled event's queue holds on the server before it stops taking more. Clients fill
 --> it, and a game that polls an event rarely, or has not got round to polling it at all, would let
 --> them grow it without end -- each row pinning its Player. A game that drains its queues every
@@ -1124,6 +1148,7 @@ local function SavePlayerBuffer(Player: Player)
             PlayersMap[Player] = Save()
             if SharedCursor > 0 then
                 Diverged[Player] = true
+                AnyDiverged = true
             end
         end
         return
@@ -1131,6 +1156,7 @@ local function SavePlayerBuffer(Player: Player)
 
     if SharedCursor > 0 then
         Diverged[Player] = true
+        AnyDiverged = true
     end
 
     Entry.Size = SendSize
@@ -1140,26 +1166,43 @@ local function SavePlayerBuffer(Player: Player)
 end
 
 --> Loads `Player`'s batch for a write of their own, diverging them first when a broadcast is pending;
---> see the broadcast batch above. The SavePlayerBuffer that follows marks them diverged.
-local function LoadPlayer(Player: Player)
+--> see the broadcast batch above. The SavePlayerBuffer that follows marks them diverged. `Upto` and
+--> `UptoInstances` bound that catch-up to a prefix of the broadcast batch: a FireAll that writes
+--> into it appends the event itself afterwards, and copying the whole batch would carry it twice.
+local function LoadPlayer(Player: Player, Upto: number?, UptoInstances: number?)
+    --> A FireAll's write that threw still holds Instances of an event that never happened; they are
+    --> taken back before this copies the batch they sit in.
+    RollbackShared()
     Load(PlayersMap[Player])
-    if SharedCursor > 0 and not Diverged[Player] then
-        local Position = Allocate(SharedCursor)
-        buffer.copy(SendBuffer, Position, SharedBuffer, 0, SharedCursor)
-        table.move(SharedInstances, 1, #SharedInstances, #SendInstances + 1, SendInstances)
+    local Shared = Upto or SharedCursor
+    if Shared > 0 and not Diverged[Player] then
+        local Position = Allocate(Shared)
+        buffer.copy(SendBuffer, Position, SharedBuffer, 0, Shared)
+        table.move(SharedInstances, 1, UptoInstances or #SharedInstances, #SendInstances + 1, SendInstances)
     end
 end
 
---> Appends an event written elsewhere to one player's batch: a FireList or FireExcept, and a
---> broadcast to a player who has diverged. A player with a batch of their own and nothing to catch up
---> on gets it straight into it; any other goes the long way, through LoadPlayer and SavePlayerBuffer.
-local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instances: {Instance})
+--> Appends `Size` bytes of `Buffer` from `Offset`, and Instances from `First` on, to one player's
+--> batch: a FireList or FireExcept, and a broadcast to a player who has diverged. The event being
+--> appended may itself sit in the broadcast batch, so the catch-up stops where it starts (`CatchUp`,
+--> which defaults to the whole batch). A player with a batch of their own and nothing to catch up on
+--> gets it straight into it; any other goes the long way, through LoadPlayer and SavePlayerBuffer.
+local function AppendRange(
+    Player: Player,
+    Buffer: buffer,
+    Offset: number,
+    Size: number,
+    Instances: {Instance},
+    First: number,
+    CatchUp: number?
+)
     local Entry = PlayersMap[Player]
-    if Entry == nil or (SharedCursor > 0 and not Diverged[Player]) then
-        LoadPlayer(Player)
+    local UpTo = CatchUp or SharedCursor
+    if Entry == nil or (UpTo > 0 and not Diverged[Player]) then
+        LoadPlayer(Player, UpTo, First - 1)
         local Position = Allocate(Size)
-        buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-        table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+        buffer.copy(SendBuffer, Position, Buffer, Offset, Size)
+        table.move(Instances, First, #Instances, #SendInstances + 1, SendInstances)
         SavePlayerBuffer(Player)
         return
     end
@@ -1180,41 +1223,38 @@ local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instan
         Entry.Size = Grown
     end
 
-    buffer.copy(Target, Cursor, Buffer, 0, Size)
+    buffer.copy(Target, Cursor, Buffer, Offset, Size)
     Entry.Cursor = InUse
 
     local Count = #Instances
-    if Count > 0 then
+    if Count >= First then
         local List = Entry.Instances
-        table.move(Instances, 1, Count, #List + 1, List)
+        table.move(Instances, First, Count, #List + 1, List)
     end
 end
 
---> Appends a broadcast to the broadcast batch, and to the batch of every player who has diverged.
-local function AppendShared(Buffer: buffer, Size: number, Instances: {Instance})
-    local InUse = SharedCursor + Size
-    if InUse > SharedSize then
-        while InUse > SharedSize do
-            SharedSize *= 1.5
-        end
+--> The generated FireList and FireExcept append the whole of what they wrote in the scratch buffer.
+local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instances: {Instance})
+    AppendRange(Player, Buffer, 0, Size, Instances, 1)
+end
 
-        local Resized = buffer.create(SharedSize)
-        buffer.copy(Resized, 0, SharedBuffer, 0, SharedCursor)
-        SharedBuffer = Resized
-    end
-
-    buffer.copy(SharedBuffer, SharedCursor, Buffer, 0, Size)
-    SharedCursor = InUse
-    if #Instances > 0 then
-        table.move(Instances, 1, #Instances, #SharedInstances + 1, SharedInstances)
-    end
-
+--> Appends the FireAll just committed -- `Size` bytes from `Before`, Instances from
+--> `BeforeInstances + 1` -- to the batch of every player who has diverged: each needs the event
+--> whole, after their own. Called only while one exists; see `AnyDiverged`.
+local function CommitDiverged(Before: number, BeforeInstances: number, Size: number)
     for Player in Diverged do
-        AppendPlayer(Player, Buffer, Size, Instances)
+        AppendRange(Player, SharedBuffer, Before, Size, SharedInstances, BeforeInstances + 1, Before)
+    end
+
+    if next(Diverged) == nil then
+        AnyDiverged = false
     end
 end
 
 local function StepReplication()
+    --> Undoes a FireAll's write that threw before the half-written event is sent.
+    RollbackShared()
+
     local Shared = SharedCursor
     for Player, Send in PlayersMap do
         --> Second line of defence. An entry can still be stale if it was written inside the narrow
@@ -1236,6 +1276,7 @@ local function StepReplication()
             Send.Cursor = SendCursor
             Send.Buffer = SendBuffer
             Diverged[Player] = true
+            AnyDiverged = true
         end
 
         local Used = Send.Cursor
@@ -1277,6 +1318,7 @@ local function StepReplication()
         SharedCursor = 0
         table.clear(SharedInstances)
         table.clear(Diverged)
+        AnyDiverged = false
     end
 
     local Shrink

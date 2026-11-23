@@ -22,9 +22,13 @@ sourcemap.json
 /benchmark/src/shared/blink
 /benchmark/src/shared/zap
 /benchmark/src/shared/upstream
+/benchmark/src/shared/netray
+/benchmark/src/shared/netray-checked
 /benchmark/runtime/rivals/blink
 /benchmark/runtime/rivals/zap
 /benchmark/runtime/rivals/upstream
+/benchmark/runtime/rivals/netray
+/benchmark/runtime/rivals/netray-checked
 /benchmark/roblox
 
 /site

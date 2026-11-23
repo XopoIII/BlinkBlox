@@ -34,21 +34,36 @@ local REQUIRES: { [string]: { string } } = {
 	quicknet = { "packages/quicknet/init.luau" },
 	warp = { "packages/warp/init.luau" },
 	satset = { "packages/satset/init.luau" },
+	netray = { "src/shared/netray/Server.luau", "src/shared/netray/Types.luau" },
+	["netray-checked"] = { "src/shared/netray-checked/Server.luau", "src/shared/netray-checked/Types.luau" },
 }
 
-Tools.ORDER = { "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp", "satset" }
+Tools.ORDER =
+	{ "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp", "satset", "netray", "netray-checked" }
 
 --> What every table's reader should know first: no tool ran with a limit that refuses traffic. The
 --> bench fires far faster than an honest client, so each tool's caps are raised where it downloads
---> (download.luau), in its mode, or in BlinkBlox's definitions.
+--> (download.luau), in its mode, or in BlinkBlox's definitions. NetRay ships its limits off, so
+--> nothing is lifted there; its decode-work cap only has to cover what one bench packet decodes.
 Tools.LIFTED = "Limits lifted on every tool: BlinkBlox's inbound limits, Packet's 8000-byte cap, QuickNet's rate "
-	.. "limit and packet caps, Warp's 8000-byte cap, Satset's token bucket. Nothing was refused."
+	.. "limit and packet caps, Warp's 8000-byte cap, Satset's token bucket; NetRay's are off unless a schema "
+	.. "declares them, and its decode-work cap is raised to the most its compiler takes. Nothing was refused."
 
---> The packages a World mounts, those downloaded.
+--> The packages a World mounts, those downloaded, and NetRay's compiled output beside them: its
+--> modules reach each other through `script.Parent`, so the directory must exist as instances. The
+--> two schemas differ -- Rivals loads runtime/rivals/netray, Runtime src/shared/netray -- and only
+--> the mode file being loaded decides which of the two runs.
 function Tools.Mounts(): { string }
 	local Mounts = {}
 	for _, Name in { "bytenet", "packet", "quicknet", "warp", "satset" } do
 		local Path = `packages/{Name}`
+		if fs.isDir(Path) then
+			table.insert(Mounts, Path)
+		end
+	end
+	for _, Path in
+		{ "runtime/rivals/netray", "runtime/rivals/netray-checked", "src/shared/netray", "src/shared/netray-checked" }
+	do
 		if fs.isDir(Path) then
 			table.insert(Mounts, Path)
 		end
@@ -117,8 +132,15 @@ function Tools.Load(Name: string, Native: boolean, Bench: string, Sources: { Ser
 
 	local Fire: (Value: any) -> ()
 	local Listen: (Callback: (Value: any) -> ()) -> ()
-	--> QuickNet's, Warp's and Satset's modes wrap each event in BlinkBlox's shape.
-	if Name == "upstream" or Name == "quicknet" or Name == "warp" or Name == "satset" then
+	--> QuickNet's, Warp's, Satset's and NetRay's modes wrap each event in BlinkBlox's shape.
+	if
+		Name == "upstream"
+		or Name == "quicknet"
+		or Name == "warp"
+		or Name == "satset"
+		or Name == "netray"
+		or Name == "netray-checked"
+	then
 		Fire = ClientEvent.Fire
 		Listen = function(Callback)
 			ServerEvent.On(function(_Player, Value)
@@ -163,7 +185,12 @@ function Tools.Load(Name: string, Native: boolean, Bench: string, Sources: { Ser
 		end,
 		Deliver = function(Packets)
 			for _, Packet in Packets do
-				(Packet :: any).Remote.OnServerEvent:Fire(Universe.Player, Packet.Buffer, Packet.Instances)
+				(Packet :: any).Remote.OnServerEvent:Fire(
+					Universe.Player,
+					Packet.Buffer,
+					Packet.Instances,
+					World.Rest(Packet)
+				)
 			end
 			--> Packet defers every listener, and the benchmark counts calling them as decoding.
 			World.Drain(Universe)

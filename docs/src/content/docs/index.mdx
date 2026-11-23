@@ -144,6 +144,14 @@ one event.
 leaves rate limiting to the game, and its decode loop has no `pcall`: one malformed event throws out
 of it, discarding the rest of that player's batch with nothing for the game to catch.
 
+[NetRay Compile](https://github.com/AstaWasTaken/NetRay-Compile) is a compiler too, and the other
+one in the [benchmarks](/BlinkBlox/guides/benchmarks/). It ships validation and every traffic limit
+off unless a schema declares them, bounds what it reads even so, and keeps a refusal in the output
+rather than telling the game which player sent it. Its `Instance` rides beside the buffer as a plain
+remote argument rather than as a reference inside one, and its optional delta compression sends a
+broadcast player by player. It is faster to fire and slower to decode than BlinkBlox, and writes
+more bytes wherever both send state.
+
 [QuickNet](https://github.com/breadboardengineer1234/QuickNet) and
 [Warp](https://github.com/imezx/Warp) are libraries rather than compilers: a schema is declared at
 runtime and packed into buffers. QuickNet limits each event per player and bounds a packet's size

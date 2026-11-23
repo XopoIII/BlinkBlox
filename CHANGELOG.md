@@ -7,6 +7,48 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.5.0 — 2026-11-23
+
+A reliable `FireAll` used to write the event into a scratch buffer and copy it into the broadcast
+batch -- two touches of every byte, a `table.clear` and a buffer swap an event. It is now written
+straight into that batch, one copy fewer an event. The wire does not change: the same bytes, at the
+same offsets, in the same packet.
+
+### Changed
+
+- **`FireAll` writes into the broadcast batch directly** (`src/Templates/Server.luau`,
+  `src/Generator/Send.luau`). The batch's cursor moves only on a commit, so a write that throws
+  leaves bytes past it that nothing reads; the Instances it appended are taken back by the next
+  `RollbackShared` -- the next `FireAll`, a player's own send, or the flush. That is the client
+  batch's own lazy rollback, one side over. The batch is loaded and committed inline rather than
+  through calls, and the list of players with their own batch in flight is a flag rather than a
+  `next` over a table on every event, because a call and that walk were most of what a broadcast
+  event cost. On `Rivals`' `Broadcast` (100 structs a frame to 50 players) the fire column reads
+  0.015 ms a frame natively where the previous build read 0.019, three runs each on an Apple M1
+  with LuneBlox 0.11.4, and its flush and bytes are unchanged. A rejected `FireAll` leaves neither
+  a phantom event nor a stray Instance in the batch: `test/BufferIntegrity.luau` holds two new
+  specs on it, and each fails when either rollback is removed.
+
+### Benchmarks
+
+- **NetRay Compile v0.2.0 joined the benchmarks** (`benchmark/`, `Benchmarks.md`). It is the third
+  IDL compiler in the tables, fetched from its source at the `v0.2.0` tag and compiled by its own
+  compiler on LuneBlox, as Blink's is. Its defaults leave every limit off, so nothing is lifted for
+  it; a second pair of schemas, `*.netray.checked`, turns its validation, receive budgets and delta
+  compression on, and the tables say what those cost -- `Validate = Full` takes a thousand booleans
+  from 3.6 ms to fire natively to 30.1, and `Compression: Repeat` turns one `FireAllClients` into
+  per-recipient sends: 150 calls and 4.3 ms of fire a frame on the broadcast, with more bytes on the
+  wire than without it.
+- **The harness carries more than one remote argument per packet** (`benchmark/runtime/World.luau`),
+  which NetRay's passthrough needs, and `Rivals` now answers `typeof` with "Instance" for its
+  players and parts in every scenario rather than one at a time.
+
+### Validation
+
+The full suite passes (778 specs), the Studio plugin and CLI build, the type check is clean in every
+mode, and the golden output was regenerated and read: the only difference in a generated module is
+the `FireAll` body above.
+
 ## 1.4.1 — 2026-11-17
 
 A schema may now let a run of three `f32` fields travel in one `buffer` call. Nothing about the wire

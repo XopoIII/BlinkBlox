@@ -132,7 +132,12 @@ function Methods.IsDescendantOf(_Self, _Ancestor)
 	return true
 end
 
-export type Sent = { Buffer: buffer, Instances: { any }? }
+export type Sent = {
+	Buffer: buffer,
+	Instances: { any }?,
+	--> The arguments after the Instances table, as the remote took them: NetRay's passthrough.
+	Rest: { any }?,
+}
 
 export type Universe = {
 	Native: boolean,
@@ -163,36 +168,64 @@ local function Remote(Universe: Universe, ClassName: string)
 	State.Properties.OnServerEvent = Signal()
 	State.Properties.OnClientEvent = Signal()
 	--> A remote serialises its arguments when it is fired, and the tools reuse what they fired, so what
-	--> is kept of a packet with Instances is a copy. Buffers are copied where the server sends: some
-	--> tools rewrite one buffer for each player.
+	--> is kept of a packet is a copy: the tables among the arguments are cloned, and the bytes are
+	--> copied where the server sends, as some tools rewrite one buffer for each player.
 	local function Keep(Instances: { any }?): { any }?
 		return if Instances and #Instances > 0 then table.clone(Instances) else Instances
+	end
+
+	--> What a tool passes beside its buffer, after the table of Instances every tool but NetRay
+	--> stops at: its passthrough sends a count list and one list of values per position.
+	local function KeepRest(Count: number, ...): { any }?
+		if Count == 0 then
+			return nil
+		end
+		local Rest = table.pack(...)
+		for Index = 1, Count do
+			local Value = Rest[Index]
+			if type(Value) == "table" then
+				Rest[Index] = table.clone(Value)
+			end
+		end
+		return Rest
 	end
 
 	--> Warp's client asks for the server's event ids with a call that carries nothing. The client's buffer is
 	--> kept as it is, not copied as Roblox does: the harness decodes it in the same frame, before the tool
 	--> flushes again, so a tool that reuses its buffer is still read right, and the flush it is timed on
 	--> carries no copy that is the harness's rather than the tool's.
-	State.Properties.FireServer = function(_self, Buffer: buffer?, Instances: { any }?)
+	State.Properties.FireServer = function(_self, Buffer: buffer?, Instances: { any }?, ...)
+		local Rest = KeepRest(select("#", ...), ...)
 		Universe.Calls += 1
 		Universe.Bytes += if Buffer then buffer.len(Buffer) else 0
-		table.insert(Universe.Outbox, { Buffer = Buffer, Instances = Keep(Instances), Remote = Object } :: any)
+		table.insert(
+			Universe.Outbox,
+			{ Buffer = Buffer, Instances = Keep(Instances), Rest = Rest, Remote = Object } :: any
+		)
 	end
-	State.Properties.FireClient = function(_self, Player: any, Buffer: buffer, Instances: { any }?)
+	State.Properties.FireClient = function(_self, Player: any, Buffer: buffer, Instances: { any }?, ...)
+		local Rest = KeepRest(select("#", ...), ...)
 		Universe.Calls += 1
 		Universe.Bytes += buffer.len(Buffer)
 		if Player == Universe.Player then
 			local Copy = buffer.create(buffer.len(Buffer))
 			buffer.copy(Copy, 0, Buffer)
-			table.insert(Universe.Inbox, { Buffer = Copy, Instances = Keep(Instances), Remote = Object } :: any)
+			table.insert(
+				Universe.Inbox,
+				{ Buffer = Copy, Instances = Keep(Instances), Rest = Rest, Remote = Object } :: any
+			)
 		end
 	end
-	State.Properties.FireAllClients = function(_self, Buffer: buffer, Instances: { any }?)
+	State.Properties.FireAllClients = function(_self, Buffer: buffer, Instances: { any }?, ...)
+		local Rest = KeepRest(select("#", ...), ...)
 		Universe.Calls += 1
 		Universe.Bytes += buffer.len(Buffer) * #Universe.Crowd
 		local Copy = buffer.create(buffer.len(Buffer))
 		buffer.copy(Copy, 0, Buffer)
-		table.insert(Universe.Inbox, { Buffer = Copy, Instances = Keep(Instances), Remote = Object } :: any)
+		table.insert(
+			Universe.Inbox,
+			{ Buffer = Copy, Instances = Keep(Instances), Rest = Rest, Remote = Object } :: any
+		)
 	end
 	return Object
 end
@@ -279,6 +312,16 @@ function World.Drain(Universe: Universe)
 	Mocks.Drain(Universe.Deferred)
 end
 
+--- The arguments a packet carries after its Instances table, as the remote took them. Returns
+--- nothing rather than nil when it carries none: NetRay counts the arguments it receives.
+function World.Rest(Packet: Sent): ...any
+	local Rest = (Packet :: any).Rest
+	if Rest == nil then
+		return
+	end
+	return table.unpack(Rest, 1, Rest.n)
+end
+
 --- Delivers what the two sides sent each other while loading, both ways, until neither sends more,
 --- then forgets it was sent: Warp's client learns its event ids from the server this way before it can
 --- fire one. Call it once both sides are loaded, before anything is timed.
@@ -292,10 +335,15 @@ function World.Settle(Universe: Universe)
 		table.clear(Universe.Outbox)
 		table.clear(Universe.Inbox)
 		for _, Packet in Outbox do
-			(Packet :: any).Remote.OnServerEvent:Fire(Universe.Player, Packet.Buffer, Packet.Instances)
+			(Packet :: any).Remote.OnServerEvent:Fire(
+				Universe.Player,
+				Packet.Buffer,
+				Packet.Instances,
+				World.Rest(Packet)
+			)
 		end
 		for _, Packet in Inbox do
-			(Packet :: any).Remote.OnClientEvent:Fire(Packet.Buffer, Packet.Instances)
+			(Packet :: any).Remote.OnClientEvent:Fire(Packet.Buffer, Packet.Instances, World.Rest(Packet))
 		end
 		World.Drain(Universe)
 	end

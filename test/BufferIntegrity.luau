@@ -334,6 +334,102 @@ do
 end
 
 do
+	--> A FireAll writes straight into the broadcast batch now, where it used to write into the
+	--> scratch buffer and copy that across. A write that throws after appending an Instance still
+	--> leaves it in the batch's list, though the cursor is never committed over it; whoever touches
+	--> the batch next takes it back, or the instance table of every later broadcast is one place
+	--> out -- the next event's Instance arriving as the rejected one's.
+	local Name = "A rejected FireAll leaves no instance behind in the broadcast batch"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	local Rejected, Wanted = MockInstance("Rejected"), MockInstance("Wanted")
+	local Seen: { any } = {}
+	local Disconnect = Client.InstanceAny.On(function(Value)
+		table.insert(Seen, Value)
+	end)
+	local Phantom = 0
+	local DisconnectTuple = Client.Tuple.On(function()
+		Phantom += 1
+	end)
+
+	task.wait(FLUSH)
+	--> The Instance is the fourth element; the array after it is where the write throws.
+	local Threw = not pcall(Server.Tuple.FireAll, 1, "A", nil, Rejected, nil, "not an array" :: any)
+	Server.InstanceAny.FireAll(Wanted)
+	task.wait(FLUSH)
+	Disconnect()
+	DisconnectTuple()
+	Shared.DrainWarnings()
+
+	if not Threw then
+		ErrorPrint(`Failed "{Name}": the bad fire was accepted instead of rejected.`)
+		return {}
+	end
+
+	if #Seen ~= 1 or Seen[1] ~= Wanted then
+		ErrorPrint(
+			`Failed "{Name}": the client received {#Seen} instances, the first {tostring(Seen[1])}, expected Wanted alone.`
+		)
+		return {}
+	end
+
+	if Phantom ~= 0 then
+		ErrorPrint(`Failed "{Name}": the rejected fire reached the client {Phantom} times.`)
+		return {}
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end
+
+do
+	--> A player's own send copies the broadcast batch into their own. It happens with committed
+	--> broadcasts already in that batch, and what a rejected FireAll left in its instance list has
+	--> to be skipped: their packet would otherwise carry an Instance of an event nobody sent, and
+	--> the event they did send would arrive carrying the rejected one's.
+	local Name = "A rejected FireAll leaves no instance behind in a player's batch"
+	PrettyPrint("cyan", `Testing: {Name}...`, true)
+
+	local First, Rejected, Wanted = MockInstance("First"), MockInstance("Rejected"), MockInstance("Wanted")
+	local Seen: { any } = {}
+	local Disconnect = Client.InstanceAny.On(function(Value)
+		table.insert(Seen, Value)
+	end)
+	local Phantom = 0
+	local DisconnectTuple = Client.Tuple.On(function()
+		Phantom += 1
+	end)
+
+	task.wait(FLUSH)
+	--> Committed first: a player's send only copies the batch when there is a broadcast to catch up on.
+	Server.InstanceAny.FireAll(First)
+	local Threw = not pcall(Server.Tuple.FireAll, 1, "A", nil, Rejected, nil, "not an array" :: any)
+	Server.InstanceAny.Fire(Shared.Player, Wanted)
+	task.wait(FLUSH)
+	Disconnect()
+	DisconnectTuple()
+	Shared.DrainWarnings()
+
+	if not Threw then
+		ErrorPrint(`Failed "{Name}": the bad fire was accepted instead of rejected.`)
+		return {}
+	end
+
+	if #Seen ~= 2 or Seen[1] ~= First or Seen[2] ~= Wanted then
+		ErrorPrint(
+			`Failed "{Name}": the client received {#Seen} instances, {tostring(Seen[1])} then {tostring(Seen[2])}, expected First then Wanted.`
+		)
+		return {}
+	end
+
+	if Phantom ~= 0 then
+		ErrorPrint(`Failed "{Name}": the rejected fire reached the client {Phantom} times.`)
+		return {}
+	end
+
+	OkPrint(`Test "{Name}" passed!`)
+end
+
+do
 	--> An exported type's Write swaps the outgoing batch out for a scratch buffer and swaps it back
 	--> after. A value that throws part way used to skip the swap back: the scratch buffer stayed
 	--> installed, the events already queued were gone, and the next flush sent the half-written value

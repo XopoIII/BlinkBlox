@@ -1,0 +1,61 @@
+-- Definition.netray as a live server would configure NetRay: validation on, budgets on, and nothing
+-- refused. Its defaults are what the main tables measure; this is the other configuration, one run,
+-- and the numbers sit beside them in Benchmarks.md. Every limit is sized to fit what the bench
+-- fires -- 1000 events of up to 602 bytes a frame -- as their own Benchmark.idl sizes its budgets.
+option DecodeStruct = Table;
+option Validate = Full;
+option MaxBatchBytes = 2097152;
+option MaxBatchMessages = 2048;
+option MaxDecodeWork = 2147483647;
+option MaxUnreliableBytes = 1000;
+option MaxPollingMessages = 128;
+option ReceiveCallsPerSecond = 100000;
+option ReceiveCallBurst = 100000;
+option ReceiveBytesPerSecond = 67108864;
+option ReceiveByteBurst = 67108864;
+option ReceiveMessagesPerSecond = 1000000;
+option ReceiveMessageBurst = 1000000;
+
+struct Entity {
+	id: u8,
+	x: u8,
+	y: u8,
+	z: u8,
+	orientation: u8,
+	animation: u8
+}
+
+event Booleans {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: array<bool, 1000>
+}
+
+event Entities {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: array<Entity, 1000>
+}
+
+event BooleansRandom {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: array<bool, 1000>
+}
+
+event EntitiesRandom {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: array<Entity, 1000>
+}
+
+event Tiny {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: u8
+}

@@ -39,8 +39,9 @@ local EVENTS_PER_FRAME = 1000
 local WARMUP_FRAMES = 10
 local BENCHES = { "Booleans", "Entities", "BooleansRandom", "EntitiesRandom", "Tiny" }
 --> Benches only this file runs, and the tools whose modes declare them. The rest are Studio's, shared
---> with it. Satset declares Tiny because it frames a run of one event apart from the rest.
-local LOCAL_BENCHES: { [string]: { [string]: boolean } } = { Tiny = { blink = true, satset = true } }
+--> with it. Satset and NetRay declare Tiny because it frames a run of one event apart from the rest.
+local LOCAL_BENCHES: { [string]: { [string]: boolean } } =
+	{ Tiny = { blink = true, satset = true, netray = true, ["netray-checked"] = true } }
 
 local Frames = 200
 local Filter: string? = nil

@@ -56,6 +56,14 @@ Two other projects occupy the neighbouring ground, and neither covers this one:
   events; a refusal, a failed decode and an array cut to the bytes left are all silent, and a
   truncated `string8` decodes as `""`. Its run framing -- one header for consecutive events of one
   id, no index each -- is the one thing it does that BlinkBlox does not (`benchmark/Benchmarks.md`).
+- **NetRay Compile** (AstaWasTaken/NetRay-Compile) is an IDL compiler like BlinkBlox, benchmarked
+  beside it from its 0.2.0. Its defaults are the inverse of every other rival's: validation off,
+  and its per-event and per-module limits off unless the schema declares them, so unlike Packet's,
+  QuickNet's, Warp's and Satset's nothing is lifted to run it. It does bound what it reads -- array
+  counts and allocation sizes are checked even with validation off -- but it does not report a
+  refusal to the game ("not every rejection produces a warning"), and an `instance` is a passthrough
+  remote argument beside the buffer rather than a reference inside it. Its opt-in delta compression
+  turns one `FireAllClients` into a per-recipient send (`benchmark/Benchmarks.md`).
 
 None of them reports every refusal to the game and bounds every allocation before it happens. That is the gap this fork fills: **the
 generated server module should be safe to point at the open internet** — without giving up the
@@ -178,7 +186,14 @@ is not in Luau at all: it is an open RFC, #238.)
   (`src/Generator/Decode.luau`); every unclaimed index ends in the unknown-index error, and a channel
   this side hears nothing on fails at the index read. `test/EventIndices.luau` sends all 256 bytes.
 - **A reliable `FireAll` goes to one broadcast batch** sent in one `FireAllClients`; `LoadPlayer`
-  diverges a player who also has events of their own, so their order holds around it.
+  diverges a player who also has events of their own, so their order holds around it. The event is
+  written straight into that batch, loaded and committed inline (`PendingShared`, `SharedCursor` in
+  `src/Generator/Send.luau`), not into the scratch buffer and copied out of it: `SharedCursor` moves
+  only on a commit, so a write that throws leaves bytes past it that nothing reads, and the
+  Instances it appended are taken back by the next `RollbackShared` -- the next FireAll, a player's
+  own send, or the flush. `AnyDiverged` keeps the players-with-their-own-batch check off the
+  per-event path; `CommitDiverged` runs only while one exists. `test/BufferIntegrity.luau` fails
+  when either rollback is removed.
 - **The client's batch is cut to the server's limits** (`MaxEventsPerPacket`, `MaxPacketSize`), so an
   honest player is never refused for `Events` or `Oversized`.
 - **Features that cost code are spliced only when used**: the outbound budget
