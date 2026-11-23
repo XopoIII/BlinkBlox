@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: What BlinkBlox's generated code costs to fire, flush and decode against Blink, zap, ByteNet, Packet, QuickNet, Warp and Satset, measured on LuneBlox -- a thousand events a frame, and a server sending to fifty players, unreliable events and Instances -- and its frame rate, fire time and bandwidth against them and plain remotes in Studio.
+description: What BlinkBlox's generated code costs to fire, flush and decode against Blink, zap, ByteNet, Packet, QuickNet, Warp, Satset and NetRay -- measured on LuneBlox, a thousand events a frame, and a server sending to fifty players, unreliable events and Instances -- and its frame rate, fire time and bandwidth against them and plain remotes in Studio.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -11,7 +11,8 @@ There are two benchmarks, and they answer different questions.
   [LuneBlox](https://github.com/XopoIII/LuneBlox) -- Lune on the Luau version Roblox runs, with
   Roblox's fast flags -- without Roblox. It is reproducible on any machine and
   separates the three things the code does: firing events, flushing them into a packet, and the
-  server decoding that packet. It runs BlinkBlox, Blink, zap, ByteNet, Packet, QuickNet, Warp and Satset.
+  server decoding that packet. It runs BlinkBlox, Blink, zap, ByteNet, Packet, QuickNet, Warp, Satset and
+  NetRay.
 - **The Studio benchmark** puts the same tools and plain remotes inside Roblox Studio, and reports
   frame rate, the time the fires took, and bandwidth.
 
@@ -21,9 +22,11 @@ same schema compiled by its own compiler.
 <Aside type="note" title="No tool runs with a limit that refuses traffic">
 The benchmarks fire far faster than an honest client, so every tool's caps are lifted: BlinkBlox's
 inbound limits, Packet's 8000-byte cap, QuickNet's rate limit and packet caps, Warp's 8000-byte cap
-and Satset's token bucket. The checks behind them still run and are timed; only the refusals are
-gone, and each run confirms every event it fired was heard. [Reading the numbers](#reading-the-numbers)
-says how each is lifted.
+and Satset's token bucket. NetRay ships its limits off, so nothing is lifted for it: its own
+`MaxDecodeWork` is raised to the maximum its compiler accepts, because one benchmark packet decodes a
+million array elements and no live game would. The checks behind them still run and are timed; only
+the refusals are gone, and each run confirms every event it fired was heard.
+[Reading the numbers](#reading-the-numbers) says how each is lifted.
 </Aside>
 
 ## The generated code, on LuneBlox
@@ -213,6 +216,49 @@ to send interpreted where BlinkBlox's take 16.9. On random payloads compression 
 byte: `BooleansRandom` costs both 127.02 compressed. A reliable `FireAll` is one broadcast for both;
 an unreliable one Satset copies into each player's batch, 50 calls to BlinkBlox's one. It has no
 Instance type, so it sits out `Instances`.
+
+### NetRay
+
+NetRay Compile is an IDL compiler like BlinkBlox and zap. Its compiler runs from source -- the
+release binaries are x86_64 only -- and its output is three modules, `Server`, `Client` and `Types`,
+which require each other as siblings. Its defaults are the inverse of every other rival's:
+validation off, and its rate, byte, decode-work and polling budgets off unless the schema declares
+them, so it is the one tool here with nothing lifted. `option DecodeStruct = Table` makes each
+struct payload one table, the shape every other mode presents, and its `Instance` is a passthrough
+-- a remote argument beside the buffer, which Roblox serialises -- rather than a reference inside
+one.
+
+One run of `Runtime` and `Rivals` on 2026-11-23, an Apple M1 with LuneBlox 0.11.4 and BlinkBlox
+1.5.0, 200 frames; `NetRay `checked`` is the same events with `Validate = Full`, receive budgets
+sized to fit and `Compression: Repeat` on `Snapshot`.
+
+| Bench | BlinkBlox, fire / decode | NetRay | NetRay `checked` | Bytes, BlinkBlox / NetRay |
+|---|---|---|---|---|
+| Booleans | **2.4** / **1.8** | 3.5 / 3.5 | 29.7 / 3.5 | **127.01** / 127.00 |
+| Entities | 1.7 / **3.8** | **1.6** / 10.5 | 16.5 / 10.1 | **601.01** / 602.00 |
+| BooleansRandom | **5.2** / **1.7** | 10.3 / 3.9 | 39.9 / 4.0 | 127.01 / **127.00** |
+| EntitiesRandom | **2.5** / **4.2** | 2.5 / 13.2 | 20.2 / 13.5 | **601.01** / 602.00 |
+| Tiny | 0.082 / **0.068** | **0.033** / 0.085 | 0.041 / 0.085 | 1.01 / **1.00** |
+
+Native, in milliseconds a frame; interpreted, NetRay's `Entities` fire is the faster of the two,
+8.8 against 9.8. On `Broadcast` NetRay's 100 structs cost 0.013 ms to fire to BlinkBlox's 0.016,
+one call each, and interpreted the two swap -- 0.030 to 0.029, with NetRay's decode nearly twice
+BlinkBlox's. On `Instances` NetRay fires in 0.004 ms to BlinkBlox's 0.029, where BlinkBlox's client
+runs `Begin`/`Settle`, three packet-limit checks and `Frame` so that a rejected write leaves nothing
+behind; interpreted the decode is level, 0.019 against 0.020. BlinkBlox decodes a struct nearly
+three times faster, writes fewer bytes wherever both send state -- 12,900 a frame to 13,700 on
+`WorldState`, 850 to 900 on `SelfState`, where NetRay spends a `u16` index an event and BlinkBlox
+frames a run of one index in three bytes -- and holds `SelfState`'s fire.
+
+`Validate = Full` costs NetRay ten times its fire time and buys nothing the tables can see: a thousand
+booleans take 29.7 ms natively rather than 3.5, a thousand entity structs 16.5 rather than 1.6, and
+its decode is unchanged. Its opt-in `Compression: Repeat` turns a `FireAll` into a per-recipient
+send: 150 calls a frame, 3.5 ms of fire against 0.016 and one call, and 95,000 bytes a frame against
+85,150, because these payloads differ index by index and the delta carries more than it saves.
+Measured one at a time, validation alone added half again to a broadcast's fire time and compression
+alone took it to 1.4 ms; the `checked` rows carry both. Its full tables, and why the harness answers
+`typeof` with "Instance" in every scenario now, are in
+[`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
 
 ### A schema with many events
 
@@ -424,6 +470,14 @@ Packet's EntitiesRandom came to 486 bytes an event, less than the 600 bytes of r
 - **Satset's token bucket is lifted in its modes.** Its server charges a token a remote call, 1000 at
   most and 500 a second, and drops the call once they run out; the modes pass `math.huge` for both
   to `Satset.start`. Its batching is left as it ships. It is fetched from its GitHub tag, `v0.5.0`.
+- **NetRay ships its limits off, and they are a schema option.** Its rate, byte, decode-work and
+  polling budgets default to zero, which disables them, so the tool runs exactly as it ships and
+  nothing is lifted. `definitions/Definition.netray` and `Scenarios.netray` give its generated
+  `Types` module a sibling to require and turn struct payloads into one table each
+  (`option DecodeStruct = Table`), which is the API shape the other tools' modes present anyway. A
+  second pair of schemas, `*.netray.checked`, turns its validation, its budgets and its delta
+  compression on: those numbers show what its opt-in safety and compression cost, and the tables say
+  which configuration each row is.
 - **Warp sends each reliable packet as its XOR against the last.** Two identical frames XOR to
   zeros, which zstd removes, so on the repeated payloads Warp's compressed bytes are the lowest of
   any tool. Since 1.1.0-pre8 it frames unreliable packets too, adds 2 bytes to each, and sends a
@@ -487,10 +541,12 @@ processor, and the process `Runtime` starts for each row inherits the core.
   `option ManualReplication = true` for it.
 - `luneblox run Scenarios` and `luneblox run Rivals` time a server sending to a crowd, unreliable events,
   streams and Instances: BlinkBlox alone, and every tool. `--batch` builds BlinkBlox with
-  `BatchUnreliable`; `Rivals` takes `--tools` as `Runtime` does.
+  `BatchUnreliable`; `Rivals` takes `--tools` as `Runtime` does, and `--tools netray-checked` runs
+  NetRay with its validation, budgets and compression on.
 - `luneblox run Performance` times the compiler itself: lexing, parsing and generating the test schema.
 - `luneblox run build --download --run` fetches zap, BlinkBlox, ByteNet and Packet for the machine it
-  runs on, QuickNet, Warp and Satset from their GitHub source, and the source of Blink, the original project, builds the Studio place, runs it with `run-in-roblox`, and
+  runs on, QuickNet, Warp and Satset from their GitHub source, and the source of Blink, the original
+  project, and of NetRay; builds the Studio place, runs it with `run-in-roblox`, and
   writes `Benchmarks.md`. Press F5 when Studio's Output asks. Without `--download` it reuses the tools it has; without `--run` it
   only builds the place. `--local` compiles the schema with the checkout's own compiler rather than
   the latest release, which is how the numbers above were taken.

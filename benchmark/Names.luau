@@ -5,7 +5,19 @@
 --- the original project BlinkBlox forked from. The ids stay what `--tools` and the mode files use.
 local Names = {}
 
-Names.ORDER = { "roblox", "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp", "satset" }
+Names.ORDER = {
+	"roblox",
+	"blink",
+	"upstream",
+	"zap",
+	"bytenet",
+	"packet",
+	"quicknet",
+	"warp",
+	"satset",
+	"netray",
+	"netray-checked",
+}
 
 local DISPLAY: { [string]: string } = {
 	roblox = "Roblox remotes",
@@ -17,6 +29,8 @@ local DISPLAY: { [string]: string } = {
 	quicknet = "QuickNet",
 	warp = "Warp",
 	satset = "Satset",
+	netray = "NetRay",
+	["netray-checked"] = "NetRay `checked`",
 }
 
 function Names.Display(Id: string): string

@@ -35,7 +35,8 @@ local WARMUP_FRAMES = 10
 --> What each Heartbeat tells the tools a frame took; see the same constant in runtime/Tools.luau.
 local FRAME = 1 / 30
 
-local ORDER = { "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp", "satset" }
+local ORDER =
+	{ "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp", "satset", "netray", "netray-checked" }
 local REQUIRES: { [string]: { string } } = {
 	upstream = { "runtime/rivals/upstream/Server.luau" },
 	zap = { "runtime/rivals/zap/Server.luau" },
@@ -44,6 +45,8 @@ local REQUIRES: { [string]: { string } } = {
 	quicknet = { "packages/quicknet/init.luau" },
 	warp = { "packages/warp/init.luau" },
 	satset = { "packages/satset/init.luau" },
+	netray = { "runtime/rivals/netray/Server.luau", "runtime/rivals/netray/Types.luau" },
+	["netray-checked"] = { "runtime/rivals/netray-checked/Server.luau", "runtime/rivals/netray-checked/Types.luau" },
 }
 
 local Frames = 200
@@ -99,7 +102,12 @@ end
 type Result = { Fire: number, Flush: number, Decode: number, Calls: number, Bytes: number }
 
 local function Run(Tool: string, Scenario: any, Api: Apis.Api, Native: boolean): Result
-	local Universe = World.Universe(Native, Tools.Mounts(), Scenario.Players, Scenario.Instances == true)
+	--> Every Rivals scenario runs with the mock's `typeof` answering "Instance": its players and
+	--> parts are instances, and a tool that type-checks what it is handed -- NetRay does, on every
+	--> send -- must be answered as Roblox would answer. The replaced builtin is no longer a fastcall,
+	--> so each tool pays the mock's closure once per query, the same as the others; scenarios used to
+	--> turn it on one at a time, and the first two that needed it found out the hard way.
+	local Universe = World.Universe(Native, Tools.Mounts(), Scenario.Players, true)
 	local Parts = {}
 	for Index = 1, 16 do
 		Parts[Index] = World.Part(`Part{Index}`)
@@ -139,11 +147,16 @@ local function Run(Tool: string, Scenario: any, Api: Apis.Api, Native: boolean):
 
 		if Scenario.FromServer then
 			for _, Packet in Universe.Inbox do
-				(Packet :: any).Remote.OnClientEvent:Fire(Packet.Buffer, Packet.Instances)
+				(Packet :: any).Remote.OnClientEvent:Fire(Packet.Buffer, Packet.Instances, World.Rest(Packet))
 			end
 		else
 			for _, Packet in Universe.Outbox do
-				(Packet :: any).Remote.OnServerEvent:Fire(Universe.Player, Packet.Buffer, Packet.Instances)
+				(Packet :: any).Remote.OnServerEvent:Fire(
+					Universe.Player,
+					Packet.Buffer,
+					Packet.Instances,
+					World.Rest(Packet)
+				)
 			end
 		end
 		World.Drain(Universe)

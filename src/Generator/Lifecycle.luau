@@ -150,13 +150,13 @@ function Lifecycle.Sources(Context: string, Options: Parser.Options): { string }
 
 	--> SavePlayerBuffer comes first in the template's text, then InvokePlayer; they are found by the
 	--> line in front of each marker rather than by that order, so a move in the template cannot swap
-	--> their guards.
+	--> their guards. A FireAll's guard is emitted into its generated body instead, since that body
+	--> writes into the broadcast batch inline (see Generator/Send.luau).
 	local Rest = string.split(SERVER[3], STARTED)
 	local Guarded = { Rest[1] }
 	for Index = 2, #Rest do
 		local Before = Rest[Index - 1]
 		local Guard = if string.find(Before, "local function SavePlayerBuffer%(Player: Player%)\n$")
-				or string.find(Before, "local function AppendShared%(.-%)\n$")
 			then Start.Guard.SavePlayerBuffer
 			else Start.Guard.InvokePlayer
 		table.insert(Guarded, if Deferred then Guard .. Rest[Index] else Rest[Index])

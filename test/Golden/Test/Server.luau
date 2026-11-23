@@ -10708,6 +10708,30 @@ local SharedInstances: {Instance} = {}
 local SharedUnderused = 0
 local Diverged: {[Player]: true} = {}
 
+--> A FireAll writes straight into the broadcast batch above, one copy fewer an event than writing
+--> it in the scratch buffer and appending that. A write that throws is undone lazily, as the
+--> client's batch is (Begin and Settle in the base template): SharedCursor only moves on a commit,
+--> so the bytes a failed write left past it are never read, and only the Instances it appended must
+--> be taken back. Whatever touches the batch next -- the next FireAll, a player's own send, or the
+--> flush -- takes them back first.
+-->
+--> The generated FireAll loads and commits the batch inline rather than through calls: it is the
+--> hottest send the module has, and a call is most of an event's fire. `CommitDiverged` is the one
+--> piece left as a function, and it runs only while a player has a batch of their own in flight.
+local PendingShared = -1
+--> Whether anyone in `Diverged` is there at all, kept so a FireAll does not walk an empty table
+--> through `next` on every event. Cleared with the table, at the flush.
+local AnyDiverged = false
+
+local function RollbackShared()
+    if PendingShared >= 0 then
+        for Index = #SharedInstances, PendingShared + 1, -1 do
+            SharedInstances[Index] = nil
+        end
+        PendingShared = -1
+    end
+end
+
 --> How many rows a polled event's queue holds on the server before it stops taking more. Clients fill
 --> it, and a game that polls an event rarely, or has not got round to polling it at all, would let
 --> them grow it without end -- each row pinning its Player. A game that drains its queues every
@@ -11200,6 +11224,7 @@ local function SavePlayerBuffer(Player: Player)
             PlayersMap[Player] = Save()
             if SharedCursor > 0 then
                 Diverged[Player] = true
+                AnyDiverged = true
             end
         end
         return
@@ -11207,6 +11232,7 @@ local function SavePlayerBuffer(Player: Player)
 
     if SharedCursor > 0 then
         Diverged[Player] = true
+        AnyDiverged = true
     end
 
     Entry.Size = SendSize
@@ -11216,26 +11242,43 @@ local function SavePlayerBuffer(Player: Player)
 end
 
 --> Loads `Player`'s batch for a write of their own, diverging them first when a broadcast is pending;
---> see the broadcast batch above. The SavePlayerBuffer that follows marks them diverged.
-local function LoadPlayer(Player: Player)
+--> see the broadcast batch above. The SavePlayerBuffer that follows marks them diverged. `Upto` and
+--> `UptoInstances` bound that catch-up to a prefix of the broadcast batch: a FireAll that writes
+--> into it appends the event itself afterwards, and copying the whole batch would carry it twice.
+local function LoadPlayer(Player: Player, Upto: number?, UptoInstances: number?)
+    --> A FireAll's write that threw still holds Instances of an event that never happened; they are
+    --> taken back before this copies the batch they sit in.
+    RollbackShared()
     Load(PlayersMap[Player])
-    if SharedCursor > 0 and not Diverged[Player] then
-        local Position = Allocate(SharedCursor)
-        buffer.copy(SendBuffer, Position, SharedBuffer, 0, SharedCursor)
-        table.move(SharedInstances, 1, #SharedInstances, #SendInstances + 1, SendInstances)
+    local Shared = Upto or SharedCursor
+    if Shared > 0 and not Diverged[Player] then
+        local Position = Allocate(Shared)
+        buffer.copy(SendBuffer, Position, SharedBuffer, 0, Shared)
+        table.move(SharedInstances, 1, UptoInstances or #SharedInstances, #SendInstances + 1, SendInstances)
     end
 end
 
---> Appends an event written elsewhere to one player's batch: a FireList or FireExcept, and a
---> broadcast to a player who has diverged. A player with a batch of their own and nothing to catch up
---> on gets it straight into it; any other goes the long way, through LoadPlayer and SavePlayerBuffer.
-local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instances: {Instance})
+--> Appends `Size` bytes of `Buffer` from `Offset`, and Instances from `First` on, to one player's
+--> batch: a FireList or FireExcept, and a broadcast to a player who has diverged. The event being
+--> appended may itself sit in the broadcast batch, so the catch-up stops where it starts (`CatchUp`,
+--> which defaults to the whole batch). A player with a batch of their own and nothing to catch up on
+--> gets it straight into it; any other goes the long way, through LoadPlayer and SavePlayerBuffer.
+local function AppendRange(
+    Player: Player,
+    Buffer: buffer,
+    Offset: number,
+    Size: number,
+    Instances: {Instance},
+    First: number,
+    CatchUp: number?
+)
     local Entry = PlayersMap[Player]
-    if Entry == nil or (SharedCursor > 0 and not Diverged[Player]) then
-        LoadPlayer(Player)
+    local UpTo = CatchUp or SharedCursor
+    if Entry == nil or (UpTo > 0 and not Diverged[Player]) then
+        LoadPlayer(Player, UpTo, First - 1)
         local Position = Allocate(Size)
-        buffer.copy(SendBuffer, Position, Buffer, 0, Size)
-        table.move(Instances, 1, #Instances, #SendInstances + 1, SendInstances)
+        buffer.copy(SendBuffer, Position, Buffer, Offset, Size)
+        table.move(Instances, First, #Instances, #SendInstances + 1, SendInstances)
         SavePlayerBuffer(Player)
         return
     end
@@ -11256,41 +11299,38 @@ local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instan
         Entry.Size = Grown
     end
 
-    buffer.copy(Target, Cursor, Buffer, 0, Size)
+    buffer.copy(Target, Cursor, Buffer, Offset, Size)
     Entry.Cursor = InUse
 
     local Count = #Instances
-    if Count > 0 then
+    if Count >= First then
         local List = Entry.Instances
-        table.move(Instances, 1, Count, #List + 1, List)
+        table.move(Instances, First, Count, #List + 1, List)
     end
 end
 
---> Appends a broadcast to the broadcast batch, and to the batch of every player who has diverged.
-local function AppendShared(Buffer: buffer, Size: number, Instances: {Instance})
-    local InUse = SharedCursor + Size
-    if InUse > SharedSize then
-        while InUse > SharedSize do
-            SharedSize *= 1.5
-        end
+--> The generated FireList and FireExcept append the whole of what they wrote in the scratch buffer.
+local function AppendPlayer(Player: Player, Buffer: buffer, Size: number, Instances: {Instance})
+    AppendRange(Player, Buffer, 0, Size, Instances, 1)
+end
 
-        local Resized = buffer.create(SharedSize)
-        buffer.copy(Resized, 0, SharedBuffer, 0, SharedCursor)
-        SharedBuffer = Resized
-    end
-
-    buffer.copy(SharedBuffer, SharedCursor, Buffer, 0, Size)
-    SharedCursor = InUse
-    if #Instances > 0 then
-        table.move(Instances, 1, #Instances, #SharedInstances + 1, SharedInstances)
-    end
-
+--> Appends the FireAll just committed -- `Size` bytes from `Before`, Instances from
+--> `BeforeInstances + 1` -- to the batch of every player who has diverged: each needs the event
+--> whole, after their own. Called only while one exists; see `AnyDiverged`.
+local function CommitDiverged(Before: number, BeforeInstances: number, Size: number)
     for Player in Diverged do
-        AppendPlayer(Player, Buffer, Size, Instances)
+        AppendRange(Player, SharedBuffer, Before, Size, SharedInstances, BeforeInstances + 1, Before)
+    end
+
+    if next(Diverged) == nil then
+        AnyDiverged = false
     end
 end
 
 local function StepReplication()
+    --> Undoes a FireAll's write that threw before the half-written event is sent.
+    RollbackShared()
+
     local Shared = SharedCursor
     for Player, Send in PlayersMap do
         --> Second line of defence. An entry can still be stale if it was written inside the narrow
@@ -11312,6 +11352,7 @@ local function StepReplication()
             Send.Cursor = SendCursor
             Send.Buffer = SendBuffer
             Diverged[Player] = true
+            AnyDiverged = true
         end
 
         local Used = Send.Cursor
@@ -11353,6 +11394,7 @@ local function StepReplication()
         SharedCursor = 0
         table.clear(SharedInstances)
         table.clear(Diverged)
+        AnyDiverged = false
     end
 
     local Shrink
@@ -17002,11 +17044,21 @@ Returns.SendOccupiedCell = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: Vector3): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_SendOccupiedCell(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: Vector3): ()
 		LoadScratch()
@@ -17145,11 +17197,21 @@ Returns.ServerPollEvent = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 		LoadScratch()
@@ -17225,11 +17287,21 @@ Returns.ServerEmptyPollEvent = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: nil): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: nil): ()
 		LoadScratch()
@@ -17357,11 +17429,21 @@ Returns.EmptyEvent = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: nil): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_EmptyEvent(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: nil): ()
 		LoadScratch()
@@ -17509,11 +17591,21 @@ Returns.Flags8 = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_Flags8(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
 		LoadScratch()
@@ -17544,11 +17636,21 @@ Returns.Flags16 = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_Flags16(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
 		LoadScratch()
@@ -17579,11 +17681,21 @@ Returns.Flags32 = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_Flags32(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
 		LoadScratch()
@@ -17614,11 +17726,21 @@ Returns.Flags33 = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_Flags33(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
 		LoadScratch()
@@ -17649,11 +17771,21 @@ Returns.DynamicMap = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {[number]: { Static: number, Dynamic: buffer }}): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_DynamicMap(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
 		LoadScratch()
@@ -17684,11 +17816,21 @@ Returns.DynamicArray = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { { Static: number, Dynamic: buffer } }): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_DynamicArray(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: { { Static: number, Dynamic: buffer } }): ()
 		LoadScratch()
@@ -17719,11 +17861,21 @@ Returns.PlayerEvent = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_PlayerEvent(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
 		LoadScratch()
@@ -17782,11 +17934,21 @@ Returns.Generic = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_Generic(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } }): ()
 		LoadScratch()
@@ -17817,11 +17979,21 @@ Returns.GenericArray = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_GenericArray(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: { { Data: number, Array: { number }, Optional: number?, Nested: { Value: number } } }?): ()
 		LoadScratch()
@@ -17857,11 +18029,21 @@ Returns.Unknown = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: any): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_Unknown(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: any): ()
 		LoadScratch()
@@ -17892,11 +18074,21 @@ Returns.MapEvent = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {[string]: number}): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_MapEvent(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: {[string]: number}): ()
 		LoadScratch()
@@ -17927,11 +18119,21 @@ Returns.MapStructEvent = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { Map: {[string]: number} }): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_MapStructEvent(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: { Map: {[string]: number} }): ()
 		LoadScratch()
@@ -17962,11 +18164,21 @@ Returns.MapComplexEvent = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {[string]: { number }}): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: {[string]: { number }}): ()
 		LoadScratch()
@@ -17997,11 +18209,21 @@ Returns.MapReferenceEvent = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
 		LoadScratch()
@@ -18122,11 +18344,21 @@ Returns.ManyReliableSync = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: number): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: number): ()
 		LoadScratch()
@@ -18157,11 +18389,21 @@ Returns.ManyReliableAsync = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: number): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: number): ()
 		LoadScratch()
@@ -18282,11 +18524,21 @@ Returns.ReliableServer = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: number): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_ReliableServer(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: number): ()
 		LoadScratch()
@@ -18317,11 +18569,21 @@ Returns.ReliableServerAsync = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: number): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: number): ()
 		LoadScratch()
@@ -18499,11 +18761,21 @@ Returns.InstanceAny = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: Instance): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_InstanceAny(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: Instance): ()
 		LoadScratch()
@@ -18539,11 +18811,21 @@ Returns.InstanceOfType = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: Sound): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_InstanceOfType(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: Sound): ()
 		LoadScratch()
@@ -18579,11 +18861,21 @@ Returns.InstanceOptional = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: Instance?): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_InstanceOptional(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: Instance?): ()
 		LoadScratch()
@@ -18619,11 +18911,21 @@ Returns.InstanceOfClassWithDigit = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: Motor6D): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_InstanceOfClassWithDigit(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: Motor6D): ()
 		LoadScratch()
@@ -18654,11 +18956,21 @@ Returns.Reference = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_Reference(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 		LoadScratch()
@@ -18689,11 +19001,21 @@ Returns.ReferenceArray = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_ReferenceArray(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
 		LoadScratch()
@@ -18724,11 +19046,21 @@ Returns.ReferenceOptional = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 		LoadScratch()
@@ -18800,11 +19132,21 @@ Returns.Tuple = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?, Value6: { number }): ()
 		LoadScratch()
@@ -18917,11 +19259,21 @@ Returns.AnotherScope = {
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: number): ()
-			LoadScratch()
+			if PendingShared >= 0 then RollbackShared() end
+			local BEFORE = SharedCursor
+			local BEFORE_INSTANCES = #SharedInstances
+			PendingShared = BEFORE_INSTANCES
+			SendSize = SharedSize
+			SendCursor = BEFORE
+			SendOffset = BEFORE
+			SendBuffer = SharedBuffer
+			SendInstances = SharedInstances
 			SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
+			SharedBuffer = SendBuffer
+			SharedSize = SendSize
+			SharedCursor = SendCursor
+			PendingShared = -1
+			if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 		end,
 		FireList = function(List: {Player}, Value: number): ()
 			LoadScratch()
@@ -18953,11 +19305,21 @@ Returns.AnotherScope = {
 				SavePlayerBuffer(Player)
 			end,
 			FireAll = function(Value: number): ()
-				LoadScratch()
+				if PendingShared >= 0 then RollbackShared() end
+				local BEFORE = SharedCursor
+				local BEFORE_INSTANCES = #SharedInstances
+				PendingShared = BEFORE_INSTANCES
+				SendSize = SharedSize
+				SendCursor = BEFORE
+				SendOffset = BEFORE
+				SendBuffer = SharedBuffer
+				SendInstances = SharedInstances
 				SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
-				local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-				KeepScratch()
-				AppendShared(Buffer, Size, Instances)
+				SharedBuffer = SendBuffer
+				SharedSize = SendSize
+				SharedCursor = SendCursor
+				PendingShared = -1
+				if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 			end,
 			FireList = function(List: {Player}, Value: number): ()
 				LoadScratch()
@@ -18991,11 +19353,21 @@ Returns.ExampleScope = {
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: number): ()
-			LoadScratch()
+			if PendingShared >= 0 then RollbackShared() end
+			local BEFORE = SharedCursor
+			local BEFORE_INSTANCES = #SharedInstances
+			PendingShared = BEFORE_INSTANCES
+			SendSize = SharedSize
+			SendCursor = BEFORE
+			SendOffset = BEFORE
+			SendBuffer = SharedBuffer
+			SendInstances = SharedInstances
 			SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
+			SharedBuffer = SendBuffer
+			SharedSize = SendSize
+			SharedCursor = SendCursor
+			PendingShared = -1
+			if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 		end,
 		FireList = function(List: {Player}, Value: number): ()
 			LoadScratch()
@@ -19028,11 +19400,21 @@ Returns.Issue33 = {
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
-			LoadScratch()
+			if PendingShared >= 0 then RollbackShared() end
+			local BEFORE = SharedCursor
+			local BEFORE_INSTANCES = #SharedInstances
+			PendingShared = BEFORE_INSTANCES
+			SendSize = SharedSize
+			SendCursor = BEFORE
+			SendOffset = BEFORE
+			SendBuffer = SharedBuffer
+			SendInstances = SharedInstances
 			SerdesFunctions.Issue33_WriteEVENT_Event(Value1, Value2, Value3)
-			local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-			KeepScratch()
-			AppendShared(Buffer, Size, Instances)
+			SharedBuffer = SendBuffer
+			SharedSize = SendSize
+			SharedCursor = SendCursor
+			PendingShared = -1
+			if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 		end,
 		FireList = function(List: {Player}, Value1: {[("One" | "Two")]: number}, Value2: { Tag: "Variant", field: ("One" | "Two") }, Value3: { field: ("One" | "Two") }): ()
 			LoadScratch()
@@ -19095,11 +19477,21 @@ Returns.NamedTuple = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(chefId: number, dish: string, portions: number?): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_NamedTuple(chefId, dish, portions)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, chefId: number, dish: string, portions: number?): ()
 		LoadScratch()
@@ -19166,11 +19558,21 @@ Returns.PartiallyNamedTuple = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value1: number, named: string, Value3: number): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_PartiallyNamedTuple(Value1, named, Value3)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value1: number, named: string, Value3: number): ()
 		LoadScratch()
@@ -19472,11 +19874,21 @@ Returns.QueuedHoles = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_QueuedHoles(Value1, Value2, Value3, Value4, Value5)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Value1: number, Value2: number?, Value3: number?, Value4: number, Value5: number?): ()
 		LoadScratch()
@@ -20267,11 +20679,21 @@ Returns.NamedLength = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(s: string, Length: number): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_NamedLength(s, Length)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, s: string, Length: number): ()
 		LoadScratch()
@@ -20302,11 +20724,21 @@ Returns.LengthFirst = {
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Length: number, s: string): ()
-		LoadScratch()
+		if PendingShared >= 0 then RollbackShared() end
+		local BEFORE = SharedCursor
+		local BEFORE_INSTANCES = #SharedInstances
+		PendingShared = BEFORE_INSTANCES
+		SendSize = SharedSize
+		SendCursor = BEFORE
+		SendOffset = BEFORE
+		SendBuffer = SharedBuffer
+		SendInstances = SharedInstances
 		SerdesFunctions.WriteEVENT_LengthFirst(Length, s)
-		local Buffer, Size, Instances = SendBuffer, SendCursor, SendInstances
-		KeepScratch()
-		AppendShared(Buffer, Size, Instances)
+		SharedBuffer = SendBuffer
+		SharedSize = SendSize
+		SharedCursor = SendCursor
+		PendingShared = -1
+		if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end
 	end,
 	FireList = function(List: {Player}, Length: number, s: string): ()
 		LoadScratch()

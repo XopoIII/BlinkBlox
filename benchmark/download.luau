@@ -113,6 +113,14 @@ local Sources: { [string]: { Url: string, Version: string } } = {
 		Url = "https://github.com/1Axen/blink/archive/refs/tags/v0.18.9.zip",
 		Version = "v0.18.9",
 	},
+
+	--> NetRay Compile, an IDL compiler in BlinkBlox's own category. Its CLI ships release binaries
+	--> for x86_64 only, with none for the Apple silicon the bench runs on, and its compiler runs on
+	--> Lune besides, so the source archive serves both platforms the same way.
+	netray = {
+		Url = "https://github.com/AstaWasTaken/NetRay-Compile/archive/refs/tags/v0.2.0.zip",
+		Version = "v0.2.0",
+	},
 }
 
 local Versions = {}

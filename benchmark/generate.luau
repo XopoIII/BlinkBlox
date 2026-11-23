@@ -136,6 +136,8 @@ local CLIENT_CODE: { [string]: string } = {
 	bytenet = "partly native",
 	warp = "partly native",
 	satset = "partly native",
+	netray = "native",
+	["netray-checked"] = "native",
 }
 
 local Metrics = {

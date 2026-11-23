@@ -197,22 +197,52 @@ function Send.Broadcast(
 		return Fire:End()
 	end
 
+	--> A reliable send to everyone is written straight into the broadcast batch too: it used to be
+	--> written into the scratch buffer and copied out of it, and the copy is most of what a FireAll
+	--> cost. The batch is loaded and committed inline, as the hottest send the module has -- the one
+	--> function call left is the event's own write.
+	if Event.IsReliable and AllClients then
+		--> An unstarted server -- `option AutoStart = false` -- sends nothing, and queues nothing:
+		--> the event is dropped before its write, as a send to one player is at SavePlayerBuffer.
+		if State.Options.AutoStart == false then
+			Fire:Line("if not Started then")
+			Fire:Line("\tDropBeforeStart()")
+			Fire:Line("\treturn")
+			Fire:Line("end")
+		end
+
+		--> A write that threw before this one left Instances of an event that never happened; they
+		--> are taken back first (RollbackShared).
+		Fire:Line("if PendingShared >= 0 then RollbackShared() end")
+		Fire:Line("local BEFORE = SharedCursor")
+		Fire:Line("local BEFORE_INSTANCES = #SharedInstances")
+		Fire:Line("PendingShared = BEFORE_INSTANCES")
+		Fire:Line("SendSize = SharedSize")
+		Fire:Line("SendCursor = BEFORE")
+		Fire:Line("SendOffset = BEFORE")
+		Fire:Line("SendBuffer = SharedBuffer")
+		Fire:Line("SendInstances = SharedInstances")
+		Fire:Line(Event.WriteEvent)
+		Fire:Line("SharedBuffer = SendBuffer")
+		Fire:Line("SharedSize = SendSize")
+		Fire:Line("SharedCursor = SendCursor")
+		Fire:Line("PendingShared = -1")
+		Fire:Line("if AnyDiverged then CommitDiverged(BEFORE, BEFORE_INSTANCES, SharedCursor - BEFORE) end")
+		if Event.Traffic then
+			Fire:Line("local Reached = #Players:GetPlayers()")
+			Traffic.Sent(Fire, Event.Traffic, "(SharedCursor - BEFORE)", false, "Reached")
+		end
+		return Fire:End()
+	end
+
 	Fire:Line("LoadScratch()")
 	Fire:Line(Event.WriteEvent)
 
 	if Event.IsReliable then
 		Fire:Lines(RELIABLE_BODY.Header, 1)
-		if Options.AllClients then
-			Fire:Line(RELIABLE_BODY.Shared)
-			if Event.Traffic then
-				Fire:Line("local Reached = #Players:GetPlayers()")
-				Traffic.Sent(Fire, Event.Traffic, "Size", false, "Reached")
-			end
-		else
-			local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept):Lines(RELIABLE_BODY.Body, 2)
-			Traffic.Sent(Loop, Event.Traffic, "Size", false)
-			Loop:End()
-		end
+		local Loop = EachRecipient(Fire, Recipients, Options.SkipExcept):Lines(RELIABLE_BODY.Body, 2)
+		Traffic.Sent(Loop, Event.Traffic, "Size", false)
+		Loop:End()
 	elseif Batched(Event) then
 		CheckSize(Fire, Event)
 

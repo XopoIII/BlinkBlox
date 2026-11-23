@@ -1,0 +1,52 @@
+-- Definition.blink's benches as NetRay declares them; see benchmark/Runtime.luau. Compiled by
+-- NetRay's own compiler into src/shared/netray, from where src/shared/modes/netray.luau loads it in
+-- Studio and runtime/Tools.luau without. As Scenarios.netray: DecodeStruct = Table so each struct
+-- payload arrives as one table, and no limit declared, because none is on by default.
+option DecodeStruct = Table;
+
+struct Entity {
+	id: u8,
+	x: u8,
+	y: u8,
+	z: u8,
+	orientation: u8,
+	animation: u8
+}
+
+event Booleans {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: array<bool, 1000>
+}
+
+event Entities {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: array<Entity, 1000>
+}
+
+-- The same two payloads, different in every event: see src/shared/benches/BooleansRandom.luau.
+event BooleansRandom {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: array<bool, 1000>
+}
+
+event EntitiesRandom {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: array<Entity, 1000>
+}
+
+-- One byte of payload, where the cost of an event is its framing, dispatch and guards rather than
+-- its data; Runtime.luau only.
+event Tiny {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: u8
+}

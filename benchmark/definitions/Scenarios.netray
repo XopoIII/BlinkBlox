@@ -1,0 +1,56 @@
+-- Scenarios.blink's events as NetRay declares them; see benchmark/Rivals.luau. Compiled by NetRay's
+-- own compiler, from source, into runtime/rivals/netray; its CLI writes Server, Client and Types as
+-- siblings, so the directory is mounted and the modules require each other through script.Parent.
+--
+-- The Touch payload's Instance travels as NetRay's passthrough: outside the buffer, as a remote
+-- argument Roblox itself serialises. BlinkBlox and zap write theirs into the buffer, so the Instances
+-- table's Bytes column reads lower here for a reason the notes beside the tables explain.
+--
+-- Nothing here opts into NetRay's limits: its rate, size and work budgets are off unless declared,
+-- so unlike Packet, QuickNet, Warp and Satset there is nothing to lift. Its defaults are what runs.
+option DecodeStruct = Table;
+
+struct Unit {
+	id: u16,
+	x: f32,
+	y: f32,
+	z: f32,
+	health: u8,
+	moving: bool,
+	crouched: bool
+}
+
+event Snapshot {
+	From: Server,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: Unit
+}
+
+event Input {
+	From: Client,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: struct { move: u8, turn: i16, jump: bool, sprint: bool }
+}
+
+event Touch {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: (instance, u8)
+}
+
+event WorldState {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: array<Unit, 16>
+}
+
+event SelfState {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: Unit
+}

@@ -44,7 +44,6 @@ export type Api = {
 export type Scenario = {
 	Name: string,
 	Players: number,
-	Instances: boolean?,
 	--> Which side sends, so the flush and the delivery go the right way.
 	FromServer: boolean,
 	Expected: number,
@@ -263,12 +262,18 @@ Apis.APIS = {
 	quicknet = BlinkStyle(),
 	warp = BlinkStyle(),
 	satset = WithoutInstances(BlinkStyle()),
+	--> NetRay's generated surface is BlinkBlox's own shape: Fire, FireAll and On, with DecodeStruct
+	--> = Table making each struct payload one argument. Its Touch payload carries the Instance as a
+	--> passthrough beside the buffer, where BlinkBlox's carries its own inside one.
+	netray = BlinkStyle(),
+	--> The same events with NetRay's validation, budgets and compression on: the second configuration.
+	["netray-checked"] = BlinkStyle(),
 }
 
 Apis.SCENARIOS = {
 	{ Name = "Broadcast", Players = Apis.CROWD, FromServer = true, Expected = BROADCASTS },
 	{ Name = "UnreliableInput", Players = 1, FromServer = false, Expected = INPUTS },
-	{ Name = "Instances", Players = 1, Instances = true, FromServer = false, Expected = TOUCHES },
+	{ Name = "Instances", Players = 1, FromServer = false, Expected = TOUCHES },
 	{ Name = "WorldState", Players = Apis.CROWD, FromServer = true, Expected = 1 },
 	{ Name = "SelfState", Players = Apis.CROWD, FromServer = true, Expected = 1 },
 }

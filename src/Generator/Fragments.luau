@@ -133,8 +133,6 @@ local RELIABLE_BODY = {
 	Body = {
 		"AppendPlayer(Player, Buffer, Size, Instances)\n",
 	},
-	--> A FireAll's, which goes to the broadcast batch rather than to each player's.
-	Shared = "AppendShared(Buffer, Size, Instances)",
 }
 
 local UNRELIABLE_BODY = {

@@ -49,8 +49,12 @@ for _, Directory in
 		"./src/shared/zap",
 		"./src/shared/blink",
 		"./src/shared/upstream",
+		"./src/shared/netray",
+		"./src/shared/netray-checked",
 		"./runtime/rivals/zap",
 		"./runtime/rivals/upstream",
+		"./runtime/rivals/netray",
+		"./runtime/rivals/netray-checked",
 	}
 do
 	if not fs.isDir(Directory) then
@@ -71,6 +75,34 @@ for _, Name in { "Definition", "Scenarios" } do
 	})
 	if not Result.ok then
 		error(`Upstream Blink's compiler failed with exit code {Result.code}`, 0)
+	end
+end
+
+--> NetRay too compiles its own definitions, from source on LuneBlox. Its generated modules require
+--> each other as siblings, so every schema keeps its own output directory, each with Server, Client
+--> and Types together. The `.checked` schemas are the same events with NetRay's validation, budgets
+--> and compression on, and compile the same way.
+for _, Compile in
+	{
+		{ Definition = "definitions/Definition.netray", Output = "src/shared/netray" },
+		{ Definition = "definitions/Definition.netray.checked", Output = "src/shared/netray-checked" },
+		{ Definition = "definitions/Scenarios.netray", Output = "runtime/rivals/netray" },
+		{ Definition = "definitions/Scenarios.netray.checked", Output = "runtime/rivals/netray-checked" },
+	}
+do
+	local Definition = `{process.cwd}{Compile.Definition}`
+	local Output = `{process.cwd}{Compile.Output}`
+	print(`> {runtime.command} run cli/netray.luau compile {Definition} --out-dir {Output} (in ./tools/netray)`)
+	local Result = process.exec(
+		runtime.command,
+		{ "run", "cli/netray.luau", "compile", Definition, "--out-dir", Output },
+		{
+			cwd = "./tools/netray",
+			stdio = "inherit",
+		}
+	)
+	if not Result.ok then
+		error(`NetRay's compiler failed with exit code {Result.code}`, 0)
 	end
 end
 if Local then
