@@ -72,7 +72,13 @@ local function ClientFire(Shape: Shape, Writer: Writes.Write, FireValues: string
 end
 
 --> The server's `Fire` and its variants, to one player and to many.
-local function ServerFire(Shape: Shape, Writer: Writes.Write, WriteEvent: string)
+local function ServerFire(
+	Shape: Shape,
+	Writer: Writes.Write,
+	WriteEvent: string,
+	WriteBody: { string }?,
+	WriteBinding: string?
+)
 	local Value = Shape.Declaration.Value
 	local Values = Shape.Values
 	local Counters = Shape.Counters
@@ -86,6 +92,11 @@ local function ServerFire(Shape: Shape, Writer: Writes.Write, WriteEvent: string
 		Instances = Writes.CarriesInstances(Value.Data),
 		Traffic = Counters,
 		Low = Outbound.Low(Value.Priority),
+		--> The write's body, spliced into the reliable FireAll in place of the call, and the line
+		--> that binds its positional names to the values FireAll took; nil when the write names
+		--> values FireAll does not take. See Sending, where both are decided.
+		WriteBody = WriteBody,
+		WriteBinding = WriteBinding,
 	}
 	local Fire = Blocks.Function(State.Casing.Fire, `Player: Player, {Values}`, "()", true)
 	if Shape.IsReliable then
@@ -157,7 +168,24 @@ local function Sending(Shape: Shape)
 	--> batch is put back whatever happens. How a Fire writes into a batch that outlives it is
 	--> Writes.luau's.
 	local TryWriteEvent = `pcall({Util.GetPath(Shape.Identifier, true, State.Scope)}, {WriteArguments})`
-	local Writer = Writes.new(Shape.Identifier, WriteArguments, WriteEvent, Value.Data, Shape.Counters, Shape.Index)
+	--> The write's body, spliced into the reliable Fires in place of the call. A stamped event's
+	--> write takes a value no Fire receives, so it keeps the call; a named pack's elements the write
+	--> names positionally are bound to the names the Fire took, one line inside the inline, and the
+	--> body runs unmodified.
+	local WriteBody = if Value.Stamp then nil else Shape.WriteBody
+	local WriteBinding = if Value.Stamp or Shape.Arguments == Shape.InnerArguments
+		then nil
+		else `local {Shape.InnerArguments} = {Shape.Arguments}`
+	local Writer = Writes.new(
+		Shape.Identifier,
+		WriteArguments,
+		WriteEvent,
+		Value.Data,
+		Shape.Counters,
+		Shape.Index,
+		WriteBody,
+		WriteBinding
+	)
 
 	if State.Context == "Client" then
 		ClientFire(Shape, Writer, FireValues, TryWriteEvent)
@@ -166,7 +194,7 @@ local function Sending(Shape: Shape)
 		--> place of the Fire family. See Stream.luau.
 		Streams.Server(Declaration, Shape.Index, Shape.Values, WriteEvent, Shape.Body, Shape.Indent, Shape.Counters)
 	else
-		ServerFire(Shape, Writer, WriteEvent)
+		ServerFire(Shape, Writer, WriteEvent, WriteBody, WriteBinding)
 	end
 end
 
@@ -202,6 +230,10 @@ function Declarations.Event(Declaration: Parser.Event)
 	local Read, Write = Generators.Event(Value.Data, Index, Identifier, nil, IsSequenced)
 	local DataTypes, Values, Arguments, InnerValues, InnerArguments = Spellings(Value.Data)
 
+	--> The write's body without its function around it, for a FireAll that inlines it; the header
+	--> and the end are the function's, and stay with it.
+	local WriteBody = table.move(Write, 2, #Write - 1, 1, table.create(#Write - 2))
+
 	if IsSameContext then
 		State.UserTypes.PushLines(Write, 1, 0)
 	else
@@ -227,6 +259,7 @@ function Declarations.Event(Declaration: Parser.Event)
 		Arguments = Arguments,
 		InnerValues = InnerValues,
 		InnerArguments = InnerArguments,
+		WriteBody = WriteBody,
 		Body = Body,
 		Indent = Indent,
 	}

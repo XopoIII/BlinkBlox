@@ -981,7 +981,25 @@ Returns.Damage = {
 		if PendingCursor >= 0 then Settle() end
 		local Start, Before = SendCursor, CommittedInstances
 		PendingCursor = Start
-		SerdesFunctions.WriteEVENT_Damage(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_Damage (0)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+			-- Value: Damage
+			-- Value.Target: Target
+			table.insert(SendInstances, Value.Target or Null)
+			-- Value.Amount: Amount
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Amount)
+			do
+				-- Value.Note: Note
+				local Length = #Value.Note
+				if not (Length <= 32) then error(`Expected "Length" to be smaller than or equal to 32, got {Length} instead.`) end
+				buffer.writeu8(SendBuffer, BLOCK_START + 2, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Value.Note, Length)
+			end
+		end
 		local Count = #SendInstances
 		PendingCursor = -1
 		CommittedInstances = Count

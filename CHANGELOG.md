@@ -7,6 +7,60 @@ A line marked **Recompile both modules** means a client and a server must be gen
 release to talk to each other; the schema signature added in 0.23.0 makes a mismatch refuse at
 startup instead of misreading packets.
 
+## 1.6.0 — 2026-11-24
+
+The event's own write was the one function call left on every Fire, and a frame's unreliable events
+were one remote call each. Both are gone: the write's body is spliced into the Fires that carry it,
+and a frame's unreliable events are gathered into one packet by default. Neither changes the wire --
+the same bytes, at the same offsets, in the same packets.
+
+### Changed
+
+- **The write's body is inlined into the Fires that carry it** (`src/Generator/Event.luau`,
+  `src/Generator/Send.luau`, `src/Generator/Writes.luau`): a reliable `FireAll`, a server's reliable
+  `Fire` to one player, and the client's reliable `Fire` emit the serialiser's own lines inside
+  `do ... end` in place of the call, one function the less on the hottest paths a module has. The
+  block keeps the body's locals to itself, and where the payload's names differ -- a named pack's
+  elements, which the write names positionally -- one line inside the block binds them to the names
+  the Fire took. A stamped event's write takes a value no Fire receives, so it keeps the call; so do
+  the Fires that write under a `pcall` or into the scratch buffer, and `FireList` and `FireExcept`.
+  A body that threw is undone exactly as a call that threw was: lazily on the client, beneath `Mark`
+  on the server, taken back by the next `RollbackShared` on a broadcast -- `test/BufferIntegrity.luau`
+  holds those invariants and each of its specs fails when one is removed. On `Rivals` and `Runtime`,
+  three runs each on an Apple M1 with LuneBlox 0.11.4: `Broadcast` fires 0.015 → 0.013 ms a frame
+  natively (NetRay's 0.012 at 0.001 apiece) and 0.029 → 0.026 interpreted (NetRay's 0.029 passed);
+  `Runtime`'s `Tiny` 0.082 → 0.065 natively and 0.238 → 0.217 interpreted; `Instances` 0.029 → 0.027;
+  and every other column is within a run's noise of the release before. The run framing's steady
+  state inlined beside the write was measured and dropped -- slower both natively and interpreted,
+  the event's start held live across the whole write -- as was an instance-list counter in place of
+  `table.insert` and `#SendInstances`, a measured 1.8 ns on a fire of hundreds.
+- **`option BatchUnreliable` now defaults to `true`** (`src/Generator/Batches.luau`). A frame's
+  unreliable events are gathered into as few packets as the unreliable limit allows and sent at the
+  flush, one remote call and one packet header instead of one each -- and a client stays further
+  inside the inbound budget, which charges every packet at least 128 bytes. It costs no latency:
+  Roblox sends a frame's remote calls together at one point in the frame whenever each was fired, as
+  `benchmark/Latency.luau` measured in Studio. A client's gathered packet is cut at the server's
+  `MaxEventsPerPacket`, as the reliable batch always was, so an honest player is refused no more
+  than before -- rather less, the budget's per-packet floor now met once a frame instead of once an
+  event. On `Rivals`, the client's `UnreliableInput` frame of eight events is one remote call and
+  40 bytes where it was eight calls, NetRay's own shape. What gathers is a client's own fires and a
+  server's sends to many; a server's unreliable `Fire` to one player, and a stream held per player,
+  are sent at once as they always were -- measured on `SelfState`, a frame's one event a player,
+  gathering read 0.018 ms natively against a direct send's 0.015, the batch's bookkeeping with
+  nothing to gather beside it. `option BatchUnreliable = false` restores one packet an event for
+  the schema that wants each send out the moment it is made, and `test/UnreliableBatches.luau`
+  holds a spec on it.
+
+### Upgrading
+
+- Recompile both modules. The write's inline and the batch's default are generator changes; the wire
+  does not move, but the modules of one release refuse another's at startup, as ever.
+- A `SetPacketDropHandler` or rate-limit handler now sees a refusal name a packet of several events
+  rather than the one it was, and the inbound budget charges a batched client one packet's floor a
+  flush instead of one an event: a game that strikes on refusals refuses less honest traffic than
+  before, never more. A game that needs each unreliable send on the wire at once sets
+  `option BatchUnreliable = false`.
+
 ## 1.5.0 — 2026-11-23
 
 A reliable `FireAll` used to write the event into a scratch buffer and copy it into the broadcast

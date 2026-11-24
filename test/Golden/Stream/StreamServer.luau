@@ -2277,40 +2277,31 @@ Returns.Aim = {
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_Aim(Value)
 		if not CheckUnreliableSize("Aim") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
-			buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendOrdered(Player, 1)
 		end
+		KeepScratch()
 	end,
 	fireList = function(List: {Player}, Value: Vector3): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_Aim(Value)
 		if not CheckUnreliableSize("Aim") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendOrdered(Player, 1)
 		end
+		KeepScratch()
 	end,
 	fireExcept = function(Except: Player, Value: Vector3): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_Aim(Value)
 		if not CheckUnreliableSize("Aim") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			buffer.writeu16(Buffer, 1, NextOrder(Player, 1))
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendOrdered(Player, 1)
 		end
+		KeepScratch()
 	end,
 }
 Returns.World = {

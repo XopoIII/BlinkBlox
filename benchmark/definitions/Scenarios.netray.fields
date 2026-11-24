@@ -1,0 +1,63 @@
+-- Scenarios.netray.checked with the field-mask compression instead of the byte-repeat: every
+-- other line the same, so the Rivals table can say what Fields costs where Repeat was measured.
+-- The payloads differ per index, and a field mask names the fields that moved -- the table says
+-- what it found to mask.
+option DecodeStruct = Table;
+option Validate = Full;
+option MaxBatchBytes = 2097152;
+option MaxBatchMessages = 2048;
+option MaxDecodeWork = 2147483647;
+option MaxUnreliableBytes = 1000;
+option MaxPollingMessages = 128;
+option ReceiveCallsPerSecond = 100000;
+option ReceiveCallBurst = 100000;
+option ReceiveBytesPerSecond = 67108864;
+option ReceiveByteBurst = 67108864;
+option ReceiveMessagesPerSecond = 1000000;
+option ReceiveMessageBurst = 1000000;
+
+struct Unit {
+	id: u16,
+	x: f32,
+	y: f32,
+	z: f32,
+	health: u8,
+	moving: bool,
+	crouched: bool
+}
+
+event Snapshot {
+	From: Server,
+	Type: Reliable,
+	Call: SingleSync,
+	Compression: Fields,
+	Data: Unit
+}
+
+event Input {
+	From: Client,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: struct { move: u8, turn: i16, jump: bool, sprint: bool }
+}
+
+event Touch {
+	From: Client,
+	Type: Reliable,
+	Call: SingleSync,
+	Data: (instance, u8)
+}
+
+event WorldState {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: array<Unit, 16>
+}
+
+event SelfState {
+	From: Server,
+	Type: Unreliable,
+	Call: SingleSync,
+	Data: Unit
+}

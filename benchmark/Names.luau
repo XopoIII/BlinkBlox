@@ -17,6 +17,7 @@ Names.ORDER = {
 	"satset",
 	"netray",
 	"netray-checked",
+	"netray-fields",
 }
 
 local DISPLAY: { [string]: string } = {
@@ -31,6 +32,7 @@ local DISPLAY: { [string]: string } = {
 	satset = "Satset",
 	netray = "NetRay",
 	["netray-checked"] = "NetRay `checked`",
+	["netray-fields"] = "NetRay `fields`",
 }
 
 function Names.Display(Id: string): string

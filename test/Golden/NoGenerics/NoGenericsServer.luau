@@ -4140,6 +4140,205 @@ local function StepReplication()
         SharedBuffer = buffer.create(64)
     end
 end
+
+--> UNRELIABLE BATCHES; see Generator/Batches.luau.
+--> `Committed` counts the Instances of the events kept. `Pending` is set while an event is written
+--> straight into the batch: one that then threw has left its own Instances behind, and they are
+--> dropped before the batch is used again. Checking the flag spares every other use a count.
+type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Committed: number, Events: number, Pending: boolean }
+
+local function NewUnreliable(): BLINK_UNRELIABLE
+    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Committed = 0, Events = 0, Pending = false }
+end
+
+local function Clean(Batch: BLINK_UNRELIABLE)
+    if not Batch.Pending then
+        return
+    end
+
+    local Instances = Batch.Instances
+    for Index = #Instances, Batch.Committed + 1, -1 do
+        Instances[Index] = nil
+    end
+    Batch.Pending = false
+end
+
+--> Appends what the scratch buffer holds -- one event, written there by the send -- to `Batch`.
+local function CopyUnreliable(Batch: BLINK_UNRELIABLE): number
+    local Size = SendCursor
+    local Cursor = Batch.Cursor
+    local InUse = Cursor + Size
+    if InUse > Batch.Size then
+        local Grown = Batch.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Batch.Buffer, 0, Cursor)
+        Batch.Buffer = Resized
+        Batch.Size = Grown
+    end
+
+    buffer.copy(Batch.Buffer, Cursor, SendBuffer, 0, Size)
+    Batch.Cursor = InUse
+    Batch.Events += 1
+
+    local Count = #SendInstances
+    if Count > 0 then
+        table.move(SendInstances, 1, Count, Batch.Committed + 1, Batch.Instances)
+        Batch.Committed += Count
+    end
+
+    return Cursor
+end
+
+--> Whether the event in the scratch buffer would take `Batch` past the unreliable limit.
+local function Overflows(Batch: BLINK_UNRELIABLE): boolean
+    return Batch.Cursor + SendCursor + (Batch.Committed + #SendInstances) * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE
+end
+
+local SharedUnreliable = NewUnreliable()
+local PlayerUnreliable: {[Player]: BLINK_UNRELIABLE} = {}
+
+Players.PlayerRemoving:Connect(function(Player)
+    PlayerUnreliable[Player] = nil
+end)
+
+local function SendUnreliable(Batch: BLINK_UNRELIABLE, Player: Player?)
+    local Used = Batch.Cursor
+    if Used == 0 then
+        return
+    end
+
+    Clean(Batch)
+    local Packet = buffer.create(Used)
+    buffer.copy(Packet, 0, Batch.Buffer, 0, Used)
+    if Player then
+        Unreliable:FireClient(Player, Packet, Batch.Instances)
+    else
+        Unreliable:FireAllClients(Packet, Batch.Instances)
+    end
+
+    Batch.Cursor = 0
+    Batch.Events = 0
+    if Batch.Committed > 0 then
+        Batch.Committed = 0
+        table.clear(Batch.Instances)
+    end
+end
+
+--> A player's batch, made on their first unreliable event of the session. None for a player who has
+--> already left: PlayerRemoving has run, and nothing would clear a batch made now.
+local function PlayerBatch(Player: Player): BLINK_UNRELIABLE?
+    local Batch = PlayerUnreliable[Player]
+    if Batch == nil then
+        if Player.Parent == nil then
+            return nil
+        end
+
+        Batch = NewUnreliable()
+        PlayerUnreliable[Player] = Batch
+    end
+
+    return Batch
+end
+
+--> Appends the event in the scratch buffer to everyone's batch, or to `Player`'s.
+local function AppendUnreliable(Player: Player?)
+    local Batch = if Player then PlayerBatch(Player) else SharedUnreliable
+    if Batch == nil then
+        return
+    end
+
+    Clean(Batch)
+    if Overflows(Batch) then
+        SendUnreliable(Batch, Player)
+    end
+    CopyUnreliable(Batch)
+end
+
+--> Where the event being written straight into a batch began: its first byte, and the Instances ahead
+--> of it.
+local BatchStart = 0
+local BatchInstances = 0
+
+--> Installs everyone's batch, or `Player`'s, as the send buffer, so a send to one batch writes its event
+--> there and copies nothing. None for a player who has left, who is written into the scratch buffer
+--> and sent nothing.
+local function LoadBatch(Player: Player?): BLINK_UNRELIABLE?
+    local Batch = if Player then PlayerBatch(Player) else SharedUnreliable
+    if Batch == nil then
+        LoadScratch()
+        BatchStart = 0
+        BatchInstances = 0
+        return nil
+    end
+
+    Clean(Batch)
+    Batch.Pending = true
+    SendSize = Batch.Size
+    SendCursor = Batch.Cursor
+    SendBuffer = Batch.Buffer
+    SendInstances = Batch.Instances
+    BatchStart = Batch.Cursor
+    BatchInstances = Batch.Committed
+    return Batch
+end
+
+--> Keeps the event just written into `Batch`, stamping an ordered one's sequence at `Slot`. When the
+--> event does not fit one packet beside what the batch already held, that goes first, on its own, and
+--> the event moves to the front.
+local function CommitBatch(Batch: BLINK_UNRELIABLE?, Player: Player?, Slot: number?, Instances: boolean)
+    if Batch == nil then
+        return
+    end
+
+    local Buffer = SendBuffer
+    local Start = BatchStart
+    local Count = if Instances then #SendInstances else BatchInstances
+    if Start > 0 and SendCursor + Count * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE then
+        local Packet = buffer.create(Start)
+        buffer.copy(Packet, 0, Buffer, 0, Start)
+        local Before = table.move(SendInstances, 1, BatchInstances, 1, {})
+        if Player then
+            Unreliable:FireClient(Player, Packet, Before)
+        else
+            Unreliable:FireAllClients(Packet, Before)
+        end
+
+        local Size = SendCursor - Start
+        buffer.copy(Buffer, 0, Buffer, Start, Size)
+        table.move(SendInstances, BatchInstances + 1, Count, 1, SendInstances)
+        for Index = Count, Count - BatchInstances + 1, -1 do
+            SendInstances[Index] = nil
+        end
+
+        SendCursor = Size
+        Count -= BatchInstances
+        Start = 0
+        Batch.Events = 0
+    end
+
+    Batch.Buffer = Buffer
+    Batch.Size = SendSize
+    Batch.Cursor = SendCursor
+    Batch.Committed = Count
+    Batch.Pending = false
+end
+
+local StepBeforeUnreliable = StepReplication
+--> A batch is made only for a player still in the game, and PlayerRemoving drops it, so the flush asks
+--> nobody whether they are still here: that was a property read per player per frame.
+StepReplication = function()
+    StepBeforeUnreliable()
+    SendUnreliable(SharedUnreliable, nil)
+    for Player, Batch in PlayerUnreliable do
+        if Batch.Cursor > 0 then
+            SendUnreliable(Batch, Player)
+        end
+    end
+end
 local Decoding = -1
 local RunIndex = 0
 local RunRemaining = 0
@@ -5159,7 +5358,116 @@ Returns.ClientEmptyUnreliablePollEvent = {
 Returns.ServerPollEvent = {
 	Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			local BITFIELD_1_0
+			-- EVENT_ServerPollEvent (2)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+			-- Value: ServerPollEvent
+			-- Value.Field: Field
+			BITFIELD_1_0 = 0
+			if Value.Field ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value.Field ~= nil then
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value.Field: Field
+				if type(Value.Field) ~= "number" then
+					error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.{if type(Value.Field) == "table" or type(Value.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
+			end
+			-- Value.Float16Field: Float16Field
+			if Value.Float16Field ~= nil then BITFIELD_1_0 += 0x02 end
+			if Value.Float16Field ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value.Float16Field: Float16Field
+				if type(Value.Float16Field) ~= "number" then
+					error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.{if type(Value.Float16Field) == "table" or type(Value.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				if Value.Float16Field > 65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+				elseif Value.Float16Field < -65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+				elseif Value.Float16Field ~= Value.Float16Field then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+				elseif Value.Float16Field == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
+				else
+					local float = Value.Float16Field
+					local Abosulte = math.abs(float)
+					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+					local RoundedValue = (Abosulte // Interval) * Interval
+					local Fraction, Exponent = math.frexp(RoundedValue)
+					Exponent += 14
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+						+ if float < 0 then 0x8000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+				end
+			end
+			-- Value.Enum: Enum
+			if Value.Enum == "A" then
+			elseif Value.Enum == "B" then
+				BITFIELD_1_0 += 4
+			elseif Value.Enum == "C" then
+				BITFIELD_1_0 += 8
+			elseif Value.Enum == "D" then
+				BITFIELD_1_0 += 12
+			else
+				error(`Unexpected enum: {Value.Enum}, expected one of "A" or "B" or "C" or "D".`)
+			end
+			-- Value.Nested: Nested
+			-- Value.Nested.Guh: Guh
+			if type(Value.Nested.Guh) ~= "number" then
+				error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.{if type(Value.Nested.Guh) == "table" or type(Value.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Nested.Guh)
+			do
+				-- Value.Nested.Array: Array
+				-- START ARRAY
+				if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_1 = Allocate(1 * 10)
+				for Index = 1, 10 do
+					local Item_1 = Value.Nested.Array[Index]
+					-- Item_1: Array
+					if type(Item_1) ~= "number" then
+						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+				end
+				-- END ARRAY
+			end
+			-- Value.Nested.OptionalArray: OptionalArray
+			if Value.Nested.OptionalArray ~= nil then BITFIELD_1_0 += 0x10 end
+			if Value.Nested.OptionalArray ~= nil then
+				-- Value.Nested.OptionalArray: OptionalArray
+				-- START ARRAY
+				if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_2 = Allocate(1 * 2)
+				for Index = 1, 2 do
+					local Item_2 = Value.Nested.OptionalArray[Index]
+					-- Item_2: OptionalArray
+					if type(Item_2) ~= "number" then
+						error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_2
+					ARRAY_START_2 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+				end
+				-- END ARRAY
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
@@ -5172,7 +5480,116 @@ Returns.ServerPollEvent = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_ServerPollEvent(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			local BITFIELD_1_0
+			-- EVENT_ServerPollEvent (2)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+			-- Value: ServerPollEvent
+			-- Value.Field: Field
+			BITFIELD_1_0 = 0
+			if Value.Field ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value.Field ~= nil then
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value.Field: Field
+				if type(Value.Field) ~= "number" then
+					error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.{if type(Value.Field) == "table" or type(Value.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
+			end
+			-- Value.Float16Field: Float16Field
+			if Value.Float16Field ~= nil then BITFIELD_1_0 += 0x02 end
+			if Value.Float16Field ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value.Float16Field: Float16Field
+				if type(Value.Float16Field) ~= "number" then
+					error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.{if type(Value.Float16Field) == "table" or type(Value.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				if Value.Float16Field > 65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+				elseif Value.Float16Field < -65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+				elseif Value.Float16Field ~= Value.Float16Field then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+				elseif Value.Float16Field == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
+				else
+					local float = Value.Float16Field
+					local Abosulte = math.abs(float)
+					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+					local RoundedValue = (Abosulte // Interval) * Interval
+					local Fraction, Exponent = math.frexp(RoundedValue)
+					Exponent += 14
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+						+ if float < 0 then 0x8000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+				end
+			end
+			-- Value.Enum: Enum
+			if Value.Enum == "A" then
+			elseif Value.Enum == "B" then
+				BITFIELD_1_0 += 4
+			elseif Value.Enum == "C" then
+				BITFIELD_1_0 += 8
+			elseif Value.Enum == "D" then
+				BITFIELD_1_0 += 12
+			else
+				error(`Unexpected enum: {Value.Enum}, expected one of "A" or "B" or "C" or "D".`)
+			end
+			-- Value.Nested: Nested
+			-- Value.Nested.Guh: Guh
+			if type(Value.Nested.Guh) ~= "number" then
+				error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.{if type(Value.Nested.Guh) == "table" or type(Value.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Nested.Guh)
+			do
+				-- Value.Nested.Array: Array
+				-- START ARRAY
+				if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_1 = Allocate(1 * 10)
+				for Index = 1, 10 do
+					local Item_1 = Value.Nested.Array[Index]
+					-- Item_1: Array
+					if type(Item_1) ~= "number" then
+						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+				end
+				-- END ARRAY
+			end
+			-- Value.Nested.OptionalArray: OptionalArray
+			if Value.Nested.OptionalArray ~= nil then BITFIELD_1_0 += 0x10 end
+			if Value.Nested.OptionalArray ~= nil then
+				-- Value.Nested.OptionalArray: OptionalArray
+				-- START ARRAY
+				if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_2 = Allocate(1 * 2)
+				for Index = 1, 2 do
+					local Item_2 = Value.Nested.OptionalArray[Index]
+					-- Item_2: OptionalArray
+					if type(Item_2) ~= "number" then
+						error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_2
+					ARRAY_START_2 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+				end
+				-- END ARRAY
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5212,44 +5629,46 @@ Returns.ServerUnreliablePollEvent = {
 		Unreliable:FireClient(Player, Buffer, SendInstances)
 	end,
 	FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
-		LoadScratch()
+		local BATCH = LoadBatch(nil)
 		SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
-		if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
-		Unreliable:FireAllClients(Buffer, SendInstances)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "ServerUnreliablePollEvent", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, false)
 	end,
 	FireList = function(List: {Player}, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
 		if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 	FireExcept = function(Except: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_ServerUnreliablePollEvent(Value)
 		if not CheckUnreliableSize("ServerUnreliablePollEvent") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 }
 Returns.ServerEmptyPollEvent = {
 	Fire = function(Player: Player, Value: nil): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_ServerEmptyPollEvent (3)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: nil): ()
@@ -5262,7 +5681,12 @@ Returns.ServerEmptyPollEvent = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_ServerEmptyPollEvent(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_ServerEmptyPollEvent (3)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 3)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5302,38 +5726,35 @@ Returns.ServerEmptyUnreliablePollEvent = {
 		Unreliable:FireClient(Player, Buffer, SendInstances)
 	end,
 	FireAll = function(Value: nil): ()
-		LoadScratch()
+		local BATCH = LoadBatch(nil)
 		SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
-		if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
-		Unreliable:FireAllClients(Buffer, SendInstances)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "ServerEmptyUnreliablePollEvent", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, false)
 	end,
 	FireList = function(List: {Player}, Value: nil): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
 		if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 	FireExcept = function(Except: Player, Value: nil): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_ServerEmptyUnreliablePollEvent(Value)
 		if not CheckUnreliableSize("ServerEmptyUnreliablePollEvent") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 }
 Returns.ClientEmptyEvent = {
@@ -5371,7 +5792,12 @@ Returns.ClientEmptyUnreliableEvent = {
 Returns.EmptyEvent = {
 	Fire = function(Player: Player, Value: nil): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_EmptyEvent(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_EmptyEvent (5)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 5)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: nil): ()
@@ -5384,7 +5810,12 @@ Returns.EmptyEvent = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_EmptyEvent(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_EmptyEvent (5)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 5)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5424,38 +5855,35 @@ Returns.EmptyUnreliableEvent = {
 		Unreliable:FireClient(Player, Buffer, SendInstances)
 	end,
 	FireAll = function(Value: nil): ()
-		LoadScratch()
+		local BATCH = LoadBatch(nil)
 		SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
-		if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
-		Unreliable:FireAllClients(Buffer, SendInstances)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "EmptyUnreliableEvent", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, false)
 	end,
 	FireList = function(List: {Player}, Value: nil): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
 		if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 	FireExcept = function(Except: Player, Value: nil): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_EmptyUnreliableEvent(Value)
 		if not CheckUnreliableSize("EmptyUnreliableEvent") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 }
 Returns.EmptyFunction = {
@@ -5497,7 +5925,23 @@ Returns.EmptyFunction = {
 Returns.Flags8 = {
 	Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_Flags8(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_Flags8 (7)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 7)
+			-- Value: Flags8
+			local SET_BITS = 0
+			if Value.F1 == true then SET_BITS += 0x1 end
+			if Value.F2 == true then SET_BITS += 0x2 end
+			if Value.F3 == true then SET_BITS += 0x4 end
+			if Value.F4 == true then SET_BITS += 0x8 end
+			if Value.F5 == true then SET_BITS += 0x10 end
+			if Value.F6 == true then SET_BITS += 0x20 end
+			if Value.F7 == true then SET_BITS += 0x40 end
+			if Value.F8 == true then SET_BITS += 0x80 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, SET_BITS)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,}): ()
@@ -5510,7 +5954,23 @@ Returns.Flags8 = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_Flags8(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_Flags8 (7)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 7)
+			-- Value: Flags8
+			local SET_BITS = 0
+			if Value.F1 == true then SET_BITS += 0x1 end
+			if Value.F2 == true then SET_BITS += 0x2 end
+			if Value.F3 == true then SET_BITS += 0x4 end
+			if Value.F4 == true then SET_BITS += 0x8 end
+			if Value.F5 == true then SET_BITS += 0x10 end
+			if Value.F6 == true then SET_BITS += 0x20 end
+			if Value.F7 == true then SET_BITS += 0x40 end
+			if Value.F8 == true then SET_BITS += 0x80 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, SET_BITS)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5542,7 +6002,31 @@ Returns.Flags8 = {
 Returns.Flags16 = {
 	Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_Flags16(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_Flags16 (8)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 8)
+			-- Value: Flags16
+			local SET_BITS = 0
+			if Value.F1 == true then SET_BITS += 0x1 end
+			if Value.F2 == true then SET_BITS += 0x2 end
+			if Value.F3 == true then SET_BITS += 0x4 end
+			if Value.F4 == true then SET_BITS += 0x8 end
+			if Value.F5 == true then SET_BITS += 0x10 end
+			if Value.F6 == true then SET_BITS += 0x20 end
+			if Value.F7 == true then SET_BITS += 0x40 end
+			if Value.F8 == true then SET_BITS += 0x80 end
+			if Value.F9 == true then SET_BITS += 0x100 end
+			if Value.F10 == true then SET_BITS += 0x200 end
+			if Value.F11 == true then SET_BITS += 0x400 end
+			if Value.F12 == true then SET_BITS += 0x800 end
+			if Value.F13 == true then SET_BITS += 0x1000 end
+			if Value.F14 == true then SET_BITS += 0x2000 end
+			if Value.F15 == true then SET_BITS += 0x4000 end
+			if Value.F16 == true then SET_BITS += 0x8000 end
+			buffer.writeu16(SendBuffer, BLOCK_START + 1, SET_BITS)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,}): ()
@@ -5555,7 +6039,31 @@ Returns.Flags16 = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_Flags16(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_Flags16 (8)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 8)
+			-- Value: Flags16
+			local SET_BITS = 0
+			if Value.F1 == true then SET_BITS += 0x1 end
+			if Value.F2 == true then SET_BITS += 0x2 end
+			if Value.F3 == true then SET_BITS += 0x4 end
+			if Value.F4 == true then SET_BITS += 0x8 end
+			if Value.F5 == true then SET_BITS += 0x10 end
+			if Value.F6 == true then SET_BITS += 0x20 end
+			if Value.F7 == true then SET_BITS += 0x40 end
+			if Value.F8 == true then SET_BITS += 0x80 end
+			if Value.F9 == true then SET_BITS += 0x100 end
+			if Value.F10 == true then SET_BITS += 0x200 end
+			if Value.F11 == true then SET_BITS += 0x400 end
+			if Value.F12 == true then SET_BITS += 0x800 end
+			if Value.F13 == true then SET_BITS += 0x1000 end
+			if Value.F14 == true then SET_BITS += 0x2000 end
+			if Value.F15 == true then SET_BITS += 0x4000 end
+			if Value.F16 == true then SET_BITS += 0x8000 end
+			buffer.writeu16(SendBuffer, BLOCK_START + 1, SET_BITS)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5587,7 +6095,47 @@ Returns.Flags16 = {
 Returns.Flags32 = {
 	Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_Flags32(Value)
+		do
+			-- Allocate BLOCK: 5 bytes
+			local BLOCK_START = Allocate(5)
+			-- EVENT_Flags32 (9)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 9)
+			-- Value: Flags32
+			local SET_BITS = 0
+			if Value.F1 == true then SET_BITS += 0x1 end
+			if Value.F2 == true then SET_BITS += 0x2 end
+			if Value.F3 == true then SET_BITS += 0x4 end
+			if Value.F4 == true then SET_BITS += 0x8 end
+			if Value.F5 == true then SET_BITS += 0x10 end
+			if Value.F6 == true then SET_BITS += 0x20 end
+			if Value.F7 == true then SET_BITS += 0x40 end
+			if Value.F8 == true then SET_BITS += 0x80 end
+			if Value.F9 == true then SET_BITS += 0x100 end
+			if Value.F10 == true then SET_BITS += 0x200 end
+			if Value.F11 == true then SET_BITS += 0x400 end
+			if Value.F12 == true then SET_BITS += 0x800 end
+			if Value.F13 == true then SET_BITS += 0x1000 end
+			if Value.F14 == true then SET_BITS += 0x2000 end
+			if Value.F15 == true then SET_BITS += 0x4000 end
+			if Value.F16 == true then SET_BITS += 0x8000 end
+			if Value.F17 == true then SET_BITS += 0x10000 end
+			if Value.F18 == true then SET_BITS += 0x20000 end
+			if Value.F19 == true then SET_BITS += 0x40000 end
+			if Value.F20 == true then SET_BITS += 0x80000 end
+			if Value.F21 == true then SET_BITS += 0x100000 end
+			if Value.F22 == true then SET_BITS += 0x200000 end
+			if Value.F23 == true then SET_BITS += 0x400000 end
+			if Value.F24 == true then SET_BITS += 0x800000 end
+			if Value.F25 == true then SET_BITS += 0x1000000 end
+			if Value.F26 == true then SET_BITS += 0x2000000 end
+			if Value.F27 == true then SET_BITS += 0x4000000 end
+			if Value.F28 == true then SET_BITS += 0x8000000 end
+			if Value.F29 == true then SET_BITS += 0x10000000 end
+			if Value.F30 == true then SET_BITS += 0x20000000 end
+			if Value.F31 == true then SET_BITS += 0x40000000 end
+			if Value.F32 == true then SET_BITS += 0x80000000 end
+			buffer.writeu32(SendBuffer, BLOCK_START + 1, SET_BITS)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,}): ()
@@ -5600,7 +6148,47 @@ Returns.Flags32 = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_Flags32(Value)
+		do
+			-- Allocate BLOCK: 5 bytes
+			local BLOCK_START = Allocate(5)
+			-- EVENT_Flags32 (9)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 9)
+			-- Value: Flags32
+			local SET_BITS = 0
+			if Value.F1 == true then SET_BITS += 0x1 end
+			if Value.F2 == true then SET_BITS += 0x2 end
+			if Value.F3 == true then SET_BITS += 0x4 end
+			if Value.F4 == true then SET_BITS += 0x8 end
+			if Value.F5 == true then SET_BITS += 0x10 end
+			if Value.F6 == true then SET_BITS += 0x20 end
+			if Value.F7 == true then SET_BITS += 0x40 end
+			if Value.F8 == true then SET_BITS += 0x80 end
+			if Value.F9 == true then SET_BITS += 0x100 end
+			if Value.F10 == true then SET_BITS += 0x200 end
+			if Value.F11 == true then SET_BITS += 0x400 end
+			if Value.F12 == true then SET_BITS += 0x800 end
+			if Value.F13 == true then SET_BITS += 0x1000 end
+			if Value.F14 == true then SET_BITS += 0x2000 end
+			if Value.F15 == true then SET_BITS += 0x4000 end
+			if Value.F16 == true then SET_BITS += 0x8000 end
+			if Value.F17 == true then SET_BITS += 0x10000 end
+			if Value.F18 == true then SET_BITS += 0x20000 end
+			if Value.F19 == true then SET_BITS += 0x40000 end
+			if Value.F20 == true then SET_BITS += 0x80000 end
+			if Value.F21 == true then SET_BITS += 0x100000 end
+			if Value.F22 == true then SET_BITS += 0x200000 end
+			if Value.F23 == true then SET_BITS += 0x400000 end
+			if Value.F24 == true then SET_BITS += 0x800000 end
+			if Value.F25 == true then SET_BITS += 0x1000000 end
+			if Value.F26 == true then SET_BITS += 0x2000000 end
+			if Value.F27 == true then SET_BITS += 0x4000000 end
+			if Value.F28 == true then SET_BITS += 0x8000000 end
+			if Value.F29 == true then SET_BITS += 0x10000000 end
+			if Value.F30 == true then SET_BITS += 0x20000000 end
+			if Value.F31 == true then SET_BITS += 0x40000000 end
+			if Value.F32 == true then SET_BITS += 0x80000000 end
+			buffer.writeu32(SendBuffer, BLOCK_START + 1, SET_BITS)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5632,7 +6220,50 @@ Returns.Flags32 = {
 Returns.Flags33 = {
 	Fire = function(Player: Player, Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_Flags33(Value)
+		do
+			-- Allocate BLOCK: 6 bytes
+			local BLOCK_START = Allocate(6)
+			-- EVENT_Flags33 (10)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 10)
+			-- Value: Flags33
+			local SET_BITS = 0
+			if Value.F1 == true then SET_BITS += 0x1 end
+			if Value.F2 == true then SET_BITS += 0x2 end
+			if Value.F3 == true then SET_BITS += 0x4 end
+			if Value.F4 == true then SET_BITS += 0x8 end
+			if Value.F5 == true then SET_BITS += 0x10 end
+			if Value.F6 == true then SET_BITS += 0x20 end
+			if Value.F7 == true then SET_BITS += 0x40 end
+			if Value.F8 == true then SET_BITS += 0x80 end
+			if Value.F9 == true then SET_BITS += 0x100 end
+			if Value.F10 == true then SET_BITS += 0x200 end
+			if Value.F11 == true then SET_BITS += 0x400 end
+			if Value.F12 == true then SET_BITS += 0x800 end
+			if Value.F13 == true then SET_BITS += 0x1000 end
+			if Value.F14 == true then SET_BITS += 0x2000 end
+			if Value.F15 == true then SET_BITS += 0x4000 end
+			if Value.F16 == true then SET_BITS += 0x8000 end
+			if Value.F17 == true then SET_BITS += 0x10000 end
+			if Value.F18 == true then SET_BITS += 0x20000 end
+			if Value.F19 == true then SET_BITS += 0x40000 end
+			if Value.F20 == true then SET_BITS += 0x80000 end
+			if Value.F21 == true then SET_BITS += 0x100000 end
+			if Value.F22 == true then SET_BITS += 0x200000 end
+			if Value.F23 == true then SET_BITS += 0x400000 end
+			if Value.F24 == true then SET_BITS += 0x800000 end
+			if Value.F25 == true then SET_BITS += 0x1000000 end
+			if Value.F26 == true then SET_BITS += 0x2000000 end
+			if Value.F27 == true then SET_BITS += 0x4000000 end
+			if Value.F28 == true then SET_BITS += 0x8000000 end
+			if Value.F29 == true then SET_BITS += 0x10000000 end
+			if Value.F30 == true then SET_BITS += 0x20000000 end
+			if Value.F31 == true then SET_BITS += 0x40000000 end
+			if Value.F32 == true then SET_BITS += 0x80000000 end
+			buffer.writeu32(SendBuffer, BLOCK_START + 1, SET_BITS)
+			SET_BITS = 0
+			if Value.F33 == true then SET_BITS += 0x1 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 5, SET_BITS)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {F1: boolean,F2: boolean,F3: boolean,F4: boolean,F5: boolean,F6: boolean,F7: boolean,F8: boolean,F9: boolean,F10: boolean,F11: boolean,F12: boolean,F13: boolean,F14: boolean,F15: boolean,F16: boolean,F17: boolean,F18: boolean,F19: boolean,F20: boolean,F21: boolean,F22: boolean,F23: boolean,F24: boolean,F25: boolean,F26: boolean,F27: boolean,F28: boolean,F29: boolean,F30: boolean,F31: boolean,F32: boolean,F33: boolean,}): ()
@@ -5645,7 +6276,50 @@ Returns.Flags33 = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_Flags33(Value)
+		do
+			-- Allocate BLOCK: 6 bytes
+			local BLOCK_START = Allocate(6)
+			-- EVENT_Flags33 (10)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 10)
+			-- Value: Flags33
+			local SET_BITS = 0
+			if Value.F1 == true then SET_BITS += 0x1 end
+			if Value.F2 == true then SET_BITS += 0x2 end
+			if Value.F3 == true then SET_BITS += 0x4 end
+			if Value.F4 == true then SET_BITS += 0x8 end
+			if Value.F5 == true then SET_BITS += 0x10 end
+			if Value.F6 == true then SET_BITS += 0x20 end
+			if Value.F7 == true then SET_BITS += 0x40 end
+			if Value.F8 == true then SET_BITS += 0x80 end
+			if Value.F9 == true then SET_BITS += 0x100 end
+			if Value.F10 == true then SET_BITS += 0x200 end
+			if Value.F11 == true then SET_BITS += 0x400 end
+			if Value.F12 == true then SET_BITS += 0x800 end
+			if Value.F13 == true then SET_BITS += 0x1000 end
+			if Value.F14 == true then SET_BITS += 0x2000 end
+			if Value.F15 == true then SET_BITS += 0x4000 end
+			if Value.F16 == true then SET_BITS += 0x8000 end
+			if Value.F17 == true then SET_BITS += 0x10000 end
+			if Value.F18 == true then SET_BITS += 0x20000 end
+			if Value.F19 == true then SET_BITS += 0x40000 end
+			if Value.F20 == true then SET_BITS += 0x80000 end
+			if Value.F21 == true then SET_BITS += 0x100000 end
+			if Value.F22 == true then SET_BITS += 0x200000 end
+			if Value.F23 == true then SET_BITS += 0x400000 end
+			if Value.F24 == true then SET_BITS += 0x800000 end
+			if Value.F25 == true then SET_BITS += 0x1000000 end
+			if Value.F26 == true then SET_BITS += 0x2000000 end
+			if Value.F27 == true then SET_BITS += 0x4000000 end
+			if Value.F28 == true then SET_BITS += 0x8000000 end
+			if Value.F29 == true then SET_BITS += 0x10000000 end
+			if Value.F30 == true then SET_BITS += 0x20000000 end
+			if Value.F31 == true then SET_BITS += 0x40000000 end
+			if Value.F32 == true then SET_BITS += 0x80000000 end
+			buffer.writeu32(SendBuffer, BLOCK_START + 1, SET_BITS)
+			SET_BITS = 0
+			if Value.F33 == true then SET_BITS += 0x1 end
+			buffer.writeu8(SendBuffer, BLOCK_START + 5, SET_BITS)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5677,7 +6351,45 @@ Returns.Flags33 = {
 Returns.DynamicMap = {
 	Fire = function(Player: Player, Value: {[number]: { Static: number, Dynamic: buffer }}): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_DynamicMap(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_DynamicMap (11)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 11)
+			-- Value: DynamicMap
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: DynamicMap
+				if type(Key_1) ~= "number" then
+					error(`Expected Key_1 to be of type number, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local OFFSET_0 = Allocate(1)
+				buffer.writeu8(SendBuffer, OFFSET_0, Key_1)
+				-- Element_1: DynamicMap
+				do
+					-- Element_1.Static: Static
+					if type(Element_1.Static) ~= "number" then
+						error(`Expected Element_1.Static to be of type number, got {type(Element_1.Static)} instead.{if type(Element_1.Static) == "table" or type(Element_1.Static) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local OFFSET_1 = Allocate(1)
+					buffer.writeu8(SendBuffer, OFFSET_1, Element_1.Static)
+				end
+				do
+					-- Element_1.Dynamic: Dynamic
+					if type(Element_1.Dynamic) ~= "buffer" then
+						error(`Expected Element_1.Dynamic to be of type buffer, got {type(Element_1.Dynamic)} instead.{if type(Element_1.Dynamic) == "table" or type(Element_1.Dynamic) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = buffer.len(Element_1.Dynamic)
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.copy(SendBuffer, SendOffset, Element_1.Dynamic, 0, Length)
+				end
+			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 1, Elements_1)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {[number]: { Static: number, Dynamic: buffer }}): ()
@@ -5690,7 +6402,45 @@ Returns.DynamicMap = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_DynamicMap(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_DynamicMap (11)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 11)
+			-- Value: DynamicMap
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: DynamicMap
+				if type(Key_1) ~= "number" then
+					error(`Expected Key_1 to be of type number, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local OFFSET_0 = Allocate(1)
+				buffer.writeu8(SendBuffer, OFFSET_0, Key_1)
+				-- Element_1: DynamicMap
+				do
+					-- Element_1.Static: Static
+					if type(Element_1.Static) ~= "number" then
+						error(`Expected Element_1.Static to be of type number, got {type(Element_1.Static)} instead.{if type(Element_1.Static) == "table" or type(Element_1.Static) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local OFFSET_1 = Allocate(1)
+					buffer.writeu8(SendBuffer, OFFSET_1, Element_1.Static)
+				end
+				do
+					-- Element_1.Dynamic: Dynamic
+					if type(Element_1.Dynamic) ~= "buffer" then
+						error(`Expected Element_1.Dynamic to be of type buffer, got {type(Element_1.Dynamic)} instead.{if type(Element_1.Dynamic) == "table" or type(Element_1.Dynamic) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = buffer.len(Element_1.Dynamic)
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.copy(SendBuffer, SendOffset, Element_1.Dynamic, 0, Length)
+				end
+			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 1, Elements_1)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5722,7 +6472,43 @@ Returns.DynamicMap = {
 Returns.DynamicArray = {
 	Fire = function(Player: Player, Value: { { Static: number, Dynamic: buffer } }): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_DynamicArray(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_DynamicArray (12)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 12)
+			-- Value: DynamicArray
+			-- START ARRAY
+			if #Value ~= 12 then error(`Expected length of "Value" to be equal to 12, got {#Value} instead.`) end
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * 12)
+			for Index = 1, 12 do
+				local Item_1 = Value[Index]
+				-- Item_1: DynamicArray
+				do
+					-- Item_1.Static: Static
+					if type(Item_1.Static) ~= "number" then
+						error(`Expected Item_1.Static to be of type number, got {type(Item_1.Static)} instead.{if type(Item_1.Static) == "table" or type(Item_1.Static) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1.Static)
+				end
+				do
+					-- Item_1.Dynamic: Dynamic
+					if type(Item_1.Dynamic) ~= "buffer" then
+						error(`Expected Item_1.Dynamic to be of type buffer, got {type(Item_1.Dynamic)} instead.{if type(Item_1.Dynamic) == "table" or type(Item_1.Dynamic) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = buffer.len(Item_1.Dynamic)
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.copy(SendBuffer, SendOffset, Item_1.Dynamic, 0, Length)
+				end
+			end
+			-- END ARRAY
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { { Static: number, Dynamic: buffer } }): ()
@@ -5735,7 +6521,43 @@ Returns.DynamicArray = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_DynamicArray(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_DynamicArray (12)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 12)
+			-- Value: DynamicArray
+			-- START ARRAY
+			if #Value ~= 12 then error(`Expected length of "Value" to be equal to 12, got {#Value} instead.`) end
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * 12)
+			for Index = 1, 12 do
+				local Item_1 = Value[Index]
+				-- Item_1: DynamicArray
+				do
+					-- Item_1.Static: Static
+					if type(Item_1.Static) ~= "number" then
+						error(`Expected Item_1.Static to be of type number, got {type(Item_1.Static)} instead.{if type(Item_1.Static) == "table" or type(Item_1.Static) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1.Static)
+				end
+				do
+					-- Item_1.Dynamic: Dynamic
+					if type(Item_1.Dynamic) ~= "buffer" then
+						error(`Expected Item_1.Dynamic to be of type buffer, got {type(Item_1.Dynamic)} instead.{if type(Item_1.Dynamic) == "table" or type(Item_1.Dynamic) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = buffer.len(Item_1.Dynamic)
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.copy(SendBuffer, SendOffset, Item_1.Dynamic, 0, Length)
+				end
+			end
+			-- END ARRAY
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5767,7 +6589,70 @@ Returns.DynamicArray = {
 Returns.PlayerEvent = {
 	Fire = function(Player: Player, Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_PlayerEvent(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			local BITFIELD_1_0
+			-- EVENT_PlayerEvent (13)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 13)
+			-- Value: PlayerEvent
+			BITFIELD_1_0 = 0
+			if Value.Type == "Join" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				-- Value: Join
+				do
+					-- Value.Name: Name
+					if type(Value.Name) ~= "string" then
+						error(`Expected Value.Name to be of type string, got {type(Value.Name)} instead.{if type(Value.Name) == "table" or type(Value.Name) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Value.Name
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Name, Length)
+				end
+				-- Value.UserId: UserId
+				if type(Value.UserId) ~= "number" then
+					error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.{if type(Value.UserId) == "table" or type(Value.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.UserId)
+			elseif Value.Type == "Chat" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				BITFIELD_1_0 += 1
+				-- Value: Chat
+				-- Value.UserId: UserId
+				if type(Value.UserId) ~= "number" then
+					error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.{if type(Value.UserId) == "table" or type(Value.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.UserId)
+				do
+					-- Value.Message: Message
+					if type(Value.Message) ~= "string" then
+						error(`Expected Value.Message to be of type string, got {type(Value.Message)} instead.{if type(Value.Message) == "table" or type(Value.Message) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Value.Message
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Message, Length)
+				end
+			elseif Value.Type == "Leave" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				BITFIELD_1_0 += 2
+				-- Value: Leave
+				-- Value.UserId: UserId
+				if type(Value.UserId) ~= "number" then
+					error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.{if type(Value.UserId) == "table" or type(Value.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.UserId)
+			else
+				error(`Unexpected variant: {Value.Type}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { Type: "Join", Name: string, UserId: number } | { Type: "Chat", UserId: number, Message: string } | { Type: "Leave", UserId: number }): ()
@@ -5780,7 +6665,70 @@ Returns.PlayerEvent = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_PlayerEvent(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			local BITFIELD_1_0
+			-- EVENT_PlayerEvent (13)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 13)
+			-- Value: PlayerEvent
+			BITFIELD_1_0 = 0
+			if Value.Type == "Join" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				-- Value: Join
+				do
+					-- Value.Name: Name
+					if type(Value.Name) ~= "string" then
+						error(`Expected Value.Name to be of type string, got {type(Value.Name)} instead.{if type(Value.Name) == "table" or type(Value.Name) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Value.Name
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Name, Length)
+				end
+				-- Value.UserId: UserId
+				if type(Value.UserId) ~= "number" then
+					error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.{if type(Value.UserId) == "table" or type(Value.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.UserId)
+			elseif Value.Type == "Chat" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				BITFIELD_1_0 += 1
+				-- Value: Chat
+				-- Value.UserId: UserId
+				if type(Value.UserId) ~= "number" then
+					error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.{if type(Value.UserId) == "table" or type(Value.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.UserId)
+				do
+					-- Value.Message: Message
+					if type(Value.Message) ~= "string" then
+						error(`Expected Value.Message to be of type string, got {type(Value.Message)} instead.{if type(Value.Message) == "table" or type(Value.Message) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Value.Message
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Value.Message, Length)
+				end
+			elseif Value.Type == "Leave" then
+				-- Allocate BLOCK: 8 bytes
+				local BLOCK_START = Allocate(8)
+				BITFIELD_1_0 += 2
+				-- Value: Leave
+				-- Value.UserId: UserId
+				if type(Value.UserId) ~= "number" then
+					error(`Expected Value.UserId to be of type number, got {type(Value.UserId)} instead.{if type(Value.UserId) == "table" or type(Value.UserId) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writef64(SendBuffer, BLOCK_START + 0, Value.UserId)
+			else
+				error(`Unexpected variant: {Value.Type}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5848,7 +6796,14 @@ Returns.Unknown = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_Unknown(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_Unknown (15)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 15)
+			-- Value: Unknown
+			table.insert(SendInstances, if Value == nil then Null else Value)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5880,7 +6835,34 @@ Returns.Unknown = {
 Returns.MapEvent = {
 	Fire = function(Player: Player, Value: {[string]: number}): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_MapEvent(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_MapEvent (16)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 16)
+			-- Value: MapEvent
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: MapSimple
+				if type(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Length = #Key_1
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				WriteVarLength(Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+				-- Element_1: MapSimple
+				if type(Element_1) ~= "number" then
+					error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.{if type(Element_1) == "table" or type(Element_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local OFFSET_0 = Allocate(1)
+				buffer.writeu8(SendBuffer, OFFSET_0, Element_1)
+			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 1, Elements_1)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {[string]: number}): ()
@@ -5893,7 +6875,34 @@ Returns.MapEvent = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_MapEvent(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_MapEvent (16)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 16)
+			-- Value: MapEvent
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: MapSimple
+				if type(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Length = #Key_1
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				WriteVarLength(Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+				-- Element_1: MapSimple
+				if type(Element_1) ~= "number" then
+					error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.{if type(Element_1) == "table" or type(Element_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local OFFSET_0 = Allocate(1)
+				buffer.writeu8(SendBuffer, OFFSET_0, Element_1)
+			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 1, Elements_1)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5925,7 +6934,37 @@ Returns.MapEvent = {
 Returns.MapStructEvent = {
 	Fire = function(Player: Player, Value: { Map: {[string]: number} }): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_MapStructEvent(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_MapStructEvent (17)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 17)
+			-- Value: MapStructEvent
+			do
+				-- Value.Map: Map
+				local Elements_1 = 0
+				for Key_1, Element_1 in Value.Map do
+					Elements_1 += 1
+					-- Key_1: Map
+					if type(Key_1) ~= "string" then
+						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Key_1
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+					-- Element_1: Map
+					if type(Element_1) ~= "number" then
+						error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.{if type(Element_1) == "table" or type(Element_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local OFFSET_0 = Allocate(1)
+					buffer.writeu8(SendBuffer, OFFSET_0, Element_1)
+				end
+				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, Elements_1)
+			end
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { Map: {[string]: number} }): ()
@@ -5938,7 +6977,37 @@ Returns.MapStructEvent = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_MapStructEvent(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_MapStructEvent (17)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 17)
+			-- Value: MapStructEvent
+			do
+				-- Value.Map: Map
+				local Elements_1 = 0
+				for Key_1, Element_1 in Value.Map do
+					Elements_1 += 1
+					-- Key_1: Map
+					if type(Key_1) ~= "string" then
+						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Key_1
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+					-- Element_1: Map
+					if type(Element_1) ~= "number" then
+						error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.{if type(Element_1) == "table" or type(Element_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local OFFSET_0 = Allocate(1)
+					buffer.writeu8(SendBuffer, OFFSET_0, Element_1)
+				end
+				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, Elements_1)
+			end
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -5970,7 +7039,50 @@ Returns.MapStructEvent = {
 Returns.MapComplexEvent = {
 	Fire = function(Player: Player, Value: {[string]: { number }}): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_MapComplexEvent (18)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 18)
+			-- Value: MapComplexEvent
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: MapComplex
+				if type(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				if #Key_1 < 0 then error(`Expected length of "Key_1" to be larger than or equal to 0, got {#Key_1} instead.`) end
+				if #Key_1 > 20 then error(`Expected length of "Key_1" to be smaller than or equal to 20, got {#Key_1} instead.`) end
+				local Length = #Key_1
+				if not (Length <= 20) then error(`Expected "Length" to be smaller than or equal to 20, got {Length} instead.`) end
+				local OFFSET_0 = Allocate(1)
+				buffer.writeu8(SendBuffer, OFFSET_0, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+				-- Element_1: MapComplex
+				-- START ARRAY
+				if #Element_1 ~= 8 then error(`Expected length of "Element_1" to be equal to 8, got {#Element_1} instead.`) end
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_2 = Allocate(1 * 8)
+				for Index = 1, 8 do
+					local Item_2 = Element_1[Index]
+					-- Item_2: MapComplex
+					if type(Item_2) ~= "number" then
+						error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					if not (Item_2 >= 0) then error(`Expected "Item_2" to be larger than or equal to 0, got {Item_2} instead.`) end
+					if not (Item_2 <= 100) then error(`Expected "Item_2" to be smaller than or equal to 100, got {Item_2} instead.`) end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_2
+					ARRAY_START_2 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+				end
+				-- END ARRAY
+			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 1, Elements_1)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {[string]: { number }}): ()
@@ -5983,7 +7095,50 @@ Returns.MapComplexEvent = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_MapComplexEvent(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_MapComplexEvent (18)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 18)
+			-- Value: MapComplexEvent
+			local Elements_1 = 0
+			for Key_1, Element_1 in Value do
+				Elements_1 += 1
+				-- Key_1: MapComplex
+				if type(Key_1) ~= "string" then
+					error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				if #Key_1 < 0 then error(`Expected length of "Key_1" to be larger than or equal to 0, got {#Key_1} instead.`) end
+				if #Key_1 > 20 then error(`Expected length of "Key_1" to be smaller than or equal to 20, got {#Key_1} instead.`) end
+				local Length = #Key_1
+				if not (Length <= 20) then error(`Expected "Length" to be smaller than or equal to 20, got {Length} instead.`) end
+				local OFFSET_0 = Allocate(1)
+				buffer.writeu8(SendBuffer, OFFSET_0, Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+				-- Element_1: MapComplex
+				-- START ARRAY
+				if #Element_1 ~= 8 then error(`Expected length of "Element_1" to be equal to 8, got {#Element_1} instead.`) end
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_2 = Allocate(1 * 8)
+				for Index = 1, 8 do
+					local Item_2 = Element_1[Index]
+					-- Item_2: MapComplex
+					if type(Item_2) ~= "number" then
+						error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					if not (Item_2 >= 0) then error(`Expected "Item_2" to be larger than or equal to 0, got {Item_2} instead.`) end
+					if not (Item_2 <= 100) then error(`Expected "Item_2" to be smaller than or equal to 100, got {Item_2} instead.`) end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_2
+					ARRAY_START_2 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+				end
+				-- END ARRAY
+			end
+			if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 1, Elements_1)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6015,7 +7170,56 @@ Returns.MapComplexEvent = {
 Returns.MapReferenceEvent = {
 	Fire = function(Player: Player, Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			local BITFIELD_1_0
+			-- EVENT_MapReferenceEvent (19)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 19)
+			-- Value: MapReferenceEvent
+			BITFIELD_1_0 = 0
+			if Value ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: MapReference
+				local Elements_2 = 0
+				for Key_2, Element_2 in Value do
+					local BITFIELD_3_0_OFFSET
+					local BITFIELD_3_0
+					Elements_2 += 1
+					-- Key_2: MapReference
+					local OFFSET_0 = Allocate(1)
+					BITFIELD_3_0 = 0
+					BITFIELD_3_0_OFFSET = OFFSET_0
+					if Key_2 == "A" then
+					elseif Key_2 == "B" then
+						BITFIELD_3_0 += 1
+					elseif Key_2 == "C" then
+						BITFIELD_3_0 += 2
+					elseif Key_2 == "D" then
+						BITFIELD_3_0 += 3
+					else
+						error(`Unexpected enum: {Key_2}, expected one of "A" or "B" or "C" or "D".`)
+					end
+					-- Element_2: MapReference
+					if Element_2 == "A" then
+					elseif Element_2 == "B" then
+						BITFIELD_3_0 += 4
+					elseif Element_2 == "C" then
+						BITFIELD_3_0 += 8
+					elseif Element_2 == "D" then
+						BITFIELD_3_0 += 12
+					else
+						error(`Unexpected enum: {Element_2}, expected one of "A" or "B" or "C" or "D".`)
+					end
+					buffer.writeu8(SendBuffer, BITFIELD_3_0_OFFSET, BITFIELD_3_0)
+				end
+				if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_2)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: {[("A" | "B" | "C" | "D")]: ("A" | "B" | "C" | "D")}?): ()
@@ -6028,7 +7232,56 @@ Returns.MapReferenceEvent = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_MapReferenceEvent(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			local BITFIELD_1_0
+			-- EVENT_MapReferenceEvent (19)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 19)
+			-- Value: MapReferenceEvent
+			BITFIELD_1_0 = 0
+			if Value ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value: MapReference
+				local Elements_2 = 0
+				for Key_2, Element_2 in Value do
+					local BITFIELD_3_0_OFFSET
+					local BITFIELD_3_0
+					Elements_2 += 1
+					-- Key_2: MapReference
+					local OFFSET_0 = Allocate(1)
+					BITFIELD_3_0 = 0
+					BITFIELD_3_0_OFFSET = OFFSET_0
+					if Key_2 == "A" then
+					elseif Key_2 == "B" then
+						BITFIELD_3_0 += 1
+					elseif Key_2 == "C" then
+						BITFIELD_3_0 += 2
+					elseif Key_2 == "D" then
+						BITFIELD_3_0 += 3
+					else
+						error(`Unexpected enum: {Key_2}, expected one of "A" or "B" or "C" or "D".`)
+					end
+					-- Element_2: MapReference
+					if Element_2 == "A" then
+					elseif Element_2 == "B" then
+						BITFIELD_3_0 += 4
+					elseif Element_2 == "C" then
+						BITFIELD_3_0 += 8
+					elseif Element_2 == "D" then
+						BITFIELD_3_0 += 12
+					else
+						error(`Unexpected enum: {Element_2}, expected one of "A" or "B" or "C" or "D".`)
+					end
+					buffer.writeu8(SendBuffer, BITFIELD_3_0_OFFSET, BITFIELD_3_0)
+				end
+				if not (Elements_2 <= 65535) then error(`Expected "Elements_2" to be smaller than or equal to 65535, got {Elements_2} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Elements_2)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6068,38 +7321,35 @@ Returns.ArrayPrimitive = {
 		Unreliable:FireClient(Player, Buffer, SendInstances)
 	end,
 	FireAll = function(Value: { number }): ()
-		LoadScratch()
+		local BATCH = LoadBatch(nil)
 		SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
-		if not CheckUnreliableSize("ArrayPrimitive") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
-		Unreliable:FireAllClients(Buffer, SendInstances)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "ArrayPrimitive", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, false)
 	end,
 	FireList = function(List: {Player}, Value: { number }): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
 		if not CheckUnreliableSize("ArrayPrimitive") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 	FireExcept = function(Except: Player, Value: { number }): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_ArrayPrimitive(Value)
 		if not CheckUnreliableSize("ArrayPrimitive") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 }
 Returns.OptionalPrimitive = {
@@ -6113,44 +7363,51 @@ Returns.OptionalPrimitive = {
 		Unreliable:FireClient(Player, Buffer, SendInstances)
 	end,
 	FireAll = function(Value: number?): ()
-		LoadScratch()
+		local BATCH = LoadBatch(nil)
 		SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
-		if not CheckUnreliableSize("OptionalPrimitive") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
-		Unreliable:FireAllClients(Buffer, SendInstances)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "OptionalPrimitive", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, false)
 	end,
 	FireList = function(List: {Player}, Value: number?): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
 		if not CheckUnreliableSize("OptionalPrimitive") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 	FireExcept = function(Except: Player, Value: number?): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_OptionalPrimitive(Value)
 		if not CheckUnreliableSize("OptionalPrimitive") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 }
 Returns.ManyReliableSync = {
 	Fire = function(Player: Player, Value: number): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_ManyReliableSync (20)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 20)
+			-- Value: ManyReliableSync
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: number): ()
@@ -6163,7 +7420,17 @@ Returns.ManyReliableSync = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_ManyReliableSync(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_ManyReliableSync (20)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 20)
+			-- Value: ManyReliableSync
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6195,7 +7462,17 @@ Returns.ManyReliableSync = {
 Returns.ManyReliableAsync = {
 	Fire = function(Player: Player, Value: number): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_ManyReliableAsync (21)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 21)
+			-- Value: ManyReliableAsync
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: number): ()
@@ -6208,7 +7485,17 @@ Returns.ManyReliableAsync = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_ManyReliableAsync(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_ManyReliableAsync (21)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 21)
+			-- Value: ManyReliableAsync
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6248,38 +7535,35 @@ Returns.ManyUnreliableSync = {
 		Unreliable:FireClient(Player, Buffer, SendInstances)
 	end,
 	FireAll = function(Value: number): ()
-		LoadScratch()
+		local BATCH = LoadBatch(nil)
 		SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
-		if not CheckUnreliableSize("ManyUnreliableSync") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
-		Unreliable:FireAllClients(Buffer, SendInstances)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "ManyUnreliableSync", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, false)
 	end,
 	FireList = function(List: {Player}, Value: number): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
 		if not CheckUnreliableSize("ManyUnreliableSync") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 	FireExcept = function(Except: Player, Value: number): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_ManyUnreliableSync(Value)
 		if not CheckUnreliableSize("ManyUnreliableSync") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 }
 Returns.ManyUnreliableAsync = {
@@ -6293,44 +7577,51 @@ Returns.ManyUnreliableAsync = {
 		Unreliable:FireClient(Player, Buffer, SendInstances)
 	end,
 	FireAll = function(Value: number): ()
-		LoadScratch()
+		local BATCH = LoadBatch(nil)
 		SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
-		if not CheckUnreliableSize("ManyUnreliableAsync") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
-		Unreliable:FireAllClients(Buffer, SendInstances)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "ManyUnreliableAsync", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, false)
 	end,
 	FireList = function(List: {Player}, Value: number): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
 		if not CheckUnreliableSize("ManyUnreliableAsync") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 	FireExcept = function(Except: Player, Value: number): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_ManyUnreliableAsync(Value)
 		if not CheckUnreliableSize("ManyUnreliableAsync") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 }
 Returns.ReliableServer = {
 	Fire = function(Player: Player, Value: number): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_ReliableServer(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_ReliableServer (22)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 22)
+			-- Value: ReliableServer
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: number): ()
@@ -6343,7 +7634,17 @@ Returns.ReliableServer = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_ReliableServer(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_ReliableServer (22)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 22)
+			-- Value: ReliableServer
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6375,7 +7676,17 @@ Returns.ReliableServer = {
 Returns.ReliableServerAsync = {
 	Fire = function(Player: Player, Value: number): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_ReliableServerAsync (23)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 23)
+			-- Value: ReliableServerAsync
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: number): ()
@@ -6388,7 +7699,17 @@ Returns.ReliableServerAsync = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_ReliableServerAsync(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_ReliableServerAsync (23)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 23)
+			-- Value: ReliableServerAsync
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6447,38 +7768,35 @@ Returns.UnreliableServer = {
 		Unreliable:FireClient(Player, Buffer, SendInstances)
 	end,
 	FireAll = function(Value: number): ()
-		LoadScratch()
+		local BATCH = LoadBatch(nil)
 		SerdesFunctions.WriteEVENT_UnreliableServer(Value)
-		if not CheckUnreliableSize("UnreliableServer") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
-		Unreliable:FireAllClients(Buffer, SendInstances)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "UnreliableServer", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, false)
 	end,
 	FireList = function(List: {Player}, Value: number): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_UnreliableServer(Value)
 		if not CheckUnreliableSize("UnreliableServer") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 	FireExcept = function(Except: Player, Value: number): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_UnreliableServer(Value)
 		if not CheckUnreliableSize("UnreliableServer") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 }
 Returns.UnreliableServerAsync = {
@@ -6492,38 +7810,35 @@ Returns.UnreliableServerAsync = {
 		Unreliable:FireClient(Player, Buffer, SendInstances)
 	end,
 	FireAll = function(Value: number): ()
-		LoadScratch()
+		local BATCH = LoadBatch(nil)
 		SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
-		if not CheckUnreliableSize("UnreliableServerAsync") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
-		Unreliable:FireAllClients(Buffer, SendInstances)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "UnreliableServerAsync", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, false)
 	end,
 	FireList = function(List: {Player}, Value: number): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
 		if not CheckUnreliableSize("UnreliableServerAsync") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 	FireExcept = function(Except: Player, Value: number): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_UnreliableServerAsync(Value)
 		if not CheckUnreliableSize("UnreliableServerAsync") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 }
 Returns.UnreliableClient = {
@@ -6560,7 +7875,17 @@ Returns.InstanceAny = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_InstanceAny(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_InstanceAny (25)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 25)
+			-- Value: InstanceAny
+			if (Value :: any) ~= nil then
+				if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
+			end
+			table.insert(SendInstances, Value or Null)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6610,7 +7935,18 @@ Returns.InstanceOfType = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_InstanceOfType(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_InstanceOfType (26)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 26)
+			-- Value: InstanceOfType
+			if (Value :: any) ~= nil then
+				if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
+				if not Value:IsA("Sound") then error(`Expected an Instance of type "Sound", got "{Value.ClassName}" instead.`) end
+			end
+			table.insert(SendInstances, Value or Null)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6660,7 +7996,18 @@ Returns.InstanceOptional = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_InstanceOptional(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_InstanceOptional (27)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 27)
+			-- Value: InstanceOptional
+			-- Value: InstanceOptional
+			if (Value :: any) ~= nil then
+				if typeof(Value) ~= "Instance" then error(`Expected an Instance, got {typeof(Value)} instead.`) end
+			end
+			table.insert(SendInstances, Value or Null)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6692,7 +8039,125 @@ Returns.InstanceOptional = {
 Returns.Reference = {
 	Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_Reference(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			local BITFIELD_1_0
+			-- EVENT_Reference (28)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 28)
+			-- Value: Reference
+			BITFIELD_1_0 = 0
+			if Value ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				local BITFIELD_2_0
+				-- Value: Reference
+				-- Value.Field: Field
+				BITFIELD_2_0 = 0
+				if Value.Field ~= nil then BITFIELD_2_0 += 0x01 end
+				if Value.Field ~= nil then
+					-- Allocate BLOCK: 1 bytes
+					local BLOCK_START = Allocate(1)
+					-- Value.Field: Field
+					if type(Value.Field) ~= "number" then
+						error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.{if type(Value.Field) == "table" or type(Value.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
+				end
+				-- Value.Float16Field: Float16Field
+				if Value.Float16Field ~= nil then BITFIELD_2_0 += 0x02 end
+				if Value.Float16Field ~= nil then
+					-- Allocate BLOCK: 2 bytes
+					local BLOCK_START = Allocate(2)
+					-- Value.Float16Field: Float16Field
+					if type(Value.Float16Field) ~= "number" then
+						error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.{if type(Value.Float16Field) == "table" or type(Value.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					if Value.Float16Field > 65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+					elseif Value.Float16Field < -65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+					elseif Value.Float16Field ~= Value.Float16Field then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+					elseif Value.Float16Field == 0 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
+					else
+						local float = Value.Float16Field
+						local Abosulte = math.abs(float)
+						local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+						local RoundedValue = (Abosulte // Interval) * Interval
+						local Fraction, Exponent = math.frexp(RoundedValue)
+						Exponent += 14
+						local Scaled = math.round(if Exponent <= 0
+							then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+							else Fraction * 0x800)
+						local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+							+ if float < 0 then 0x8000 else 0
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					end
+				end
+				-- Value.Enum: Enum
+				if Value.Enum == "A" then
+				elseif Value.Enum == "B" then
+					BITFIELD_2_0 += 4
+				elseif Value.Enum == "C" then
+					BITFIELD_2_0 += 8
+				elseif Value.Enum == "D" then
+					BITFIELD_2_0 += 12
+				else
+					error(`Unexpected enum: {Value.Enum}, expected one of "A" or "B" or "C" or "D".`)
+				end
+				-- Value.Nested: Nested
+				-- Value.Nested.Guh: Guh
+				if type(Value.Nested.Guh) ~= "number" then
+					error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.{if type(Value.Nested.Guh) == "table" or type(Value.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Nested.Guh)
+				do
+					-- Value.Nested.Array: Array
+					-- START ARRAY
+					if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_2 = Allocate(1 * 10)
+					for Index = 1, 10 do
+						local Item_2 = Value.Nested.Array[Index]
+						-- Item_2: Array
+						if type(Item_2) ~= "number" then
+							error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_2
+						ARRAY_START_2 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+					end
+					-- END ARRAY
+				end
+				-- Value.Nested.OptionalArray: OptionalArray
+				if Value.Nested.OptionalArray ~= nil then BITFIELD_2_0 += 0x10 end
+				if Value.Nested.OptionalArray ~= nil then
+					-- Value.Nested.OptionalArray: OptionalArray
+					-- START ARRAY
+					if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_3 = Allocate(1 * 2)
+					for Index = 1, 2 do
+						local Item_3 = Value.Nested.OptionalArray[Index]
+						-- Item_3: OptionalArray
+						if type(Item_3) ~= "number" then
+							error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.{if type(Item_3) == "table" or type(Item_3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_3
+						ARRAY_START_3 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_3)
+					end
+					-- END ARRAY
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_2_0)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
@@ -6705,7 +8170,125 @@ Returns.Reference = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_Reference(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			local BITFIELD_1_0
+			-- EVENT_Reference (28)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 28)
+			-- Value: Reference
+			BITFIELD_1_0 = 0
+			if Value ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				local BITFIELD_2_0
+				-- Value: Reference
+				-- Value.Field: Field
+				BITFIELD_2_0 = 0
+				if Value.Field ~= nil then BITFIELD_2_0 += 0x01 end
+				if Value.Field ~= nil then
+					-- Allocate BLOCK: 1 bytes
+					local BLOCK_START = Allocate(1)
+					-- Value.Field: Field
+					if type(Value.Field) ~= "number" then
+						error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.{if type(Value.Field) == "table" or type(Value.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
+				end
+				-- Value.Float16Field: Float16Field
+				if Value.Float16Field ~= nil then BITFIELD_2_0 += 0x02 end
+				if Value.Float16Field ~= nil then
+					-- Allocate BLOCK: 2 bytes
+					local BLOCK_START = Allocate(2)
+					-- Value.Float16Field: Float16Field
+					if type(Value.Float16Field) ~= "number" then
+						error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.{if type(Value.Float16Field) == "table" or type(Value.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					if Value.Float16Field > 65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+					elseif Value.Float16Field < -65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+					elseif Value.Float16Field ~= Value.Float16Field then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+					elseif Value.Float16Field == 0 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
+					else
+						local float = Value.Float16Field
+						local Abosulte = math.abs(float)
+						local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+						local RoundedValue = (Abosulte // Interval) * Interval
+						local Fraction, Exponent = math.frexp(RoundedValue)
+						Exponent += 14
+						local Scaled = math.round(if Exponent <= 0
+							then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+							else Fraction * 0x800)
+						local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+							+ if float < 0 then 0x8000 else 0
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					end
+				end
+				-- Value.Enum: Enum
+				if Value.Enum == "A" then
+				elseif Value.Enum == "B" then
+					BITFIELD_2_0 += 4
+				elseif Value.Enum == "C" then
+					BITFIELD_2_0 += 8
+				elseif Value.Enum == "D" then
+					BITFIELD_2_0 += 12
+				else
+					error(`Unexpected enum: {Value.Enum}, expected one of "A" or "B" or "C" or "D".`)
+				end
+				-- Value.Nested: Nested
+				-- Value.Nested.Guh: Guh
+				if type(Value.Nested.Guh) ~= "number" then
+					error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.{if type(Value.Nested.Guh) == "table" or type(Value.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Nested.Guh)
+				do
+					-- Value.Nested.Array: Array
+					-- START ARRAY
+					if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_2 = Allocate(1 * 10)
+					for Index = 1, 10 do
+						local Item_2 = Value.Nested.Array[Index]
+						-- Item_2: Array
+						if type(Item_2) ~= "number" then
+							error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_2
+						ARRAY_START_2 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+					end
+					-- END ARRAY
+				end
+				-- Value.Nested.OptionalArray: OptionalArray
+				if Value.Nested.OptionalArray ~= nil then BITFIELD_2_0 += 0x10 end
+				if Value.Nested.OptionalArray ~= nil then
+					-- Value.Nested.OptionalArray: OptionalArray
+					-- START ARRAY
+					if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_3 = Allocate(1 * 2)
+					for Index = 1, 2 do
+						local Item_3 = Value.Nested.OptionalArray[Index]
+						-- Item_3: OptionalArray
+						if type(Item_3) ~= "number" then
+							error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.{if type(Item_3) == "table" or type(Item_3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_3
+						ARRAY_START_3 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_3)
+					end
+					-- END ARRAY
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_2_0)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6737,7 +8320,137 @@ Returns.Reference = {
 Returns.ReferenceArray = {
 	Fire = function(Player: Player, Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_ReferenceArray(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_ReferenceArray (29)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 29)
+			-- Value: ReferenceArray
+			-- START ARRAY
+			if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
+				-- Allocate BLOCK: 2 bytes
+			local ARRAY_START_1 = Allocate(2 * 8)
+			local BITFIELD_2_0_OFFSET
+			local BITFIELD_2_0
+			for Index = 1, 8 do
+				local Item_1 = Value[Index]
+				-- Item_1: ReferenceArray
+				do
+					-- Item_1.Field: Field
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					BITFIELD_2_0 = 0
+					BITFIELD_2_0_OFFSET = OPERATION_OFFSET_0
+					if Item_1.Field ~= nil then BITFIELD_2_0 += 0x01 end
+					if Item_1.Field ~= nil then
+						-- Allocate BLOCK: 1 bytes
+						local BLOCK_START = Allocate(1)
+						-- Item_1.Field: Field
+						if type(Item_1.Field) ~= "number" then
+							error(`Expected Item_1.Field to be of type number, got {type(Item_1.Field)} instead.{if type(Item_1.Field) == "table" or type(Item_1.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						buffer.writeu8(SendBuffer, BLOCK_START + 0, Item_1.Field)
+					end
+				end
+				-- Item_1.Float16Field: Float16Field
+				if Item_1.Float16Field ~= nil then BITFIELD_2_0 += 0x02 end
+				if Item_1.Float16Field ~= nil then
+					-- Allocate BLOCK: 2 bytes
+					local BLOCK_START = Allocate(2)
+					-- Item_1.Float16Field: Float16Field
+					if type(Item_1.Float16Field) ~= "number" then
+						error(`Expected Item_1.Float16Field to be of type number, got {type(Item_1.Float16Field)} instead.{if type(Item_1.Float16Field) == "table" or type(Item_1.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					if Item_1.Float16Field > 65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+					elseif Item_1.Float16Field < -65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+					elseif Item_1.Float16Field ~= Item_1.Float16Field then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+					elseif Item_1.Float16Field == 0 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Item_1.Float16Field < 0 then 0x8000 else 0)
+					else
+						local float = Item_1.Float16Field
+						local Abosulte = math.abs(float)
+						local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+						local RoundedValue = (Abosulte // Interval) * Interval
+						local Fraction, Exponent = math.frexp(RoundedValue)
+						Exponent += 14
+						local Scaled = math.round(if Exponent <= 0
+							then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+							else Fraction * 0x800)
+						local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+							+ if float < 0 then 0x8000 else 0
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					end
+				end
+				-- Item_1.Enum: Enum
+				if Item_1.Enum == "A" then
+				elseif Item_1.Enum == "B" then
+					BITFIELD_2_0 += 4
+				elseif Item_1.Enum == "C" then
+					BITFIELD_2_0 += 8
+				elseif Item_1.Enum == "D" then
+					BITFIELD_2_0 += 12
+				else
+					error(`Unexpected enum: {Item_1.Enum}, expected one of "A" or "B" or "C" or "D".`)
+				end
+				-- Item_1.Nested: Nested
+				do
+					-- Item_1.Nested.Guh: Guh
+					if type(Item_1.Nested.Guh) ~= "number" then
+						error(`Expected Item_1.Nested.Guh to be of type number, got {type(Item_1.Nested.Guh)} instead.{if type(Item_1.Nested.Guh) == "table" or type(Item_1.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					-- Allocate 1
+					local OPERATION_OFFSET_1 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, Item_1.Nested.Guh)
+				end
+				do
+					-- Item_1.Nested.Array: Array
+					-- START ARRAY
+					if #Item_1.Nested.Array ~= 10 then error(`Expected length of "Item_1.Nested.Array" to be equal to 10, got {#Item_1.Nested.Array} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_2 = Allocate(1 * 10)
+					for Index = 1, 10 do
+						local Item_2 = Item_1.Nested.Array[Index]
+						-- Item_2: Array
+						if type(Item_2) ~= "number" then
+							error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_2
+						ARRAY_START_2 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+					end
+					-- END ARRAY
+				end
+				-- Item_1.Nested.OptionalArray: OptionalArray
+				if Item_1.Nested.OptionalArray ~= nil then BITFIELD_2_0 += 0x10 end
+				if Item_1.Nested.OptionalArray ~= nil then
+					-- Item_1.Nested.OptionalArray: OptionalArray
+					-- START ARRAY
+					if #Item_1.Nested.OptionalArray ~= 2 then error(`Expected length of "Item_1.Nested.OptionalArray" to be equal to 2, got {#Item_1.Nested.OptionalArray} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_3 = Allocate(1 * 2)
+					for Index = 1, 2 do
+						local Item_3 = Item_1.Nested.OptionalArray[Index]
+						-- Item_3: OptionalArray
+						if type(Item_3) ~= "number" then
+							error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.{if type(Item_3) == "table" or type(Item_3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_3
+						ARRAY_START_3 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_3)
+					end
+					-- END ARRAY
+				end
+				buffer.writeu8(SendBuffer, BITFIELD_2_0_OFFSET, BITFIELD_2_0)
+			end
+			-- END ARRAY
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } } }): ()
@@ -6750,7 +8463,137 @@ Returns.ReferenceArray = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_ReferenceArray(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_ReferenceArray (29)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 29)
+			-- Value: ReferenceArray
+			-- START ARRAY
+			if #Value ~= 8 then error(`Expected length of "Value" to be equal to 8, got {#Value} instead.`) end
+				-- Allocate BLOCK: 2 bytes
+			local ARRAY_START_1 = Allocate(2 * 8)
+			local BITFIELD_2_0_OFFSET
+			local BITFIELD_2_0
+			for Index = 1, 8 do
+				local Item_1 = Value[Index]
+				-- Item_1: ReferenceArray
+				do
+					-- Item_1.Field: Field
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					BITFIELD_2_0 = 0
+					BITFIELD_2_0_OFFSET = OPERATION_OFFSET_0
+					if Item_1.Field ~= nil then BITFIELD_2_0 += 0x01 end
+					if Item_1.Field ~= nil then
+						-- Allocate BLOCK: 1 bytes
+						local BLOCK_START = Allocate(1)
+						-- Item_1.Field: Field
+						if type(Item_1.Field) ~= "number" then
+							error(`Expected Item_1.Field to be of type number, got {type(Item_1.Field)} instead.{if type(Item_1.Field) == "table" or type(Item_1.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						buffer.writeu8(SendBuffer, BLOCK_START + 0, Item_1.Field)
+					end
+				end
+				-- Item_1.Float16Field: Float16Field
+				if Item_1.Float16Field ~= nil then BITFIELD_2_0 += 0x02 end
+				if Item_1.Float16Field ~= nil then
+					-- Allocate BLOCK: 2 bytes
+					local BLOCK_START = Allocate(2)
+					-- Item_1.Float16Field: Float16Field
+					if type(Item_1.Float16Field) ~= "number" then
+						error(`Expected Item_1.Float16Field to be of type number, got {type(Item_1.Float16Field)} instead.{if type(Item_1.Float16Field) == "table" or type(Item_1.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					if Item_1.Float16Field > 65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+					elseif Item_1.Float16Field < -65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+					elseif Item_1.Float16Field ~= Item_1.Float16Field then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+					elseif Item_1.Float16Field == 0 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Item_1.Float16Field < 0 then 0x8000 else 0)
+					else
+						local float = Item_1.Float16Field
+						local Abosulte = math.abs(float)
+						local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+						local RoundedValue = (Abosulte // Interval) * Interval
+						local Fraction, Exponent = math.frexp(RoundedValue)
+						Exponent += 14
+						local Scaled = math.round(if Exponent <= 0
+							then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+							else Fraction * 0x800)
+						local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+							+ if float < 0 then 0x8000 else 0
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					end
+				end
+				-- Item_1.Enum: Enum
+				if Item_1.Enum == "A" then
+				elseif Item_1.Enum == "B" then
+					BITFIELD_2_0 += 4
+				elseif Item_1.Enum == "C" then
+					BITFIELD_2_0 += 8
+				elseif Item_1.Enum == "D" then
+					BITFIELD_2_0 += 12
+				else
+					error(`Unexpected enum: {Item_1.Enum}, expected one of "A" or "B" or "C" or "D".`)
+				end
+				-- Item_1.Nested: Nested
+				do
+					-- Item_1.Nested.Guh: Guh
+					if type(Item_1.Nested.Guh) ~= "number" then
+						error(`Expected Item_1.Nested.Guh to be of type number, got {type(Item_1.Nested.Guh)} instead.{if type(Item_1.Nested.Guh) == "table" or type(Item_1.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					-- Allocate 1
+					local OPERATION_OFFSET_1 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_1, Item_1.Nested.Guh)
+				end
+				do
+					-- Item_1.Nested.Array: Array
+					-- START ARRAY
+					if #Item_1.Nested.Array ~= 10 then error(`Expected length of "Item_1.Nested.Array" to be equal to 10, got {#Item_1.Nested.Array} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_2 = Allocate(1 * 10)
+					for Index = 1, 10 do
+						local Item_2 = Item_1.Nested.Array[Index]
+						-- Item_2: Array
+						if type(Item_2) ~= "number" then
+							error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_2
+						ARRAY_START_2 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+					end
+					-- END ARRAY
+				end
+				-- Item_1.Nested.OptionalArray: OptionalArray
+				if Item_1.Nested.OptionalArray ~= nil then BITFIELD_2_0 += 0x10 end
+				if Item_1.Nested.OptionalArray ~= nil then
+					-- Item_1.Nested.OptionalArray: OptionalArray
+					-- START ARRAY
+					if #Item_1.Nested.OptionalArray ~= 2 then error(`Expected length of "Item_1.Nested.OptionalArray" to be equal to 2, got {#Item_1.Nested.OptionalArray} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_3 = Allocate(1 * 2)
+					for Index = 1, 2 do
+						local Item_3 = Item_1.Nested.OptionalArray[Index]
+						-- Item_3: OptionalArray
+						if type(Item_3) ~= "number" then
+							error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.{if type(Item_3) == "table" or type(Item_3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_3
+						ARRAY_START_3 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_3)
+					end
+					-- END ARRAY
+				end
+				buffer.writeu8(SendBuffer, BITFIELD_2_0_OFFSET, BITFIELD_2_0)
+			end
+			-- END ARRAY
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6782,7 +8625,125 @@ Returns.ReferenceArray = {
 Returns.ReferenceOptional = {
 	Fire = function(Player: Player, Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			local BITFIELD_1_0
+			-- EVENT_ReferenceOptional (30)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 30)
+			-- Value: ReferenceOptional
+			BITFIELD_1_0 = 0
+			if Value ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				local BITFIELD_2_0
+				-- Value: ReferenceOptional
+				-- Value.Field: Field
+				BITFIELD_2_0 = 0
+				if Value.Field ~= nil then BITFIELD_2_0 += 0x01 end
+				if Value.Field ~= nil then
+					-- Allocate BLOCK: 1 bytes
+					local BLOCK_START = Allocate(1)
+					-- Value.Field: Field
+					if type(Value.Field) ~= "number" then
+						error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.{if type(Value.Field) == "table" or type(Value.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
+				end
+				-- Value.Float16Field: Float16Field
+				if Value.Float16Field ~= nil then BITFIELD_2_0 += 0x02 end
+				if Value.Float16Field ~= nil then
+					-- Allocate BLOCK: 2 bytes
+					local BLOCK_START = Allocate(2)
+					-- Value.Float16Field: Float16Field
+					if type(Value.Float16Field) ~= "number" then
+						error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.{if type(Value.Float16Field) == "table" or type(Value.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					if Value.Float16Field > 65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+					elseif Value.Float16Field < -65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+					elseif Value.Float16Field ~= Value.Float16Field then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+					elseif Value.Float16Field == 0 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
+					else
+						local float = Value.Float16Field
+						local Abosulte = math.abs(float)
+						local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+						local RoundedValue = (Abosulte // Interval) * Interval
+						local Fraction, Exponent = math.frexp(RoundedValue)
+						Exponent += 14
+						local Scaled = math.round(if Exponent <= 0
+							then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+							else Fraction * 0x800)
+						local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+							+ if float < 0 then 0x8000 else 0
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					end
+				end
+				-- Value.Enum: Enum
+				if Value.Enum == "A" then
+				elseif Value.Enum == "B" then
+					BITFIELD_2_0 += 4
+				elseif Value.Enum == "C" then
+					BITFIELD_2_0 += 8
+				elseif Value.Enum == "D" then
+					BITFIELD_2_0 += 12
+				else
+					error(`Unexpected enum: {Value.Enum}, expected one of "A" or "B" or "C" or "D".`)
+				end
+				-- Value.Nested: Nested
+				-- Value.Nested.Guh: Guh
+				if type(Value.Nested.Guh) ~= "number" then
+					error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.{if type(Value.Nested.Guh) == "table" or type(Value.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Nested.Guh)
+				do
+					-- Value.Nested.Array: Array
+					-- START ARRAY
+					if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_2 = Allocate(1 * 10)
+					for Index = 1, 10 do
+						local Item_2 = Value.Nested.Array[Index]
+						-- Item_2: Array
+						if type(Item_2) ~= "number" then
+							error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_2
+						ARRAY_START_2 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+					end
+					-- END ARRAY
+				end
+				-- Value.Nested.OptionalArray: OptionalArray
+				if Value.Nested.OptionalArray ~= nil then BITFIELD_2_0 += 0x10 end
+				if Value.Nested.OptionalArray ~= nil then
+					-- Value.Nested.OptionalArray: OptionalArray
+					-- START ARRAY
+					if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_3 = Allocate(1 * 2)
+					for Index = 1, 2 do
+						local Item_3 = Value.Nested.OptionalArray[Index]
+						-- Item_3: OptionalArray
+						if type(Item_3) ~= "number" then
+							error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.{if type(Item_3) == "table" or type(Item_3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_3
+						ARRAY_START_3 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_3)
+					end
+					-- END ARRAY
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_2_0)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? } }?): ()
@@ -6795,7 +8756,125 @@ Returns.ReferenceOptional = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_ReferenceOptional(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			local BITFIELD_1_0
+			-- EVENT_ReferenceOptional (30)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 30)
+			-- Value: ReferenceOptional
+			BITFIELD_1_0 = 0
+			if Value ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				local BITFIELD_2_0
+				-- Value: ReferenceOptional
+				-- Value.Field: Field
+				BITFIELD_2_0 = 0
+				if Value.Field ~= nil then BITFIELD_2_0 += 0x01 end
+				if Value.Field ~= nil then
+					-- Allocate BLOCK: 1 bytes
+					local BLOCK_START = Allocate(1)
+					-- Value.Field: Field
+					if type(Value.Field) ~= "number" then
+						error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.{if type(Value.Field) == "table" or type(Value.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
+				end
+				-- Value.Float16Field: Float16Field
+				if Value.Float16Field ~= nil then BITFIELD_2_0 += 0x02 end
+				if Value.Float16Field ~= nil then
+					-- Allocate BLOCK: 2 bytes
+					local BLOCK_START = Allocate(2)
+					-- Value.Float16Field: Float16Field
+					if type(Value.Float16Field) ~= "number" then
+						error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.{if type(Value.Float16Field) == "table" or type(Value.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					if Value.Float16Field > 65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+					elseif Value.Float16Field < -65504 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+					elseif Value.Float16Field ~= Value.Float16Field then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+					elseif Value.Float16Field == 0 then
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
+					else
+						local float = Value.Float16Field
+						local Abosulte = math.abs(float)
+						local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+						local RoundedValue = (Abosulte // Interval) * Interval
+						local Fraction, Exponent = math.frexp(RoundedValue)
+						Exponent += 14
+						local Scaled = math.round(if Exponent <= 0
+							then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+							else Fraction * 0x800)
+						local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+							+ if float < 0 then 0x8000 else 0
+						buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+					end
+				end
+				-- Value.Enum: Enum
+				if Value.Enum == "A" then
+				elseif Value.Enum == "B" then
+					BITFIELD_2_0 += 4
+				elseif Value.Enum == "C" then
+					BITFIELD_2_0 += 8
+				elseif Value.Enum == "D" then
+					BITFIELD_2_0 += 12
+				else
+					error(`Unexpected enum: {Value.Enum}, expected one of "A" or "B" or "C" or "D".`)
+				end
+				-- Value.Nested: Nested
+				-- Value.Nested.Guh: Guh
+				if type(Value.Nested.Guh) ~= "number" then
+					error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.{if type(Value.Nested.Guh) == "table" or type(Value.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value.Nested.Guh)
+				do
+					-- Value.Nested.Array: Array
+					-- START ARRAY
+					if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_2 = Allocate(1 * 10)
+					for Index = 1, 10 do
+						local Item_2 = Value.Nested.Array[Index]
+						-- Item_2: Array
+						if type(Item_2) ~= "number" then
+							error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_2
+						ARRAY_START_2 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+					end
+					-- END ARRAY
+				end
+				-- Value.Nested.OptionalArray: OptionalArray
+				if Value.Nested.OptionalArray ~= nil then BITFIELD_2_0 += 0x10 end
+				if Value.Nested.OptionalArray ~= nil then
+					-- Value.Nested.OptionalArray: OptionalArray
+					-- START ARRAY
+					if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
+						-- Allocate BLOCK: 1 bytes
+					local ARRAY_START_3 = Allocate(1 * 2)
+					for Index = 1, 2 do
+						local Item_3 = Value.Nested.OptionalArray[Index]
+						-- Item_3: OptionalArray
+						if type(Item_3) ~= "number" then
+							error(`Expected Item_3 to be of type number, got {type(Item_3)} instead.{if type(Item_3) == "table" or type(Item_3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+						end
+						-- Allocate 1
+						local OPERATION_OFFSET_0 = ARRAY_START_3
+						ARRAY_START_3 += 1
+						buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_3)
+					end
+					-- END ARRAY
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, BITFIELD_2_0)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6881,7 +8960,71 @@ Returns.Tuple = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_Tuple(Value1, Value2, Value3, Value4, Value5, Value6)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			local BITFIELD_1_0
+			-- EVENT_Tuple (32)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 32)
+			-- Value: Tuple
+			-- Value1: Tuple
+			if type(Value1) ~= "number" then
+				error(`Expected Value1 to be of type number, got {type(Value1)} instead.{if type(Value1) == "table" or type(Value1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value1)
+			-- Value2: Tuple
+			BITFIELD_1_0 = 0
+			if Value2 == "A" then
+			elseif Value2 == "B" then
+				BITFIELD_1_0 += 1
+			elseif Value2 == "C" then
+				BITFIELD_1_0 += 2
+			elseif Value2 == "D" then
+				BITFIELD_1_0 += 3
+			else
+				error(`Unexpected enum: {Value2}, expected one of "A" or "B" or "C" or "D".`)
+			end
+			-- Value3: Tuple
+			if Value3 ~= nil then BITFIELD_1_0 += 0x04 end
+			if Value3 ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value3: Tuple
+				if type(Value3) ~= "number" then
+					error(`Expected Value3 to be of type number, got {type(Value3)} instead.{if type(Value3) == "table" or type(Value3) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu16(SendBuffer, BLOCK_START + 0, Value3)
+			end
+			-- Value4: Tuple
+			if (Value4 :: any) ~= nil then
+				if typeof(Value4) ~= "Instance" then error(`Expected an Instance, got {typeof(Value4)} instead.`) end
+			end
+			table.insert(SendInstances, Value4 or Null)
+			-- Value5: Tuple
+			-- Value5: Tuple
+			if (Value5 :: any) ~= nil then
+				if typeof(Value5) ~= "Instance" then error(`Expected an Instance, got {typeof(Value5)} instead.`) end
+			end
+			table.insert(SendInstances, Value5 or Null)
+			-- Value6: Tuple
+			-- START ARRAY
+			if #Value6 ~= 8 then error(`Expected length of "Value6" to be equal to 8, got {#Value6} instead.`) end
+				-- Allocate BLOCK: 1 bytes
+			local ARRAY_START_1 = Allocate(1 * 8)
+			for Index = 1, 8 do
+				local Item_1 = Value6[Index]
+				-- Item_1: Tuple
+				if type(Item_1) ~= "number" then
+					error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				-- Allocate 1
+				local OPERATION_OFFSET_0 = ARRAY_START_1
+				ARRAY_START_1 += 1
+				buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+			end
+			-- END ARRAY
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, BITFIELD_1_0)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -6921,38 +9064,35 @@ Returns.TupleUnreliable = {
 		Unreliable:FireClient(Player, Buffer, SendInstances)
 	end,
 	FireAll = function(Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
-		LoadScratch()
+		local BATCH = LoadBatch(nil)
 		SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
-		if not CheckUnreliableSize("TupleUnreliable") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
-		Unreliable:FireAllClients(Buffer, SendInstances)
+		local EVENT_BYTES = SendCursor - BatchStart + (#SendInstances - BatchInstances) * UNRELIABLE_INSTANCE_BYTES
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "TupleUnreliable", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, true)
 	end,
 	FireList = function(List: {Player}, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
 		if not CheckUnreliableSize("TupleUnreliable") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 	FireExcept = function(Except: Player, Value1: number, Value2: ("A" | "B" | "C" | "D"), Value3: number?, Value4: Instance, Value5: Instance?): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_TupleUnreliable(Value1, Value2, Value3, Value4, Value5)
 		if not CheckUnreliableSize("TupleUnreliable") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 }
 Returns.TupleFunction = {
@@ -6995,7 +9135,17 @@ Returns.AnotherScope = {
 	InScopeEvent = {
 		Fire = function(Player: Player, Value: number): ()
 			LoadPlayer(Player)
-			SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
+			do
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- EVENT_InScopeEvent (34)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, 34)
+				-- Value: InScopeEvent
+				if type(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+			end
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: number): ()
@@ -7008,7 +9158,17 @@ Returns.AnotherScope = {
 			SendOffset = BEFORE
 			SendBuffer = SharedBuffer
 			SendInstances = SharedInstances
-			SerdesFunctions.AnotherScope_WriteEVENT_InScopeEvent(Value)
+			do
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- EVENT_InScopeEvent (34)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, 34)
+				-- Value: InScopeEvent
+				if type(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+			end
 			SharedBuffer = SendBuffer
 			SharedSize = SendSize
 			SharedCursor = SendCursor
@@ -7041,7 +9201,17 @@ Returns.AnotherScope = {
 		InAnotherScopeEvent = {
 			Fire = function(Player: Player, Value: number): ()
 				LoadPlayer(Player)
-				SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
+				do
+					-- Allocate BLOCK: 2 bytes
+					local BLOCK_START = Allocate(2)
+					-- EVENT_InAnotherScopeEvent (35)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, 35)
+					-- Value: InAnotherScopeEvent
+					if type(Value) ~= "number" then
+						error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+				end
 				SavePlayerBuffer(Player)
 			end,
 			FireAll = function(Value: number): ()
@@ -7054,7 +9224,17 @@ Returns.AnotherScope = {
 				SendOffset = BEFORE
 				SendBuffer = SharedBuffer
 				SendInstances = SharedInstances
-				SerdesFunctions.AnotherScope_ScopeWithinAnotherScope_WriteEVENT_InAnotherScopeEvent(Value)
+				do
+					-- Allocate BLOCK: 2 bytes
+					local BLOCK_START = Allocate(2)
+					-- EVENT_InAnotherScopeEvent (35)
+					buffer.writeu8(SendBuffer, BLOCK_START + 0, 35)
+					-- Value: InAnotherScopeEvent
+					if type(Value) ~= "number" then
+						error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+				end
 				SharedBuffer = SendBuffer
 				SharedSize = SendSize
 				SharedCursor = SendCursor
@@ -7089,7 +9269,17 @@ Returns.ExampleScope = {
 	InScopeEvent = {
 		Fire = function(Player: Player, Value: number): ()
 			LoadPlayer(Player)
-			SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
+			do
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- EVENT_InScopeEvent (36)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, 36)
+				-- Value: InScopeEvent
+				if type(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+			end
 			SavePlayerBuffer(Player)
 		end,
 		FireAll = function(Value: number): ()
@@ -7102,7 +9292,17 @@ Returns.ExampleScope = {
 			SendOffset = BEFORE
 			SendBuffer = SharedBuffer
 			SendInstances = SharedInstances
-			SerdesFunctions.ExampleScope_WriteEVENT_InScopeEvent(Value)
+			do
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- EVENT_InScopeEvent (36)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, 36)
+				-- Value: InScopeEvent
+				if type(Value) ~= "number" then
+					error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+			end
 			SharedBuffer = SendBuffer
 			SharedSize = SendSize
 			SharedCursor = SendCursor

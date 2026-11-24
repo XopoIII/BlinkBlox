@@ -42,7 +42,7 @@ A few rules hold for all of them:
 | `FutureLibrary`, `PromiseLibrary` | Luau path | none | [Output](#futurelibrary-and-promiselibrary) |
 | `ManualReplication` | boolean | `false` | [Runtime behaviour](#manualreplication) |
 | `ClientFlushRate` | sends a second | `60` | [Runtime behaviour](#clientflushrate) |
-| `BatchUnreliable` | boolean | `false` | [Runtime behaviour](#batchunreliable) |
+| `BatchUnreliable` | boolean | `true` | [Runtime behaviour](#batchunreliable) |
 | `UsePolling` | boolean | `false` | [Runtime behaviour](#usepolling) |
 | `Predict` | boolean | `false` | [Runtime behaviour](#predict) |
 | `PackedBooleanReader` | `"Auto"`, `"Bits"`, `"Rows"` | `"Auto"` | [Runtime behaviour](#packedbooleanreader) |
@@ -277,8 +277,9 @@ Default: `false`
 
 Reliable events and function calls are not sent the moment you fire them. Each side batches them into
 one buffer (the server keeps one per player) and sends the batch once a frame, from
-`RunService.Heartbeat`. Unreliable events are the exception: each one is sent at once, in a packet of
-its own, unless [`BatchUnreliable`](#batchunreliable) gathers them too.
+`RunService.Heartbeat`. Unreliable events are gathered the same way by default
+([`BatchUnreliable`](#batchunreliable) turns that off, and each goes out at once, in a packet of
+its own).
 
 `ManualReplication = true` removes that Heartbeat connection, and nothing is sent until you call
 `StepReplication` yourself. The function is exported either way; with this option it is the only thing
@@ -317,17 +318,21 @@ option ClientFlushRate = 120
 
 It limits the Heartbeat only: `StepReplication` called by the game still sends at once, and under
 [`ManualReplication`](#manualreplication) there is no Heartbeat to limit. An unreliable event outside
-[`BatchUnreliable`](#batchunreliable) is sent when it is fired, as before.
+[`BatchUnreliable`](#batchunreliable) -- that is, in a schema that sets the option to `false` -- is
+sent when it is fired, as before.
 
 ### `BatchUnreliable`
-Default: `false`
+Default: `true`
 
-Gathers every unreliable event a side sends in a frame into as few packets as
-[`MaxUnreliableSize`](#maxunreliablesize) allows, sent at the same flush as the reliable batch, rather
-than sending each at once in a remote call of its own. On the server, an event fired to everyone goes
-into one packet that every player is sent in a single `FireAllClients`, and an event to one player
-into that player's; an `OrderedUnreliable` event carries each player's own sequence number, so it is
-always gathered player by player. A client's packet is also cut at the server's
+Gathers a frame's unreliable events into as few packets as
+[`MaxUnreliableSize`](#maxunreliablesize) allows, sent at the same flush as the reliable batch,
+rather than sending each at once in a remote call of its own. What gathers is a client's own fires
+and a server's unreliable `FireAll` -- one packet every player is sent in a single `FireAllClients`
+-- with `FireList`, `FireExcept` and an `OrderedUnreliable` event's per-recipient sends gathered into
+each player's own packet, since an ordered event's sequence number is the player's own. A server's
+unreliable `Fire` to one player is sent at once, never gathered: with one event of that player's own
+in the frame there is nothing to gather beside it, and the batch's bookkeeping measured more than the
+call it saved. A client's packet is also cut at the server's
 [`MaxEventsPerPacket`](#maxpacketsize-maxeventsperpacket-maxinstancesperpacket).
 
 A frame's worth of small events then costs one remote call and one packet header instead of one each,
@@ -338,16 +343,17 @@ batched for the flush arrived when one sent at once did -- 16 ms after a fire la
 33 after one early in it, either way
 ([`benchmark/Latency.luau`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Latency.luau)).
 It pays where a recipient gets several unreliable events a frame -- a client's input, a server's
-effects. Where each player gets one, there is nothing to gather: the call count stays the same, and
-the batch's bookkeeping costs an interpreted side a little more than sending at once did.
+effects -- and where each gets one there is nothing to gather, which is why a send to one player and
+a stream held per player go out as sends of their own. `false` restores one packet an event for a
+schema that wants each send out the moment it is made.
 
 A [stream](/BlinkBlox/language/streams/) to everyone is gathered this way whatever the option says,
 since it is sent from the flush already. A stream [held per player](/BlinkBlox/language/streams/#one-state-per-player)
-sends each player one state a step, so it joins the player's batch only under this option, beside
-their other events.
+sends each player one state a step, and goes out as a send of its own for the same reason a `Fire`
+to one player does.
 
 ```blink
-option BatchUnreliable = true
+option BatchUnreliable = false
 ```
 
 ### `UsePolling`

@@ -11,9 +11,12 @@ local task = require("@lune/task")
 local RunClosure = Assertions.RunClosure
 
 --> A burst of 1000 bytes. Each Chatter or Hit below is 303 bytes on the wire: its index, a two-byte
---> length and 300 bytes of payload.
+--> length and 300 bytes of payload. BatchUnreliable is off because these specs charge the budget
+--> per send at the Fire, and a low `FireAll`'s player-by-player sends gather into per-player
+--> batches under the option, charged at the flush instead.
 local SCHEMA = [[
 option OutboundBytesPerSecond = 1000
+option BatchUnreliable = false
 event Chatter { From: Server, Type: Unreliable, Call: SingleSync, Priority: Low, Data: buffer(0..400) }
 event Hit { From: Server, Type: Unreliable, Call: SingleSync, Data: buffer(0..400) }
 event Score { From: Server, Type: Reliable, Call: SingleSync, Data: buffer(0..4000) }

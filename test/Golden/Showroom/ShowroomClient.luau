@@ -1173,7 +1173,14 @@ Returns.Position = {
 Returns.Ready = {
 	fire = function(Value: number): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_Ready(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_Ready (1)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+			-- Value: Ready
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		Frame(Commit(), 1, PacketStart)
 	end
 }

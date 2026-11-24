@@ -55,6 +55,7 @@ for _, Directory in
 		"./runtime/rivals/upstream",
 		"./runtime/rivals/netray",
 		"./runtime/rivals/netray-checked",
+		"./runtime/rivals/netray-fields",
 	}
 do
 	if not fs.isDir(Directory) then
@@ -88,6 +89,7 @@ for _, Compile in
 		{ Definition = "definitions/Definition.netray.checked", Output = "src/shared/netray-checked" },
 		{ Definition = "definitions/Scenarios.netray", Output = "runtime/rivals/netray" },
 		{ Definition = "definitions/Scenarios.netray.checked", Output = "runtime/rivals/netray-checked" },
+		{ Definition = "definitions/Scenarios.netray.fields", Output = "runtime/rivals/netray-fields" },
 	}
 do
 	local Definition = `{process.cwd}{Compile.Definition}`

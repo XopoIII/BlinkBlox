@@ -10668,6 +10668,98 @@ local function StepReplication()
         LastPacket = nil
     end
 end
+
+--> UNRELIABLE BATCHES; see Generator/Batches.luau.
+--> `Committed` counts the Instances of the events kept. `Pending` is set while an event is written
+--> straight into the batch: one that then threw has left its own Instances behind, and they are
+--> dropped before the batch is used again. Checking the flag spares every other use a count.
+type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Committed: number, Events: number, Pending: boolean }
+
+local function NewUnreliable(): BLINK_UNRELIABLE
+    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Committed = 0, Events = 0, Pending = false }
+end
+
+local function Clean(Batch: BLINK_UNRELIABLE)
+    if not Batch.Pending then
+        return
+    end
+
+    local Instances = Batch.Instances
+    for Index = #Instances, Batch.Committed + 1, -1 do
+        Instances[Index] = nil
+    end
+    Batch.Pending = false
+end
+
+--> Appends what the scratch buffer holds -- one event, written there by the send -- to `Batch`.
+local function CopyUnreliable(Batch: BLINK_UNRELIABLE): number
+    local Size = SendCursor
+    local Cursor = Batch.Cursor
+    local InUse = Cursor + Size
+    if InUse > Batch.Size then
+        local Grown = Batch.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Batch.Buffer, 0, Cursor)
+        Batch.Buffer = Resized
+        Batch.Size = Grown
+    end
+
+    buffer.copy(Batch.Buffer, Cursor, SendBuffer, 0, Size)
+    Batch.Cursor = InUse
+    Batch.Events += 1
+
+    local Count = #SendInstances
+    if Count > 0 then
+        table.move(SendInstances, 1, Count, Batch.Committed + 1, Batch.Instances)
+        Batch.Committed += Count
+    end
+
+    return Cursor
+end
+
+--> Whether the event in the scratch buffer would take `Batch` past the unreliable limit.
+local function Overflows(Batch: BLINK_UNRELIABLE): boolean
+    return Batch.Cursor + SendCursor + (Batch.Committed + #SendInstances) * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE
+end
+
+local ClientUnreliable = NewUnreliable()
+
+local function SendUnreliable()
+    local Used = ClientUnreliable.Cursor
+    if Used == 0 then
+        return
+    end
+
+    local Packet = buffer.create(Used)
+    buffer.copy(Packet, 0, ClientUnreliable.Buffer, 0, Used)
+    Unreliable:FireServer(Packet, ClientUnreliable.Instances)
+
+    ClientUnreliable.Cursor = 0
+    ClientUnreliable.Events = 0
+    if ClientUnreliable.Committed > 0 then
+        ClientUnreliable.Committed = 0
+        table.clear(ClientUnreliable.Instances)
+    end
+end
+
+--> Appends the event in the scratch buffer to the batch, sending the batch first when the event would
+--> take it past the unreliable limit or the server's event cap.
+local function AppendUnreliable()
+    if Overflows(ClientUnreliable) or ClientUnreliable.Events >= MAX_EVENTS_PER_PACKET then
+        SendUnreliable()
+    end
+    CopyUnreliable(ClientUnreliable)
+end
+
+local StepBeforeUnreliable = StepReplication
+StepReplication = function()
+    StepBeforeUnreliable()
+    SendUnreliable()
+end
 local MissingWarned: {[string]: true} = {}
 local function ReportMissingInstance(Event: string)
 	if DecodeHandler then
@@ -14341,9 +14433,7 @@ Returns.OrderedPosition = {
 		Hold()
 		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_OrderedPosition, Value)
 		if Sent and CheckUnreliableSize("OrderedPosition") then
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			Unreliable:FireServer(Buffer, SendInstances)
+			AppendUnreliable()
 		end
 		Release()
 		if Sent ~= true then
@@ -16195,14 +16285,34 @@ Returns.PackedOptional = {
 Returns.RateLimited = {
 	Fire = function(Value: number): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_RateLimited(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_RateLimited (0)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+			-- Value: RateLimited
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		Frame(Commit(), 0, PacketStart)
 	end
 }
 Returns.RateLimitedPoll = {
 	Fire = function(Value: number): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_RateLimitedPoll(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_RateLimitedPoll (1)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+			-- Value: RateLimitedPoll
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		Frame(Commit(), 1, PacketStart)
 	end
 }
@@ -16211,9 +16321,7 @@ Returns.UnreliableOversize = {
 		Hold()
 		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_UnreliableOversize, Value)
 		if Sent and CheckUnreliableSize("UnreliableOversize") then
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			Unreliable:FireServer(Buffer, SendInstances)
+			AppendUnreliable()
 		end
 		Release()
 		if Sent ~= true then
@@ -16226,9 +16334,7 @@ Returns.UnreliableInstances = {
 		Hold()
 		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_UnreliableInstances, Value1, Value2)
 		if Sent and CheckUnreliableSize("UnreliableInstances") then
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			Unreliable:FireServer(Buffer, SendInstances)
+			AppendUnreliable()
 		end
 		Release()
 		if Sent ~= true then
@@ -16619,7 +16725,210 @@ Returns.SendOccupiedCell = {
 Returns.ClientPollEvent = {
 	Fire = function(Value: { Field: number?, Float16Field: number?, Enum: ("A" | "B" | "C" | "D"), Nested: { Guh: number, Array: { number }, OptionalArray: { number }? }, Map: {[string]: number}, Data: number, Struct: { Data: number, Array: { number }, Optional: { string }?, Nested: { Value: string } }, AnotherNested: { Value: number } }): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_ClientPollEvent(Value)
+		do
+			-- Allocate BLOCK: 15 bytes
+			local BLOCK_START = Allocate(15)
+			local BITFIELD_1_0
+			-- EVENT_ClientPollEvent (5)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 5)
+			-- Value: ClientPollEvent
+			-- Value.Field: Field
+			BITFIELD_1_0 = 0
+			if Value.Field ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value.Field ~= nil then
+				-- Allocate BLOCK: 1 bytes
+				local BLOCK_START = Allocate(1)
+				-- Value.Field: Field
+				if type(Value.Field) ~= "number" then
+					error(`Expected Value.Field to be of type number, got {type(Value.Field)} instead.{if type(Value.Field) == "table" or type(Value.Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, Value.Field)
+			end
+			-- Value.Float16Field: Float16Field
+			if Value.Float16Field ~= nil then BITFIELD_1_0 += 0x02 end
+			if Value.Float16Field ~= nil then
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- Value.Float16Field: Float16Field
+				if type(Value.Float16Field) ~= "number" then
+					error(`Expected Value.Float16Field to be of type number, got {type(Value.Float16Field)} instead.{if type(Value.Float16Field) == "table" or type(Value.Float16Field) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				if Value.Float16Field > 65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b0_11111_0000000000)
+				elseif Value.Float16Field < -65504 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000000)
+				elseif Value.Float16Field ~= Value.Float16Field then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, 0b1_11111_0000000001)
+				elseif Value.Float16Field == 0 then
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, if 1 / Value.Float16Field < 0 then 0x8000 else 0)
+				else
+					local float = Value.Float16Field
+					local Abosulte = math.abs(float)
+					local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+					local RoundedValue = (Abosulte // Interval) * Interval
+					local Fraction, Exponent = math.frexp(RoundedValue)
+					Exponent += 14
+					local Scaled = math.round(if Exponent <= 0
+						then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+						else Fraction * 0x800)
+					local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+						+ if float < 0 then 0x8000 else 0
+					buffer.writeu16(SendBuffer, BLOCK_START + 0, Result)
+				end
+			end
+			-- Value.Enum: Enum
+			if Value.Enum == "A" then
+			elseif Value.Enum == "B" then
+				BITFIELD_1_0 += 4
+			elseif Value.Enum == "C" then
+				BITFIELD_1_0 += 8
+			elseif Value.Enum == "D" then
+				BITFIELD_1_0 += 12
+			else
+				error(`Unexpected enum: {Value.Enum}, expected one of "A" or "B" or "C" or "D".`)
+			end
+			-- Value.Nested: Nested
+			-- Value.Nested.Guh: Guh
+			if type(Value.Nested.Guh) ~= "number" then
+				error(`Expected Value.Nested.Guh to be of type number, got {type(Value.Nested.Guh)} instead.{if type(Value.Nested.Guh) == "table" or type(Value.Nested.Guh) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 2, Value.Nested.Guh)
+			do
+				-- Value.Nested.Array: Array
+				-- START ARRAY
+				if #Value.Nested.Array ~= 10 then error(`Expected length of "Value.Nested.Array" to be equal to 10, got {#Value.Nested.Array} instead.`) end
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_1 = Allocate(1 * 10)
+				for Index = 1, 10 do
+					local Item_1 = Value.Nested.Array[Index]
+					-- Item_1: Array
+					if type(Item_1) ~= "number" then
+						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+				end
+				-- END ARRAY
+			end
+			-- Value.Nested.OptionalArray: OptionalArray
+			if Value.Nested.OptionalArray ~= nil then BITFIELD_1_0 += 0x10 end
+			if Value.Nested.OptionalArray ~= nil then
+				-- Value.Nested.OptionalArray: OptionalArray
+				-- START ARRAY
+				if #Value.Nested.OptionalArray ~= 2 then error(`Expected length of "Value.Nested.OptionalArray" to be equal to 2, got {#Value.Nested.OptionalArray} instead.`) end
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_2 = Allocate(1 * 2)
+				for Index = 1, 2 do
+					local Item_2 = Value.Nested.OptionalArray[Index]
+					-- Item_2: OptionalArray
+					if type(Item_2) ~= "number" then
+						error(`Expected Item_2 to be of type number, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_2
+					ARRAY_START_2 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_2)
+				end
+				-- END ARRAY
+			end
+			do
+				-- Value.Map: Map
+				local Elements_1 = 0
+				for Key_1, Element_1 in Value.Map do
+					Elements_1 += 1
+					-- Key_1: GenericMap
+					if type(Key_1) ~= "string" then
+						error(`Expected Key_1 to be of type string, got {type(Key_1)} instead.{if type(Key_1) == "table" or type(Key_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Key_1
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Key_1, Length)
+					-- Element_1: GenericMap
+					if type(Element_1) ~= "number" then
+						error(`Expected Element_1 to be of type number, got {type(Element_1)} instead.{if type(Element_1) == "table" or type(Element_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local OFFSET_0 = Allocate(8)
+					buffer.writef64(SendBuffer, OFFSET_0, Element_1)
+				end
+				if not (Elements_1 <= 65535) then error(`Expected "Elements_1" to be smaller than or equal to 65535, got {Elements_1} instead.`) end
+				buffer.writeu16(SendBuffer, BLOCK_START + 3, Elements_1)
+			end
+			-- Value.Data: Data
+			if type(Value.Data) ~= "number" then
+				error(`Expected Value.Data to be of type number, got {type(Value.Data)} instead.{if type(Value.Data) == "table" or type(Value.Data) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 5, Value.Data)
+			-- Value.Struct: Struct
+			-- Value.Struct.Data: Data
+			if type(Value.Struct.Data) ~= "number" then
+				error(`Expected Value.Struct.Data to be of type number, got {type(Value.Struct.Data)} instead.{if type(Value.Struct.Data) == "table" or type(Value.Struct.Data) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 6, Value.Struct.Data)
+			do
+				-- Value.Struct.Array: Array
+				-- START ARRAY
+				if not (#Value.Struct.Array <= 65535) then error(`Expected "#Value.Struct.Array" to be smaller than or equal to 65535, got {#Value.Struct.Array} instead.`) end
+				WriteVarLength(#Value.Struct.Array)
+					-- Allocate BLOCK: 1 bytes
+				local ARRAY_START_1 = Allocate(1 * #Value.Struct.Array)
+				for Index = 1, #Value.Struct.Array do
+					local Item_1 = Value.Struct.Array[Index]
+					-- Item_1: Array
+					if type(Item_1) ~= "number" then
+						error(`Expected Item_1 to be of type number, got {type(Item_1)} instead.{if type(Item_1) == "table" or type(Item_1) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					-- Allocate 1
+					local OPERATION_OFFSET_0 = ARRAY_START_1
+					ARRAY_START_1 += 1
+					buffer.writeu8(SendBuffer, OPERATION_OFFSET_0, Item_1)
+				end
+				-- END ARRAY
+			end
+			-- Value.Struct.Optional: Optional
+			if Value.Struct.Optional ~= nil then BITFIELD_1_0 += 0x20 end
+			if Value.Struct.Optional ~= nil then
+				-- Value.Struct.Optional: Optional
+				-- START ARRAY
+				if not (#Value.Struct.Optional <= 65535) then error(`Expected "#Value.Struct.Optional" to be smaller than or equal to 65535, got {#Value.Struct.Optional} instead.`) end
+				WriteVarLength(#Value.Struct.Optional)
+				for Index = 1, #Value.Struct.Optional do
+					local Item_2 = Value.Struct.Optional[Index]
+					-- Item_2: B
+					if type(Item_2) ~= "string" then
+						error(`Expected Item_2 to be of type string, got {type(Item_2)} instead.{if type(Item_2) == "table" or type(Item_2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+					end
+					local Length = #Item_2
+					if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+					WriteVarLength(Length)
+					Allocate(Length)
+					buffer.writestring(SendBuffer, SendOffset, Item_2, Length)
+				end
+				-- END ARRAY
+			end
+			-- Value.Struct.Nested: Nested
+			do
+				-- Value.Struct.Nested.Value: Value
+				if type(Value.Struct.Nested.Value) ~= "string" then
+					error(`Expected Value.Struct.Nested.Value to be of type string, got {type(Value.Struct.Nested.Value)} instead.{if type(Value.Struct.Nested.Value) == "table" or type(Value.Struct.Nested.Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Length = #Value.Struct.Nested.Value
+				if not (Length <= 65535) then error(`Expected "Length" to be smaller than or equal to 65535, got {Length} instead.`) end
+				WriteVarLength(Length)
+				Allocate(Length)
+				buffer.writestring(SendBuffer, SendOffset, Value.Struct.Nested.Value, Length)
+			end
+			-- Value.AnotherNested: AnotherNested
+			-- Value.AnotherNested.Value: Value
+			if type(Value.AnotherNested.Value) ~= "number" then
+				error(`Expected Value.AnotherNested.Value to be of type number, got {type(Value.AnotherNested.Value)} instead.{if type(Value.AnotherNested.Value) == "table" or type(Value.AnotherNested.Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writef64(SendBuffer, BLOCK_START + 7, Value.AnotherNested.Value)
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		Frame(Commit(), 5, PacketStart)
 	end
 }
@@ -16628,9 +16937,7 @@ Returns.ClientUnreliablePollEvent = {
 		Hold()
 		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientUnreliablePollEvent, Value)
 		if Sent and CheckUnreliableSize("ClientUnreliablePollEvent") then
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			Unreliable:FireServer(Buffer, SendInstances)
+			AppendUnreliable()
 		end
 		Release()
 		if Sent ~= true then
@@ -16641,7 +16948,12 @@ Returns.ClientUnreliablePollEvent = {
 Returns.ClientEmptyPollEvent = {
 	Fire = function(Value: nil): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_ClientEmptyPollEvent(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_ClientEmptyPollEvent (6)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 6)
+		end
 		Frame(Commit(), 6, PacketStart)
 	end
 }
@@ -16650,9 +16962,7 @@ Returns.ClientEmptyUnreliablePollEvent = {
 		Hold()
 		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliablePollEvent, Value)
 		if Sent and CheckUnreliableSize("ClientEmptyUnreliablePollEvent") then
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			Unreliable:FireServer(Buffer, SendInstances)
+			AppendUnreliable()
 		end
 		Release()
 		if Sent ~= true then
@@ -16771,7 +17081,12 @@ Returns.ServerEmptyUnreliablePollEvent = {
 Returns.ClientEmptyEvent = {
 	Fire = function(Value: nil): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_ClientEmptyEvent(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_ClientEmptyEvent (9)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 9)
+		end
 		Frame(Commit(), 9, PacketStart)
 	end
 }
@@ -16780,9 +17095,7 @@ Returns.ClientEmptyUnreliableEvent = {
 		Hold()
 		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_ClientEmptyUnreliableEvent, Value)
 		if Sent and CheckUnreliableSize("ClientEmptyUnreliableEvent") then
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			Unreliable:FireServer(Buffer, SendInstances)
+			AppendUnreliable()
 		end
 		Release()
 		if Sent ~= true then
@@ -17126,7 +17439,53 @@ Returns.PlayerEvent = {
 Returns.Booleans = {
 	Fire = function(Value: { boolean }): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_Booleans(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_Booleans (20)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 20)
+			-- Value: Booleans
+			-- START ARRAY
+			if not (#Value <= 65535) then error(`Expected "#Value" to be smaller than or equal to 65535, got {#Value} instead.`) end
+			WriteVarLength(#Value)
+			do
+				local PACKED_LENGTH = #Value
+				local PACKED_OFFSET = Allocate((PACKED_LENGTH + 7) // 8)
+				local PACKED_WHOLE = PACKED_LENGTH // 8
+				for PACKED_BYTE = 0, PACKED_WHOLE - 1 do
+					local PACKED_BASE = PACKED_BYTE * 8
+					local PACKED_1, PACKED_2, PACKED_3, PACKED_4 = Value[PACKED_BASE + 1], Value[PACKED_BASE + 2], Value[PACKED_BASE + 3], Value[PACKED_BASE + 4]
+					local PACKED_5, PACKED_6, PACKED_7, PACKED_8 = Value[PACKED_BASE + 5], Value[PACKED_BASE + 6], Value[PACKED_BASE + 7], Value[PACKED_BASE + 8]
+					if type(PACKED_1) ~= "boolean" or type(PACKED_2) ~= "boolean" or type(PACKED_3) ~= "boolean" or type(PACKED_4) ~= "boolean" or type(PACKED_5) ~= "boolean" or type(PACKED_6) ~= "boolean" or type(PACKED_7) ~= "boolean" or type(PACKED_8) ~= "boolean" then
+						for PACKED_INDEX = PACKED_BASE + 1, PACKED_BASE + 8 do
+							local PACKED_ITEM = Value[PACKED_INDEX]
+							if type(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_INDEX}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						end
+					end
+					local PACKED_BITS = 0
+					if PACKED_1 then PACKED_BITS += 1 end
+					if PACKED_2 then PACKED_BITS += 2 end
+					if PACKED_3 then PACKED_BITS += 4 end
+					if PACKED_4 then PACKED_BITS += 8 end
+					if PACKED_5 then PACKED_BITS += 16 end
+					if PACKED_6 then PACKED_BITS += 32 end
+					if PACKED_7 then PACKED_BITS += 64 end
+					if PACKED_8 then PACKED_BITS += 128 end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_BYTE, PACKED_BITS)
+				end
+				if PACKED_LENGTH % 8 ~= 0 then
+					local PACKED_BASE = PACKED_WHOLE * 8
+					local PACKED_BITS = 0
+					for PACKED_BIT = 0, PACKED_LENGTH % 8 - 1 do
+						local PACKED_ITEM = Value[PACKED_BASE + PACKED_BIT + 1]
+						if type(PACKED_ITEM) ~= "boolean" then error(`Expected Value[{PACKED_BASE + PACKED_BIT + 1}] to be of type boolean, got {type(PACKED_ITEM)} instead.`) end
+						if PACKED_ITEM then PACKED_BITS += bit32.lshift(1, PACKED_BIT) end
+					end
+					buffer.writeu8(SendBuffer, PACKED_OFFSET + PACKED_WHOLE, PACKED_BITS)
+				end
+			end
+			-- END ARRAY
+		end
 		Frame(Commit(), 20, PacketStart)
 	end
 }
@@ -17603,7 +17962,17 @@ Returns.ReliableServerAsync = {
 Returns.ReliableClient = {
 	Fire = function(Value: number): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_ReliableClient(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_ReliableClient (32)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 32)
+			-- Value: ReliableClient
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		Frame(Commit(), 32, PacketStart)
 	end
 }
@@ -17652,9 +18021,7 @@ Returns.UnreliableClient = {
 		Hold()
 		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_UnreliableClient, Value)
 		if Sent and CheckUnreliableSize("UnreliableClient") then
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			Unreliable:FireServer(Buffer, SendInstances)
+			AppendUnreliable()
 		end
 		Release()
 		if Sent ~= true then
@@ -18144,7 +18511,14 @@ Returns.UnknownInbound = {
 		if PendingCursor >= 0 then Settle() end
 		local Start, Before = SendCursor, CommittedInstances
 		PendingCursor = Start
-		SerdesFunctions.WriteEVENT_UnknownInbound(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_UnknownInbound (47)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 47)
+			-- Value: UnknownInbound
+			table.insert(SendInstances, if Value == nil then Null else Value)
+		end
 		local Count = #SendInstances
 		PendingCursor = -1
 		CommittedInstances = Count
@@ -18301,7 +18675,19 @@ Returns.AskClient = {
 Returns.RangedFromClient = {
 	Fire = function(Value: number): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_RangedFromClient(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_RangedFromClient (53)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 53)
+			-- Value: RangedFromClient
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value >= 10) then error(`Expected "Value" to be larger than or equal to 10, got {Value} instead.`) end
+			if not (Value <= 20) then error(`Expected "Value" to be smaller than or equal to 20, got {Value} instead.`) end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		Frame(Commit(), 53, PacketStart)
 	end
 }
@@ -18310,9 +18696,7 @@ Returns.RangedUnreliableFromClient = {
 		Hold()
 		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_RangedUnreliableFromClient, Value)
 		if Sent and CheckUnreliableSize("RangedUnreliableFromClient") then
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			Unreliable:FireServer(Buffer, SendInstances)
+			AppendUnreliable()
 		end
 		Release()
 		if Sent ~= true then
@@ -18323,7 +18707,22 @@ Returns.RangedUnreliableFromClient = {
 Returns.RangedVectorFromClient = {
 	Fire = function(Value: Vector3): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_RangedVectorFromClient(Value)
+		do
+			-- Allocate BLOCK: 13 bytes
+			local BLOCK_START = Allocate(13)
+			-- EVENT_RangedVectorFromClient (54)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 54)
+			-- Value: RangedVectorFromClient
+			if typeof(Value) ~= "Vector3" then
+				error(`Expected Value to be of type Vector3, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value.Magnitude >= 0) then error(`Expected magnitude of "Value" to be larger than or equal to 0, got {Value.Magnitude} instead.`) end
+			if not (Value.Magnitude <= 1) then error(`Expected magnitude of "Value" to be smaller than or equal to 1, got {Value.Magnitude} instead.`) end
+			local Vector = Value
+			buffer.writef32(SendBuffer, BLOCK_START + 1, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 5, Vector.Y)
+			buffer.writef32(SendBuffer, BLOCK_START + 9, Vector.Z)
+		end
 		Frame(Commit(), 54, PacketStart)
 	end
 }
@@ -18350,14 +18749,29 @@ Returns.BadlyAnswered = {
 Returns.PlainFromClient = {
 	Fire = function(Value: number): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_PlainFromClient(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_PlainFromClient (56)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 56)
+			-- Value: PlainFromClient
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		Frame(Commit(), 56, PacketStart)
 	end
 }
 Returns.Unlistened = {
 	Fire = function(Value: nil): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_Unlistened(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_Unlistened (57)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 57)
+		end
 		Frame(Commit(), 57, PacketStart)
 	end
 }
@@ -19086,14 +19500,59 @@ Returns.QuatCFrame24 = {
 Returns.RangedFloat32 = {
 	Fire = function(Value: number): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_RangedFloat32(Value)
+		do
+			-- Allocate BLOCK: 5 bytes
+			local BLOCK_START = Allocate(5)
+			-- EVENT_RangedFloat32 (60)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 60)
+			-- Value: RangedFloat32
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value >= 0) then error(`Expected "Value" to be larger than or equal to 0, got {Value} instead.`) end
+			if not (Value <= 0.3) then error(`Expected "Value" to be smaller than or equal to 0.3, got {Value} instead.`) end
+			buffer.writef32(SendBuffer, BLOCK_START + 1, Value)
+		end
 		Frame(Commit(), 60, PacketStart)
 	end
 }
 Returns.RangedFloat16 = {
 	Fire = function(Value: number): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_RangedFloat16(Value)
+		do
+			-- Allocate BLOCK: 3 bytes
+			local BLOCK_START = Allocate(3)
+			-- EVENT_RangedFloat16 (61)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 61)
+			-- Value: RangedFloat16
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value >= 0.1) then error(`Expected "Value" to be larger than or equal to 0.1, got {Value} instead.`) end
+			if not (Value <= 1) then error(`Expected "Value" to be smaller than or equal to 1, got {Value} instead.`) end
+			if Value > 65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, 0b0_11111_0000000000)
+			elseif Value < -65504 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, 0b1_11111_0000000000)
+			elseif Value ~= Value then
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, 0b1_11111_0000000001)
+			elseif Value == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, if 1 / Value < 0 then 0x8000 else 0)
+			else
+				local float = Value
+				local Abosulte = math.abs(float)
+				local Interval = math.ldexp(1, math.floor(math.log(Abosulte, 2)) - 10)
+				local RoundedValue = (Abosulte // Interval) * Interval
+				local Fraction, Exponent = math.frexp(RoundedValue)
+				Exponent += 14
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x400 / math.ldexp(1, math.abs(Exponent))
+					else Fraction * 0x800)
+				local Result = (if Exponent <= 0 then Scaled else Scaled - 0x400 + Exponent * 0x400)
+					+ if float < 0 then 0x8000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, Result)
+			end
+		end
 		Frame(Commit(), 61, PacketStart)
 	end
 }
@@ -19264,7 +19723,36 @@ Returns.FlagCarrier = {
 Returns.RangedFloat24 = {
 	Fire = function(Value: number): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_RangedFloat24(Value)
+		do
+			-- Allocate BLOCK: 4 bytes
+			local BLOCK_START = Allocate(4)
+			-- EVENT_RangedFloat24 (64)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 64)
+			-- Value: RangedFloat24
+			if type(Value) ~= "number" then
+				error(`Expected Value to be of type number, got {type(Value)} instead.{if type(Value) == "table" or type(Value) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			if not (Value >= 0.1) then error(`Expected "Value" to be larger than or equal to 0.1, got {Value} instead.`) end
+			if not (Value <= 0.7) then error(`Expected "Value" to be smaller than or equal to 0.7, got {Value} instead.`) end
+			if Value ~= Value then
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, 0x0001)
+				buffer.writeu8(SendBuffer, BLOCK_START + 1 + 2, 0xFE)
+			elseif Value == 0 then
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, 0)
+				buffer.writeu8(SendBuffer, BLOCK_START + 1 + 2, if 1 / Value < 0 then 0x80 else 0)
+			else
+				local float = Value
+				local Fraction, Exponent = math.frexp(math.abs(float))
+				Exponent += 30
+				local Scaled = math.round(if Exponent <= 0
+					then Fraction * 0x20000 / math.ldexp(1, -Exponent)
+					else Fraction * 0x40000)
+				local Result = math.min(if Exponent <= 0 then Scaled else Scaled - 0x20000 + Exponent * 0x20000, 0x7E0000)
+					+ if float < 0 then 0x800000 else 0
+				buffer.writeu16(SendBuffer, BLOCK_START + 1, Result)
+				buffer.writeu8(SendBuffer, BLOCK_START + 1 + 2, bit32.rshift(Result, 16))
+			end
+		end
 		Frame(Commit(), 64, PacketStart)
 	end
 }

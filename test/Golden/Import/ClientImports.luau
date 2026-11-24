@@ -1033,6 +1033,98 @@ local function StepReplication()
         LastPacket = nil
     end
 end
+
+--> UNRELIABLE BATCHES; see Generator/Batches.luau.
+--> `Committed` counts the Instances of the events kept. `Pending` is set while an event is written
+--> straight into the batch: one that then threw has left its own Instances behind, and they are
+--> dropped before the batch is used again. Checking the flag spares every other use a count.
+type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Committed: number, Events: number, Pending: boolean }
+
+local function NewUnreliable(): BLINK_UNRELIABLE
+    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Committed = 0, Events = 0, Pending = false }
+end
+
+local function Clean(Batch: BLINK_UNRELIABLE)
+    if not Batch.Pending then
+        return
+    end
+
+    local Instances = Batch.Instances
+    for Index = #Instances, Batch.Committed + 1, -1 do
+        Instances[Index] = nil
+    end
+    Batch.Pending = false
+end
+
+--> Appends what the scratch buffer holds -- one event, written there by the send -- to `Batch`.
+local function CopyUnreliable(Batch: BLINK_UNRELIABLE): number
+    local Size = SendCursor
+    local Cursor = Batch.Cursor
+    local InUse = Cursor + Size
+    if InUse > Batch.Size then
+        local Grown = Batch.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Batch.Buffer, 0, Cursor)
+        Batch.Buffer = Resized
+        Batch.Size = Grown
+    end
+
+    buffer.copy(Batch.Buffer, Cursor, SendBuffer, 0, Size)
+    Batch.Cursor = InUse
+    Batch.Events += 1
+
+    local Count = #SendInstances
+    if Count > 0 then
+        table.move(SendInstances, 1, Count, Batch.Committed + 1, Batch.Instances)
+        Batch.Committed += Count
+    end
+
+    return Cursor
+end
+
+--> Whether the event in the scratch buffer would take `Batch` past the unreliable limit.
+local function Overflows(Batch: BLINK_UNRELIABLE): boolean
+    return Batch.Cursor + SendCursor + (Batch.Committed + #SendInstances) * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE
+end
+
+local ClientUnreliable = NewUnreliable()
+
+local function SendUnreliable()
+    local Used = ClientUnreliable.Cursor
+    if Used == 0 then
+        return
+    end
+
+    local Packet = buffer.create(Used)
+    buffer.copy(Packet, 0, ClientUnreliable.Buffer, 0, Used)
+    Unreliable:FireServer(Packet, ClientUnreliable.Instances)
+
+    ClientUnreliable.Cursor = 0
+    ClientUnreliable.Events = 0
+    if ClientUnreliable.Committed > 0 then
+        ClientUnreliable.Committed = 0
+        table.clear(ClientUnreliable.Instances)
+    end
+end
+
+--> Appends the event in the scratch buffer to the batch, sending the batch first when the event would
+--> take it past the unreliable limit or the server's event cap.
+local function AppendUnreliable()
+    if Overflows(ClientUnreliable) or ClientUnreliable.Events >= MAX_EVENTS_PER_PACKET then
+        SendUnreliable()
+    end
+    CopyUnreliable(ClientUnreliable)
+end
+
+local StepBeforeUnreliable = StepReplication
+StepReplication = function()
+    StepBeforeUnreliable()
+    SendUnreliable()
+end
 local Decoding = -1
 local RunIndex = 0
 local RunRemaining = 0
@@ -1217,9 +1309,7 @@ Returns.Generics = {
 			Hold()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.Generics_WriteEVENT_Snapshot, Value)
 			if Sent and CheckUnreliableSize("Snapshot") then
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				Unreliable:FireServer(Buffer, SendInstances)
+				AppendUnreliable()
 			end
 			Release()
 			if Sent ~= true then
@@ -1297,9 +1387,7 @@ Returns.Example = {
 			Hold()
 			local Sent: boolean, Failure: any = pcall(SerdesFunctions.Example_WriteEVENT_Snapshot, Value)
 			if Sent and CheckUnreliableSize("Snapshot") then
-				local Buffer = buffer.create(SendCursor)
-				buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-				Unreliable:FireServer(Buffer, SendInstances)
+				AppendUnreliable()
 			end
 			Release()
 			if Sent ~= true then

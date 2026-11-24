@@ -1465,6 +1465,216 @@ local function StepReplication()
         SharedBuffer = buffer.create(64)
     end
 end
+
+--> UNRELIABLE BATCHES; see Generator/Batches.luau.
+--> `Committed` counts the Instances of the events kept. `Pending` is set while an event is written
+--> straight into the batch: one that then threw has left its own Instances behind, and they are
+--> dropped before the batch is used again. Checking the flag spares every other use a count.
+type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Committed: number, Events: number, Pending: boolean }
+
+local function NewUnreliable(): BLINK_UNRELIABLE
+    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Committed = 0, Events = 0, Pending = false }
+end
+
+local function Clean(Batch: BLINK_UNRELIABLE)
+    if not Batch.Pending then
+        return
+    end
+
+    local Instances = Batch.Instances
+    for Index = #Instances, Batch.Committed + 1, -1 do
+        Instances[Index] = nil
+    end
+    Batch.Pending = false
+end
+
+--> Appends what the scratch buffer holds -- one event, written there by the send -- to `Batch`.
+local function CopyUnreliable(Batch: BLINK_UNRELIABLE): number
+    local Size = SendCursor
+    local Cursor = Batch.Cursor
+    local InUse = Cursor + Size
+    if InUse > Batch.Size then
+        local Grown = Batch.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Batch.Buffer, 0, Cursor)
+        Batch.Buffer = Resized
+        Batch.Size = Grown
+    end
+
+    buffer.copy(Batch.Buffer, Cursor, SendBuffer, 0, Size)
+    Batch.Cursor = InUse
+    Batch.Events += 1
+
+    local Count = #SendInstances
+    if Count > 0 then
+        table.move(SendInstances, 1, Count, Batch.Committed + 1, Batch.Instances)
+        Batch.Committed += Count
+    end
+
+    return Cursor
+end
+
+--> Whether the event in the scratch buffer would take `Batch` past the unreliable limit.
+local function Overflows(Batch: BLINK_UNRELIABLE): boolean
+    return Batch.Cursor + SendCursor + (Batch.Committed + #SendInstances) * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE
+end
+
+local SharedUnreliable = NewUnreliable()
+local PlayerUnreliable: {[Player]: BLINK_UNRELIABLE} = {}
+
+Players.PlayerRemoving:Connect(function(Player)
+    PlayerUnreliable[Player] = nil
+end)
+
+local function SendUnreliable(Batch: BLINK_UNRELIABLE, Player: Player?)
+    local Used = Batch.Cursor
+    if Used == 0 then
+        return
+    end
+
+    Clean(Batch)
+    local Packet = buffer.create(Used)
+    buffer.copy(Packet, 0, Batch.Buffer, 0, Used)
+    if Player then
+        Unreliable:FireClient(Player, Packet, Batch.Instances)
+    else
+        Unreliable:FireAllClients(Packet, Batch.Instances)
+    end
+
+    Batch.Cursor = 0
+    Batch.Events = 0
+    if Batch.Committed > 0 then
+        Batch.Committed = 0
+        table.clear(Batch.Instances)
+    end
+end
+
+--> A player's batch, made on their first unreliable event of the session. None for a player who has
+--> already left: PlayerRemoving has run, and nothing would clear a batch made now.
+local function PlayerBatch(Player: Player): BLINK_UNRELIABLE?
+    local Batch = PlayerUnreliable[Player]
+    if Batch == nil then
+        if Player.Parent == nil then
+            return nil
+        end
+
+        Batch = NewUnreliable()
+        PlayerUnreliable[Player] = Batch
+    end
+
+    return Batch
+end
+
+--> Appends the event in the scratch buffer to everyone's batch, or to `Player`'s.
+local function AppendUnreliable(Player: Player?)
+    if not Started then
+        DropBeforeStart()
+        return
+    end
+    local Batch = if Player then PlayerBatch(Player) else SharedUnreliable
+    if Batch == nil then
+        return
+    end
+
+    Clean(Batch)
+    if Overflows(Batch) then
+        SendUnreliable(Batch, Player)
+    end
+    CopyUnreliable(Batch)
+end
+
+--> Where the event being written straight into a batch began: its first byte, and the Instances ahead
+--> of it.
+local BatchStart = 0
+local BatchInstances = 0
+
+--> Installs everyone's batch, or `Player`'s, as the send buffer, so a send to one batch writes its event
+--> there and copies nothing. None for a player who has left, who is written into the scratch buffer
+--> and sent nothing.
+local function LoadBatch(Player: Player?): BLINK_UNRELIABLE?
+    if not Started then
+        DropBeforeStart()
+        LoadScratch()
+        BatchStart = 0
+        BatchInstances = 0
+        return nil
+    end
+    local Batch = if Player then PlayerBatch(Player) else SharedUnreliable
+    if Batch == nil then
+        LoadScratch()
+        BatchStart = 0
+        BatchInstances = 0
+        return nil
+    end
+
+    Clean(Batch)
+    Batch.Pending = true
+    SendSize = Batch.Size
+    SendCursor = Batch.Cursor
+    SendBuffer = Batch.Buffer
+    SendInstances = Batch.Instances
+    BatchStart = Batch.Cursor
+    BatchInstances = Batch.Committed
+    return Batch
+end
+
+--> Keeps the event just written into `Batch`, stamping an ordered one's sequence at `Slot`. When the
+--> event does not fit one packet beside what the batch already held, that goes first, on its own, and
+--> the event moves to the front.
+local function CommitBatch(Batch: BLINK_UNRELIABLE?, Player: Player?, Slot: number?, Instances: boolean)
+    if Batch == nil then
+        return
+    end
+
+    local Buffer = SendBuffer
+    local Start = BatchStart
+    local Count = if Instances then #SendInstances else BatchInstances
+    if Start > 0 and SendCursor + Count * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE then
+        local Packet = buffer.create(Start)
+        buffer.copy(Packet, 0, Buffer, 0, Start)
+        local Before = table.move(SendInstances, 1, BatchInstances, 1, {})
+        if Player then
+            Unreliable:FireClient(Player, Packet, Before)
+        else
+            Unreliable:FireAllClients(Packet, Before)
+        end
+
+        local Size = SendCursor - Start
+        buffer.copy(Buffer, 0, Buffer, Start, Size)
+        table.move(SendInstances, BatchInstances + 1, Count, 1, SendInstances)
+        for Index = Count, Count - BatchInstances + 1, -1 do
+            SendInstances[Index] = nil
+        end
+
+        SendCursor = Size
+        Count -= BatchInstances
+        Start = 0
+        Batch.Events = 0
+    end
+
+    Batch.Buffer = Buffer
+    Batch.Size = SendSize
+    Batch.Cursor = SendCursor
+    Batch.Committed = Count
+    Batch.Pending = false
+end
+
+local StepBeforeUnreliable = StepReplication
+--> A batch is made only for a player still in the game, and PlayerRemoving drops it, so the flush asks
+--> nobody whether they are still here: that was a property read per player per frame.
+StepReplication = function()
+    StepBeforeUnreliable()
+    SendUnreliable(SharedUnreliable, nil)
+    for Player, Batch in PlayerUnreliable do
+        if Batch.Cursor > 0 then
+            SendUnreliable(Batch, Player)
+        end
+    end
+end
 local function Listen()
 	local Decoding = -1
 	local RunIndex = 0
@@ -1703,7 +1913,18 @@ Returns.start = Start
 Returns.Announce = {
 	fire = function(Player: Player, Value: string): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_Announce(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_Announce (0)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+			-- Value: Announce
+			local Length = #Value
+			if not (Length <= 64) then error(`Expected "Length" to be smaller than or equal to 64, got {Length} instead.`) end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Length)
+			Allocate(Length)
+			buffer.writestring(SendBuffer, SendOffset, Value, Length)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	fireAll = function(Value: string): ()
@@ -1720,7 +1941,18 @@ Returns.Announce = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_Announce(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_Announce (0)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+			-- Value: Announce
+			local Length = #Value
+			if not (Length <= 64) then error(`Expected "Length" to be smaller than or equal to 64, got {Length} instead.`) end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Length)
+			Allocate(Length)
+			buffer.writestring(SendBuffer, SendOffset, Value, Length)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor
@@ -1760,38 +1992,35 @@ Returns.Position = {
 		Unreliable:FireClient(Player, Buffer, SendInstances)
 	end,
 	fireAll = function(Value: number): ()
-		LoadScratch()
+		local BATCH = LoadBatch(nil)
 		SerdesFunctions.WriteEVENT_Position(Value)
-		if not CheckUnreliableSize("Position") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
-		Unreliable:FireAllClients(Buffer, SendInstances)
+		local EVENT_BYTES = SendCursor - BatchStart
+		if EVENT_BYTES > MAX_UNRELIABLE_SIZE then
+			warn(`[BlinkBlox]: Dropped unreliable event "Position", {EVENT_BYTES} bytes exceeds the {MAX_UNRELIABLE_SIZE} byte limit.`)
+			return
+		end
+		CommitBatch(BATCH, nil, nil, false)
 	end,
 	fireList = function(List: {Player}, Value: number): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_Position(Value)
 		if not CheckUnreliableSize("Position") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in List do
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 	fireExcept = function(Except: Player, Value: number): ()
 		LoadScratch()
 		SerdesFunctions.WriteEVENT_Position(Value)
 		if not CheckUnreliableSize("Position") then return end
-		local Buffer = buffer.create(SendCursor)
-		buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-		KeepScratch()
 		for _, Player in Players:GetPlayers() do
 			if Player == Except then
 				continue
 			end
-			Unreliable:FireClient(Player, Buffer, SendInstances)
+			AppendUnreliable(Player)
 		end
+		KeepScratch()
 	end,
 }
 Returns.Ready = {

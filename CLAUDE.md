@@ -99,10 +99,27 @@ easy to break without noticing.
   BEFORE Frame, on the entry's still-plain bytes, so a run never crosses the packet a Cut opens and
   the client never builds a packet the server would refuse. The decoder reads the marker once and
   then that many events without an index each.
+- **The event's write is inlined into the reliable Fires** -- the client's `Fire`, a server's `Fire`
+  to one player, and `FireAll` -- inside `do ... end`, the call gone (2026-11-24: `Rivals`'
+  `Broadcast` 0.015 to 0.013 ms a frame natively, `Runtime`'s `Tiny` 0.082 to 0.065). The block
+  keeps the body's locals; a named pack's elements, which the write names positionally, are bound
+  to the names the Fire took by one line inside it. A stamped event (its write takes a value no
+  Fire receives), the `pcall` and scratch paths of an unreliable Fire, `FireList` and `FireExcept`
+  keep the call, and so does the run framing: its steady state written out beside the write measured
+  slower both natively and interpreted.
+- **`BatchUnreliable` defaults to `true`**: a client's own unreliable fires and a server's sends to
+  many gather into as few packets as the limit allows, at the flush. A server's `Fire` to one player
+  and a per-player stream go out at once -- measured on `Rivals`' `SelfState`, a frame's one event a
+  player, gathering read 0.018 ms a frame natively against a direct send's 0.015 -- so the option
+  itself now only turns gathering off. `false` restores one packet an event.
 - **Measured and dropped:** constant offsets in array loops (slower natively), branchless boolean
   packing (no faster), packing array elements' bits into one run (dynamic bit addressing in every
   decode), a struct-of-arrays wire layout (no fewer builtin calls, one more pass), Satset's
-  write-side run framing (the 32-68% above).
+  write-side run framing (the 32-68% above), the run framing's steady state written out beside the
+  write in the client's reliable Fire, with Begin and Commit inlined too (slower natively and
+  interpreted both, 2026-11-24: the event's start held live across the whole write, and one basic
+  block grown by the run's checks), an instance-list counter with direct indexed writes in place of
+  `table.insert` and `#SendInstances` (a measured 1.8 ns an event on a fire of hundreds, 2026-11-24).
 - **`@profile` defaults to `release`**, so forgetting the flag leaves a debug remote out rather than
   shipping it. An excluded declaration is still parsed and registered, and a compiled one naming it
   is refused (`src/Modules/Attributes.luau`).

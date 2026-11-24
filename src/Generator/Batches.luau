@@ -6,8 +6,9 @@
 --- the unreliable limit allows and sent at the flush, where each had been a remote call of its own.
 ---
 --- A stream is always batched: it is sent from StepReplication already, so gathering it costs nothing
---- in time. An ordinary unreliable event is batched under `option BatchUnreliable`, since it then waits
---- for the flush rather than going at once -- as a reliable event always has.
+--- in time. An ordinary unreliable event is batched unless `option BatchUnreliable = false` turns it
+--- off: it then waits for the flush rather than going at once -- as a reliable event always has --
+--- which measured no later an arrival, and a frame's events cost one remote call instead of one each.
 ---
 --- Spliced in after the side's template, and only into a module that batches anything. It wraps
 --- StepReplication, as the stream runtime does, so a frame sends its reliable batch and then its
@@ -21,9 +22,13 @@ local State = require("./State")
 
 local Batches = {}
 
---- Whether this module batches the unreliable events it sends, beyond its streams.
+--- Whether this module batches the unreliable events it sends, beyond its streams. On unless a
+--- schema says `option BatchUnreliable = false`: gathering a frame's events into one remote call is
+--- the better default -- a call costs bytes beside its payload, and the inbound budget charges a
+--- packet at least 128 -- and it costs no time, since Roblox delivers a frame's calls together
+--- whenever each was fired (see benchmark/Latency.luau).
 function Batches.Events(): boolean
-	return State.Options.BatchUnreliable == true
+	return State.Options.BatchUnreliable ~= false
 end
 
 local COMMON = [[

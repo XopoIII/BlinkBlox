@@ -12,6 +12,7 @@
 --> them. The compiler itself must keep working on any Lune: pesde runs it on the user's.
 local fs = require("@lune/fs")
 local luauLibrary = require("@lune/luau")
+local process = require("@lune/process")
 local stdio = require("@lune/stdio")
 
 --> The pin in rokit.toml, found from wherever the script runs: the root, test/, benchmark/, src/CLI.
@@ -79,6 +80,52 @@ function runtime.collect()
 	if collect then
 		collect()
 	end
+end
+
+--> The one-minute load average and the machine's core count, read once: `uptime` for the first, with
+--> macOS's "load averages: 1.2 1.3 1.4" and Linux's "load average: 1.2, 1.3, 1.4" both carrying it,
+--> and `sysctl`/`nproc` for the second. nil wherever either says nothing.
+local loadAverage: number? = nil
+local cores: number? = nil
+local probed = false
+local function busy(): (number?, number?)
+	if not probed then
+		probed = true
+		local ran, result = pcall(process.exec, "uptime")
+		if ran and result.ok then
+			loadAverage = tonumber(string.match(result.stdout, "(%d+%.%d+)"))
+		end
+
+		--> macOS answers sysctl, Linux nproc; either failing leaves the check silent. A spawned
+		--> process's output comes back captured by default.
+		local mac, sysctl = pcall(process.exec, "sysctl", { "-n", "hw.ncpu" })
+		if mac and sysctl.ok then
+			cores = tonumber(string.match(sysctl.stdout, "(%d+)"))
+		else
+			local linux, nproc = pcall(process.exec, "nproc")
+			if linux and nproc.ok then
+				cores = tonumber(string.match(nproc.stdout, "(%d+)"))
+			end
+		end
+	end
+
+	return loadAverage, cores
+end
+
+--> Says so, before the timings, when the machine is busy: background work beside a benchmark moved
+--> published figures by up to a fifth, and a load average at half the cores means something else is
+--> running. A word rather than a refusal -- a busy machine compares two builds honestly enough, and
+--> only the absolute figures stop being reproducible.
+function runtime.quiet()
+	local load, count = busy()
+	if load == nil or count == nil or count < 1 or load < count * 0.5 then
+		return
+	end
+
+	local yellow, reset = stdio.color("yellow"), stdio.style("reset")
+	stdio.ewrite(
+		`{yellow}! The machine is busy: load {string.format("%.1f", load)} on {count} cores. Background work has moved benchmark figures by up to a fifth; close it, or take the numbers as a comparison rather than a result.{reset}\n`
+	)
 end
 
 --> Memory held for the rest of the process, before any tool loads. Luau's collector paces itself on the

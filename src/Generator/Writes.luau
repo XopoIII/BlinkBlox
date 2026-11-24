@@ -37,13 +37,22 @@ export type Write = {
 --- `WriteEvent` is the call that serialises the event from `WriteArguments`; `Counters` is where its
 --- traffic counters start under `option TrafficStats`, and nil otherwise. `Index` is the event's
 --- channel index, which Frame merges consecutive same-index events under one header with.
+---
+--- `WriteBody` is the write function's own lines, spliced into the reliable Fires -- the client's
+--- and a server's to one player -- in place of the call, inside `do ... end`, with `WriteBinding`
+--- first inside the block when the write names the payload positionally where the Fire names it
+--- otherwise. Both are nil for a stamped event, whose write takes values no Fire receives. A Fire's
+--- rollback undoes a body that threw exactly as it undid a call that threw, lazy on the client and
+--- beneath Mark on the server, so nothing else changes.
 function Writes.new(
 	Identifier: string,
 	WriteArguments: string,
 	WriteEvent: string,
 	Data: Type?,
 	Counters: number?,
-	Index: number?
+	Index: number?,
+	WriteBody: { string }?,
+	WriteBinding: string?
 ): Write
 	--> The same call, protected. `LoadPlayer` installs the player's saved instance list itself rather
 	--> than a copy, so an Instance appended before a later field threw stayed in it even though the
@@ -52,6 +61,22 @@ function Writes.new(
 	local TryWriteEvent = `pcall({Util.GetPath(Identifier, true, State.Scope)}, {WriteArguments})`
 
 	local CarriesInstances = Writes.CarriesInstances(Data)
+
+	--> The write itself: the body inline where it is had, the call otherwise. The block keeps the
+	--> body's locals to the write's own scope, so they never meet the Fire's; the binding, when the
+	--> payload's names differ, is the block's first line.
+	local function Write(Target: Blocks.Block)
+		if WriteBody then
+			Target:Line("do")
+			if WriteBinding then
+				Target:Line(WriteBinding)
+			end
+			Target:Lines(WriteBody, 1)
+			Target:Line("end")
+		else
+			Target:Line(WriteEvent)
+		end
+	end
 
 	--> Writes into a batch that is kept, undoing whatever a write that throws had already added.
 	local function WriteKept(Target: Blocks.Block)
@@ -70,11 +95,16 @@ function Writes.new(
 			if Counters then
 				Target:Line("local Cursor = SendCursor")
 			end
-			Target:Line(WriteEvent)
+			Write(Target)
 			if Index ~= nil then
 				--> After the cut Commit may make, so a run never crosses the packet a Cut opens; the
 				--> packet boundary Frame then sees is the new one, and the event starts the new
 				--> packet's first run as a plain entry. Commit returns where the event began.
+				-->
+				--> Begin, Commit and Frame stay calls, measured: with the run's steady state written
+				--> out here beside them -- the body moved by reads and writes of a width the generator
+				--> knows -- the Fire read slower both natively and interpreted, its `Start` held live
+				--> across the whole write and its one basic block grown by the checks.
 				Target:Line(`Frame(Commit(), {Index}, PacketStart)`)
 			else
 				Target:Line("Commit()")
@@ -85,7 +115,7 @@ function Writes.new(
 		Target:Line("if PendingCursor >= 0 then Settle() end")
 		Target:Line("local Start, Before = SendCursor, CommittedInstances")
 		Target:Line("PendingCursor = Start")
-		Target:Line(WriteEvent)
+		Write(Target)
 		Target:Line("local Count = #SendInstances")
 		Target:Line("PendingCursor = -1")
 		Target:Line("CommittedInstances = Count")
@@ -117,7 +147,7 @@ function Writes.new(
 		if Counters then
 			Target:Line("local Cursor = SendCursor")
 		end
-		Target:Line(WriteEvent)
+		Write(Target)
 	end
 
 	return { Begun = Begun, Player = Player }

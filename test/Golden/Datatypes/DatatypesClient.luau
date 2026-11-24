@@ -1809,7 +1809,25 @@ Returns.Styled = {
 Returns.Pressed = {
 	Fire = function(Value1: Enum.KeyCode, Value2: Vector2): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_Pressed(Value1, Value2)
+		do
+			-- Allocate BLOCK: 11 bytes
+			local BLOCK_START = Allocate(11)
+			-- EVENT_Pressed (1)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+			-- Value: Pressed
+			-- Value1: Pressed
+			if typeof(Value1) ~= "EnumItem" or Value1.EnumType ~= Enum.KeyCode then error(`Expected Value1 to be an item of Enum.KeyCode, got {Value1} instead.`) end
+			local EnumValue = Value1.Value
+			if not (EnumValue >= 0 and EnumValue <= 65535) then error(`Expected Value1 to have a Value from 0 to 65535, got {EnumValue} instead.`) end
+			buffer.writeu16(SendBuffer, BLOCK_START + 1, EnumValue)
+			-- Value2: Pressed
+			if typeof(Value2) ~= "Vector2" then
+				error(`Expected Value2 to be of type Vector2, got {type(Value2)} instead.{if type(Value2) == "table" or type(Value2) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			local Vector = Value2
+			buffer.writef32(SendBuffer, BLOCK_START + 3, Vector.X)
+			buffer.writef32(SendBuffer, BLOCK_START + 7, Vector.Y)
+		end
 		Frame(Commit(), 1, PacketStart)
 	end
 }
@@ -1985,7 +2003,77 @@ Returns.World = {
 Returns.Placed = {
 	Fire = function(Value: { Custom: PhysicalProperties?, Size: NumberSequence, Clip: Rect, Zone: Region3, Aim: Ray }): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_Placed(Value)
+		do
+			-- Allocate BLOCK: 66 bytes
+			local BLOCK_START = Allocate(66)
+			local BITFIELD_1_0
+			-- EVENT_Placed (2)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+			-- Value: Placed
+			-- Value.Custom: Custom
+			BITFIELD_1_0 = 0
+			if Value.Custom ~= nil then BITFIELD_1_0 += 0x01 end
+			if Value.Custom ~= nil then
+				-- Allocate BLOCK: 24 bytes
+				local BLOCK_START = Allocate(24)
+				-- Value.Custom: Custom
+				if typeof(Value.Custom) ~= "PhysicalProperties" then
+					error(`Expected Value.Custom to be of type PhysicalProperties, got {type(Value.Custom)} instead.{if type(Value.Custom) == "table" or type(Value.Custom) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Physical = Value.Custom
+				buffer.writef32(SendBuffer, BLOCK_START + 0, Physical.Density)
+				buffer.writef32(SendBuffer, BLOCK_START + 4, Physical.Friction)
+				buffer.writef32(SendBuffer, BLOCK_START + 8, Physical.Elasticity)
+				buffer.writef32(SendBuffer, BLOCK_START + 12, Physical.FrictionWeight)
+				buffer.writef32(SendBuffer, BLOCK_START + 16, Physical.ElasticityWeight)
+				buffer.writef32(SendBuffer, BLOCK_START + 20, Physical.AcousticAbsorption)
+			end
+			-- Value.Size: Size
+			if typeof(Value.Size) ~= "NumberSequence" then
+				error(`Expected Value.Size to be of type NumberSequence, got {type(Value.Size)} instead.{if type(Value.Size) == "table" or type(Value.Size) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+			end
+			WriteNumberSequence(Value.Size)
+			do
+				-- Value.Clip: Clip
+				if typeof(Value.Clip) ~= "Rect" then
+					error(`Expected Value.Clip to be of type Rect, got {type(Value.Clip)} instead.{if type(Value.Clip) == "table" or type(Value.Clip) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Bounds = Value.Clip
+				buffer.writef32(SendBuffer, BLOCK_START + 2, Bounds.Min.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 6, Bounds.Min.Y)
+				buffer.writef32(SendBuffer, BLOCK_START + 10, Bounds.Max.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 14, Bounds.Max.Y)
+			end
+			do
+				-- Value.Zone: Zone
+				if typeof(Value.Zone) ~= "Region3" then
+					error(`Expected Value.Zone to be of type Region3, got {type(Value.Zone)} instead.{if type(Value.Zone) == "table" or type(Value.Zone) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Region = Value.Zone
+				local RegionCenter = Region.CFrame.Position
+				local RegionHalf = Region.Size / 2
+				buffer.writef32(SendBuffer, BLOCK_START + 18, RegionCenter.X - RegionHalf.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 22, RegionCenter.Y - RegionHalf.Y)
+				buffer.writef32(SendBuffer, BLOCK_START + 26, RegionCenter.Z - RegionHalf.Z)
+				buffer.writef32(SendBuffer, BLOCK_START + 30, RegionCenter.X + RegionHalf.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 34, RegionCenter.Y + RegionHalf.Y)
+				buffer.writef32(SendBuffer, BLOCK_START + 38, RegionCenter.Z + RegionHalf.Z)
+			end
+			do
+				-- Value.Aim: Aim
+				if typeof(Value.Aim) ~= "Ray" then
+					error(`Expected Value.Aim to be of type Ray, got {type(Value.Aim)} instead.{if type(Value.Aim) == "table" or type(Value.Aim) == "userdata" then " If this is a call made with ':', make it with '.'." else ""}`)
+				end
+				local Line = Value.Aim
+				buffer.writef32(SendBuffer, BLOCK_START + 42, Line.Origin.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 46, Line.Origin.Y)
+				buffer.writef32(SendBuffer, BLOCK_START + 50, Line.Origin.Z)
+				buffer.writef32(SendBuffer, BLOCK_START + 54, Line.Direction.X)
+				buffer.writef32(SendBuffer, BLOCK_START + 58, Line.Direction.Y)
+				buffer.writef32(SendBuffer, BLOCK_START + 62, Line.Direction.Z)
+			end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, BITFIELD_1_0)
+		end
 		Frame(Commit(), 2, PacketStart)
 	end
 }

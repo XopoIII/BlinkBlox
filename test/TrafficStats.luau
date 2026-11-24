@@ -141,6 +141,15 @@ RunClosure("Unreliable and ordered events count their packets and their sequence
 	Client.Seq.Fire(9)
 	Client.Seq.Fire(10)
 
+	local Written = Client.GetTrafficStats()
+	Expect("Client Ping before the flush", Written.Events.Ping, Counted(1, 2, 0, 0))
+	Expect("Client Seq before the flush", Written.Events.Seq, Counted(2, 8, 0, 0))
+	Expect("Client unreliable before the flush", Written.Unreliable, Counted(3, 10, 0, 0))
+	Expect("Client reliable before the flush", Written.Reliable, ZERO)
+
+	--> The three events are gathered into one packet, sent at the flush; see Generator/Batches.luau.
+	Client.StepReplication()
+
 	local Sent = Client.GetTrafficStats()
 	Expect("Client Ping", Sent.Events.Ping, Counted(1, 2, 0, 0))
 	Expect("Client Seq", Sent.Events.Seq, Counted(2, 8, 0, 0))
@@ -155,7 +164,8 @@ RunClosure("Unreliable and ordered events count their packets and their sequence
 	local Received = Server.GetTrafficStats()
 	Expect("Server Ping", Received.Events.Ping, Counted(0, 0, 1, 2))
 	Expect("Server Seq", Received.Events.Seq, Counted(0, 0, 2, 8))
-	Expect("Server unreliable", Received.Unreliable, Counted(0, 0, 3, 10))
+	--> One packet carries all three; the channel counts packets, and the events their own bytes.
+	Expect("Server unreliable", Received.Unreliable, Counted(0, 0, 1, 10))
 end)
 
 RunClosure("Server sends count once per recipient, and the client counts what it receives", function()
@@ -175,9 +185,16 @@ RunClosure("Server sends count once per recipient, and the client counts what it
 	Server.Blip.FireList({ Player, Player }, 301)
 	Server.Blip.Fire(Player, 302)
 	Server.Blip.FireExcept(Player, 303)
+	local Written = Server.GetTrafficStats()
+	Expect("Server Blip", Written.Events.Blip, Counted(4, 12, 0, 0))
+	Expect("Server unreliable before the flush", Written.Unreliable, Counted(4, 12, 0, 0))
+
+	--> FireAll goes to the shared batch and FireList to the player's; the flush sends one packet
+	--> each, beside the Fire to one player, which went out at once as a send of its own.
+	Server.StepReplication()
 	local Sent = Server.GetTrafficStats()
-	Expect("Server Blip", Sent.Events.Blip, Counted(4, 12, 0, 0))
-	Expect("Server unreliable", Sent.Unreliable, Counted(4, 12, 0, 0))
+	Expect("Server Blip after the flush", Sent.Events.Blip, Counted(4, 12, 0, 0))
+	Expect("Server unreliable after the flush", Sent.Unreliable, Counted(4, 12, 0, 0))
 
 	if #Pair.Delivered ~= 1 or buffer.len(Pair.Delivered[1].Buffer) ~= 10 then
 		ErrorPrint(`Failed "Wire": {#Pair.Delivered} reliable packet(s), expected one of 10 bytes.`)
@@ -193,7 +210,8 @@ RunClosure("Server sends count once per recipient, and the client counts what it
 	Expect("Client Push", Received.Events.Push, Counted(0, 0, 5, 10))
 	Expect("Client Blip", Received.Events.Blip, Counted(0, 0, 4, 12))
 	Expect("Client reliable", Received.Reliable, Counted(0, 0, 1, 10))
-	Expect("Client unreliable", Received.Unreliable, Counted(0, 0, 4, 12))
+	--> FireAll's packet, FireList's batch, and the Fire's direct send: three packets, twelve bytes.
+	Expect("Client unreliable", Received.Unreliable, Counted(0, 0, 3, 12))
 end)
 
 RunClosure("A polled event in a scope is counted under its path", function()

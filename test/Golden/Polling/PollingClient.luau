@@ -953,14 +953,24 @@ Returns.remotes = REMOTE_NAMES
 Returns.PollingEvent = {
 	fire = function(Value: nil): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_PollingEvent(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_PollingEvent (0)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+		end
 		Frame(Commit(), 0, PacketStart)
 	end
 }
 Returns.ImplicitPollingEvent = {
 	fire = function(Value: nil): ()
 		Begin()
-		SerdesFunctions.WriteEVENT_ImplicitPollingEvent(Value)
+		do
+			-- Allocate BLOCK: 1 bytes
+			local BLOCK_START = Allocate(1)
+			-- EVENT_ImplicitPollingEvent (1)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
+		end
 		Frame(Commit(), 1, PacketStart)
 	end
 }
