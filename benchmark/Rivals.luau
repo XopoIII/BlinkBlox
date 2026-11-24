@@ -6,7 +6,7 @@
 ---     luneblox run Rivals -- Broadcast         only the scenarios whose name contains "Broadcast"
 ---     luneblox run Rivals -- --frames 50       fewer frames
 ---     luneblox run Rivals -- --tools blink,zap only these tools
----     luneblox run Rivals -- --batch           BlinkBlox with option BatchUnreliable
+---     luneblox run Rivals -- --no-batch      BlinkBlox with option BatchUnreliable = false
 ---
 --- Every tool loads through World.luau here, BlinkBlox included, so each pays for the same mocks: a
 --- remote call costs the same whoever makes it. Each flushes on its own Heartbeat, as it would in a
@@ -21,6 +21,7 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local runtime = require("../.lune/libs/runtime")
 runtime.ballast()
+runtime.quiet()
 
 local Apis = require("./runtime/rivals/Apis")
 local Attributes = require("../src/Modules/Attributes")
@@ -35,8 +36,19 @@ local WARMUP_FRAMES = 10
 --> What each Heartbeat tells the tools a frame took; see the same constant in runtime/Tools.luau.
 local FRAME = 1 / 30
 
-local ORDER =
-	{ "blink", "upstream", "zap", "bytenet", "packet", "quicknet", "warp", "satset", "netray", "netray-checked" }
+local ORDER = {
+	"blink",
+	"upstream",
+	"zap",
+	"bytenet",
+	"packet",
+	"quicknet",
+	"warp",
+	"satset",
+	"netray",
+	"netray-checked",
+	"netray-fields",
+}
 local REQUIRES: { [string]: { string } } = {
 	upstream = { "runtime/rivals/upstream/Server.luau" },
 	zap = { "runtime/rivals/zap/Server.luau" },
@@ -47,11 +59,13 @@ local REQUIRES: { [string]: { string } } = {
 	satset = { "packages/satset/init.luau" },
 	netray = { "runtime/rivals/netray/Server.luau", "runtime/rivals/netray/Types.luau" },
 	["netray-checked"] = { "runtime/rivals/netray-checked/Server.luau", "runtime/rivals/netray-checked/Types.luau" },
+	["netray-fields"] = { "runtime/rivals/netray-fields/Server.luau", "runtime/rivals/netray-fields/Types.luau" },
 }
 
 local Frames = 200
---> `--batch`: BlinkBlox built with option BatchUnreliable, which gathers a frame's unreliable events.
-local Batch = false
+--> `--no-batch`: BlinkBlox built with `option BatchUnreliable = false`. The option defaults to true,
+--> which gathers a frame's unreliable events; this is the row for a schema that turns that off.
+local Batch = true
 local Filter: string? = nil
 local Only: { string }? = nil
 do
@@ -60,8 +74,8 @@ do
 		local Argument = process.args[Index]
 		if Argument == "--" then
 			--> What `luneblox run Rivals -- ...` passes through ahead of the arguments.
-		elseif Argument == "--batch" then
-			Batch = true
+		elseif Argument == "--no-batch" then
+			Batch = false
 		elseif Argument == "--frames" then
 			Frames = assert(tonumber(process.args[Index + 1]), "--frames takes a number")
 			Index += 1

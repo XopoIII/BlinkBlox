@@ -312,6 +312,7 @@ RunClosure("AutoStart = false creates nothing until Start, and Start twice chang
 	Expect(string.find(Text, "late", 1, true) ~= nil, "the packet lacks the event sent after Start")
 	Expect(string.find(Text, "early", 1, true) == nil, "an event sent before Start went out after it")
 	Server.Position.Fire(Shared.Player, 3)
+	Frame(Heartbeat)
 	Same(#Unreliable.Sent, 1, "unreliable packets after Start")
 
 	Server.Start()

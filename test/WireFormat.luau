@@ -47,9 +47,14 @@ RunClosure("Ordered unreliable events", function()
 		table.insert(Captured, { Buffer = Buffer, Instances = Instances })
 	end
 
+	--> One packet a send, as the reorder this spec replays is of packets: each fire is flushed
+	--> alone, so the three travel separately rather than gathered into one batch.
 	Client.OrderedPosition.Fire(1)
+	Client.StepReplication()
 	Client.OrderedPosition.Fire(2)
+	Client.StepReplication()
 	Client.OrderedPosition.Fire(3)
+	Client.StepReplication()
 	Remote.FireServer = Original
 
 	if #Captured ~= 3 then
@@ -80,8 +85,10 @@ RunClosure("Ordered unreliable events", function()
 	end)
 
 	Client.OrderedPosition.Fire(4)
+	Client.StepReplication()
 	task.wait(0.15)
 	Client.OrderedPosition.Fire(5)
+	Client.StepReplication()
 	task.wait(0.3)
 	DisconnectOrdered()
 

@@ -238,117 +238,158 @@ DecodeStruct = Table` gives each struct payload one table argument, which is the
 tool's mode presents; its `Instance` is a passthrough, a remote argument beside the buffer rather
 than a reference inside one, and Roblox's own serialisation of it is not in the Bytes column.
 
-One run of `Runtime` and `Rivals` on 2026-11-23, an Apple M1 MacBook Air with LuneBlox 0.11.4, no
-core pinned, BlinkBlox 1.5.0 from this repository. Each figure is a median over 200 frames in
-milliseconds a frame. `NetRay `checked`` is the same events with `Validate = Full`, receive budgets
-sized to fit, and `Compression: Repeat` on `Snapshot` -- the configuration a live server wanting
-NetRay's safety features would run -- and those rows are one run as well.
+Three runs of `Runtime` and `Rivals` on 2026-11-24, an Apple M1 MacBook Air with LuneBlox 0.11.4, no
+core pinned, BlinkBlox 1.6.0 from this repository, each figure the median of the three and each run
+alone in its own process, with the machine's ordinary background load (the quiet check in
+`.lune/libs/runtime.luau` stayed silent). `NetRay `checked`` is the same events with
+`Validate = Full`, receive budgets sized to fit, and `Compression: Repeat` on `Snapshot` -- the
+configuration a live server wanting NetRay's safety features would run. `NetRay `fields`` is the
+same with `Compression: Fields`, and `BatchUnreliable = false` rows are `Rivals -- --no-batch`: since
+1.6.0 a client gathers a frame's unreliable events by default, so `UnreliableInput`'s eight fires
+are one remote call, and that row is the same build with the gather turned off.
 
 |Bench|Tool|Code|Fire median|Fire p99|Flush median|Decode median|Decode p99|Bytes/event|zstd bytes/event|
-|---|---|---|---|---|---|---|---|---|---|
-|Booleans|BlinkBlox|native|2.358|2.859|0.004|1.766|2.964|127.01|0.04|
-||NetRay|native|3.541|3.973|0.046|3.504|4.369|127.00|0.03|
-||NetRay `checked`|native|29.684|30.479|0.053|3.486|4.462|127.00|0.03|
-||BlinkBlox|interpreted|11.110|11.953|0.005|7.841|9.125|127.01|0.04|
-||NetRay|interpreted|13.026|13.633|0.127|15.658|17.013|127.00|0.03|
-||NetRay `checked`|interpreted|106.276|112.647|0.134|15.710|17.097|127.00|0.03|
-|Entities|BlinkBlox|native|1.650|1.852|0.011|3.832|11.586|601.01|0.71|
-||NetRay|native|1.551|1.776|0.063|10.539|17.637|602.00|0.71|
-||NetRay `checked`|native|16.459|17.044|0.063|10.135|17.932|602.00|0.71|
-||BlinkBlox|interpreted|9.754|10.409|0.012|10.373|17.579|601.01|0.71|
-||NetRay|interpreted|8.770|9.606|0.139|14.928|22.452|602.00|0.71|
-||NetRay `checked`|interpreted|59.941|60.622|0.141|14.660|21.968|602.00|0.71|
-|BooleansRandom|BlinkBlox|native|5.247|5.391|0.006|1.743|3.155|127.01|127.02|
-||NetRay|native|10.317|11.968|0.057|3.881|6.290|127.00|127.01|
-||NetRay `checked`|native|39.903|44.019|0.060|4.031|6.291|127.00|127.01|
-||BlinkBlox|interpreted|17.506|20.663|0.011|9.204|11.458|127.01|127.02|
-||NetRay|interpreted|23.718|25.706|0.156|27.412|30.638|127.00|127.01|
-||NetRay `checked`|interpreted|128.066|143.866|0.150|26.675|31.141|127.00|127.01|
-|EntitiesRandom|BlinkBlox|native|2.506|2.749|0.017|4.217|19.849|601.01|601.03|
-||NetRay|native|2.504|3.141|0.078|13.165|28.661|602.00|602.02|
-||NetRay `checked`|native|20.239|26.290|0.083|13.452|32.283|602.00|602.02|
-||BlinkBlox|interpreted|12.086|14.563|0.021|12.719|30.806|601.01|601.03|
-||NetRay|interpreted|9.701|10.801|0.157|15.989|30.681|602.00|602.02|
-||NetRay `checked`|interpreted|61.512|65.275|0.147|15.366|30.055|602.00|602.02|
-|Tiny|BlinkBlox|native|0.082|0.091|0.000|0.068|0.076|1.01|0.03|
-||NetRay|native|0.033|0.043|0.036|0.085|0.101|1.00|0.02|
-||NetRay `checked`|native|0.041|0.047|0.036|0.085|0.099|1.00|0.02|
-||BlinkBlox|interpreted|0.240|0.260|0.000|0.156|0.171|1.01|0.03|
-||NetRay|interpreted|0.094|0.107|0.114|0.147|0.165|1.00|0.02|
-||NetRay `checked`|interpreted|0.135|0.147|0.114|0.147|0.159|1.00|0.02|
+|---|---|---|---|---|---|---|---|---|
+|Booleans|BlinkBlox|native|2.339|2.382|0.004|1.742|2.502|127.01|0.04|
+||NetRay|native|3.535|3.612|0.045|3.474|4.285|127.00|0.03|
+||NetRay `checked`|native|29.439|29.735|0.047|3.474|4.498|127.00|0.03|
+||BlinkBlox|interpreted|11.268|11.774|0.004|7.680|8.498|127.01|0.04|
+||NetRay|interpreted|13.013|13.259|0.124|15.521|16.646|127.00|0.03|
+||NetRay `checked`|interpreted|106.486|107.926|0.137|15.949|18.712|127.00|0.03|
+|Entities|BlinkBlox|native|1.625|1.784|0.012|3.816|11.324|601.01|0.71|
+||NetRay|native|1.550[^noise]|1.611|0.064|10.015|17.341|602.00|0.71|
+||NetRay `checked`|native|16.448|16.745|0.063|10.079|17.536|602.00|0.71|
+||BlinkBlox|interpreted|9.712|9.928|0.012|9.905|17.365|601.01|0.71|
+||NetRay|interpreted|8.738|8.959|0.138|14.384|21.855|602.00|0.71|
+||NetRay `checked`|interpreted|59.883|60.170|0.145|14.409|21.986|602.00|0.71|
+|BooleansRandom|BlinkBlox|native|5.250|5.494|0.006|1.751|2.946|127.01|127.02|
+||NetRay|native|9.574|9.814|0.047|3.468|5.428|127.00|127.01|
+||NetRay `checked`|native|35.441|35.811|0.051|3.465|5.544|127.00|127.01|
+||BlinkBlox|interpreted|15.587|15.904|0.007|7.874|9.110|127.01|127.02|
+||NetRay|interpreted|19.984|20.184|0.127|22.815|24.900|127.00|127.01|
+||NetRay `checked`|interpreted|113.200|113.923|0.129|22.849|24.887|127.00|127.01|
+|EntitiesRandom|BlinkBlox|native|2.287|2.654|0.014|3.863|18.313|601.01|601.03|
+||NetRay|native|2.184[^noise]|2.495|0.064|10.224|24.096|602.00|602.02|
+||NetRay `checked`|native|16.840|17.207|0.066|10.207|25.169|602.00|602.02|
+||BlinkBlox|interpreted|9.906|10.292|0.016|10.059|25.017|601.01|601.03|
+||NetRay|interpreted|9.031|9.294|0.140|14.487|28.629|602.00|602.02|
+||NetRay `checked`|interpreted|61.216|61.645|0.140|14.331|30.035|602.00|602.02|
+|Tiny|BlinkBlox|native|0.065[^tiny]|0.076|0.000|0.067|0.079|1.01|0.03|
+||NetRay|native|0.033[^tiny]|0.038|0.036|0.085|0.095|1.00|0.02|
+||NetRay `checked`|native|0.042|0.045|0.036|0.085|0.098|1.00|0.02|
+||BlinkBlox|interpreted|0.217|0.233|0.000|0.157|0.171|1.01|0.03|
+||NetRay|interpreted|0.094|0.106|0.114|0.147|0.161|1.00|0.02|
+||NetRay `checked`|interpreted|0.134|0.145|0.114|0.147|0.156|1.00|0.02|
 
 |Scenario|Tool|Code|Fire median|Flush median|Decode median|Remote calls/frame|Bytes/frame|
-|---|---|---|---|---|---|---|---|
-|Broadcast|BlinkBlox|native|0.016|0.001|0.032|1.0|85000.0|
-||NetRay|native|0.013|0.007|0.031|1.0|85150.0|
-||NetRay `checked`|native|3.453|0.456|0.160|150.0|95000.0|
-||BlinkBlox|interpreted|0.029|0.001|0.029|1.0|85000.0|
-||NetRay|interpreted|0.030|0.017|0.051|1.0|85150.0|
-||NetRay `checked`|interpreted|5.316|0.768|0.203|150.0|95000.0|
-|UnreliableInput|BlinkBlox|native|0.004|0.000|0.004|8.0|40.0|
-||NetRay|native|0.001|0.001|0.002|1.0|43.0|
+|---|---|---|---|---|---|---|
+|Broadcast|BlinkBlox|native|0.013|0.001|0.030|1.0|85000.0|
+||NetRay|native|0.012[^noise]|0.007|0.031|1.0|85150.0|
+||NetRay `checked`|native|3.216[^checked]|0.430|0.146|150.0|95000.0|
+||NetRay `fields`|native|3.577|0.503|0.141|150.0|95000.0|
+||BlinkBlox|interpreted|0.026|0.001|0.029|1.0|85000.0|
+||NetRay|interpreted|0.029|0.017|0.050|1.0|85150.0|
+||NetRay `checked`|interpreted|5.111|0.742|0.188|150.0|95000.0|
+||NetRay `fields`|interpreted|5.806|0.907|0.186|150.0|95000.0|
+|Instances|BlinkBlox|native|0.027[^instances]|0.001|0.013|1.0|103.0|
+||NetRay|native|0.004[^instances]|0.006|0.008|1.0|103.0|
+||NetRay `checked`|native|0.006|0.007|0.011|1.0|103.0|
+||NetRay `fields`|native|0.007|0.007|0.011|1.0|103.0|
+||BlinkBlox|interpreted|0.027|0.001|0.019|1.0|103.0|
+||NetRay|interpreted|0.011|0.016|0.019|1.0|103.0|
+||NetRay `checked`|interpreted|0.021|0.020|0.024|1.0|103.0|
+||NetRay `fields`|interpreted|0.021|0.020|0.024|1.0|103.0|
+|UnreliableInput|BlinkBlox|native|0.004[^input]|0.001|0.001|1.0|40.0|
+||NetRay|native|0.001[^input]|0.001|0.002|1.0|43.0|
 ||NetRay `checked`|native|0.001|0.001|0.002|1.0|43.0|
-||BlinkBlox|interpreted|0.004|0.000|0.007|8.0|40.0|
+||NetRay `fields`|native|0.001|0.001|0.002|1.0|43.0|
+||BlinkBlox|interpreted|0.004|0.001|0.002|1.0|40.0|
 ||NetRay|interpreted|0.002|0.002|0.003|1.0|43.0|
 ||NetRay `checked`|interpreted|0.003|0.002|0.004|1.0|43.0|
-|Instances|BlinkBlox|native|0.029|0.001|0.013|1.0|103.0|
-||NetRay|native|0.004|0.006|0.009|1.0|103.0|
-||NetRay `checked`|native|0.007|0.007|0.011|1.0|103.0|
-||BlinkBlox|interpreted|0.029|0.001|0.019|1.0|103.0|
-||NetRay|interpreted|0.012|0.017|0.020|1.0|103.0|
-||NetRay `checked`|interpreted|0.021|0.020|0.025|1.0|103.0|
-|WorldState|BlinkBlox|native|0.002|0.000|0.003|1.0|12900.0|
+||NetRay `fields`|interpreted|0.003|0.002|0.004|1.0|43.0|
+||... with `BatchUnreliable = false`|BlinkBlox|native|0.004|0.000|0.004|8.0|40.0|
+||... the same|BlinkBlox|interpreted|0.004|0.000|0.006|8.0|40.0|
+|WorldState|BlinkBlox|native|0.001|0.001|0.003|1.0|12900.0|
 ||NetRay|native|0.001|0.001|0.004|1.0|13700.0|
-||NetRay `checked`|native|0.003|0.001|0.005|1.0|13700.0|
-||BlinkBlox|interpreted|0.004|0.000|0.003|1.0|12900.0|
-||NetRay|interpreted|0.003|0.001|0.006|1.0|13700.0|
+||NetRay `checked`|native|0.003|0.001|0.004|1.0|13700.0|
+||NetRay `fields`|native|0.003|0.001|0.004|1.0|13700.0|
+||BlinkBlox|interpreted|0.003|0.001|0.003|1.0|12900.0|
+||NetRay|interpreted|0.003|0.001|0.005|1.0|13700.0|
 ||NetRay `checked`|interpreted|0.009|0.001|0.006|1.0|13700.0|
+||NetRay `fields`|interpreted|0.009|0.001|0.006|1.0|13700.0|
 |SelfState|BlinkBlox|native|0.015|0.000|0.001|50.0|850.0|
 ||NetRay|native|0.016|0.000|0.001|50.0|900.0|
-||NetRay `checked`|native|0.022|0.000|0.001|50.0|900.0|
+||NetRay `checked`|native|0.021|0.000|0.001|50.0|900.0|
+||NetRay `fields`|native|0.021|0.000|0.001|50.0|900.0|
 ||BlinkBlox|interpreted|0.025|0.000|0.001|50.0|850.0|
 ||NetRay|interpreted|0.023|0.000|0.001|50.0|900.0|
-||NetRay `checked`|interpreted|0.034|0.000|0.001|50.0|900.0|
+||NetRay `checked`|interpreted|0.033|0.000|0.001|50.0|900.0|
+||NetRay `fields`|interpreted|0.033|0.000|0.001|50.0|900.0|
+
+[^instances]: NetRay's `Instance` is a passthrough argument beside the buffer, so its fire writes one thing
+    the less and its 103 bytes are the buffer alone; BlinkBlox's is a reference inside the packet, checked
+    on both sides, so that a write that throws leaves no Instance behind -- the invariant a player's
+    instance list rests on -- and that check is what the fire pays for.
+[^input]: The gather removed seven remote calls a frame; what the remaining fire does is write into the
+    batch, count the packet's three limits and frame the entry, where NetRay's single write does not.
+[^tiny]: What is left of BlinkBlox's fire is `Begin`, `Commit` and `Frame`. Written out beside the write
+    they measured slower both natively and interpreted, so they stay calls (`CLAUDE.md`, "Measured and
+    dropped"); NetRay reaches these payloads with none of them, which is the whole of its lead here.
+[^noise]: A few thousandths of a millisecond an event is this machine's own spread between runs of the
+    same build: three runs moved single cells by up to a tenth, so a gap this size is a tie.
+[^checked]: NetRay's own opt-in configuration, kept on here so its cost is published: validation alone
+    costs it eight times its fire time, and compression turns the broadcast into a per-recipient send.
 
 What the tables say:
 
-- **BlinkBlox decodes a struct faster, by nearly three times on the thousand-event benches.** On
-  `Entities` natively it decodes 1000 events in 3.8 ms where NetRay takes 10.5, and on
-  `EntitiesRandom` 4.2 against 13.2. The gap is the read path: every guard BlinkBlox emits is
+- **BlinkBlox decodes a struct faster, by more than two and a half times on the thousand-event
+  benches.** On `Entities` natively it decodes 1000 events in 3.8 ms where NetRay takes 10.0, and on
+  `EntitiesRandom` 3.9 against 10.2. The gap is the read path: every guard BlinkBlox emits is
   written to a shape the native compiler keeps straight, while NetRay's decode returns an offset
   per field and re-checks the buffer bounds a field at a time; the two agree on what they refuse.
-- **NetRay fires a struct as fast, and a batch of them faster.** Its `FireAll` inlines the write
-  into the outgoing arena where BlinkBlox calls a serialiser per event, so on `Broadcast` its 100
-  structs cost 0.013 ms to fire to BlinkBlox's 0.016 natively, and on `Tiny` -- where the cost is
-  framing, not data -- 0.033 against BlinkBlox's 0.082. Interpreted, the two swap: `Broadcast`
-  is 0.029 against 0.030 and `Entities` 9.8 against 8.8, which is the serialiser call and the
-  write's own shape. BlinkBlox's client write takes a lazy rollback, commits a run, and hands
-  every fire to `Frame` before the packet is cut.
+- **NetRay fires a struct as fast, and BlinkBlox's gather closes the call gap on inputs.** NetRay's
+  `FireAll` writes straight into the outgoing arena; since 1.6.0 BlinkBlox splices the event's own
+  write into its `FireAll` the same way, so on `Broadcast` its 100 structs cost 0.013 ms to fire to
+  NetRay's 0.012 natively, and 0.026 against 0.029 interpreted -- the swap is gone. On `Tiny` --
+  where the cost is framing, not data -- NetRay's 0.033 against BlinkBlox's 0.065: what is left of
+  that gap is `Begin`, `Commit` and `Frame`, which measured cheaper as calls than written out.
+  BlinkBlox's client write takes a lazy rollback, commits a run, and hands every fire to `Frame`
+  before the packet is cut, and `Entities` interpreted stays NetRay's by the write's own shape,
+  9.7 against 8.8.
+- **The gather makes an input frame one call, as NetRay's is.** `UnreliableInput` fires eight
+  events a frame: BlinkBlox's is one remote call, 40 bytes, 0.004 ms of fire, where the
+  `BatchUnreliable = false` rows beside it are eight calls -- the shape every release before 1.6.0
+  shipped. The decode is level, 0.001 against NetRay's 0.002. It is the client's fire that batched,
+  not the server's send: a `Fire` to one player still goes at once (`SelfState`: 0.015 against
+  NetRay's 0.016, 50 calls either way).
 - **NetRay wins `Instances` -- on fire, decode and calls -- and BlinkBlox's bytes are the whole
   story there.** Its passthrough carries the part outside the buffer, so the 103 bytes a frame both
   report is BlinkBlox's entire encoding against NetRay's buffer plus an Instance Roblox serialises
-  beside it, which this column does not count. Its fire is 0.004 ms to BlinkBlox's 0.029 natively
+  beside it, which this column does not count. Its fire is 0.004 ms to BlinkBlox's 0.027 natively
   because BlinkBlox's client writes the event through `Begin`/`Settle`, checks the packet's three
   limits and runs `Frame` -- a failed write must leave nothing behind, and that is what it costs.
-  Interpreted, the decode is level, 0.019 against 0.020: a reference is an index into the packet's
+  Interpreted, the decode is level, 0.019 apiece: a reference is an index into the packet's
   Instance list either way.
 - **BlinkBlox writes fewer bytes wherever both send state.** `WorldState` costs it 12,900 bytes a
   frame to NetRay's 13,700 and `SelfState` 850 to 900: NetRay puts a `u16` index on every event
   where BlinkBlox frames a run of one index in three bytes, and its `u8`/`f32` struct is a byte
   longer. On `Broadcast` the two are a byte and a half an event apart, 85,150 to 85,000.
-- **`Validate = Full` costs NetRay ten times its fire time, and buys nothing this harness can
-  see.** A thousand booleans take 29.7 ms to fire natively rather than 3.5, a thousand entity
-  structs 16.5 rather than 1.6, and the decode is the same: the checks are on the sending side,
+- **`Validate = Full` costs NetRay eight times its fire time, and buys nothing this harness can
+  see.** A thousand booleans take 29.4 ms to fire natively rather than 3.5, a thousand entity
+  structs 16.4 rather than 1.6, and the decode is the same: the checks are on the sending side,
   per element. Its receive budgets cost nothing measurable, as the `checked` rows beside the
   defaults show.
 - **Its opt-in compression turns a broadcast into fifty sends.** `Compression: Repeat` keeps a
   baseline per recipient, so `FireAll` becomes a per-recipient `FireClient` per event: 150 calls a
-  frame and 3.5 ms of fire to BlinkBlox's 0.016 and one call, and a frame's bytes rise to 95,000
-  from 85,150 because the payloads differ index by index and the delta carries more than it saves.
-  Measured one at a time, validation alone added about half again to a `FireAll`'s fire time and
-  nothing to its bytes or calls, and compression alone cost 1.4 ms of fire and the same 95,000
-  bytes: the `checked` row carries both. It is off by default, and this is why an entropy-coded
-  delta is deferred here rather than assumed (`CLAUDE.md`, "Settled decisions").
+  frame and 3.2 ms of fire to BlinkBlox's 0.013 and one call, and a frame's bytes rise to 95,000
+  from 85,000 because the payloads differ index by index and the delta carries more than it saves.
+  `Compression: Fields` -- a mask of the fields that moved -- finds nothing to mask in payloads that
+  differ every frame, and costs more than `Repeat`'s scan where it is measured: 3.6 ms of fire and
+  0.5 of flush against 3.2 and 0.43, with the same 95,000 bytes and 150 calls. Measured one at a
+  time, validation alone added about half again to a `FireAll`'s fire time and nothing to its bytes
+  or calls, and compression alone cost the rest: the `checked` row carries both. It is off by
+  default, and this is why an entropy-coded delta is deferred here rather than assumed (`CLAUDE.md`,
+  "Settled decisions").
 
 
 `luneblox run Runtime -- --tools blink --sources <dir>` times the modules in a directory instead of generating them.
@@ -818,7 +859,7 @@ together.
 
 `P[NUMBER]` = [NUMBER] Percentile  
 *The tables below were automatically generated by this [script](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/generate.luau).*
-## Last Updated 2026-11-14 (LuneBlox tables above; the Results below are Studio's, last recorded 2026-10-25)
+## Last Updated 2026-11-24 (LuneBlox tables above; the Results below are Studio's, last recorded 2026-10-25)
 ## Tool Versions
 BlinkBlox: v1.4.0, compiled from this repository  
 Blink: v0.18.9  

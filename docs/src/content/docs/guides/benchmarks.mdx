@@ -191,13 +191,15 @@ A reliable `FireAll` in BlinkBlox is written once into a broadcast batch and sen
 Warp and Satset batch a frame per player too, so a send to 50 players is 50 remote calls. ByteNet and
 Packet share a buffer as BlinkBlox does, and BlinkBlox decodes its packet in a twelfth of ByteNet's
 time and a fifteenth of Packet's. `BatchUnreliable` gathers a client's inputs into one remote call, as
-ByteNet, QuickNet, Warp and Satset do; without it BlinkBlox's eight small packets each pay the checks
-every packet gets -- its size, the player's byte budget, an isolated decode -- which zap's do not,
-and zap packs its booleans into a bit stream besides, which is where its 32 bytes to BlinkBlox's 40
-on `UnreliableInput` come from. On Instances BlinkBlox's hundred same-index events travel as one run,
-103 bytes where every other tool pays a byte of index each -- 200 to 303 -- and it decodes fastest;
-its client fire is slower than Blink's and zap's because its client module runs interpreted on this
-harness by design (see the note above), and a run's member pays its small copy. Satset has no
+ByteNet, QuickNet, Warp and Satset do -- and since 1.6.0 it is on by default, so the 8 calls in the
+row above are what `option BatchUnreliable = false` still sends; without it BlinkBlox's eight small
+packets each pay the checks every packet gets -- its size, the player's byte budget, an isolated
+decode -- which zap's do not, and zap packs its booleans into a bit stream besides, which is where
+its 32 bytes to BlinkBlox's 40 on `UnreliableInput` come from. On Instances BlinkBlox's hundred
+same-index events travel as one run, 103 bytes where every other tool pays a byte of index each --
+200 to 303 -- and it decodes fastest; its client fire is slower than Blink's and zap's because its
+client module runs interpreted on this harness by design (see the note above), and a run's member
+pays its small copy. Satset has no
 Instance type, so it sits `Instances` out. Every scenario interpreted, and each column on its own,
 is in [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
 
@@ -228,37 +230,58 @@ struct payload one table, the shape every other mode presents, and its `Instance
 -- a remote argument beside the buffer, which Roblox serialises -- rather than a reference inside
 one.
 
-One run of `Runtime` and `Rivals` on 2026-11-23, an Apple M1 with LuneBlox 0.11.4 and BlinkBlox
-1.5.0, 200 frames; `NetRay `checked`` is the same events with `Validate = Full`, receive budgets
-sized to fit and `Compression: Repeat` on `Snapshot`.
+Three runs of `Runtime` and `Rivals` on 2026-11-24, an Apple M1 with LuneBlox 0.11.4 and BlinkBlox
+1.6.0, 200 frames, each figure the median of the three; `NetRay `checked`` is the same events with
+`Validate = Full`, receive budgets sized to fit and `Compression: Repeat` on `Snapshot`. Since 1.6.0
+BlinkBlox splices the event's own write into its reliable Fires, `FireAll` included, and a client
+gathers a frame's unreliable events into one packet by default.
 
 | Bench | BlinkBlox, fire / decode | NetRay | NetRay `checked` | Bytes, BlinkBlox / NetRay |
 |---|---|---|---|---|
-| Booleans | **2.4** / **1.8** | 3.5 / 3.5 | 29.7 / 3.5 | **127.01** / 127.00 |
-| Entities | 1.7 / **3.8** | **1.6** / 10.5 | 16.5 / 10.1 | **601.01** / 602.00 |
-| BooleansRandom | **5.2** / **1.7** | 10.3 / 3.9 | 39.9 / 4.0 | 127.01 / **127.00** |
-| EntitiesRandom | **2.5** / **4.2** | 2.5 / 13.2 | 20.2 / 13.5 | **601.01** / 602.00 |
-| Tiny | 0.082 / **0.068** | **0.033** / 0.085 | 0.041 / 0.085 | 1.01 / **1.00** |
+| Booleans | 2.3 / **1.7** | 3.5 / 3.5 | 29.4 / 3.5 | **127.01** / 127.00 |
+| Entities | 1.6 / **3.8** | **1.55[^noise]** / 10.0 | 16.4 / 10.1 | **601.01** / 602.00 |
+| BooleansRandom | **5.3** / **1.8** | 9.6 / 3.5 | 35.4 / 3.5 | 127.01 / **127.00** |
+| EntitiesRandom | 2.3 / **3.9** | **2.2[^noise]** / 10.2 | 16.8 / 10.2 | **601.01** / 602.00 |
+| Tiny | 0.065[^tiny] / **0.067** | **0.033[^tiny]** / 0.085 | 0.042 / 0.085 | 1.01 / **1.00** |
 
 Native, in milliseconds a frame; interpreted, NetRay's `Entities` fire is the faster of the two,
-8.8 against 9.8. On `Broadcast` NetRay's 100 structs cost 0.013 ms to fire to BlinkBlox's 0.016,
-one call each, and interpreted the two swap -- 0.030 to 0.029, with NetRay's decode nearly twice
-BlinkBlox's. On `Instances` NetRay fires in 0.004 ms to BlinkBlox's 0.029, where BlinkBlox's client
+8.7 against 9.7. On `Broadcast` NetRay's 100 structs cost 0.012 ms to fire to BlinkBlox's 0.013,
+one call each, and interpreted BlinkBlox is ahead, 0.026 to 0.029, with NetRay's decode nearly twice
+BlinkBlox's. On `Instances` NetRay fires in 0.004 ms to BlinkBlox's 0.027[^instances], where BlinkBlox's client
 runs `Begin`/`Settle`, three packet-limit checks and `Frame` so that a rejected write leaves nothing
-behind; interpreted the decode is level, 0.019 against 0.020. BlinkBlox decodes a struct nearly
-three times faster, writes fewer bytes wherever both send state -- 12,900 a frame to 13,700 on
+behind; interpreted the decode is level, 0.019 apiece. `UnreliableInput` is one remote call a frame
+for both -- BlinkBlox's eight fires are gathered, 40 bytes to NetRay's 43[^input]; the
+`BatchUnreliable = false` row in [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md)
+is the eight calls every release before 1.6.0 shipped. BlinkBlox decodes a struct more than two and
+a half times faster, writes fewer bytes wherever both send state -- 12,900 a frame to 13,700 on
 `WorldState`, 850 to 900 on `SelfState`, where NetRay spends a `u16` index an event and BlinkBlox
 frames a run of one index in three bytes -- and holds `SelfState`'s fire.
 
-`Validate = Full` costs NetRay ten times its fire time and buys nothing the tables can see: a thousand
-booleans take 29.7 ms natively rather than 3.5, a thousand entity structs 16.5 rather than 1.6, and
-its decode is unchanged. Its opt-in `Compression: Repeat` turns a `FireAll` into a per-recipient
-send: 150 calls a frame, 3.5 ms of fire against 0.016 and one call, and 95,000 bytes a frame against
-85,150, because these payloads differ index by index and the delta carries more than it saves.
-Measured one at a time, validation alone added half again to a broadcast's fire time and compression
-alone took it to 1.4 ms; the `checked` rows carry both. Its full tables, and why the harness answers
+`Validate = Full` costs NetRay eight times its fire time[^checked] and buys nothing the tables can see: a
+thousand booleans take 29.4 ms natively rather than 3.5, a thousand entity structs 16.4 rather than
+1.6, and its decode is unchanged. Its opt-in `Compression: Repeat` turns a `FireAll` into a
+per-recipient send: 150 calls a frame, 3.2 ms of fire against 0.013 and one call, and 95,000 bytes a
+frame against 85,000, because these payloads differ index by index and the delta carries more than it
+saves. `Compression: Fields` finds nothing to mask in the same payloads and costs more than
+`Repeat`'s scan -- 3.6 ms of fire and 0.5 of flush, the same 95,000 bytes and 150 calls. Measured
+one at a time, validation alone added half again to a broadcast's fire time and compression alone
+took it to the rest; the `checked` rows carry both. Its full tables, and why the harness answers
 `typeof` with "Instance" in every scenario now, are in
 [`benchmark/Benchmarks.md`](https://github.com/XopoIII/BlinkBlox/blob/main/benchmark/Benchmarks.md).
+
+[^instances]: NetRay's `Instance` is a passthrough argument beside the buffer, so its fire writes one
+    thing the less and its 103 bytes are the buffer alone; BlinkBlox's is a reference inside the packet,
+    checked on both sides so that a write that throws leaves no Instance behind -- the invariant a
+    player's instance list rests on -- and that check is what the fire pays for.
+[^input]: The gather removed seven remote calls a frame; what the remaining fire does is write into the
+    batch, count the packet's three limits and frame the entry, where NetRay's single write does not.
+[^tiny]: What is left of BlinkBlox's fire is `Begin`, `Commit` and `Frame`. Written out beside the write
+    they measured slower both natively and interpreted, so they stay calls (`CLAUDE.md`, "Measured and
+    dropped"); NetRay reaches these payloads with none of them, which is the whole of its lead here.
+[^noise]: A few thousandths of a millisecond an event is this machine's own spread between runs of the
+    same build: three runs moved single cells by up to a tenth, so a gap this size is a tie.
+[^checked]: Off by default, and left on here so its cost is published: validation alone costs NetRay
+    eight times its fire time, and compression turns the broadcast into a per-recipient send.
 
 ### A schema with many events
 
@@ -540,8 +563,9 @@ processor, and the process `Runtime` starts for each row inherits the core.
   directory instead of generating them, for comparing releases: compile the schema with
   `option ManualReplication = true` for it.
 - `luneblox run Scenarios` and `luneblox run Rivals` time a server sending to a crowd, unreliable events,
-  streams and Instances: BlinkBlox alone, and every tool. `--batch` builds BlinkBlox with
-  `BatchUnreliable`; `Rivals` takes `--tools` as `Runtime` does, and `--tools netray-checked` runs
+  streams and Instances: BlinkBlox alone, and every tool. `--no-batch` builds BlinkBlox with
+  `option BatchUnreliable = false`, the option being on by default; `Rivals` takes `--tools` as
+  `Runtime` does, and `--tools netray-checked` runs
   NetRay with its validation, budgets and compression on.
 - `luneblox run Performance` times the compiler itself: lexing, parsing and generating the test schema.
 - `luneblox run build --download --run` fetches zap, BlinkBlox, ByteNet and Packet for the machine it

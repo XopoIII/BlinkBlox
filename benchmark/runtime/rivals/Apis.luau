@@ -268,6 +268,8 @@ Apis.APIS = {
 	netray = BlinkStyle(),
 	--> The same events with NetRay's validation, budgets and compression on: the second configuration.
 	["netray-checked"] = BlinkStyle(),
+	--> The same again, with the field-mask compression where the checked one repeats bytes.
+	["netray-fields"] = BlinkStyle(),
 }
 
 Apis.SCENARIOS = {

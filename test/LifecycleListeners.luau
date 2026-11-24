@@ -97,6 +97,7 @@ RunClosure("An AutoStart = false server reports listener errors after Start", fu
 	Client.Ready.Fire(7)
 	Client.StepReplication()
 	Client.Moved.Fire(8)
+	Client.StepReplication()
 	task.wait(0.1)
 	Same(#Reports, 2, "reports after two throwing events")
 	table.sort(Reports, function(A, B)

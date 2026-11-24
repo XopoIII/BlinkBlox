@@ -45,6 +45,10 @@ export type Shape = {
 	Arguments: string,
 	InnerValues: string,
 	InnerArguments: string,
+	--> The write function's own lines, without its header or its end: a reliable FireAll splices
+	--> them in rather than pay the call. A stamped event's write names values FireAll does not take,
+	--> so its FireAll keeps the call.
+	WriteBody: { string },
 	Body: Builder.Builder,
 	Indent: number,
 }

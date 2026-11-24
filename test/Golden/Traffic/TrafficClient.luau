@@ -1043,6 +1043,98 @@ local function StepReplication()
         LastPacket = nil
     end
 end
+
+--> UNRELIABLE BATCHES; see Generator/Batches.luau.
+--> `Committed` counts the Instances of the events kept. `Pending` is set while an event is written
+--> straight into the batch: one that then threw has left its own Instances behind, and they are
+--> dropped before the batch is used again. Checking the flag spares every other use a count.
+type BLINK_UNRELIABLE = { Buffer: buffer, Size: number, Cursor: number, Instances: {Instance}, Committed: number, Events: number, Pending: boolean }
+
+local function NewUnreliable(): BLINK_UNRELIABLE
+    return { Buffer = buffer.create(64), Size = 64, Cursor = 0, Instances = {}, Committed = 0, Events = 0, Pending = false }
+end
+
+local function Clean(Batch: BLINK_UNRELIABLE)
+    if not Batch.Pending then
+        return
+    end
+
+    local Instances = Batch.Instances
+    for Index = #Instances, Batch.Committed + 1, -1 do
+        Instances[Index] = nil
+    end
+    Batch.Pending = false
+end
+
+--> Appends what the scratch buffer holds -- one event, written there by the send -- to `Batch`.
+local function CopyUnreliable(Batch: BLINK_UNRELIABLE): number
+    local Size = SendCursor
+    local Cursor = Batch.Cursor
+    local InUse = Cursor + Size
+    if InUse > Batch.Size then
+        local Grown = Batch.Size
+        while InUse > Grown do
+            Grown *= 1.5
+        end
+
+        local Resized = buffer.create(Grown)
+        buffer.copy(Resized, 0, Batch.Buffer, 0, Cursor)
+        Batch.Buffer = Resized
+        Batch.Size = Grown
+    end
+
+    buffer.copy(Batch.Buffer, Cursor, SendBuffer, 0, Size)
+    Batch.Cursor = InUse
+    Batch.Events += 1
+
+    local Count = #SendInstances
+    if Count > 0 then
+        table.move(SendInstances, 1, Count, Batch.Committed + 1, Batch.Instances)
+        Batch.Committed += Count
+    end
+
+    return Cursor
+end
+
+--> Whether the event in the scratch buffer would take `Batch` past the unreliable limit.
+local function Overflows(Batch: BLINK_UNRELIABLE): boolean
+    return Batch.Cursor + SendCursor + (Batch.Committed + #SendInstances) * UNRELIABLE_INSTANCE_BYTES > MAX_UNRELIABLE_SIZE
+end
+
+local ClientUnreliable = NewUnreliable()
+
+local function SendUnreliable()
+    local Used = ClientUnreliable.Cursor
+    if Used == 0 then
+        return
+    end
+
+    local Packet = buffer.create(Used)
+    buffer.copy(Packet, 0, ClientUnreliable.Buffer, 0, Used)
+    Unreliable:FireServer(Packet, ClientUnreliable.Instances)
+
+    ClientUnreliable.Cursor = 0
+    ClientUnreliable.Events = 0
+    if ClientUnreliable.Committed > 0 then
+        ClientUnreliable.Committed = 0
+        table.clear(ClientUnreliable.Instances)
+    end
+end
+
+--> Appends the event in the scratch buffer to the batch, sending the batch first when the event would
+--> take it past the unreliable limit or the server's event cap.
+local function AppendUnreliable()
+    if Overflows(ClientUnreliable) or ClientUnreliable.Events >= MAX_EVENTS_PER_PACKET then
+        SendUnreliable()
+    end
+    CopyUnreliable(ClientUnreliable)
+end
+
+local StepBeforeUnreliable = StepReplication
+StepReplication = function()
+    StepBeforeUnreliable()
+    SendUnreliable()
+end
 local Decoding = -1
 local RunIndex = 0
 local RunRemaining = 0
@@ -1255,7 +1347,14 @@ Returns.Byte = {
 	Fire = function(Value: number): ()
 		Begin()
 		local Cursor = SendCursor
-		SerdesFunctions.WriteEVENT_Byte(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_Byte (0)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+			-- Value: Byte
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		Frame(Commit(), 0, PacketStart)
 		TrafficCounters[9] += SendCursor - Cursor
 		TrafficCounters[10] += 1
@@ -1300,9 +1399,7 @@ Returns.Ping = {
 		Hold()
 		local Sent: boolean, Failure: any = pcall(SerdesFunctions.WriteEVENT_Ping, Value)
 		if Sent and CheckUnreliableSize("Ping") then
-			local Buffer = buffer.create(SendCursor)
-			buffer.copy(Buffer, 0, SendBuffer, 0, SendCursor)
-			Unreliable:FireServer(Buffer, SendInstances)
+			AppendUnreliable()
 			TrafficCounters[21] += SendCursor
 			TrafficCounters[22] += 1
 			TrafficCounters[5] += SendCursor
@@ -1334,7 +1431,18 @@ Returns.Note = {
 	Fire = function(Value: string): ()
 		Begin()
 		local Cursor = SendCursor
-		SerdesFunctions.WriteEVENT_Note(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_Note (2)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 2)
+			-- Value: Note
+			local Length = #Value
+			if not (Length <= 32) then error(`Expected "Length" to be smaller than or equal to 32, got {Length} instead.`) end
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Length)
+			Allocate(Length)
+			buffer.writestring(SendBuffer, SendOffset, Value, Length)
+		end
 		Frame(Commit(), 2, PacketStart)
 		TrafficCounters[29] += SendCursor - Cursor
 		TrafficCounters[30] += 1
@@ -1381,7 +1489,14 @@ Returns.Inner = {
 		Fire = function(Value: number): ()
 			Begin()
 			local Cursor = SendCursor
-			SerdesFunctions.Inner_WriteEVENT_Poll(Value)
+			do
+				-- Allocate BLOCK: 2 bytes
+				local BLOCK_START = Allocate(2)
+				-- EVENT_Poll (4)
+				buffer.writeu8(SendBuffer, BLOCK_START + 0, 4)
+				-- Value: Poll
+				buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+			end
 			Frame(Commit(), 4, PacketStart)
 			TrafficCounters[37] += SendCursor - Cursor
 			TrafficCounters[38] += 1

@@ -35,6 +35,13 @@ export type Send = {
 	Instances: boolean?,
 	--> Left out of a send to a player whose outbound budget is spent; see Outbound.luau.
 	Low: boolean?,
+	--> The write's body, spliced into a reliable FireAll inside `do ... end` in place of the call:
+	--> the call was the one left on the hottest send the module has, and the block keeps its locals
+	--> to the write's own scope. nil when the write names values the FireAll does not take.
+	WriteBody: { string }?,
+	--> The line that binds the write's positional names to the values FireAll took, first inside
+	--> the block; nil when the payload's names already agree.
+	WriteBinding: string?,
 }
 
 --- Stamps the recipient's own sequence number into an ordered packet. An unreliable server send always
@@ -72,13 +79,10 @@ local function Charge(Target: Blocks.Block, Player: string?)
 end
 
 --- Whether this send goes to a batch rather than straight out: a stream's to everyone always, an
---- event's, and a stream's held per player, under `option BatchUnreliable`. See Batches.luau.
----
---- A per-player stream sends each player one state a step, so on its own it has nothing to gather,
---- and a batch would only add its bookkeeping to the send; it joins the player's batch when the
---- option gathers other events there too.
+--- event's send to many, unless `option BatchUnreliable = false`. A send to ONE player never does;
+--- see Send.One. See Batches.luau.
 local function Batched(Event: Send): boolean
-	local Batch = (Event.Stream == true and not Event.PerPlayer) or Batches.Events()
+	local Batch = (Event.Stream == true and not Event.PerPlayer) or (Event.Stream ~= true and Batches.Events())
 	if Batch then
 		State.UsesBatches = true
 	end
@@ -140,11 +144,11 @@ function Send.One(Fire: Blocks.Block, Event: Send): Blocks.Block
 		Fire:Line("if OutboundSpent(Player) then return end")
 	end
 
-	if Batched(Event) then
-		WriteBatched(Fire, Event, "Player", false)
-		return Fire
-	end
-
+	--> Sent at once, whatever the option: a send to one player is one event of that player's own,
+	--> and measured on `Rivals`' `SelfState` -- a frame's one event a player -- gathering it cost
+	--> 0.018 ms a frame natively against a direct send's 0.015, the batch's bookkeeping with
+	--> nothing to gather. The events that gather are a client's own fires and a server's sends to
+	--> everyone.
 	Fire:Line("LoadScratch()")
 	Fire:Line(Event.WriteEvent)
 	CheckSize(Fire, Event)
@@ -199,8 +203,8 @@ function Send.Broadcast(
 
 	--> A reliable send to everyone is written straight into the broadcast batch too: it used to be
 	--> written into the scratch buffer and copied out of it, and the copy is most of what a FireAll
-	--> cost. The batch is loaded and committed inline, as the hottest send the module has -- the one
-	--> function call left is the event's own write.
+	--> cost. The batch is loaded and committed inline, and the write with it, as the hottest send the
+	--> module has.
 	if Event.IsReliable and AllClients then
 		--> An unstarted server -- `option AutoStart = false` -- sends nothing, and queues nothing:
 		--> the event is dropped before its write, as a send to one player is at SavePlayerBuffer.
@@ -222,7 +226,19 @@ function Send.Broadcast(
 		Fire:Line("SendOffset = BEFORE")
 		Fire:Line("SendBuffer = SharedBuffer")
 		Fire:Line("SendInstances = SharedInstances")
-		Fire:Line(Event.WriteEvent)
+		--> The write's body, inline: the one function call a FireAll still paid, and most of what it
+		--> cost. Its own block, so its locals stay the write's and never meet the send's; the binding,
+		--> when the payload's names differ, is the block's first line.
+		if Event.WriteBody then
+			Fire:Line("do")
+			if Event.WriteBinding then
+				Fire:Line(Event.WriteBinding)
+			end
+			Fire:Lines(Event.WriteBody, 1)
+			Fire:Line("end")
+		else
+			Fire:Line(Event.WriteEvent)
+		end
 		Fire:Line("SharedBuffer = SendBuffer")
 		Fire:Line("SharedSize = SendSize")
 		Fire:Line("SharedCursor = SendCursor")

@@ -34,6 +34,8 @@ RunClosure("An ordered packet from before the wrap is stale after it", function(
 		Captured = Buffer
 	end
 	Client.OrderedPosition.Fire(1)
+	--> Ordered events ride the frame's unreliable batch, sent at the flush.
+	Client.StepReplication()
 	Remote.FireServer = Original
 	assert(Captured, "no ordered packet was sent to take the index from")
 	local Index = buffer.readu8(Captured, 0)

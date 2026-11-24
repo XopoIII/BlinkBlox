@@ -1264,7 +1264,14 @@ Returns.Ready = {
 	fire = function(Value: number): ()
 		Begin()
 		local Cursor = SendCursor
-		SerdesFunctions.WriteEVENT_Ready(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_Ready (0)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+			-- Value: Ready
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		Frame(Commit(), 0, PacketStart)
 		TrafficCounters[17] += SendCursor - Cursor
 		TrafficCounters[18] += 1

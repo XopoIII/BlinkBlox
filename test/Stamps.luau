@@ -117,6 +117,8 @@ RunClosure("A stamped event's values arrive before SentAt, and its Fire takes on
 
 	ClientClock.Fixed = 50.25
 	Pair.Client.Aim.Fire(7, roblox.Vector3.new(1, 2, 3))
+	--> Unreliable events are gathered into the frame's batch, sent at the flush.
+	Pair.Client.StepReplication()
 	ClientClock.Fixed = nil
 
 	local Packet = Pair.SentUnreliable[1]

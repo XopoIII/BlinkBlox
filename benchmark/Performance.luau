@@ -89,6 +89,7 @@ local function BenchmarkClosure(Title: string, Closure: () -> ())
 end
 
 runtime.notice("These timings")
+runtime.quiet()
 
 BenchmarkClosure("Lex", function()
 	SourceLexer:Initialize(Source)

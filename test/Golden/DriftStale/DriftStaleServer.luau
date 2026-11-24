@@ -1478,7 +1478,14 @@ Returns.Remotes = REMOTE_NAMES
 Returns.Alpha = {
 	Fire = function(Player: Player, Value: number): ()
 		LoadPlayer(Player)
-		SerdesFunctions.WriteEVENT_Alpha(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_Alpha (0)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+			-- Value: Alpha
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		SavePlayerBuffer(Player)
 	end,
 	FireAll = function(Value: number): ()
@@ -1491,7 +1498,14 @@ Returns.Alpha = {
 		SendOffset = BEFORE
 		SendBuffer = SharedBuffer
 		SendInstances = SharedInstances
-		SerdesFunctions.WriteEVENT_Alpha(Value)
+		do
+			-- Allocate BLOCK: 2 bytes
+			local BLOCK_START = Allocate(2)
+			-- EVENT_Alpha (0)
+			buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
+			-- Value: Alpha
+			buffer.writeu8(SendBuffer, BLOCK_START + 1, Value)
+		end
 		SharedBuffer = SendBuffer
 		SharedSize = SendSize
 		SharedCursor = SendCursor

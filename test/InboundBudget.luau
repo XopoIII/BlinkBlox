@@ -64,6 +64,8 @@ local function CapturePacket(): (buffer, { any })
 		Buffer, Instances = Captured, CapturedInstances
 	end
 	Client.UnreliableClient.Fire(1)
+	--> The event is gathered into the frame's batch, sent at the flush; see Generator/Batches.luau.
+	Client.StepReplication()
 	Remote.FireServer = Original
 
 	assert(Buffer and Instances, "the client did not send a packet")

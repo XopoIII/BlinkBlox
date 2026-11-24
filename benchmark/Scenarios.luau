@@ -21,6 +21,7 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local runtime = require("../.lune/libs/runtime")
 runtime.ballast()
+runtime.quiet()
 
 local Attributes = require("../src/Modules/Attributes")
 local Crowd = require("./runtime/Crowd")

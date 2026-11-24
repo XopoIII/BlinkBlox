@@ -81,6 +81,21 @@ RunClosure("A client's unreliable events wait for the flush and go out together"
 	Expect("heard", FeedAll(Pair), { "Move 1", "Move 2", "Move 3" })
 end)
 
+RunClosure("A schema that turns the gathering off sends each event at once, as before", function()
+	--> The default gathers a frame's unreliable events; `option BatchUnreliable = false` is the
+	--> escape hatch for a side that wants each send out the moment it is made.
+	local Unbatched = string.gsub(BATCHED, "option BatchUnreliable = true", "option BatchUnreliable = false")
+	local Pair = Build(Unbatched)
+	for Value = 1, 3 do
+		Pair.Client.Move.Fire(Value)
+	end
+
+	assert(#Pair.SentUnreliable == 3, `sent {#Pair.SentUnreliable} packets before any flush, expected three`)
+	Pair.Client.StepReplication()
+	assert(#Pair.SentUnreliable == 3, "the flush sent something the events had not")
+	Expect("heard", FeedAll(Pair), { "Move 1", "Move 2", "Move 3" })
+end)
+
 RunClosure("A client's unreliable batch is cut at the server's event cap", function()
 	local Pair = Build(BATCHED)
 	for Value = 1, 10 do
@@ -139,18 +154,21 @@ RunClosure("An ordered event in a batch carries the player's own sequence", func
 		table.insert(Heard, Value)
 	end)
 
+	--> The FireAll joins the player's batch and waits for the flush; the Fire to one player goes
+	--> out at once, never gathered (see Send.One), so three sends are three packets.
 	Pair.Server.Aim.FireAll(1)
 	Pair.Server.Aim.Fire(Shared.Player, 2)
 	Pair.Server.StepReplication()
 	Pair.Server.Aim.FireAll(3)
 	Pair.Server.StepReplication()
 
-	assert(#Pair.Outbound == 2, `sent {#Pair.Outbound} packets over two frames, expected two`)
+	assert(#Pair.Outbound == 3, `sent {#Pair.Outbound} packets over two frames, expected three`)
 	for _, Packet in Pair.Outbound do
 		assert(Packet.Player == Shared.Player, "an ordered event went to everyone at once")
 	end
 
-	--> The second frame's packet first: the first frame's then arrives stale, and both its events go.
+	--> The last frame's packet first: the two before it then arrive stale, theirs dropped.
+	Pair.Deliver(Pair.Outbound[3])
 	Pair.Deliver(Pair.Outbound[2])
 	Pair.Deliver(Pair.Outbound[1])
 	Expect("heard", Heard, { 3 })
@@ -174,7 +192,7 @@ event Big { From: Server, Type: Unreliable, Call: ManySync, Data: string(..600) 
 event Touch { From: Server, Type: Unreliable, Call: ManySync, Data: (Instance, string(..4)) }
 ]]
 
-RunClosure("An event that would overflow its player's batch sends what came before it first", function()
+RunClosure("An event that would overflow the batch sends what came before it first", function()
 	local Pair = Build(DIRECT)
 	local Heard: { number } = {}
 	Pair.Client.Big.On(function(Value)
@@ -182,8 +200,8 @@ RunClosure("An event that would overflow its player's batch sends what came befo
 	end)
 
 	--> An index, a two-byte varint length and 500 bytes: 503 each, and two do not fit under 980.
-	Pair.Server.Big.Fire(Shared.Player, string.rep("a", 500))
-	Pair.Server.Big.Fire(Shared.Player, string.rep("b", 500))
+	Pair.Server.Big.FireAll(string.rep("a", 500))
+	Pair.Server.Big.FireAll(string.rep("b", 500))
 	assert(#Pair.Outbound == 1, `{#Pair.Outbound} packets went out before the flush, expected the first`)
 	Pair.Server.StepReplication()
 
@@ -205,8 +223,8 @@ RunClosure("A send that throws leaves no Instance behind in the batch it was wri
 
 	--> The Instance goes into the batch before the string is refused for its length.
 	local Kept, Dropped = MockInstance("Kept"), MockInstance("Dropped")
-	assert(not pcall(Pair.Server.Touch.Fire, Shared.Player, Dropped, "too long"), "a string past its bound was sent")
-	Pair.Server.Touch.Fire(Shared.Player, Kept, "ok")
+	assert(not pcall(Pair.Server.Touch.FireAll, Dropped, "too long"), "a string past its bound was sent")
+	Pair.Server.Touch.FireAll(Kept, "ok")
 	Pair.Server.StepReplication()
 
 	assert(#Pair.Outbound == 1, `sent {#Pair.Outbound} packets, expected one`)

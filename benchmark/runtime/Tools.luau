@@ -62,7 +62,13 @@ function Tools.Mounts(): { string }
 		end
 	end
 	for _, Path in
-		{ "runtime/rivals/netray", "runtime/rivals/netray-checked", "src/shared/netray", "src/shared/netray-checked" }
+		{
+			"runtime/rivals/netray",
+			"runtime/rivals/netray-checked",
+			"runtime/rivals/netray-fields",
+			"src/shared/netray",
+			"src/shared/netray-checked",
+		}
 	do
 		if fs.isDir(Path) then
 			table.insert(Mounts, Path)

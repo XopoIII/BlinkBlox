@@ -93,15 +93,15 @@ to hold each release to the one before it: nothing may get slower.
 
 Each tool fires 1000 events a frame from client to server, on
 [LuneBlox](https://github.com/XopoIII/LuneBlox) -- the Luau version and flags Roblox runs, without
-Roblox -- on an Apple M1, with BlinkBlox 1.5.0, on 2026-11-23. Each figure is one run of 200 frames,
-every tool in a process of its own. Blink is the original project BlinkBlox forked
+Roblox -- on an Apple M1, with BlinkBlox 1.6.0, on 2026-11-24. Each figure is the median of three
+runs of 200 frames, every tool in a process of its own. Blink is the original project BlinkBlox forked
 from, at its last release, 0.18.9. "Send" is a frame's thousand fires and the flush into a packet,
 interpreted, as most players' clients run it; "decode" is the server decoding them, natively
 compiled, as a Roblox server runs it; bytes are one event before compression.
 
 | Tool | 1000 booleans: send / decode | 100 entities: send / decode | Bytes, booleans / entities |
 |---|---|---|---|
-| **BlinkBlox** | **11.1** / **1.8 ms** | 9.8 / **3.8 ms** | 127 / **601** |
+| **BlinkBlox** | **11.3** / **1.7 ms** | 9.7 / **3.8 ms** | 127 / **601** |
 | Blink | 22.1 / 6.5 ms | 9.6 / 21.5 ms | 1003 / 603 |
 | zap | 58.8 / 7.8 ms | 28.5 / 21.8 ms | 1003 / 603 |
 | ByteNet | 46.6 / 40.6 ms | 40.5 / 37.1 ms | 1003 / 603 |
@@ -109,7 +109,12 @@ compiled, as a Roblox server runs it; bytes are one event before compression.
 | QuickNet | 13.2 / 3.0 ms | 15.7 / 11.4 ms | 128 / 603 |
 | Warp | 38.1 / 6.4 ms | 62.4 / 32.7 ms | 128 / 602 |
 | Satset | 31.8 / 8.0 ms | 43.2 / 43.9 ms | 127 / 602 |
-| NetRay | 13.2 / 3.5 ms | **8.9** / 10.5 ms | 127 / 602 |
+| NetRay | 13.0 / 3.5 ms | **8.7**[^netray] / 10.0 ms | 127 / 602 |
+
+[^netray]: NetRay's send is ahead on this bench and on the smallest payloads, where its one arena write
+    pays none of the framing a BlinkBlox fire does; BlinkBlox's decode is two and a half times faster
+    and its bytes a byte an event lower, and its own smaller-payload lead is published, with the
+    measurements behind it, in [`benchmark/Benchmarks.md`](benchmark/Benchmarks.md).
 
 BlinkBlox packs a frame's consecutive events of one id under a shared three-byte header instead of a
 byte of index each, which is where the smallest packets' last spare byte was going: a thousand
@@ -123,9 +128,11 @@ that way; BlinkBlox's generated client asks for no such thing, because Roblox co
 natively on Android alone, and every other device logs `Native code generation is not supported on
 this device` once per module that asks. Most players' clients run code interpreted, so BlinkBlox's
 client figures are what a player's device actually pays, while Blink's, zap's and NetRay's native
-rows assume an Android client -- and even interpreted, BlinkBlox's client is the fastest sender on
-every bench but Entities, where NetRay inlines its write into the outgoing arena where BlinkBlox
-calls a serialiser per event, 8.9 ms against 9.8. Its server module does ask for native
+rows assume an Android client. Since 1.6.0 BlinkBlox splices the event's own write into its
+client's `Fire` as NetRay does, one call the less; Entities interpreted is still NetRay's by the
+write's own shape, and `Tiny` by what a fire's framing costs, which the
+[Benchmarks](https://xopoiii.github.io/BlinkBlox/guides/benchmarks/) tables carry. Its server module
+does ask for native
 compilation, as every Roblox server supports it, which is what the decode column runs. **Warp
 encodes nothing when an event is fired** -- it queues the value and serialises the whole queue at
 its flush, so its send cost is in the flush column the table folds in, and its near-zero fire time
